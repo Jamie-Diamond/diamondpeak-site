@@ -186,6 +186,17 @@ threshold/VO2 bursts and race-pace work is pacing and fuelling rehearsal only.
 Short-course racing is the other way round: there, race pace IS the sharpening
 intensity.
 
+Race week carries **no protected long ride and no long-run target**
+(`session_library`): `long_ride_missing` is an unconditional hard blocker, so a
+race week whose budget is ~113 TSS would fail every attempt for want of a 4-hour
+ride and deliver no week at all. The same applies to post-race recovery weeks.
+
+The race on the calendar is safe: intervals.icu tags it category `RACE`, so
+`_is_workout` drops it (no double-count with the deduction) and the replace-push
+delete filter (`WORKOUT` only) cannot remove it. A hand-entered race named like
+the race is skipped by `session_on_race_day` so it cannot false-block its own
+week.
+
 `plan_tools.DOWN_WEEK_TYPES` is the single list of weeks that are light by design
 (`deload`, `taper`, `race`, `post_race`) — used both to relax the quality floors
 and to stop a deliberately light week reading as a missed one.

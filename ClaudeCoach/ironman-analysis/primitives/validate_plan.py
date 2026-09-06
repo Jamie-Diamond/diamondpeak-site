@@ -874,6 +874,7 @@ def validate_week(
     rest_day_waiver: str | None = None,
     long_ride_max_min: int | None = None,
     race_date: date | None = None,
+    race_name: str | None = None,
 ) -> WeekReport:
     """Validate the planned sessions for the 7 days starting `week_start`.
 
@@ -1137,7 +1138,16 @@ def validate_week(
     #     because race day is just another Saturday to the day rules. Opt-in like every
     #     other check: no race_date supplied, no assertion.
     if race_date is not None and week_start <= race_date <= week_end:
-        on_race_day = [e for e in week_events if _event_date(e) == race_date]
+        # The race itself is not one of these: intervals.icu tags it category RACE and
+        # _is_workout already drops it. But a hand-entered race sits in the calendar as a
+        # WORKOUT, and blocking the week because "the race is on race day" would false-fail
+        # every race week it appears in — so anything named like the race is skipped.
+        rn = (race_name or "").strip().lower()
+        on_race_day = [
+            e for e in week_events
+            if _event_date(e) == race_date
+            and not (rn and rn in str(e.get("name") or "").strip().lower())
+        ]
         if on_race_day:
             names = ", ".join(str(e.get("name") or "session") for e in on_race_day[:3])
             violations.append(Violation(

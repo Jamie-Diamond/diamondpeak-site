@@ -279,3 +279,75 @@ class TestOpenersAreAboveRaceIntensity:
     def test_it_falls_back_to_the_event_when_there_is_no_prev_race(self):
         assert pt.race_intensity(CFG) <= pt._LONG_COURSE_IF          # Full Ironman
         assert pt.race_intensity({"race_distance": "Sprint"}) > pt._LONG_COURSE_IF
+
+
+class TestTheRaceItselfIsSafeOnTheCalendar:
+    """intervals.icu tags a race category RACE, so _is_workout drops it and
+    plan_builder's replace-delete (WORKOUT only) cannot remove it. It is therefore
+    counted exactly once — by the deduction in required_tss — and never deleted.
+    """
+
+    def _ev(self, d, name, cat="WORKOUT"):
+        return {"category": cat, "type": "Ride", "name": name,
+                "start_date_local": f"{d}T07:00", "load_target": 500}
+
+    def test_a_race_category_event_is_not_counted_as_planned_load(self):
+        rep = validate_week([self._ev(RACE, "IM Italy", cat="RACE")], MONDAY,
+                            race_date=RACE, race_name="IM Italy")
+        assert rep.total_tss == 0
+
+    def test_a_hand_entered_race_does_not_false_block_its_own_week(self):
+        """Blocking race week because 'the race is on race day' would be absurd."""
+        rep = validate_week([self._ev(RACE, "IM Italy Emilia-Romagna")], MONDAY,
+                            race_date=RACE, race_name="IM Italy")
+        assert not [v for v in rep.violations if v.code == "session_on_race_day"]
+
+    def test_a_real_training_session_on_race_day_still_blocks(self):
+        rep = validate_week([self._ev(RACE, "Z2 endurance ride")], MONDAY,
+                            race_date=RACE, race_name="IM Italy")
+        assert [v for v in rep.violations if v.code == "session_on_race_day"]
+
+    def test_the_push_delete_filter_only_touches_workouts(self):
+        src = (REPO / "lib" / "plan_builder.py").read_text()
+        assert 'e.get("category") == "WORKOUT"' in src
+
+
+class TestRaceWeekStillGetsAWeek:
+    """Jamie: "make sure if the race is planned, then the load for that week allows for
+    that otherwise it will plan 0 other than the race".
+
+    Two ways race week could come out empty, and both are real:
+      - the training budget goes to zero once the race is deducted (the floor stops this);
+      - the week cannot pass the audit at all, because `long_ride_missing` is an
+        unconditional HARD blocker and no 113-TSS week contains a 4-hour ride. That one
+        delivers NO WEEK for the most important week of the year.
+    """
+
+    def test_the_budget_never_reaches_zero(self):
+        r = _req(MONDAY)
+        assert r["recommended_weekly_tss"] > 0
+        assert r["recommended_weekly_tss"] == round(MAINT * pt._RACE_WEEK_MIN)
+        # sanity: enough for 3-4 short sessions, not a token gesture
+        assert 80 <= r["recommended_weekly_tss"] <= 200
+
+    def test_the_floor_holds_however_big_the_race(self):
+        cfg = dict(CFG, race_tss=2000)          # absurd, to prove the floor is a floor
+        assert _req(MONDAY, cfg)["recommended_weekly_tss"] == round(MAINT * pt._RACE_WEEK_MIN)
+
+    def test_no_protected_long_ride_is_demanded_in_a_race_week(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "stage1", REPO / "scripts" / "stage1-plan.py")
+        stage1 = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(stage1)
+        brief = {"long_ride_target_min": None, "week_type": "race"}
+        built = {"total_tss": 113, "sessions": [
+            {"sport": "Ride", "duration_min": 45}, {"sport": "Swim", "duration_min": 30}]}
+        blocking, _ = stage1.audit_built(brief, built, 113, {"sessions": []})
+        assert not [b for b in blocking if b.get("code") == "long_ride_missing"]
+
+    def test_the_brief_suppresses_the_long_session_targets(self):
+        src = (REPO / "lib" / "session_library.py").read_text()
+        assert '_no_key_sessions = (req.get("week_type") in ("race", "post_race"))' in src
+        assert "long_ride_min = None" in src
+        assert "long_run_target_min = None" in src

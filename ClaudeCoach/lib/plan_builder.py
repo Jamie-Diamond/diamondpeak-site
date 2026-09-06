@@ -313,7 +313,7 @@ def build_sessions(slug: str, proposal: dict) -> dict:
     except (ValueError, TypeError):
         _race_d = None
     rep = validate_week(events, ws, day_rules=dr,
-                        race_date=_race_d,
+                        race_date=_race_d, race_name=cfg.get("race_name"),
                         rest_day_waiver=_rest_waiver,
                         weekly_tss_cap=_weekly_tss_cap(slug, phase, week_start=ws),
                         weekly_tss_floor=_floor,
