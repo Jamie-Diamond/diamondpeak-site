@@ -560,9 +560,60 @@ _TAPER_FACTORS = {3: 0.70, 2: 0.55, 1: 0.40}
 # falls on its own as CTL decays, so this cannot ratchet), intensity stays off, and the
 # note asks for the next race rather than inventing a target to chase.
 _TRANSITION_FACTORS = {1: 0.30, 2: 0.45, 3: 0.60}
-# Week 4 onward with still no next race: hold, do not build. Training on toward nothing
-# is exactly what produced the complaint.
-_TRANSITION_HOLD = 0.65
+
+# Week 4 onward: work toward a MAINTENANCE CTL, not a percentage (Jamie, 6 Sep 2026).
+#
+# The first cut of this held at 65% of 7 x CTL, recomputed each week off the CURRENT
+# CTL. That is not a hold: 7 x CTL is precisely the load that keeps CTL level, so a
+# fixed fraction of it prescribes less every week as CTL falls, and CTL chases the
+# target down. Simulated from CTL 45 it goes 45 -> 23 in twelve weeks and keeps going;
+# the asymptote is zero. A "maintenance" setting that detrains the athlete to nothing
+# is worse than no setting at all, because it reads as deliberate.
+#
+# So the off-season default is a TARGET, handled exactly like a phase CTL target: the
+# weekly load that converges CTL on `maintenance_ctl` over _MAINTENANCE_CONVERGE_WEEKS,
+# bounded by the athlete's ramp cap. Above the target the prescription sits below
+# maintenance and CTL comes down to it; below the target it builds gently back up to it.
+# Either way it settles and stays there instead of drifting.
+#
+# The NUMBER is athlete-dependent (Jamie: "TBC, athlete dependent") and is set per
+# athlete as ctl_targets.maintenance_ctl. Until someone sets it, it is DERIVED at
+# _MAINTENANCE_FRACTION of the athlete's own peak/race CTL and flagged as provisional,
+# because the two obvious "safe" fallbacks are both wrong:
+#
+#   - hold CTL where the recovery weeks left it. For a CTL-115 Ironman athlete that
+#     is a hold at ~88 (76% of race fitness) on ~615 TSS/wk — near race training, with
+#     no race, indefinitely. Maintenance is obviously far below race fitness.
+#   - decay by a fixed fraction of 7 x CTL. That has no floor at all (see above).
+#
+# Deriving from THEIR peak keeps it athlete-dependent, lands in the 55-70% of peak that
+# off-season maintenance normally sits in, and the provisional flag puts the real number
+# in front of the coach instead of burying the assumption.
+_MAINTENANCE_CONVERGE_WEEKS = 4
+_MAINTENANCE_FRACTION = 0.60
+
+
+def maintenance_ctl(cfg: dict):
+    """(ctl, source) for the athlete's off-season CTL target.
+
+    source is "configured" (ctl_targets.maintenance_ctl or a top-level
+    maintenance_ctl), "derived" (a provisional _MAINTENANCE_FRACTION of their peak
+    phase CTL, or of race_min), or None when there is no basis for either.
+    """
+    ct = cfg.get("ctl_targets") or {}
+    v = ct.get("maintenance_ctl", cfg.get("maintenance_ctl"))
+    if v is not None:
+        try:
+            return float(v), "configured"
+        except (TypeError, ValueError):
+            pass
+    basis = (ct.get("phase_ctl") or {}).get("peak") or ct.get("race_min")
+    if basis:
+        try:
+            return round(float(basis) * _MAINTENANCE_FRACTION), "derived"
+        except (TypeError, ValueError):
+            pass
+    return None, None
 
 
 # Down-week placement is a BLOCK decision, not a counter (macro projection, 27 Jul
@@ -719,30 +770,69 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
     if race_d and race_d < today:
         days_since = (today - race_d).days
         weeks_since = days_since // 7 + 1
-        f = _TRANSITION_FACTORS.get(weeks_since, _TRANSITION_HOLD)
-        maint = 7.0 * float(ctl_today or 0)
-        target = int(round(maint * f)) if maint else None
+        maint = 7.0 * float(ctl_today or 0)      # the load that HOLDS current CTL
         stale = weeks_since > max(_TRANSITION_FACTORS)
+        mct, mct_source = maintenance_ctl(cfg)
+        f = _TRANSITION_FACTORS.get(weeks_since)
+        if not stale:
+            # Weeks 1-3: recovery from the race. A fraction of maintenance, by design.
+            target = int(round(maint * f)) if maint else None
+        elif not maint:
+            target = None
+        elif mct is not None:
+            # Off-season: converge on the configured maintenance CTL, ramp-capped.
+            target = compute_required_tss(float(ctl_today), mct,
+                                          _MAINTENANCE_CONVERGE_WEEKS)
+            max_ramp = cfg.get("max_ctl_ramp_per_week")
+            if max_ramp:
+                target = min(target, compute_required_tss(
+                    float(ctl_today), float(ctl_today) + float(max_ramp), 1))
+        else:
+            # Maintenance CTL not configured (TBC): hold where they are, and say so.
+            target = int(round(maint))
         out = {"phase": "transition", "week_type": "post_race",
                "training_week": week_now, "ctl_today": ctl_today,
                "race_date": race_s, "days_since_race": days_since,
                "weeks_since_race": weeks_since, "transition_factor": f,
                "weekly_tss_floor": 0,          # unloading is the point; no under-training floor
                "needs_next_race": stale,
+               "maintenance_ctl": mct,
+               "maintenance_ctl_source": mct_source,
+               "needs_maintenance_target": bool(stale and mct_source != "configured"),
+               "maintenance_weekly_tss": int(round(maint)) if maint else None,
                "required_weekly_tss": target, "recommended_weekly_tss": target}
         if target is None:
             out["note"] = ("POST-RACE transition (race was "
                            f"{days_since} days ago) and no CTL available, so no volume "
                            "target could be computed. Prescribe easy aerobic only. This is "
                            "NOT a taper: do not reference an upcoming race or a countdown.")
-        elif stale:
-            out["note"] = (f"POST-RACE, and the last configured race ({race_s}) was "
-                           f"{days_since} days ago with nothing after it. Hold ~{target} TSS "
-                           f"({int(_TRANSITION_HOLD * 100)}% of the ~{int(round(maint))} TSS "
-                           "maintenance load) — maintain, do NOT build. There is no target to "
-                           "chase and no phase to progress: ask for the next race and "
+        elif stale and mct is not None:
+            _dir = ("hold" if abs(float(ctl_today) - mct) < 1
+                    else ("come down to" if float(ctl_today) > mct else "build back to"))
+            _prov = ("" if mct_source == "configured" else
+                     f" This {mct:g} is PROVISIONAL — derived as "
+                     f"{int(_MAINTENANCE_FRACTION * 100)}% of their peak race fitness "
+                     "because no maintenance CTL is configured. Ask what they actually want "
+                     "to hold between goals and set ctl_targets.maintenance_ctl.")
+            out["note"] = (f"OFF-SEASON MAINTENANCE, {days_since} days after {race_s} with no "
+                           f"next race configured. Work toward maintenance Fitness (CTL) "
+                           f"{mct:g} — {_dir} it over ~{_MAINTENANCE_CONVERGE_WEEKS} weeks: "
+                           f"prescribe ~{target} TSS this week (current CTL "
+                           f"{float(ctl_today):g}). This is a maintenance target, not a "
+                           "block: keep frequency and enjoyment, one quality touch a week at "
+                           "most, no progression." + _prov + " Ask for the next race and "
                            "regenerate the blueprint before prescribing a training block "
                            "again. Do not reference a race countdown.")
+        elif stale:
+            out["note"] = (f"POST-RACE, and the last configured race ({race_s}) was "
+                           f"{days_since} days ago with nothing after it. No maintenance "
+                           f"Fitness (CTL) target is configured for this athlete, so hold "
+                           f"where they are: ~{target} TSS, the load that keeps CTL at "
+                           f"{float(ctl_today):g}. Maintain, do NOT build. ASK what "
+                           "maintenance fitness they want to hold between goals (set "
+                           "ctl_targets.maintenance_ctl) and what the next race is — until "
+                           "one of those is answered there is no target to work toward. Do "
+                           "not reference a race countdown.")
         else:
             out["note"] = (f"POST-RACE TRANSITION, week {weeks_since} after {race_s}: "
                            f"prescribe ~{target} TSS ({int(f * 100)}% of the "
