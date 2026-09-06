@@ -58,6 +58,7 @@ sys.path.insert(0, str(BASE / "ironman-analysis"))
 sys.path.insert(0, str(BASE / "lib"))
 
 from primitives.planned_tss import (                            # noqa: E402
+    race_tss,
     planned_session_tss, tss_from_segments, render_workout, segment_if,
     name_intensity_mismatch,
 )
@@ -544,6 +545,46 @@ _DEFACTO_DELOAD_AT = 1.00   # last week <= 1.00 x maintenance = already a de fac
 # absolute numbers drift down a touch more — the safe direction.
 _TAPER_FACTORS = {3: 0.70, 2: 0.55, 1: 0.40}
 
+# RACE WEEK (6 Sep 2026). The ladder above is a WHOLE-WEEK volume target, and in race
+# week the whole week includes the race — the single biggest session of the year, and
+# the one thing on the calendar that was never costed anywhere. validate_week only ever
+# sees the built proposal, so the race sat outside the week total, outside the load cap
+# and outside the CTL-ramp projection, and the ladder's final 40% step was handed to the
+# planner as a TRAINING budget: for a CTL-110 Ironman athlete, ~300 TSS of training in
+# the seven days around a ~540 TSS race. A unit error, not a coaching choice.
+#
+# So the race is deducted first and what remains is the training budget, with a floor:
+# taper theory cuts duration, never frequency, and race week still needs its openers —
+# short sessions carrying a few race-effort minutes. For any long-course race the
+# deduction exceeds the whole-week figure and the floor is what gets prescribed, which
+# is the right answer: openers, then race.
+_RACE_WEEK_MIN = 0.15        # openers floor, as a fraction of the 7 x CTL maintenance load
+
+
+# Every week type that is light BY DESIGN. One definition, because it is asked in five
+# places for two different reasons and they must not drift:
+#
+#   - "do not force quality into this week" (stage1's minimum-quality floor, the
+#     intensity-budget check and the zone-deviation ranking). A race week and a
+#     post-race transition week are as much down-weeks as a deload is; typed only as
+#     deload/taper, those three checks would have demanded a normal week's quality dose
+#     in race week and in the week after an Ironman.
+#   - "this week being light is not evidence of a MISSED week" (the miss-trigger and the
+#     return-to-load step cap below), which must not cascade a recovery week off a week
+#     that was prescribed light on purpose.
+DOWN_WEEK_TYPES = ("deload", "taper", "race", "post_race")
+
+
+def race_load(cfg: dict) -> tuple:
+    """(tss, source) for this athlete's race — see primitives.planned_tss.race_tss.
+
+    `race_tss` / `race_expected_hours` in athletes.json override the event default, so a
+    known figure (last year's file, a target split) always beats an estimate.
+    """
+    return race_tss(cfg.get("race_distance") or cfg.get("race_name") or "",
+                    expected_hours=cfg.get("race_expected_hours"),
+                    expected_tss=cfg.get("race_tss"))
+
 # POST-RACE TRANSITION (6 Sep 2026).
 #
 # There was no branch for "the race has happened". `week_now` simply kept counting past
@@ -857,18 +898,46 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
         weeks_to_race = max(1, -(-days_to_race // 7))          # ceil
         factor = _TAPER_FACTORS.get(min(weeks_to_race, 3), _TAPER_FACTORS[3])
         pre_taper_weekly = 7.0 * float(ctl_today)
-        target = int(round(pre_taper_weekly * factor))
-        return {"phase": "taper", "week_type": "taper", "training_week": week_now,
-                "ctl_today": ctl_today, "race_date": race_s,
-                "weeks_to_race": weeks_to_race, "taper_factor": factor,
-                "weekly_tss_floor": 0,   # taper: unloading is the point
-                "required_weekly_tss": target, "recommended_weekly_tss": target,
-                "note": (f"TAPER, race in {weeks_to_race} wk: volume stepped to "
-                         f"{int(factor * 100)}% of the ~{int(round(pre_taper_weekly))} TSS "
-                         f"maintenance load (70/55/40 step-down). Hold INTENSITY — keep "
-                         f"race-pace/threshold sharpness at reduced dose, keep session "
-                         f"frequency; cut duration, never intensity. Race week: the race "
-                         f"itself is most of the load.")}
+        whole_week = int(round(pre_taper_weekly * factor))
+        out = {"phase": "taper", "week_type": "taper", "training_week": week_now,
+               "ctl_today": ctl_today, "race_date": race_s,
+               "weeks_to_race": weeks_to_race, "taper_factor": factor,
+               "weekly_tss_floor": 0,   # taper: unloading is the point
+               "required_weekly_tss": whole_week, "recommended_weekly_tss": whole_week,
+               "note": (f"TAPER, race in {weeks_to_race} wk: volume stepped to "
+                        f"{int(factor * 100)}% of the ~{int(round(pre_taper_weekly))} TSS "
+                        f"maintenance load (70/55/40 step-down). Hold INTENSITY — keep "
+                        f"race-pace/threshold sharpness at reduced dose, keep session "
+                        f"frequency; cut duration, never intensity.")}
+
+        # RACE WEEK: cost the race and prescribe only what is left (see _RACE_WEEK_MIN).
+        if days_to_race <= 6:
+            rt, rt_src = race_load(cfg)
+            floor = int(round(pre_taper_weekly * _RACE_WEEK_MIN))
+            training = max(floor, whole_week - rt)
+            out.update({
+                "week_type": "race",
+                "race_in_week": True,
+                "race_tss_estimate": rt,
+                "race_tss_source": rt_src,
+                "whole_week_tss_incl_race": whole_week,
+                "training_at_floor": training == floor,
+                "required_weekly_tss": training,
+                "recommended_weekly_tss": training,
+                "note": (
+                    f"RACE WEEK — the race is on {race_s} ({days_to_race} day"
+                    f"{'' if days_to_race == 1 else 's'} away) and it is the week's load: "
+                    f"~{rt} TSS ({rt_src.replace('_', ' ')}). The whole-week taper figure is "
+                    f"~{whole_week} TSS, so the TRAINING budget is ~{training} TSS"
+                    + (" — the openers floor, because the race alone exceeds the week's "
+                       "whole-week figure. " if training == floor else " — what is left "
+                       "after the race. ")
+                    + "Prescribe SHORT openers only: keep frequency and a few minutes at "
+                      "race effort in each, cut all duration. Nothing on race day itself, "
+                      "and the day before is rest or a 20-min opener at most. Do NOT "
+                      "schedule a long ride, a long run or any quality session."),
+            })
+        return out
 
     # Derive phase CTL milestones from race_min when not explicitly configured
     # (mirrors generate-plan.py so athletes with a race_min but no phase_ctl — e.g.
@@ -944,7 +1013,7 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
     last_at_or_below_maint = (
         last_week_tss is not None and maintenance
         and float(last_week_tss) <= _DEFACTO_DELOAD_AT * maintenance
-        and _prev_week_type() not in ("deload", "taper", "race", "post_race"))
+        and _prev_week_type() not in DOWN_WEEK_TYPES)
     if last_at_or_below_maint and rec:
         step_cap = max(int(maintenance), int(round(float(last_week_tss) * _RETURN_STEP)))
         if step_cap < int(rec):
@@ -1033,7 +1102,7 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
         # Classify the prior week by recomputing it — required_tss is pure and the inner
         # call passes last_week_tss=None, so it skips THIS branch (bounded recursion).
         # This also subsumes the old scheduled-deload arithmetic guard (prev type=deload).
-        if _prev_week_type() not in ("deload", "taper", "race", "post_race"):
+        if _prev_week_type() not in DOWN_WEEK_TYPES:
             deload_why = (f"recovery week: last week's executed load "
                           f"({int(last_week_tss)} TSS) was under {int(_MISS_TRIGGER * 100)}% "
                           f"of maintenance (~{int(_MISS_TRIGGER * maintenance)})")

@@ -214,7 +214,8 @@ def test_no_slack_when_every_loading_week_is_ramp_pinned():
     tests the ramp, not the hours."""
     rep = mp.project_block(_cfg(), _bp(ceiling_peak=5000, ceiling_spec=5000),
                            ctl_now=60.0, today=date(2026, 8, 3))
-    loading = [w for w in rep["weeks"] if w["week_type"] not in ("taper", "deload")]
+    loading = [w for w in rep["weeks"]
+               if w["week_type"] not in ("taper", "deload", "race")]
     assert loading and all(w["ramp_limited"] for w in loading)
     assert "no_slack" in _codes(rep)
     # and NOT flagged when there is real headroom under the cap

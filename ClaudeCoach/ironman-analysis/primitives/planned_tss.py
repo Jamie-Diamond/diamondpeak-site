@@ -464,6 +464,59 @@ def _duration_min(event: dict, session_type: str) -> int:
     return _DUR_DEFAULT_MIN.get(session_type, 60)
 
 
+# -- Race load ----------------------------------------------------------------
+# The race is the largest single training stress of the year and, until 6 Sep 2026,
+# the ONE thing on the calendar the planner never costed: `events` passed to
+# validate_week is the built proposal, so the race event was outside the week total,
+# outside the cap check and outside the CTL-ramp projection. Race week was therefore
+# prescribed the taper ladder's final step (40% of maintenance) as TRAINING, on top of
+# a race worth more TSS than the whole week's budget.
+#
+# Same convention as everything else here: TSS = hours x IF^2 x 100. Defaults are
+# whole-event figures (moving + transitions) at the intensity the distance is actually
+# raced at, and they are a FALLBACK — an explicit `expected_tss` on the race entry, or
+# an expected finish time, always wins. Sanity: a 11 h Ironman at 0.70 -> ~540 TSS,
+# a 5 h 70.3 at 0.80 -> ~320.
+_RACE_PROFILE = {            # event key -> (typical hours, whole-race IF)
+    "Full Ironman": (11.0, 0.70),
+    "70.3":         (5.0,  0.80),
+    "Olympic":      (2.3,  0.88),
+    "Sprint":       (1.2,  0.92),
+    # Every cycling event normalises to "Sportive" via blueprint.event_key.
+    "Sportive":     (6.0,  0.70),
+}
+_RACE_PROFILE_DEFAULT = (5.0, 0.75)
+
+
+def race_tss(event_type: str, expected_hours=None, expected_tss=None) -> tuple[int, str]:
+    """(tss, source) for a race. source in explicit | duration | event_default.
+
+    Every layer is overridable from above because a race's cost is knowable in
+    advance and an estimate should never outrank a stated figure.
+    """
+    if expected_tss:
+        try:
+            return int(round(float(expected_tss))), "explicit"
+        except (TypeError, ValueError):
+            pass
+    hours, IF = _RACE_PROFILE.get(_race_event_key(event_type), _RACE_PROFILE_DEFAULT)
+    if expected_hours:
+        try:
+            return int(round(float(expected_hours) * 100 * IF ** 2)), "duration"
+        except (TypeError, ValueError):
+            pass
+    return int(round(hours * 100 * IF ** 2)), "event_default"
+
+
+def _race_event_key(event_type: str) -> str:
+    """Normalise an event name to a _RACE_PROFILE key (cycling events -> Sportive)."""
+    try:
+        from primitives.blueprint import event_key
+        return event_key(event_type or "")
+    except Exception:
+        return event_type or ""
+
+
 def planned_session_tss(event: dict) -> dict:
     """{tss, source, duration_min, name} for a planned WORKOUT event.
     source ∈ plan | icu | calculated."""

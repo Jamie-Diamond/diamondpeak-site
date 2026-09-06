@@ -150,6 +150,32 @@ Pause an athlete by adding them to `config/planning-paused.json` and pushing —
 `cc-gitpull` picks it up on the VM within 30 minutes, no shell access needed.
 Resume by deleting the entry. Reference: `lib/planning_pause.py`.
 
+## Race week
+
+The race is the biggest single session of the year and, until 6 Sep 2026, the one
+thing on the calendar nothing costed — `validate_week` only ever sees the built
+proposal, so the race sat outside the week total, the load cap and the CTL-ramp
+projection. The taper ladder's final step (40% of maintenance) is a *whole-week*
+figure and was being handed to the planner as a *training* budget: ~300 TSS of
+training in the seven days around a ~540 TSS Ironman.
+
+Now the race is costed (`primitives.planned_tss.race_tss`) and deducted first:
+
+    training budget = max(15% of 7xCTL, whole-week taper figure - race TSS)
+
+For any long-course race the race exceeds the whole-week figure, so the openers
+floor is what gets prescribed — which is the right answer. `validate_week` also
+hard-fails a session scheduled on race day (`session_on_race_day`).
+
+Race load comes from `expected_tss` > expected finish time > event default
+(`race_tss` / `race_expected_hours` in `athletes.json` override the estimate).
+Defaults are whole-event `hours x IF^2 x 100`: Full Ironman ~539, 70.3 ~320,
+Olympic ~178, sportive ~294.
+
+`plan_tools.DOWN_WEEK_TYPES` is the single list of weeks that are light by design
+(`deload`, `taper`, `race`, `post_race`) — used both to relax the quality floors
+and to stop a deliberately light week reading as a missed one.
+
 ## After the race
 
 A race in the **past** puts the athlete in a `transition` phase, not a taper
