@@ -136,6 +136,32 @@ in the bot’s injected prompt while other files were corrected.
 
 ---
 
+## Per-athlete modes
+
+Three settings, not one on/off switch:
+
+| Setting | Where | Effect |
+| --- | --- | --- |
+| `active: false` | `config/athletes.json` | Everything off, including activity tracking. |
+| tracking-only | `config/planning-paused.json` (tracked in git) or `planning_paused: true` in `config/athletes.json` | Nothing is **prescribed** and nothing is **judged**: no weekly plan, daily prescription, blueprint, check-in, night-before brief, watchdog trigger, plan audit or weekly summary. The activity watcher, the Telegram bot and the public site data keep running, and the coach prompt is told not to chase missed sessions. |
+| `coaching_level` | `athletes/<slug>/profile.json` | Vocabulary and depth only (`beginner` / `mid` / `pro`). |
+
+Pause an athlete by adding them to `config/planning-paused.json` and pushing —
+`cc-gitpull` picks it up on the VM within 30 minutes, no shell access needed.
+Resume by deleting the entry. Reference: `lib/planning_pause.py`.
+
+## After the race
+
+A race in the **past** puts the athlete in a `transition` phase, not a taper
+(`plan_tools.required_tss`, `primitives.blueprint.current_phase`). Volume returns
+at 30/45/60% of the ~7xCTL maintenance load over three weeks and then HOLDS at
+65% with `needs_next_race` set, intensity stays off, and the weekly load ceiling
+stays armed (a taper's is deliberately `None`, which post-race meant no ceiling
+at all). Countdowns come from `races.countdown`, which counts to the next
+**upcoming** race and shows nothing once every configured race has been run.
+
+Configure the next race and regenerate the blueprint to start a new block.
+
 ## Deployment
 
 - **Code** ships via `git push` → on the VM, `cc-gitpull.sh` (`git pull`). Branch: `main`.

@@ -15,6 +15,7 @@ from coaching_levels import level_block as _level_block
 import illness as illness_lib   # structured illness/compromised flag (surfacing gate)
 import menstrual
 import ops_log
+import planning_pause    # tracking-only athletes: no prescribing, no adherence
 import progression_guard
 import rpe_context
 import injury_scope
@@ -870,6 +871,11 @@ def main():
     processed = False
     for slug, cfg in athletes.items():
         if not cfg.get("active"):
+            continue
+        # Tracking-only: this athlete keeps the activity watcher and the bot, but is
+        # prescribed nothing and judged on nothing (lib/planning_pause.py).
+        if planning_pause.is_paused(slug, cfg):
+            print(planning_pause.skip_line(slug, "daily-prescription", cfg), file=sys.stderr)
             continue
         if not cfg.get("daily_prescription", True):
             continue

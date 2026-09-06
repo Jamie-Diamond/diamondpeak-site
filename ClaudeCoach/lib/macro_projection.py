@@ -74,6 +74,7 @@ from primitives.validate_plan import validate_week             # noqa: E402
 # already repaired (or go quiet on one it has not). Same anti-drift pattern as
 # _cap_tolerance() reading validate_week's own signature.
 from plan_tools import LATE_LOADING_WINDOW                    # noqa: E402
+import planning_pause                                         # noqa: E402
 
 ATHLETES_CONFIG = BASE / "config" / "athletes.json"
 
@@ -519,7 +520,9 @@ def main():
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
     athletes = json.loads(ATHLETES_CONFIG.read_text())
-    slugs = ([s for s, c in athletes.items() if c.get("active", True)] if args.all
+    # Tracking-only athletes are not projected toward a race target (see plan_audit).
+    slugs = ([s for s, c in athletes.items()
+              if c.get("active", True) and not planning_pause.is_paused(s, c)] if args.all
              else [args.athlete])
     if not slugs or slugs == [None]:
         raise SystemExit("pass --athlete <slug> or --all")

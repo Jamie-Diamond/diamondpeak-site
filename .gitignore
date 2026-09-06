@@ -21,6 +21,12 @@ ClaudeCoach/config/onboarding_state.json
 ClaudeCoach/config/plan-audit-streaks.json
 ClaudeCoach/config/backup.key
 
+# MUST stay tracked. The tracking-only athlete list is the one piece of coaching
+# config that deploys through git (cc-gitpull) rather than living on the VM, and a
+# global ~/.gitignore_global with `*.json` in it silently swallowed it. A repo
+# .gitignore is read after the global one, so this negation wins.
+!ClaudeCoach/config/planning-paused.json
+
 # Athlete personal data — never commit to public repo
 # (current-state.md files were accidentally force-added 16 May–5 Jul 2026 and
 #  publicly served; untracked 5 Jul. Do not re-add athlete files while public.)

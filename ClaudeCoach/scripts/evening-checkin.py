@@ -35,6 +35,7 @@ sys.path.insert(0, str(BASE / "lib"))
 from coaching_levels import level_block as _level_block
 import illness as illness_lib   # structured illness/compromised flag (surfacing gate)
 import ops_log
+import planning_pause    # tracking-only athletes: no prescribing, no adherence
 
 TOOLS = "Read,Bash"
 
@@ -472,6 +473,11 @@ def main():
     processed = False
     for slug, cfg in athletes.items():
         if not cfg.get("active", True):
+            continue
+        # Tracking-only: this athlete keeps the activity watcher and the bot, but is
+        # prescribed nothing and judged on nothing (lib/planning_pause.py).
+        if planning_pause.is_paused(slug, cfg):
+            print(planning_pause.skip_line(slug, "evening-checkin", cfg), file=sys.stderr)
             continue
         if processed:
             time.sleep(stagger)   # space Claude calls — rate-limit contention

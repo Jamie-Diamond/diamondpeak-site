@@ -16,7 +16,7 @@ import pytest
 from primitives.blueprint import (
     validate_blueprint, is_valid, SCHEMA_VERSION, canonical_phases, current_phase,
     event_sports, is_multisport, event_key, EVENT_SPORTS, CYCLING_EVENTS,
-    resolve_phases, phase_structure, assign_dates,
+    resolve_phases, phase_structure, assign_dates, tss_ceiling,
 )
 
 REPO = Path(__file__).resolve().parents[2]            # ClaudeCoach/
@@ -292,8 +292,24 @@ class TestCurrentPhase:
     def test_before_first_clamps_to_first(self):
         assert current_phase(self._bp(), date(2026, 1, 1))["name"] == "Base"
 
-    def test_after_last_clamps_to_last(self):
-        assert current_phase(self._bp(), date(2027, 1, 1))["name"] == "Taper"
+    def test_after_last_is_a_post_race_transition(self):
+        """Past the last phase is TRANSITION, not "still tapering".
+
+        Clamping to the last phase (which ends on race day) made every post-race
+        week read as a taper: taper content, taper messaging ("race in 1 wk" for a
+        race already run), and no weekly load ceiling at all, because tss_ceiling
+        returns None in a taper.
+        """
+        ph = current_phase(self._bp(), date(2027, 1, 1))
+        assert ph["name"] == "Transition"
+        assert ph["family"] == "transition"
+        assert ph["post_race"] is True
+        assert ph["after_phase"] == "Taper"
+        # The window opens the day after the last phase ended (i.e. after race day).
+        assert ph["start"] > self._bp()["phases"][-1]["end"]
+        # And unlike a taper it carries a real load ceiling.
+        assert tss_ceiling(12.0, ph["name"]) is not None
+        assert tss_ceiling(12.0, "Taper") is None
 
     def test_none_when_no_phases(self):
         assert current_phase({}, date(2026, 6, 8)) is None

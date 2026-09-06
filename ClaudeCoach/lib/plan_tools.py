@@ -544,6 +544,26 @@ _DEFACTO_DELOAD_AT = 1.00   # last week <= 1.00 x maintenance = already a de fac
 # absolute numbers drift down a touch more — the safe direction.
 _TAPER_FACTORS = {3: 0.70, 2: 0.55, 1: 0.40}
 
+# POST-RACE TRANSITION (6 Sep 2026).
+#
+# There was no branch for "the race has happened". `week_now` simply kept counting past
+# peak_end_week, so every week after race day resolved to the TAPER branch, and the taper
+# branch clamps days_to_race at 0 -> weeks_to_race 1. The consequences all landed on the
+# athlete: the week was prescribed as a race-week taper ("hold INTENSITY, keep race-pace
+# sharpness"), the note told them their race was in 1 week when it was weeks behind them,
+# and because current_phase clamped to the Taper phase whose tss_ceiling is None, the
+# validator's weekly load cap was SKIPPED entirely — the one week of the year with no
+# upper bound on load was the week after an Ironman.
+#
+# A finished A-race with nothing configured after it is not a taper and not a training
+# block: it is a transition. Volume comes back gradually off ~7 x CTL (a figure that
+# falls on its own as CTL decays, so this cannot ratchet), intensity stays off, and the
+# note asks for the next race rather than inventing a target to chase.
+_TRANSITION_FACTORS = {1: 0.30, 2: 0.45, 3: 0.60}
+# Week 4 onward with still no next race: hold, do not build. Training on toward nothing
+# is exactly what produced the complaint.
+_TRANSITION_HOLD = 0.65
+
 
 # Down-week placement is a BLOCK decision, not a counter (macro projection, 27 Jul
 # 2026: Kathryn's cadence deload landed on week 16 of 18, leaving only two loading
@@ -690,19 +710,60 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
     ends = _phase_ends(cfg)
     week_now = max(1, (today - plan_start).days // 7 + 1)
     phase = next((p for p in _PHASES if week_now <= ends[p]), "taper")
+
+    # POST-RACE first: a race in the PAST is never a taper (see _TRANSITION_FACTORS).
+    # Checked ahead of the phase branches, not inside the taper one, so it also catches a
+    # stale plan_start that leaves week_now inside 'peak' after race day.
+    race_s = cfg.get("race_date")
+    race_d = date.fromisoformat(race_s) if race_s else None
+    if race_d and race_d < today:
+        days_since = (today - race_d).days
+        weeks_since = days_since // 7 + 1
+        f = _TRANSITION_FACTORS.get(weeks_since, _TRANSITION_HOLD)
+        maint = 7.0 * float(ctl_today or 0)
+        target = int(round(maint * f)) if maint else None
+        stale = weeks_since > max(_TRANSITION_FACTORS)
+        out = {"phase": "transition", "week_type": "post_race",
+               "training_week": week_now, "ctl_today": ctl_today,
+               "race_date": race_s, "days_since_race": days_since,
+               "weeks_since_race": weeks_since, "transition_factor": f,
+               "weekly_tss_floor": 0,          # unloading is the point; no under-training floor
+               "needs_next_race": stale,
+               "required_weekly_tss": target, "recommended_weekly_tss": target}
+        if target is None:
+            out["note"] = ("POST-RACE transition (race was "
+                           f"{days_since} days ago) and no CTL available, so no volume "
+                           "target could be computed. Prescribe easy aerobic only. This is "
+                           "NOT a taper: do not reference an upcoming race or a countdown.")
+        elif stale:
+            out["note"] = (f"POST-RACE, and the last configured race ({race_s}) was "
+                           f"{days_since} days ago with nothing after it. Hold ~{target} TSS "
+                           f"({int(_TRANSITION_HOLD * 100)}% of the ~{int(round(maint))} TSS "
+                           "maintenance load) — maintain, do NOT build. There is no target to "
+                           "chase and no phase to progress: ask for the next race and "
+                           "regenerate the blueprint before prescribing a training block "
+                           "again. Do not reference a race countdown.")
+        else:
+            out["note"] = (f"POST-RACE TRANSITION, week {weeks_since} after {race_s}: "
+                           f"prescribe ~{target} TSS ({int(f * 100)}% of the "
+                           f"~{int(round(maint))} TSS maintenance load). Easy aerobic only "
+                           "— no VO2, no threshold, no long-session progression; frequency "
+                           "and enjoyment over load. Recovery from the race IS the week's "
+                           "work. This is NOT a taper: there is no upcoming race, so never "
+                           "mention a countdown or race-week sharpening.")
+        return out
+
     if phase == "taper":
         # Shaped taper: stepped volume targets so the load checks stay ENGAGED
         # in the most consequential weeks (previously no target -> every audit
         # disengaged and volume was left to LLM discretion).
-        race_s = cfg.get("race_date")
         if not race_s or not ctl_today:
             missing = "race_date" if not race_s else "ctl_today"
             return {"phase": "taper/race", "ctl_today": ctl_today, "training_week": week_now,
                     "week_type": "taper",
                     "note": f"taper, but no {missing} available — volume target could not "
                             "be computed; step down toward race day, hold intensity"}
-        race = date.fromisoformat(race_s)
-        days_to_race = max(0, (race - today).days)
+        days_to_race = max(0, (race_d - today).days)
         weeks_to_race = max(1, -(-days_to_race // 7))          # ceil
         factor = _TAPER_FACTORS.get(min(weeks_to_race, 3), _TAPER_FACTORS[3])
         pre_taper_weekly = 7.0 * float(ctl_today)
@@ -793,7 +854,7 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
     last_at_or_below_maint = (
         last_week_tss is not None and maintenance
         and float(last_week_tss) <= _DEFACTO_DELOAD_AT * maintenance
-        and _prev_week_type() not in ("deload", "taper", "race"))
+        and _prev_week_type() not in ("deload", "taper", "race", "post_race"))
     if last_at_or_below_maint and rec:
         step_cap = max(int(maintenance), int(round(float(last_week_tss) * _RETURN_STEP)))
         if step_cap < int(rec):
@@ -882,7 +943,7 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
         # Classify the prior week by recomputing it — required_tss is pure and the inner
         # call passes last_week_tss=None, so it skips THIS branch (bounded recursion).
         # This also subsumes the old scheduled-deload arithmetic guard (prev type=deload).
-        if _prev_week_type() not in ("deload", "taper", "race"):
+        if _prev_week_type() not in ("deload", "taper", "race", "post_race"):
             deload_why = (f"recovery week: last week's executed load "
                           f"({int(last_week_tss)} TSS) was under {int(_MISS_TRIGGER * 100)}% "
                           f"of maintenance (~{int(_MISS_TRIGGER * maintenance)})")

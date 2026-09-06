@@ -26,6 +26,8 @@ PROJECT_DIR = str(BASE.parent)
 
 # Validate the structured sidecar against the shared schema (remediation WS B).
 sys.path.insert(0, str(BASE / "ironman-analysis"))
+sys.path.insert(0, str(BASE / "lib"))
+import planning_pause  # noqa: E402
 from primitives.blueprint import (  # noqa: E402
     validate_blueprint, canonical_phases, resolve_phases,
     phase_structure, assign_dates, SCHEMA_VERSION,
@@ -832,6 +834,12 @@ def main():
 
     slug = args.athlete
     choice = args.fitness_choice
+
+    # A blueprint IS a plan (phases, CTL milestones, test schedule), so a
+    # tracking-only athlete does not get one built for them — by cron or by hand.
+    if planning_pause.is_paused(slug):
+        print(planning_pause.skip_line(slug, "generate-blueprint"), file=sys.stderr)
+        sys.exit(0)
 
     profile_path = BASE / f"athletes/{slug}/profile.json"
     if not profile_path.exists():

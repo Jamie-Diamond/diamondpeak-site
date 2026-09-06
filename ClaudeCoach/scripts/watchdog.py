@@ -13,6 +13,7 @@ PROJECT_DIR = str(BASE.parent)               # diamondpeak-site/
 sys.path.insert(0, str(BASE / "lib"))
 import claude_call
 import ops_log
+import planning_pause    # tracking-only athletes: no prescribing, no adherence
 import heat as heat_lib
 import open_actions as oa_lib   # T9: single store, arithmetic in Python
 CLAUDE      = "/usr/bin/claude"
@@ -425,6 +426,11 @@ def main():
     processed = False
     for slug, cfg in athletes.items():
         if not cfg.get("active"):
+            continue
+        # Tracking-only: this athlete keeps the activity watcher and the bot, but is
+        # prescribed nothing and judged on nothing (lib/planning_pause.py).
+        if planning_pause.is_paused(slug, cfg):
+            print(planning_pause.skip_line(slug, "watchdog", cfg), file=sys.stderr)
             continue
         if processed:
             # Space the athletes' Claude runs to avoid bursting the rate limit.

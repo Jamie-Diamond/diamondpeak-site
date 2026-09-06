@@ -15,6 +15,7 @@ sys.path.insert(0, str(BASE / "lib"))
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 import claude_call
 import ops_log
+import planning_pause    # tracking-only athletes: no prescribing, no adherence
 from progression import long_run_cap_km as _lr_cap
 from primitives.nutrition import recent_avg_g_hr
 import races as races_lib
@@ -260,6 +261,11 @@ def main():
 
     for slug, cfg in athletes.items():
         if not cfg.get("active", True):
+            continue
+        # Tracking-only: this athlete keeps the activity watcher and the bot, but is
+        # prescribed nothing and judged on nothing (lib/planning_pause.py).
+        if planning_pause.is_paused(slug, cfg):
+            print(planning_pause.skip_line(slug, "night-before-brief", cfg), file=sys.stderr)
             continue
         try:
             run_athlete(slug, cfg)

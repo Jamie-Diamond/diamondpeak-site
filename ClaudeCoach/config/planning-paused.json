@@ -1,0 +1,8 @@
+{
+  "_README": "Athletes in tracking-only mode: no plans, no prescriptions, no adherence chasing. Activity tracking and the chat bot stay on. Read by ClaudeCoach/lib/planning_pause.py; tracked in git so a change deploys through cc-gitpull. Remove the entry (or set paused:false) to resume coaching.",
+  "calum": {
+    "paused": true,
+    "since": "2026-09-06",
+    "reason": "athlete's request: wants ClaudeCoach as a tracker, not a coach — no weekly plan, no daily card, no missed-target messages"
+  }
+}
