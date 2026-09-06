@@ -167,10 +167,24 @@ For any long-course race the race exceeds the whole-week figure, so the openers
 floor is what gets prescribed — which is the right answer. `validate_week` also
 hard-fails a session scheduled on race day (`session_on_race_day`).
 
-Race load comes from `expected_tss` > expected finish time > event default
-(`race_tss` / `race_expected_hours` in `athletes.json` override the estimate).
-Defaults are whole-event `hours x IF^2 x 100`: Full Ironman ~539, 70.3 ~320,
-Olympic ~178, sportive ~294.
+Race load comes from, best first: an explicit `race_tss`; the athlete's OWN
+previous race at that distance (`profile.prev_race`, summed per leg — Jamie's IM
+Italy is 556 TSS against a 539 event default that was never his); an expected
+finish time (`race_expected_hours`); the event default. Defaults are whole-event
+`hours x IF^2 x 100`: Full Ironman ~539, 70.3 ~320, Olympic ~178, sportive ~294.
+
+The bike IF must be read from `prev_race.bike_if` as recorded, never recomputed
+from NP against today's FTP — 201 W against an FTP that has gone 275 -> 307 reads
+as 0.65 rather than the 0.73 it was, and the race comes out ~70 TSS light.
+
+**Openers are above race intensity for long course.** Long-course racing happens
+at or below the top of Z2 (Jamie's IM bike: 230 W against FTP 307, i.e. 75% of
+FTP, exactly the top of the Coggan Z2 band), so "a few minutes at race effort" is
+easier than the athlete's normal easy riding and primes nothing. For an event
+whose race IF is at or below `_LONG_COURSE_IF`, race-week openers are short
+threshold/VO2 bursts and race-pace work is pacing and fuelling rehearsal only.
+Short-course racing is the other way round: there, race pace IS the sharpening
+intensity.
 
 `plan_tools.DOWN_WEEK_TYPES` is the single list of weeks that are light by design
 (`deload`, `taper`, `race`, `post_race`) — used both to relax the quality floors

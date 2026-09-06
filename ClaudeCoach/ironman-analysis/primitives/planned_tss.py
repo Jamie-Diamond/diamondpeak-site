@@ -488,6 +488,77 @@ _RACE_PROFILE = {            # event key -> (typical hours, whole-race IF)
 _RACE_PROFILE_DEFAULT = (5.0, 0.75)
 
 
+def race_tss_from_prev_race(prev_race: dict, css_per_100m=None,
+                            run_threshold_pace_per_km=None, swim_m: float = 3800.0,
+                            run_km: float = 42.2):
+    """(tss, "prev_race") summed per leg from what the athlete ACTUALLY raced, or None.
+
+    Far better than any event default, and it is already in profile.json for anyone who
+    has raced the distance. Per leg, because a triathlon is three efforts at three very
+    different intensities and one blended IF over the whole day is a fiction.
+
+    IF PER LEG, and each against that leg's own threshold:
+      bike  prev_race.bike_if, as recorded    (i.e. against the FTP OF THE DAY, which is
+                                               the point — see below)
+      run   run threshold pace / actual race pace
+      swim  CSS pace / actual race pace
+
+    The bike IF must be the one recorded at the time. Recomputing NP/FTP_today silently
+    reprices last year's race at this year's fitness: 201 W against an FTP that has since
+    gone 275 -> 307 reads as IF 0.65 rather than the 0.73 it was, and the race comes out
+    ~70 TSS light. Only ever read the stored figure.
+    """
+    if not prev_race:
+        return None
+    try:
+        bike_min = _hhmm_min(prev_race.get("bike_time"))
+        run_min  = _hhmm_min(prev_race.get("run_time"))
+        swim_min = _hhmm_min(prev_race.get("swim_time"))
+        bike_if  = float(prev_race.get("bike_if") or 0)
+        if not (bike_min and bike_if):
+            return None
+        total = bike_min / 60 * bike_if ** 2 * 100
+        run_thr = _pace_s(run_threshold_pace_per_km)
+        run_pace = _pace_s(prev_race.get("run_pace"))
+        if run_min and run_thr:
+            if not run_pace:
+                run_pace = run_min * 60 / run_km
+            total += run_min / 60 * (run_thr / run_pace) ** 2 * 100
+        css = _pace_s(css_per_100m)
+        if swim_min and css:
+            total += swim_min / 60 * (css / (swim_min * 60 / (swim_m / 100))) ** 2 * 100
+        return int(round(total)), "prev_race"
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+
+
+def _hhmm_min(v):
+    """'4:55' or '4:55:00' -> minutes. None when unparseable."""
+    if not v:
+        return None
+    try:
+        parts = [int(x) for x in str(v).strip().lstrip("~").split(":")[:3]]
+    except ValueError:
+        return None          # unparseable is "unknown", never an exception at a call site
+    if len(parts) == 2:
+        return parts[0] * 60 + parts[1]
+    if len(parts) == 3:
+        return parts[0] * 60 + parts[1] + parts[2] / 60
+    return None
+
+
+def _pace_s(v):
+    """'4:02/km' or '1:39' -> seconds. None when unparseable."""
+    if not v:
+        return None
+    head = str(v).split("/")[0].strip()
+    try:
+        m, sec = head.split(":")
+        return int(m) * 60 + int(sec)
+    except ValueError:
+        return None
+
+
 def race_tss(event_type: str, expected_hours=None, expected_tss=None) -> tuple[int, str]:
     """(tss, source) for a race. source in explicit | duration | event_default.
 

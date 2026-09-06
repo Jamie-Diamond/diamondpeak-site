@@ -246,7 +246,11 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         long_run_cap_min = _caps.get("long_run_min_cap")
     except Exception:
         pass
-    req = pt.required_tss(cfg, ctl, today=today, last_week_tss=last_week_tss) if ctl else {}
+    # profile carries prev_race (what the athlete's race ACTUALLY cost them) and their
+    # thresholds, which is how race week prices the race off real data instead of an
+    # event-average table.
+    req = (pt.required_tss(cfg, ctl, today=today, last_week_tss=last_week_tss,
+                           profile=profile) if ctl else {})
     # Long run is a PROGRESSING target for athletes with a configured long-run floor
     # (Kathryn): schedule it NEAR its climbing cap, not a static short run. Athletes
     # without a floor keep cap-only behaviour (no forced target) - unchanged.

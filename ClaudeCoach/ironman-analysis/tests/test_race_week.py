@@ -196,3 +196,86 @@ class TestDownWeekTypesAreOneDefinition:
         assert emitted <= {"base", "build", "specific", "peak", "deload",
                            "taper", "race", "post_race"}
         assert {"taper", "race", "post_race"} <= emitted
+
+
+class TestRaceLoadFromTheAthletesOwnRace:
+    """A real race beats a table. Jamie's IM Italy comes to 556 TSS summed per leg,
+    against a 539 event default that was never his."""
+
+    PROFILE = {
+        "swim_css_per_100m": "1:39",
+        "run_threshold_pace_per_km": "4:02",
+        "prev_race": {"name": "IM Italy Emilia-Romagna", "date": "2025-09-20",
+                      "swim_time": "1:09", "bike_time": "4:55", "bike_np_watts": 201,
+                      "bike_if": 0.73, "run_time": "3:52", "run_pace": "5:37/km"},
+    }
+
+    def test_prev_race_beats_the_event_default(self):
+        tss, src = pt.race_load(CFG, self.PROFILE)
+        assert src == "prev_race"
+        assert tss == 556
+        assert tss != race_tss("Full Ironman")[0]
+
+    def test_it_sums_per_leg_not_one_blended_if(self):
+        from primitives.planned_tss import race_tss_from_prev_race
+        tss, _ = race_tss_from_prev_race(
+            self.PROFILE["prev_race"], self.PROFILE["swim_css_per_100m"],
+            self.PROFILE["run_threshold_pace_per_km"])
+        bike_only = 295 / 60 * 0.73 ** 2 * 100
+        assert tss > bike_only * 2          # swim and run are both really in there
+
+    def test_the_recorded_bike_if_is_used_not_one_recomputed_today(self):
+        """201 W against today's FTP reads 0.65, not the 0.73 it was — repricing last
+        year's race at this year's fitness loses ~70 TSS."""
+        from primitives.planned_tss import race_tss_from_prev_race
+        as_raced, _ = race_tss_from_prev_race(self.PROFILE["prev_race"])
+        stale = dict(self.PROFILE["prev_race"], bike_if=201 / 307)
+        repriced, _ = race_tss_from_prev_race(stale)
+        assert as_raced - repriced > 50
+
+    def test_an_explicit_figure_still_wins(self):
+        assert pt.race_load(dict(CFG, race_tss=500), self.PROFILE) == (500, "explicit")
+
+    def test_a_different_distance_is_not_borrowed(self):
+        cfg = dict(CFG, race_distance="70.3", race_name="70.3 Somewhere")
+        assert pt.race_load(cfg, self.PROFILE)[1] == "event_default"
+
+    def test_no_profile_falls_back_cleanly(self):
+        assert pt.race_load(CFG)[1] == "event_default"
+
+    def test_a_malformed_prev_race_does_not_raise(self):
+        for bad in ({"bike_time": "nonsense", "bike_if": 0.73}, {"bike_if": 0.73},
+                    {"bike_time": "4:55"}, {}):
+            assert pt.race_load(CFG, {"prev_race": bad})[1] == "event_default"
+
+
+class TestOpenersAreAboveRaceIntensity:
+    """Long-course race intensity sits at or below the top of Z2 — Jamie's IM bike was
+    230 W against an FTP of 307, exactly 75% of FTP. "A few minutes at race effort" in
+    race-week openers therefore prescribes something easier than his normal easy riding.
+    """
+
+    LONG = {"prev_race": {"bike_time": "4:55", "bike_if": 0.636}}     # IM, sub-Z2-top
+    SHORT = {"prev_race": {"bike_time": "1:00", "bike_if": 0.92}}     # sprint/olympic
+
+    def test_long_course_openers_are_explicitly_above_race_effort(self):
+        note = pt.required_tss(CFG, CTL, today=MONDAY, profile=self.LONG)["note"]
+        assert "ABOVE race intensity" in note
+        assert "threshold/VO2" in note
+        assert "is NOT a stimulus" in note
+
+    def test_short_course_openers_use_race_pace(self):
+        cfg = dict(CFG, race_distance="Olympic")
+        note = pt.required_tss(cfg, CTL, today=MONDAY, profile=self.SHORT)["note"]
+        assert "race pace IS the sharpening intensity" in note
+
+    def test_the_taper_note_no_longer_calls_race_pace_intensity(self):
+        cfg = dict(CFG, phase_tss=dict(CFG["phase_tss"], peak_end_week=14))
+        note = pt.required_tss(cfg, CTL, today=MONDAY - timedelta(days=7),
+                               profile=self.LONG)["note"]
+        assert "THRESHOLD and above" in note
+        assert "not intensity" in note
+
+    def test_it_falls_back_to_the_event_when_there_is_no_prev_race(self):
+        assert pt.race_intensity(CFG) <= pt._LONG_COURSE_IF          # Full Ironman
+        assert pt.race_intensity({"race_distance": "Sprint"}) > pt._LONG_COURSE_IF
