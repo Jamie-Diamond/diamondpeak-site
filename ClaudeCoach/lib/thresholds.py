@@ -144,6 +144,24 @@ def sync_ftp_from_eftp(slug: str, cfg: dict | None = None, client=None,
     return out
 
 
+def get_ctl_on_date(slug: str, date_str: str, cfg: dict | None = None, client=None) -> float | None:
+    """Actual CTL for a single past date, straight off intervals.icu wellness — for
+    validating a hand-set CTL figure (e.g. race_predictor's anchor_ctl) against what the
+    athlete's fitness really was on that date, rather than trusting a manually entered
+    number. Never raises: any lookup failure (no config, no network, day not yet
+    synced) returns None."""
+    try:
+        if cfg is None:
+            cfg = json.loads(ATHLETES.read_text())[slug]
+        if client is None:
+            from icu_api import IcuClient
+            client = IcuClient(cfg["icu_athlete_id"], cfg["icu_api_key"])
+        rows = client.get_wellness(days=1, newest=date_str)
+        return float(rows[-1]["ctl"]) if rows and rows[-1].get("ctl") is not None else None
+    except Exception:
+        return None
+
+
 if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser()

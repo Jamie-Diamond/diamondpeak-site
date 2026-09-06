@@ -6,12 +6,14 @@ and the chat path (via plan_tools.py race-predict). Do not fork this logic.
 """
 import math
 import time
+from datetime import date, timedelta
 
 __all__ = ["race_predictor", "parse_hm", "parse_pace_s"]
 
 IF_CAP = 0.75                      # long-course sustainable ceiling
 TSB_DEFICIT_GATE = 10.0            # TSB points of freshness deficit before any haircut
 TSB_HAIRCUT_CAP_PCT = 3.0          # max IF haircut, per cent
+ANCHOR_CTL_TOLERANCE = 3.0         # CTL points before a hand-set anchor_ctl is flagged
 
 # slug -> (expiry_epoch, (ftp, source)). The bot is a long-lived poll loop, so this
 # is TTL'd: it exists to stop repeated calls inside one refresh, not to pin a figure.
@@ -64,7 +66,42 @@ def _resolve_ftp(profile, thresholds_fn=None):
     return profile_ftp, f"profile {profile_ftp}"
 
 
-def race_predictor(profile, current_ctl, thresholds_fn=None):
+def _resolve_anchor_ctl(profile, cfg, pr, wellness_fn=None):
+    """(anchor_ctl, mismatch_note). Auto-derives the reference-race anchor CTL from the
+    athlete's ACTUAL wellness CTL the day before the reference race — the tapered
+    fitness the anchor IF/NP/splits were really raced off — rather than trusting
+    cfg.anchor_ctl, a hand-set figure prone to being read off race day itself instead of
+    the day before. Falls back silently to cfg.anchor_ctl on any failure: no race date
+    on file, no slug, no network, no wellness synced that far back, no config (offline
+    tests). When a derived value IS available but disagrees with the configured one by
+    more than ANCHOR_CTL_TOLERANCE, the derived value is used instead and a note is
+    returned — same "announce, don't silently drift" pattern as the raceday_ctl
+    staleness note below."""
+    cfg_ctl = cfg.get("anchor_ctl")
+    race_date = pr.get("date")
+    slug = profile.get("slug") or profile.get("athlete")
+    if not race_date or not slug:
+        return cfg_ctl, None
+    try:
+        anchor_day = (date.fromisoformat(str(race_date)[:10]) - timedelta(days=1)).isoformat()
+        fn = wellness_fn
+        if fn is None:
+            from thresholds import get_ctl_on_date as fn
+        derived = fn(slug, anchor_day)
+    except Exception:
+        derived = None
+    if derived is None:
+        return cfg_ctl, None
+    derived = float(derived)
+    if cfg_ctl is not None and abs(derived - float(cfg_ctl)) > ANCHOR_CTL_TOLERANCE:
+        note = (f"anchor_ctl {round(cfg_ctl)} does not match {pr.get('name', 'the anchor race')}'s "
+                f"actual day-before CTL on {anchor_day} (CTL {round(derived)}) — check it wasn't "
+                f"set from race day itself; using {round(derived)}")
+        return derived, note
+    return (cfg_ctl if cfg_ctl is not None else derived), None
+
+
+def race_predictor(profile, current_ctl, thresholds_fn=None, wellness_fn=None):
     """3-scenario IM race predictor.
 
     Science (the athlete's own framing): fitness = CTL = the capacity to absorb TSS;
@@ -99,7 +136,7 @@ def race_predictor(profile, current_ctl, thresholds_fn=None):
     ftp, ftp_source = _resolve_ftp(profile, thresholds_fn)
     thr = parse_pace_s(profile.get("run_threshold_pace_per_km"))
     anchor_if  = pr.get("bike_if")
-    anchor_ctl = cfg.get("anchor_ctl")
+    anchor_ctl, anchor_ctl_note = _resolve_anchor_ctl(profile, cfg, pr, wellness_fn)
     anchor_np  = pr.get("bike_np_watts")
     bike_km    = cfg.get("bike_km", 180.0)
     bike_anchor_min = parse_hm(pr.get("bike_time"))
@@ -120,6 +157,8 @@ def race_predictor(profile, current_ctl, thresholds_fn=None):
     # Staleness self-announcement: raceday_ctl is an operator-maintained config figure,
     # so a fitness level already past it means the config, not the athlete, is behind.
     notes = []
+    if anchor_ctl_note:
+        notes.append(anchor_ctl_note)
     if float(current_ctl) > raceday_ctl:
         notes.append(f"raceday_ctl {round(raceday_ctl)} is below today's fitness "
                      f"(CTL {round(float(current_ctl))}): stale, update it")
