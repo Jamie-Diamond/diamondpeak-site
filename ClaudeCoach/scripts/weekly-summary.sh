@@ -13,8 +13,18 @@ from pathlib import Path
 BASE   = Path("ClaudeCoach")
 config = json.loads((BASE / "config/athletes.json").read_text())
 
+sys.path.insert(0, str(BASE / "lib"))
+import planning_pause
+
 for slug, a in config.items():
     if not a.get("active"):
+        continue
+    # The weekly summary is a compliance surface (planned vs executed load, intensity
+    # distribution vs the phase target, upcoming plan). A tracking-only athlete has no
+    # plan to be measured against, so the whole artefact would be a judgement on a week
+    # nobody prescribed - which is the thing the pause exists to stop.
+    if planning_pause.is_paused(slug, a):
+        print(planning_pause.skip_line(slug, "weekly-summary", a), file=sys.stderr)
         continue
     print(f"[weekly-summary] Running for {slug}...", flush=True)
     r = subprocess.run(

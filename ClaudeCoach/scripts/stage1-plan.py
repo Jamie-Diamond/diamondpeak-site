@@ -30,6 +30,7 @@ sys.path.insert(0, str(BASE / "ironman-analysis"))
 import agreed_week                    # noqa: E402
 import claude_call                    # noqa: E402
 import plan_lock                      # noqa: E402
+import planning_pause                 # noqa: E402
 import weekly_availability            # noqa: E402
 import ops_log                        # noqa: E402
 import session_library as sl          # noqa: E402
@@ -901,6 +902,15 @@ def _plan(args):
                                **({"outcome": outcome} if outcome else {}))
 
     cfg = json.loads((BASE / "config" / "athletes.json").read_text())[args.athlete]
+    # Tracking-only athletes are never prescribed for, whatever invoked this. The cron
+    # already filters them out; this is the second gate, because a plan can also be built
+    # by hand, by the bot's replan path, or by a future caller that has not heard of the
+    # pause. Exit 0 (and no heartbeat): nothing was deliverable, so nothing is missing.
+    if planning_pause.is_paused(args.athlete, cfg):
+        print(planning_pause.skip_line(args.athlete, "stage1-plan", cfg), file=sys.stderr)
+        print(json.dumps({"athlete": args.athlete, "pushed": False,
+                          "skipped": "planning_paused"}))
+        sys.exit(0)
     today = date.today()
     week_start = date.fromisoformat(args.week_start) if args.week_start else _next_monday(today)
     # today=week_start, NOT the run date: the Sunday cron plans NEXT week, and

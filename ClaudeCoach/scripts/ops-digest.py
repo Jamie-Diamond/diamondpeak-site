@@ -74,6 +74,7 @@ BASE        = Path(__file__).parent.parent   # ClaudeCoach/
 CONFIG      = BASE / "config/athletes.json"
 sys.path.insert(0, str(BASE / "lib"))
 import ops_log
+import planning_pause
 import coach_alert
 
 MAX_LINES = 40  # cap the logged digest — the raw entries stay in run-status.jsonl
@@ -265,7 +266,12 @@ def gap_lines(today_entries, week_entries, athletes, now=None, audit=None) -> tu
     now = now or datetime.now()
     day_start = datetime.combine(now.date(), time.min)
     lines, telegram = [], []
-    active = {s: c for s, c in athletes.items() if c.get("active")}
+    # Tracking-only athletes are excluded from the per-athlete deliverable expectations:
+    # their check-ins, prescriptions and weekly plan are DELIBERATELY not produced, so
+    # judging them missing would alarm every day for work nobody asked for
+    # (lib/planning_pause.py).
+    active = {s: c for s, c in athletes.items()
+              if c.get("active") and not planning_pause.is_paused(s, c)}
 
     # ONE definition of "did it run", for every deliverable. There used to be two:
     # _saw() for new checks and an ok-only _ran() for the three original ones
@@ -337,7 +343,12 @@ def weekly_alerts(week_entries, athletes, now=None, audit=None) -> list[str]:
     Returns the labels actually alerted this run (sent or dry-run), for logging.
     """
     now = now or datetime.now()
-    active = {s: c for s, c in athletes.items() if c.get("active")}
+    # Tracking-only athletes are excluded from the per-athlete deliverable expectations:
+    # their check-ins, prescriptions and weekly plan are DELIBERATELY not produced, so
+    # judging them missing would alarm every day for work nobody asked for
+    # (lib/planning_pause.py).
+    active = {s: c for s, c in athletes.items()
+              if c.get("active") and not planning_pause.is_paused(s, c)}
     alerted = []
     for d in coach_alert.DELIVERABLES:
         if d["window"] != "weekly" or not d["telegram"]:

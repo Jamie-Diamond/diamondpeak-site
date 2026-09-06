@@ -297,7 +297,20 @@ def current_phase(blueprint: dict, on_date: date) -> dict | None:
     parsed.sort(key=lambda x: x[0])
     if on_date < parsed[0][0]:
         return parsed[0][2]
-    return parsed[-1][2]
+    # AFTER the last window is not "still in the last phase". The last phase ends on race
+    # day, so clamping to it left every post-race week reading as TAPER: taper content
+    # (hold intensity, cut volume), taper messaging ("race in 1 wk" — a countdown pointing
+    # at a weekend that had already happened), and, because tss_ceiling returns None in a
+    # taper, NO weekly load ceiling at all. A finished plan is a finished plan: post-race
+    # is its own phase, with its own content and a real ceiling, until the next race is
+    # configured and a new blueprint generated.
+    last_start, last_end, last = parsed[-1]
+    if on_date > last_end:
+        return {"name": "Transition", "family": "transition",
+                "start": (last_end + timedelta(days=1)).isoformat(),
+                "end": on_date.isoformat(),
+                "post_race": True, "after_phase": last.get("name")}
+    return last
 
 
 # ---------------------------------------------------------------------------
@@ -308,15 +321,20 @@ def current_phase(blueprint: dict, on_date: date) -> dict | None:
 # ---------------------------------------------------------------------------
 
 IF_TARGETS = {
-    "base":     0.65,
-    "build":    0.68,
-    "specific": 0.70,
-    "peak":     0.72,
+    # Post-race transition sits BELOW base: the block exists to unload, and its ceiling is
+    # the only hard load bound in force once the plan's phases have run out.
+    "transition": 0.60,
+    "base":       0.65,
+    "build":      0.68,
+    "specific":   0.70,
+    "peak":       0.72,
 }
 
 
 def phase_family(name: str) -> str:
     n = (name or "").lower()
+    if "transition" in n:
+        return "transition"
     if "base" in n:
         return "base"
     if "specific" in n:
@@ -336,14 +354,24 @@ def content_family(family: str) -> str:
     more work slightly above race effort, race-rate fuelling on all key
     sessions, race sims split one late-Specific + one Peak. Events without a
     specific row fall back at each lookup site (fuelling default string,
-    ctl_range None -> fitness check skipped), so this stays an identity map.
+    ctl_range None -> fitness check skipped), so this stays an identity map —
+    except for 'transition', which has no content rows of its own anywhere and
+    therefore reads BASE content (easy aerobic), never the taper's.
     """
-    return family
+    return "base" if family == "transition" else family
 
 
 def tss_ceiling(max_hours: float, phase_name: str) -> float | None:
-    """Hard weekly TSS upper bound: max_hours x 100 x IF^2 (None in taper)."""
-    fam = content_family(phase_family(phase_name))
+    """Hard weekly TSS upper bound: max_hours x 100 x IF^2 (None in taper).
+
+    None ONLY in a real taper, where the step-down toward race day is the bound.
+    A post-race Transition phase gets a ceiling like any other block; it used to
+    inherit the taper's None and so carried no load bound at all.
+    """
+    fam = phase_family(phase_name)
+    if fam == "transition":
+        return round(max_hours * 100 * IF_TARGETS["transition"] ** 2, 0)
+    fam = content_family(fam)
     if fam == "taper":
         return None
     IF = IF_TARGETS[fam]

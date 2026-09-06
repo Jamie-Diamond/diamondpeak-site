@@ -96,9 +96,16 @@ class TestARace:
         assert races.a_race(reg)["priority"] == "A"
 
     def test_earliest_upcoming_a_race_wins_across_seasons(self):
-        reg = [races.normalise({"name": "2027", "date": "2027-09-01", "priority": "A"}),
-               races.normalise({"name": "2026", "date": "2026-09-01", "priority": "A"})]
-        assert races.a_race(sorted(reg, key=lambda r: r["date"]))["name"] == "2026"
+        # Dates are derived from the real clock, not hardcoded: normalise() implies
+        # `completed` from today's date, so a fixed 2026 date turned this test into a
+        # time bomb that started failing the day it passed (both races read completed,
+        # and the assertion picked up the later one).
+        from datetime import timedelta
+        soon = (date.today() + timedelta(days=90)).isoformat()
+        later = (date.today() + timedelta(days=455)).isoformat()
+        reg = [races.normalise({"name": "later", "date": later, "priority": "A"}),
+               races.normalise({"name": "soon", "date": soon, "priority": "A"})]
+        assert races.a_race(sorted(reg, key=lambda r: r["date"]))["name"] == "soon"
 
     def test_no_a_race_returns_none_rather_than_picking_one(self, reg):
         only_b = [r for r in reg if r["priority"] == "B"]
@@ -517,3 +524,48 @@ class TestCuratedOverride:
     def test_curated_list_is_also_capped_at_three(self):
         prof = {"race_focus": ["a", "b", "c", "d"]}
         assert len(races.focus_for(prof, "")) == 3
+
+
+class TestCountdown:
+    """The "N days to <race>" footers (6 Sep 2026).
+
+    All three of them did `(date.fromisoformat(cfg["race_date"]) - today).days` on
+    the LEGACY race_date, which keeps counting after the race: an athlete whose
+    event was five weeks ago was shown "-35 days to <race>" on every single reply,
+    and the fitness projection beside one of them multiplied a weekly ramp by a
+    negative number of weeks and reported the result as race-day form.
+    """
+
+    TODAY = date(2026, 9, 6)
+
+    def test_counts_down_to_an_upcoming_race(self):
+        cfg = {"race_date": "2026-09-19", "race_name": "IM Cervia"}
+        assert races.countdown("jamie", cfg, self.TODAY) == (13, "IM Cervia")
+
+    def test_race_day_is_zero_not_absent(self):
+        cfg = {"race_date": "2026-09-06", "race_name": "IM Cervia"}
+        assert races.countdown("jamie", cfg, self.TODAY) == (0, "IM Cervia")
+
+    def test_a_race_in_the_past_produces_no_countdown(self):
+        cfg = {"race_date": "2026-07-05", "race_name": "La Marmotte"}
+        assert races.countdown("calum", cfg, self.TODAY) == (None, "")
+
+    def test_no_race_configured_produces_no_countdown(self):
+        assert races.countdown("calum", {}, self.TODAY) == (None, "")
+
+    def test_the_registry_wins_over_a_stale_legacy_field(self):
+        """race_date stays pointed at the A-race until someone repoints it, so
+        "what is next" has to come from the registry, which knows what is done."""
+        cfg = {"race_date": "2026-07-05", "race_name": "La Marmotte",
+               "races": [{"name": "La Marmotte", "date": "2026-07-05", "priority": "A"},
+                         {"name": "The Traka", "date": "2027-05-01", "priority": "A"}]}
+        assert races.countdown("calum", cfg, self.TODAY) == (237, "The Traka")
+
+    def test_a_race_marked_completed_is_skipped_even_if_dated_ahead(self):
+        cfg = {"races": [{"name": "Done", "date": "2026-09-20", "priority": "B",
+                          "status": "completed"},
+                         {"name": "Next", "date": "2026-10-04", "priority": "A"}]}
+        assert races.countdown("x", cfg, self.TODAY) == (28, "Next")
+
+    def test_unparseable_config_does_not_raise(self):
+        assert races.countdown("x", {"races": "nonsense"}, self.TODAY) == (None, "")

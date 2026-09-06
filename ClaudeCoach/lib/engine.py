@@ -34,6 +34,11 @@ except Exception:
         return ""
 
 try:
+    import planning_pause as _planning_pause
+except Exception:
+    _planning_pause = None
+
+try:
     import illness as _illness
 except Exception:
     _illness = None
@@ -171,18 +176,34 @@ def load_illness_block(sp_file, athlete_name: str = "") -> str:
 
 
 def system_prompt_with_level(sp_file) -> str:
-    """Read system_prompt.txt and append the athlete's coaching-level block."""
+    """Read system_prompt.txt, append the coaching-level block, then the pause block.
+
+    The tracking-only block goes LAST because it overrides what the coaching level and
+    the athlete's own prompt say to do. The scheduled scripts can stand down in code; the
+    bot cannot — the athlete is talking to it — so for a paused athlete the instruction
+    not to prescribe or chase has to reach the model with the rest of the prompt.
+    """
     sp_file = Path(sp_file)
     text = sp_file.read_text().strip()
     profile_path = sp_file.parent / "profile.json"
+    slug = sp_file.parent.name
+    first_name = slug.title()
     if profile_path.exists():
         try:
-            level = json.loads(profile_path.read_text()).get("coaching_level", "mid")
-            block = _level_block(level)
+            profile = json.loads(profile_path.read_text())
+            first_name = (profile.get("name") or slug).split()[0]
+            block = _level_block(profile.get("coaching_level", "mid"))
             if block:
                 text = text + "\n\n" + block
         except Exception:
             pass
+    if _planning_pause is not None:
+        try:
+            pause = _planning_pause.prompt_block(slug, first_name)
+            if pause:
+                text = text + "\n\n" + pause
+        except Exception as e:
+            log(f"planning-pause block skipped: {e}")
     return text
 
 

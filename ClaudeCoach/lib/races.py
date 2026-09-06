@@ -136,6 +136,32 @@ def next_race(races: list, today=None) -> dict:
     return future[0] if future else None
 
 
+def countdown(slug: str, athlete_cfg: dict = None, today=None):
+    """(days, name) for the athlete's next UPCOMING race — (None, "") once every race
+    they have is behind them.
+
+    The three "N days to <race>" footers in the bot each did
+    `(date.fromisoformat(cfg["race_date"]) - today).days` on the LEGACY race_date, which
+    keeps counting after the race: an athlete whose event was five weeks ago was shown
+    "-35 days to <race>" on every reply, and the fitness projection beside one of them
+    multiplied a weekly ramp by a negative number of weeks. race_date is the A-race and
+    stays pointed at it until someone repoints it, so "what is next" has to come from the
+    registry, which knows what is finished. One definition, used by all three.
+    """
+    cfg = {slug: athlete_cfg} if athlete_cfg is not None else None
+    try:
+        races = load_races(slug, config=cfg)
+    except Exception:
+        races = []
+    nxt = next_race(races, today)
+    if not nxt:
+        return None, ""
+    d = days_to(nxt, today)
+    if d is None or d < 0:
+        return None, ""
+    return d, (nxt.get("name") or "race")
+
+
 def days_to(race: dict, today=None):
     """Whole days from `today` to the race; None if the race has no date."""
     d = _as_date((race or {}).get("date"))

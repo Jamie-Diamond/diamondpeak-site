@@ -41,6 +41,7 @@ def _log_to_history(slug: str, message: str) -> None:
 sys.path.insert(0, str(BASE / "lib"))
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 from coaching_levels import level_block as _level_block
+import planning_pause          # tracking-only: describe the ride, never chase a plan
 import illness as illness_lib   # structured illness/compromised flag (surfacing gate)
 import acknowledgement as ack_lib   # §8.3 milestone triggers, evaluated in Python
 import ask_gate                    # asked-and-answered + one-question-per-message gate
@@ -166,6 +167,7 @@ def _build_prompt(slug, first_name, ftp, injuries, profile=None, run_hr_cap=150,
 Check for new activities for {first_name} and stub them into the session log.
 
 {_level_block(coaching_level)}
+{planning_pause.prompt_block(slug, first_name)}
 {illness_lib.prompt_block(slug, first_name=first_name)}
 {ack_lib.PROMPT_NOTE}
 

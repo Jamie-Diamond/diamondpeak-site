@@ -52,6 +52,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 import rules_capture as rc
 import rules_lint
+import planning_pause
 
 DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 _DAY_RE = re.compile(
@@ -509,7 +510,8 @@ def main():
         cfgs = json.loads(cfg_path.read_text(encoding="utf-8"))
     slugs = list(a.slug)
     if a.all:
-        slugs = sorted(s for s, c in cfgs.items() if c.get("active", True))
+        slugs = sorted(s for s, c in cfgs.items()
+                       if c.get("active", True) and not planning_pause.is_paused(s, c))
     if not slugs:
         ap.error("give --slug or --all")
 

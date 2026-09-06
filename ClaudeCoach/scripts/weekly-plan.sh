@@ -3,7 +3,8 @@
 # Runs each CONFIGURED athlete (ctl_targets/phase_tss + event set). Replaces the old
 # generate-plan.py Sunday cron. Gated: only pushes a week that passes the protocol
 # audit; a non-clean week is NOT pushed (athlete's existing plan stays intact).
-# Calum configured 16 Jun 2026 (finish-oriented Marmotte targets) — now included.
+# The athlete list is derived from athletes.json below, minus anyone in tracking-only
+# mode (ClaudeCoach/config/planning-paused.json).
 set -u
 R=/Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach
 LOG="$HOME/Library/Logs/ClaudeCoach/weekly-plan.log"
@@ -30,8 +31,24 @@ timeout 300 python3 "$R/lib/thresholds.py" --all --sync-ftp --apply --notify >> 
 # was not: 1 built nothing, 3 built a week and would not push it, 4 stood down because
 # another build held this athlete's lock (plan_lock.BUSY_EXIT), 124 the `timeout` above
 # killed it. 0 never reaches the lookup.
+# The athlete list is DERIVED, not hardcoded (6 Sep 2026). It was `jamie kathryn calum`,
+# so pausing an athlete's coaching meant editing this loop, and an athlete added to
+# athletes.json was silently never planned for. Now: every ACTIVE athlete not in
+# tracking-only mode (lib/planning_pause.py). A paused athlete is not a failure and must
+# not reach the alert block below - they are simply not built for.
+ATHLETES=$(python3 - <<'PYLIST'
+import json, sys
+R = "/Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach"
+sys.path.insert(0, R + "/lib")
+import planning_pause
+cfg = json.load(open(R + "/config/athletes.json"))
+print(" ".join(s for s, c in cfg.items()
+               if c.get("active", True) and not planning_pause.is_paused(s, c)))
+PYLIST
+)
+echo "--- planning for:${ATHLETES:-(nobody)} ---" >> "$LOG"
 FAILED=""
-for A in jamie kathryn calum; do
+for A in $ATHLETES; do
   echo "--- $A $(date) ---" >> "$LOG"
   timeout 2700 python3 "$R/scripts/stage1-plan.py" --athlete "$A" --push --notify --max-attempts 3 >> "$LOG" 2>&1
   RC=$?

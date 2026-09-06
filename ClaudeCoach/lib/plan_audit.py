@@ -43,6 +43,7 @@ from primitives.validate_plan import validate_week, escalate_repeats  # noqa: E4
 from primitives.blueprint import current_phase                # noqa: E402
 from primitives.nutrition import fuel_target, recent_avg_g_hr  # noqa: E402
 from primitives.planned_tss import name_intensity_mismatch     # noqa: E402
+import planning_pause                                          # noqa: E402
 import plan_tools as pt                                        # noqa: E402
 from plan_builder import _weekly_tss_cap                       # noqa: E402
 # IMPORTED, not restated: which of the hours ceiling / ramp-permitted maximum is the
@@ -536,7 +537,11 @@ def main():
                     help="record the current signatures as the accepted baseline")
     args = ap.parse_args()
     athletes = json.loads(ATHLETES.read_text())
-    slugs = ([s for s, c in athletes.items() if c.get("active", True)] if args.all
+    # --all means every athlete being COACHED. A tracking-only athlete has no plan to
+    # audit, so auditing them can only produce findings about a plan that was
+    # deliberately not built (lib/planning_pause.py). Naming one explicitly still works.
+    slugs = ([s for s, c in athletes.items()
+              if c.get("active", True) and not planning_pause.is_paused(s, c)] if args.all
              else [args.athlete])
     baseline = _load_baseline()
     reports, any_hard = [], False

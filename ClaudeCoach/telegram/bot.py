@@ -371,13 +371,12 @@ _MODEL_LABEL = {
 def response_footer(model: str, slug: str = "", athlete_cfg: dict | None = None) -> str:
     label = _MODEL_LABEL.get(model, model.split("-")[1][0].upper())
     if athlete_cfg:
-        race_date_str = athlete_cfg.get("race_date", "")
-        race_name     = athlete_cfg.get("race_name", "race")
-        try:
-            days = (date.fromisoformat(race_date_str) - date.today()).days
+        # NEXT race, not the legacy race_date: once the A-race is behind them that field
+        # still parses and the old arithmetic counted DOWNWARD past it, so every reply
+        # carried "-35 days to <race they already did>" (races_lib.countdown).
+        days, race_name = races_lib.countdown(slug, athlete_cfg)
+        if days is not None:
             return f"\n_{days} days to {race_name} · {label}_"
-        except (ValueError, TypeError):
-            pass
     return f"\n_{label}_"
 
 
@@ -1286,15 +1285,11 @@ def _week_stats(slug: str, athlete_cfg: dict | None = None) -> str:
         diff = n_sessions - n_logged
         lines.append(f"\n_{diff} session{'s' if diff > 1 else ''} still awaiting feedback_")
 
-    # Days-to-race footer
+    # Days-to-race footer — next UPCOMING race only (see response_footer).
     if athlete_cfg:
-        try:
-            race_date_str = athlete_cfg.get("race_date", "")
-            race_name     = athlete_cfg.get("race_name", "race")
-            days_to_race  = (date.fromisoformat(race_date_str) - today).days
+        days_to_race, race_name = races_lib.countdown(slug, athlete_cfg, today)
+        if days_to_race is not None:
             lines.append(f"\n_{days_to_race} days to {race_name}_")
-        except (ValueError, TypeError):
-            pass
 
     return "\n".join(lines)
 
@@ -1347,12 +1342,13 @@ def _form_stats(slug: str, athlete_cfg: dict | None = None) -> str:
         lines.append(f"4-wk ramp: *{weekly_ramp:+.1f}/wk*")
 
         if athlete_cfg:
-            race_date_str = athlete_cfg.get("race_date", "")
-            race_name     = athlete_cfg.get("race_name", "race")
-            try:
-                days_to_race  = (date.fromisoformat(race_date_str) - today).days
+            # Only projects toward a race that is still ahead. With the legacy race_date
+            # this ran on a NEGATIVE days_to_race after the event, projecting fitness
+            # BACKWARDS from today and reporting it as race-day form.
+            days_to_race, race_name = races_lib.countdown(slug, athlete_cfg, today)
+            if days_to_race and days_to_race > 0:
                 projected_ctl = ctl + weekly_ramp * (days_to_race / 7)
-                needed_ramp   = (ctl_race_target - ctl) / (days_to_race / 7) if days_to_race > 0 else 0
+                needed_ramp   = (ctl_race_target - ctl) / (days_to_race / 7)
                 if projected_ctl >= ctl_race_target * 0.95:
                     lines.append(f"On track: Fitness *{projected_ctl:.0f}* by race day ✓")
                 else:
@@ -1361,8 +1357,6 @@ def _form_stats(slug: str, athlete_cfg: dict | None = None) -> str:
                         f"need *{needed_ramp:+.1f}/wk* to hit {int(ctl_race_target)}"
                     )
                 lines.append(f"_{days_to_race} days to {race_name}_")
-            except (ValueError, TypeError):
-                pass
 
     return "\n".join(lines)
 

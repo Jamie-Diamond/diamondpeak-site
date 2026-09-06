@@ -24,6 +24,7 @@ import weekly_availability     # per-week declared hours (Sunday ask + resolver)
 from primitives.planned_tss import planned_sessions_block
 from primitives.nutrition import fuel_target, recent_avg_g_hr
 import ops_log
+import planning_pause    # tracking-only athletes: no prescribing, no adherence
 import heat as heat_lib
 import menstrual as menstrual_lib
 import races as races_lib
@@ -40,6 +41,13 @@ CALLER = "morning-checkin"
 def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None, wellness_finalized=True, ask_morning_pain=False, race_block="", ask_weight=False, ask_ankle=True):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
+
+    # No countdown when there is no race to count down to. The footer used to be
+    # unconditional, so after an event it printed a negative number of days to a race
+    # already run; "?" days would be no better. Say what is actually true instead.
+    countdown_line = (f"_{days_to_race} days to {race_name}_"
+                      if isinstance(days_to_race, int)
+                      else "_No upcoming race set._")
 
     cycle_block = ""
     cycle_card_line = ""
@@ -219,7 +227,7 @@ Use the recovery score and signals ONLY to decide what to flag — do NOT show t
 
 [Question if applicable — one line]
 
-_{days_to_race} days to {race_name}_
+{countdown_line}
 
 Rules:
 - Sleep/HRV/RHR: use ONLY the pre-fetched wellness line above — never infer or estimate values yourself.
@@ -505,11 +513,14 @@ def run_athlete(slug, athlete_cfg):
                 pass
         return
 
-    try:
-        rd = date.fromisoformat(race_date_str) if race_date_str else None
-        days_to_race = (rd - date.today()).days if rd else "?"
-    except Exception:
+    # Countdown to the NEXT race, not to the legacy race_date. Off the raw field this
+    # went negative the day after the event and the card footer read "-12 days to <race>"
+    # until someone repointed race_date by hand (races_lib.countdown).
+    days_to_race, _next_name = races_lib.countdown(slug, athlete_cfg)
+    if days_to_race is None:
         days_to_race = "?"
+    elif _next_name:
+        race_name = _next_name
 
     # Pre-compute recovery score and extract today's wellness values directly
     recovery = None
@@ -837,6 +848,11 @@ def main():
 
         for slug, cfg in athletes.items():
             if not cfg.get("active", True):
+                continue
+            # Tracking-only: this athlete keeps the activity watcher and the bot, but is
+            # prescribed nothing and judged on nothing (lib/planning_pause.py).
+            if planning_pause.is_paused(slug, cfg):
+                print(planning_pause.skip_line(slug, "morning-checkin", cfg), file=sys.stderr)
                 continue
             try:
                 run_athlete(slug, cfg)
