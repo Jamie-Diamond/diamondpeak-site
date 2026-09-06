@@ -153,14 +153,30 @@ Resume by deleting the entry. Reference: `lib/planning_pause.py`.
 ## After the race
 
 A race in the **past** puts the athlete in a `transition` phase, not a taper
-(`plan_tools.required_tss`, `primitives.blueprint.current_phase`). Volume returns
-at 30/45/60% of the ~7xCTL maintenance load over three weeks and then HOLDS at
-65% with `needs_next_race` set, intensity stays off, and the weekly load ceiling
-stays armed (a taper's is deliberately `None`, which post-race meant no ceiling
-at all). Countdowns come from `races.countdown`, which counts to the next
-**upcoming** race and shows nothing once every configured race has been run.
+(`plan_tools.required_tss`, `primitives.blueprint.current_phase`). Intensity
+stays off and the weekly load ceiling stays armed — a taper's is deliberately
+`None`, which post-race meant no ceiling at all.
 
-Configure the next race and regenerate the blueprint to start a new block.
+- **Weeks 1-3** — recovery. Volume returns at 30/45/60% of the ~7xCTL load.
+- **Week 4 onward** — work toward a **maintenance CTL**, handled like any other
+  CTL target: the weekly load that converges on it over ~4 weeks, ramp-capped.
+  Above it the athlete comes down to it, below it they build gently back up, and
+  either way it settles instead of drifting.
+
+Set the number per athlete as `ctl_targets.maintenance_ctl` — what someone holds
+between goals is a coaching decision, not arithmetic. Until it is set it is
+DERIVED at 60% of their own peak/race CTL and flagged `maintenance_ctl_source:
+"derived"` with `needs_maintenance_target`, so the assumption is in front of the
+coach rather than buried. With no peak or `race_min` to derive from, the athlete
+simply holds current CTL.
+
+Do not use a fixed fraction of 7xCTL as a "hold": 7xCTL is exactly the load that
+keeps CTL level, so a fraction of it prescribes less every week as CTL falls and
+CTL chases it down — from 45 that reaches 23 in twelve weeks, asymptote zero.
+
+Countdowns come from `races.countdown`, which counts to the next **upcoming**
+race and shows nothing once every configured race has been run. Configure the
+next race and regenerate the blueprint to start a new block.
 
 ## Deployment
 

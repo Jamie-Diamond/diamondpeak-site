@@ -86,16 +86,11 @@ class TestPostRaceIsATransition:
         assert "no VO2" in note and "no threshold" in note
         assert "Easy aerobic only" in note
 
-    def test_holds_rather_than_builds_once_the_plan_has_run_out(self):
+    def test_works_toward_a_maintenance_target_once_the_plan_has_run_out(self):
         r = _req("2026-08-05")
         assert r["needs_next_race"] is True
-        assert r["recommended_weekly_tss"] == round(MAINTENANCE * pt._TRANSITION_HOLD)
+        assert r["maintenance_ctl"] is not None
         assert "next race" in r["note"]
-
-    def test_hold_does_not_ratchet_upward_with_time(self):
-        a = _req("2026-08-05")["recommended_weekly_tss"]
-        b = _req("2026-11-05")["recommended_weekly_tss"]
-        assert a == b
 
     def test_no_ctl_still_returns_a_transition_not_a_taper(self):
         r = pt.required_tss(CFG, 0, today=date(2026, 7, 8))
@@ -142,3 +137,93 @@ class TestNoUnboundedWeekAfterTheRace:
 
     def test_transition_ceiling_is_below_base(self):
         assert tss_ceiling(12.0, "Transition") < tss_ceiling(12.0, "Base")
+
+
+class TestOffSeasonMaintenance:
+    """Week 4 onward, with no next race: work toward a maintenance CTL.
+
+    The first cut held at a fixed 65% of 7 x CTL, recomputed weekly off the CURRENT
+    CTL. 7 x CTL is exactly the load that keeps CTL level, so a fixed fraction of it
+    prescribes less every week as CTL falls and CTL chases the target down — from 45
+    it reaches 23 in twelve weeks with no floor at all. A maintenance setting must
+    SETTLE somewhere.
+    """
+
+    PEAK = CFG["ctl_targets"]["phase_ctl"]["peak"]      # 65
+    WEEK4 = "2026-08-05"
+
+    def _converge(self, cfg, ctl0, weeks=30):
+        """Run the prescription forward through CTL EMA mechanics and return the CTL
+        it settles at (post-race weeks are driven off `today`, so the date moves too)."""
+        ctl = float(ctl0)
+        start = date.fromisoformat(RACE) + timedelta(days=1)
+        for w in range(weeks):
+            t = pt.required_tss(cfg, round(ctl, 1),
+                                today=start + timedelta(days=7 * w))["recommended_weekly_tss"]
+            for _ in range(7):
+                ctl += (t / 7 - ctl) / 42
+        return round(ctl, 1)
+
+    def test_a_configured_target_is_used_as_given(self):
+        cfg = dict(CFG, ctl_targets=dict(CFG["ctl_targets"], maintenance_ctl=38))
+        r = pt.required_tss(cfg, CTL, today=date.fromisoformat(self.WEEK4))
+        assert r["maintenance_ctl"] == 38
+        assert r["maintenance_ctl_source"] == "configured"
+        assert r["needs_maintenance_target"] is False
+
+    def test_ctl_actually_settles_on_the_configured_target(self):
+        cfg = dict(CFG, ctl_targets=dict(CFG["ctl_targets"], maintenance_ctl=38))
+        assert abs(self._converge(cfg, CTL) - 38) < 1.5
+
+    def test_it_comes_DOWN_to_maintenance_from_race_fitness(self):
+        cfg = dict(CFG, ctl_targets=dict(CFG["ctl_targets"], maintenance_ctl=38))
+        r = pt.required_tss(cfg, CTL, today=date.fromisoformat(self.WEEK4))
+        assert r["recommended_weekly_tss"] < 7 * CTL      # below "hold current CTL"
+        assert "come down to" in r["note"]
+
+    def test_it_builds_BACK_UP_if_they_have_dropped_below_it(self):
+        cfg = dict(CFG, ctl_targets=dict(CFG["ctl_targets"], maintenance_ctl=38))
+        r = pt.required_tss(cfg, 20.0, today=date.fromisoformat(self.WEEK4))
+        assert r["recommended_weekly_tss"] > 7 * 20
+        assert "build back to" in r["note"]
+
+    def test_the_rebuild_respects_the_ramp_cap(self):
+        cfg = dict(CFG, ctl_targets=dict(CFG["ctl_targets"], maintenance_ctl=90))
+        r = pt.required_tss(cfg, 20.0, today=date.fromisoformat(self.WEEK4))
+        capped = pt.compute_required_tss(20.0, 20.0 + CFG["max_ctl_ramp_per_week"], 1)
+        assert r["recommended_weekly_tss"] <= capped
+
+    def test_unset_is_derived_from_their_own_peak_and_flagged_provisional(self):
+        """Maintenance is obviously far below race fitness, so the fallback cannot be
+        "hold where the recovery weeks left you" — for a CTL-115 athlete that is a hold
+        at ~88 on ~615 TSS/wk, near race training with no race."""
+        r = _req(self.WEEK4)
+        assert r["maintenance_ctl"] == round(self.PEAK * pt._MAINTENANCE_FRACTION)
+        assert r["maintenance_ctl_source"] == "derived"
+        assert r["needs_maintenance_target"] is True     # coach still has to confirm it
+        assert "PROVISIONAL" in r["note"]
+        assert "ctl_targets.maintenance_ctl" in r["note"]
+
+    def test_the_derived_target_is_well_below_race_fitness(self):
+        assert _req(self.WEEK4)["maintenance_ctl"] < 0.7 * self.PEAK
+
+    def test_no_basis_at_all_holds_current_ctl_rather_than_guessing(self):
+        cfg = dict(CFG, ctl_targets={"phase_ctl": {"base": 40}})   # no peak, no race_min
+        r = pt.required_tss(cfg, CTL, today=date.fromisoformat(self.WEEK4))
+        assert r["maintenance_ctl"] is None
+        assert r["recommended_weekly_tss"] == round(7 * CTL)       # a true hold, not a decay
+        assert "no maintenance" in r["note"].lower()
+
+    def test_the_old_fixed_fraction_decay_is_gone(self):
+        """Regression: the target must not fall week after week under its own output."""
+        cfg = dict(CFG, ctl_targets=dict(CFG["ctl_targets"], maintenance_ctl=38))
+        assert self._converge(cfg, CTL, weeks=60) > 30             # settles, not spirals
+        assert not hasattr(pt, "_TRANSITION_HOLD")
+
+    def test_recovery_weeks_are_unaffected_by_the_maintenance_target(self):
+        cfg = dict(CFG, ctl_targets=dict(CFG["ctl_targets"], maintenance_ctl=38))
+        for day in ("2026-07-08", "2026-07-15", "2026-07-22"):
+            a = pt.required_tss(cfg, CTL, today=date.fromisoformat(day))
+            b = _req(day)
+            assert a["recommended_weekly_tss"] == b["recommended_weekly_tss"]
+            assert a["needs_maintenance_target"] is False   # not stale yet
