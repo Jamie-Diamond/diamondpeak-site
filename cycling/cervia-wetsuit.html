@@ -89,7 +89,7 @@
   <h1>Cervia Ironman<br>Wetsuit Predictor <span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:400;color:var(--muted);vertical-align:middle;">v2.0</span></h1>
   <p class="intro">
     Will it be a wetsuit or non-wetsuit swim at IRONMAN Italy Emilia-Romagna?
-    This tool uses seven independent prediction methods &mdash; empirical, model-based, and
+    This tool uses up to seven independent prediction methods &mdash; empirical, model-based, and
     observational &mdash; to triangulate the likely water temperature on race day and estimate
     the probability of wetsuit-legal conditions.
   </p>
@@ -357,7 +357,7 @@
               Range: {fmt(ensemble_lo)} – {fmt(ensemble_hi)}°C &nbsp;|&nbsp; {methods.length} methods triangulated
             </div>
             <div className="hint" style={{marginTop:6}}>
-              Sea surface {fmt(R.sst.temp)}°C &nbsp;&rarr;&nbsp; {fmt(Math.abs(chain.total), 1)}°C total measurement offset
+              Sea surface {fmt(R.sst.temp)}°C (after cold-risk allowance) &nbsp;&rarr;&nbsp; {fmt(Math.abs(chain.total), 1)}°C total measurement offset
               &nbsp;&rarr;&nbsp; <strong>{fmt(ensemble_temp)}°C on the referee's thermometer</strong>
             </div>
             <div className="hint" style={{marginTop:4, fontWeight:500}}>
@@ -483,7 +483,7 @@
             )}
             {liveStatus === 'ok' && hasObservation && (
               <span style={{fontFamily:'DM Mono,monospace', fontSize:10, color:'var(--green)'}}>
-                &nbsp;|&nbsp; Method 5 active — {daysBetween} days from race
+                &nbsp;|&nbsp; Live observation active — {daysBetween} days from race
               </span>
             )}
             <span style={{fontFamily:'DM Mono,monospace', fontSize:9, color:'var(--muted)', marginLeft:'auto'}}>
