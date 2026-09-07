@@ -63,10 +63,16 @@ function runLive(params) {
   var augYear = today.getUTCMonth() >= 7 ? today.getUTCFullYear() : today.getUTCFullYear() - 1;
   var recentUrl = MARINE_BASE + '&start_date=' + isoDay(start) + '&end_date=' + todayISO;
   var augUrl = MARINE_BASE + '&start_date=' + augYear + '-08-01&end_date=' + augYear + '-08-31';
-  // Forecast horizons: marine SST ~8-9 days, weather wind ~16 days. Only worth
-  // fetching once the race is close enough for the series to reach it.
-  var fcUrl = daysToRace >= 0 && daysToRace <= 9 ? MARINE_BASE + '&forecast_days=10' : null;
-  var windUrl = daysToRace >= 0 && daysToRace <= 15 ? WEATHER_BASE + '&forecast_days=16' : null;
+  // Forecast horizons: marine SST ~10 days, weather wind ~16 days. Fetched
+  // whenever the series can reach within the engine's bridge window — the
+  // engine extrapolates the last forecast day to race day at the measured
+  // cooling rate, so a forecast that stops short is still useful. (v1.x gated
+  // this at 9 days and so never even fetched the forecast 12 days out.)
+  var fcHorizon = 10, windHorizon = 16;
+  var fcUrl = daysToRace >= 0 && daysToRace <= fcHorizon - 1 + WE.CONSTANTS.M6_MAX_GAP_DAYS
+    ? MARINE_BASE + '&forecast_days=' + fcHorizon : null;
+  var windUrl = daysToRace >= 0 && daysToRace <= windHorizon - 1
+    ? WEATHER_BASE + '&forecast_days=' + windHorizon : null;
 
   // Seasonal-anomaly baseline: the same ~30-day window in up to 3 prior years
   // (the marine archive starts 2023). Only relevant when the race is beyond
@@ -133,6 +139,7 @@ function runLive(params) {
     var prediction = WE.predictWater({
       raceYear: raceYear,
       raceDayOfSept: raceDayOfSept,
+      todayISO: todayISO,
       augustAvgSST: params.augustAvgSST != null ? params.augustAvgSST : augAvg,
       liveTemp: temps[lastIdx],
       liveDateISO: times[lastIdx],

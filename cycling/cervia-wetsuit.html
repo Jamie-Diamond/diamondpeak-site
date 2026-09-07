@@ -86,10 +86,10 @@
   <a href="../index.html" class="back">&larr; Back to tools</a>
 
   <div class="kicker">Triathlon</div>
-  <h1>Cervia Ironman<br>Wetsuit Predictor <span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:400;color:var(--muted);vertical-align:middle;">v1.3</span></h1>
+  <h1>Cervia Ironman<br>Wetsuit Predictor <span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:400;color:var(--muted);vertical-align:middle;">v2.0</span></h1>
   <p class="intro">
     Will it be a wetsuit or non-wetsuit swim at IRONMAN Italy Emilia-Romagna?
-    This tool uses five independent prediction methods &mdash; empirical, model-based, and
+    This tool uses seven independent prediction methods &mdash; empirical, model-based, and
     observational &mdash; to triangulate the likely water temperature on race day and estimate
     the probability of wetsuit-legal conditions.
   </p>
@@ -101,6 +101,7 @@
   <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:12px;">
     <strong style="color:var(--ink2);font-weight:500;">Changelog:</strong>
     <strong>16 Jul 2026 (data review)</strong> &ndash; Historical data re-verified against the Open-Meteo marine archive: the August mean SST for 2023 (27.8&deg;C), 2024 (29.8&deg;C) and 2025 (27.4&deg;C) all still match source to the decimal, and no race-day reading changed. The API-failure fallback for August SST was refreshed from 26.2&deg;C to 28.3&deg;C (the 2023&ndash;25 archive mean) so a dropped live fetch no longer defaults cold &ndash; this only affects predictions when the live marine API is unavailable. For context, the current summer is running hot (~29&ndash;30&deg;C in mid-July, well above the 2023&ndash;25 baseline); the far-out prediction reads this live via Method 7.<br>
+    <strong>v2.0</strong> &ndash; Split the model into two explicit stages, so a sea-temperature forecast is never confused with what the referee's thermometer reads at 6am. <strong>Stage 1</strong> predicts sea-surface SST; <strong>Stage 2</strong> walks that to the official reading through a measured diurnal step (&minus;0.26 &plusmn; 0.10&deg;C, the 6am-vs-daily-max gap over 90 September days of hourly archive) and a measured coastal-reading step (median &minus;0.40&deg;C from n=3 race days, &plusmn;1.7&deg;C). Both steps are now shown in a table on the page. Four bugs fixed: <em>(1)</em> the CLI never fetched the SST forecast beyond 9 days out; <em>(2)</em> the engine discarded the whole forecast series unless it reached within 2 days of race day &ndash; it is now bridged to race day at the measured cooling rate; <em>(3)</em> the measurement bias was derived from seatemperature.info but applied to Open-Meteo inputs, two sources that differ by 1.7&deg;C on 2023 race day &ndash; the offset is now measured against the same instrument the live feed uses; <em>(4)</em> Method 1 is a mean of official readings and was still being bias-corrected a second time. Method weights now decay with lead time: the year-blind historical mean and climatological normal held a fixed 37% of the weight in v1, twelve days out, with the sea 4&deg;C above normal. The live-anomaly decay (5%/day) is gone &ndash; the archive shows the warm anomaly <em>grew</em> through September in 2023 and 2025 and collapsed only in 2024, so the anomaly now persists in the mean and collapse risk sits in a fat cold tail. That cold-event risk applies at every lead time, not just the last five days. The NE-wind detector was recalibrated after archive checking showed it <em>never fired</em> &ndash; not even in 2024, whose collapse came from NW wind at 300&ndash;311&deg;, and whose peak September wind never reached the old 30&nbsp;km/h floor. Cold-tail variance now combines in quadrature rather than being added linearly, and cold-wind days already past are no longer charged twice against a live observation.<br>
     <strong>v1.3</strong> &ndash; Method 7: current-summer anomaly with seasonal persistence (e-folding ~65 days) &ndash; the far-out forecast now reacts to how hot the sea is running TODAY vs the 2023&ndash;25 same-window baseline, instead of ignoring pre-August observations. Data revision from a source sweep of all Cervia editions (full + 70.3): 2022 corrected to an athlete-reported 21&deg;C wetsuit swim (the race was storm-delayed a day; the old 25.0 was pre-storm satellite &ndash; the same wind cold-drop as 2024, whose 21.5 reading the satellite archive confirms against media reports of 23). 2023 satellite value aligned with its cited source. No official 70.3 readings survive online; a 2019 athlete report (21&ndash;22&deg;C) conflicts with the previous day's official 24.6 and is excluded pending resolution.<br>
     <strong>v1.2</strong> &ndash; Method 6: physical ocean-model forecast SST (highest weight in race week). Leave-one-out backtest panel; ensemble uncertainty floored at the measured historical error (MAE ~2.2&deg;C weeks out &ndash; the probability is now honest about it). Bora/NE-wind cold-tail adjustment via split-normal (a late Bora is how 2024 went mandatory-wetsuit). Per-year August SST from the marine archive (2023&ndash;25).<br>
     <strong>v1.1</strong> &ndash; Defaults now target the next upcoming race (2026: Saturday 19 September). Added the 2025 race to the history (satellite SST 25.2&deg;C; official reading not found, flagged as estimated). Estimated years excluded from the measurement-bias calculation. Fixed a variable-ordering bug in the August SST fallback. Prediction maths extracted to a shared engine (js/wetsuit-engine.js) used identically by this page and the ClaudeCoach bot.<br>
@@ -261,6 +262,7 @@
        ═══════════════════════════════════════════ */
     const R = WE.predictWater({
       raceYear, raceDayOfSept,
+      todayISO: (liveStatus === 'ok' && liveDate ? liveDate : new Date()).toISOString().slice(0, 10),
       augustAvgSST: augustTempManual !== null ? augustTempManual : liveAugAvg,
       liveTemp: liveStatus === 'ok' ? liveTemp : null,
       liveDateISO: liveStatus === 'ok' && liveDate ? liveDate.toISOString() : null,
@@ -272,9 +274,10 @@
 
     // Aliases for rendering
     const augustTemp = R.augustTemp;
-    const avgBias = R.bias.avg, biasSd = R.bias.sd;
+    const chain = R.offsetChain;
     const histTemps = R.histTemps;
-    const m1_mean = R.m1.mean, m1_sd = R.m1.sd, m1_lo = R.m1.lo, m1_hi = R.m1.hi;
+    const m1_mean = R.m1.meanReading, m1_sd = R.m1.sd,
+          m1_lo = R.m1.meanReading - R.m1.sd, m1_hi = R.m1.meanReading + R.m1.sd;
     const m2_baseline = R.m2.baseline, m2_trend = R.m2.trend, m2_temp = R.m2.temp,
           m2_sd = R.m2.sd, m2_lo = R.m2.lo, m2_hi = R.m2.hi;
     const m3_temp = R.m3.temp, m3_sd = R.m3.sd, m3_lo = R.m3.lo, m3_hi = R.m3.hi;
@@ -287,7 +290,7 @@
     const daysUntilRace = hasObservation ? R.m5.daysUntilRace : 15;
     const obsClim = hasObservation ? R.m5.obsClim : null;
     const liveAnomaly = hasObservation ? R.m5.liveAnomaly : null;
-    const anomalyAtRace = hasObservation ? R.m5.anomalyAtRace : null;
+    const m5_cooling = hasObservation ? R.m5.cooling : null;
     const m5_temp = hasObservation ? R.m5.temp : null;
     const m5_sd = hasObservation ? R.m5.sd : null;
     const m5_lo = hasObservation ? R.m5.lo : null;
@@ -354,7 +357,8 @@
               Range: {fmt(ensemble_lo)} – {fmt(ensemble_hi)}°C &nbsp;|&nbsp; {methods.length} methods triangulated
             </div>
             <div className="hint" style={{marginTop:6}}>
-              Includes {fmt(avgBias)}°C measurement bias correction — official IRONMAN readings average {fmt(Math.abs(avgBias))}°C cooler than online SST
+              Sea surface {fmt(R.sst.temp)}°C &nbsp;&rarr;&nbsp; {fmt(Math.abs(chain.total), 1)}°C total measurement offset
+              &nbsp;&rarr;&nbsp; <strong>{fmt(ensemble_temp)}°C on the referee's thermometer</strong>
             </div>
             <div className="hint" style={{marginTop:4, fontWeight:500}}>
               Model &amp; historical data last updated: {WE.CONSTANTS.DATA_UPDATED_LABEL} &nbsp;|&nbsp; last reviewed: {WE.CONSTANTS.DATA_REVIEWED_LABEL} &nbsp;|&nbsp; Live SST refreshes automatically on load
@@ -393,6 +397,69 @@
           </div>
         </div>
 
+        {/* ── PREDICTION vs MEASUREMENT — the two stages, kept separate ── */}
+        <div className="panel">
+          <div className="panel-title">From sea temperature to the official reading</div>
+          <p className="desc" style={{marginBottom:12}}>
+            Two different things get confused in wetsuit predictions: <strong>how warm the sea
+            will be</strong>, and <strong>what the official thermometer will say</strong>. They are
+            not the same number. The reading is taken at roughly <strong>6am</strong> in
+            shallow coastal water at 60cm depth; the models forecast a <em>daily maximum</em>
+            for an offshore grid cell. Every step between the two is shown here, measured
+            rather than assumed.
+          </p>
+          <table className="data-table">
+            <thead>
+              <tr><th>Step</th><th style={{textAlign:'right'}}>Change</th><th style={{textAlign:'right'}}>Running</th><th>Basis</th></tr>
+            </thead>
+            <tbody>
+              {R.chainSteps.map((c, i) => (
+                <tr key={i} style={i === R.chainSteps.length - 1 ? {fontWeight:500, background:'#f3efe6'} : null}>
+                  <td>{c.label}</td>
+                  <td style={{textAlign:'right', fontFamily:'DM Mono,monospace'}}>
+                    {c.delta === null ? '—' : (c.delta >= 0 ? '+' : '') + fmt(c.delta, 2)}
+                  </td>
+                  <td className="temp-cell" style={{textAlign:'right', fontFamily:'DM Mono,monospace'}}>{fmt(c.value)}°C</td>
+                  <td style={{fontSize:10, color:'var(--muted)'}}>{c.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="hint" style={{marginTop:10}}>
+            <strong>Where the uncertainty actually lives.</strong> The diurnal step is measured
+            from 90 September days of hourly data and is tight (± {fmt(chain.diurnalSd, 2)}°C).
+            The coastal-reading step is measured from only <strong>n = {chain.readingN} race days</strong>
+            {' '}(± {fmt(chain.readingSd, 2)}°C) and dominates the total — the Open-Meteo marine
+            archive begins in 2023, so no earlier edition can be used. That single term, not the
+            sea-temperature forecast, is why the probability below is not more decisive.
+          </div>
+          <table className="data-table" style={{marginTop:12}}>
+            <thead>
+              <tr><th>Race day</th><th>Model SST at 6am</th><th>Official reading</th><th>Offset</th></tr>
+            </thead>
+            <tbody>
+              {chain.readingRows.map(r => (
+                <tr key={r.year}>
+                  <td>{r.year}</td>
+                  <td className="temp-cell">{fmt(r.om6am)}°C</td>
+                  <td className="temp-cell">{fmt(r.reading)}°C{r.censored ? ' (≤, wetsuit-legal)' : ''}</td>
+                  <td className="temp-cell" style={{color: r.offset < -1.5 ? 'var(--red)' : 'var(--ink2)'}}>
+                    {(r.offset >= 0 ? '+' : '') + fmt(r.offset, 2)}°C
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="hint" style={{marginTop:8}}>
+            The central estimate is the <strong>median</strong> ({fmt(chain.reading, 2)}°C), not the
+            mean ({fmt(chain.readingMean, 2)}°C). 2023 is an outlier whose three independent sources
+            disagree by 3.2°C — official 22.0, seatemperature.info 23.5, Open-Meteo 25.2 — so the
+            mean would be hostage to one disputed figure. Reassuringly the median puts the total
+            offset at &minus;0.66°C, the same value derived independently from the
+            seatemperature.info series over 2018&ndash;24.
+          </div>
+        </div>
+
         {/* ── LIVE DATA STATUS ────────────── */}
         <div className="panel" style={{padding:'12px 20px'}}>
           <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
@@ -411,7 +478,7 @@
             )}
             {liveStatus === 'ok' && !hasObservation && (
               <span style={{fontFamily:'DM Mono,monospace', fontSize:10, color:'#f57f17'}}>
-                &nbsp;|&nbsp; Method 5 inactive ({daysBetween > 30 ? `${daysBetween} days from race — too far out` : daysBetween < 0 ? 'race date has passed' : 'no data'})
+                &nbsp;|&nbsp; Live observation inactive ({daysBetween > 30 ? `${daysBetween} days from race — too far out` : daysBetween < 0 ? 'race date has passed' : 'no data'})
               </span>
             )}
             {liveStatus === 'ok' && hasObservation && (
@@ -461,13 +528,13 @@
               <div className="hint" style={{marginTop:8, padding:'8px 0', borderTop:'1px solid var(--border)'}}>
                 Live observation is fetched automatically from Open-Meteo Marine API (Cervia, 44.26°N 12.35°E).
                 {hasObservation && ` Latest reading: ${fmt(obsTemp)}°C on ${liveDate.toLocaleDateString('en-GB', {day:'numeric',month:'short'})}.`}
-                {!hasObservation && ' No recent September observation available — Method 5 inactive.'}
+                {!hasObservation && ' No recent September observation available — the live-observation method is inactive.'}
               </div>
             </div>
           )}
         </div>
 
-        {/* ── FIVE PREDICTION METHODS ─────── */}
+        {/* ── SEVEN PREDICTION METHODS ─────── */}
         <div className="panel-title" style={{marginTop:24, marginBottom:8}}>Prediction Methods</div>
 
         {/* Method 1 */}
@@ -478,6 +545,9 @@
           <p className="desc">
             Simple mean of all recorded water temperatures from previous Cervia Ironman races
             (2017–2025, n={histTemps.length}). No adjustments — purely what has been measured on past race days.
+            <strong> Year-blind:</strong> a base rate, carrying no information about this particular year,
+            so its weight decays as the race approaches. Shown here as an official reading; the ensemble
+            converts it into sea-surface space first so the measurement offset is not applied to it twice.
           </p>
           <div className="formula">
             mean = ({histTemps.map(t => t).join(' + ')}) ÷ {histTemps.length}<br/>
@@ -498,6 +568,8 @@
           <p className="desc">
             Uses the 30-year (1991–2020) baseline SST for Cervia on the specific race date,
             then adjusts for the observed Mediterranean warming trend of +0.04°C/year (Frontiers in Climate, 2024; ESSD Trieste series).
+            <strong> Year-blind:</strong> this knows the date and nothing about how hot the sea actually is
+            this year, so its weight is cut as the race approaches and real data arrives.
           </p>
           <div className="formula">
             baseline(Sept {raceDayOfSept}) = {fmt(SEPT_CLIM_START)} − {fmt(SEPT_COOLING_RATE, 3)} × ({raceDayOfSept} − 1) = <strong>{fmt(m2_baseline)}°C</strong><br/>
@@ -561,23 +633,25 @@
         <div className="method" style={{opacity: hasObservation ? 1 : 0.4}}>
           <div className="method-num">5</div>
           <div className="method-type observation">Observation</div>
-          <h4>Live Anomaly + Decaying Persistence</h4>
+          <h4>Live Observation + Seasonal Cooling</h4>
           <p className="desc">
-            Rather than naively extrapolating a reading forward, this method compares
-            the observed SST to the climatological normal <em>for that date</em> to isolate a
-            <strong> live anomaly</strong> — how far off-normal the sea is right now. That anomaly
-            is then projected forward with exponential decay (5%/day regression towards normal),
-            and added to the race-day climatological baseline. This captures the signal (is the
-            sea running hot or cold?) without the noise of assuming a fixed cooling rate.
-            {!hasObservation && <strong> Enable the observation input above to activate this method.</strong>}
+            Takes the most recent measured SST and carries it forward at the September cooling
+            rate observed in <em>non-collapse</em> years (&minus;0.12°C/day). It does <strong>not</strong>
+            shrink the anomaly back towards normal, which is what v1 did at 5%/day — the archive
+            contradicts that. The warm anomaly <em>grew</em> through September in both 2023 and
+            2025, and collapsed only in 2024, when strong northerly wind hit. So the anomaly now
+            persists in the central estimate and the collapse risk is carried separately, as a
+            fat cold tail (see the wind panel below). Shrinking the mean <em>and</em> keeping the
+            spread symmetric was the wrong shape for this distribution.
+            {!hasObservation && <strong> No recent observation — method inactive.</strong>}
           </p>
           {hasObservation && m5_temp !== null ? (
             <>
               <div className="formula">
-                clim normal for Sept {obsDayOfSept} = {fmt(obsClim)}°C<br/>
-                live anomaly = {fmt(obsTemp)} − {fmt(obsClim)} = <strong>{liveAnomaly >= 0 ? '+' : ''}{fmt(liveAnomaly)}°C</strong> ({liveAnomaly > 0 ? 'warmer' : liveAnomaly < 0 ? 'cooler' : 'on'} than normal)<br/>
-                anomaly at race day = {liveAnomaly >= 0 ? '+' : ''}{fmt(liveAnomaly)} × e<sup>−0.05 × {daysUntilRace}</sup> = <strong>{anomalyAtRace >= 0 ? '+' : ''}{fmt(anomalyAtRace)}°C</strong><br/>
-                prediction = {fmt(m2_temp)} (clim + trend) + {anomalyAtRace >= 0 ? '+' : ''}{fmt(anomalyAtRace)} = <strong>{fmt(m5_temp)}°C</strong>
+                observed SST on Sept {obsDayOfSept} = <strong>{fmt(obsTemp)}°C</strong> (that is {liveAnomaly >= 0 ? '+' : ''}{fmt(liveAnomaly)}°C vs the {fmt(obsClim)}°C normal — context only, not used below)<br/>
+                cooling over {daysUntilRace} days = −0.12 × {daysUntilRace} = <strong>{fmt(m5_cooling)}°C</strong><br/>
+                prediction = {fmt(obsTemp)} {fmt(m5_cooling)} = <strong>{fmt(m5_temp)}°C</strong> sea surface
+                {R.m5.redundantWithM6 && <><br/><em>Weight cut to 30% — the ocean-model forecast below comes from the same model, so counting both would double-count one signal.</em></>}
               </div>
               <div className="result">
                 <span className="result-temp" style={{color: m5_confColor}}>{fmt(m5_temp)}°C</span>
@@ -590,10 +664,10 @@
                   {m5_confidence} CONFIDENCE
                 </span>
                 <span style={{fontSize:10, color:'var(--muted)'}}>
-                  {daysUntilRace} days out — {daysUntilRace <= 3 ? 'anomaly barely decays, high signal' :
-                    daysUntilRace <= 7 ? 'anomaly partially decays, useful signal' :
-                    daysUntilRace <= 14 ? 'anomaly mostly decayed, limited value' :
-                    'anomaly almost fully decayed, minimal added value'}
+                  {daysUntilRace} days out — {daysUntilRace <= 3 ? 'the sea can barely change now' :
+                    daysUntilRace <= 7 ? 'strong signal, one wind event could still shift it' :
+                    daysUntilRace <= 14 ? 'useful signal, real collapse risk remains' :
+                    'weak signal, plenty of time for the sea to move'}
                 </span>
               </div>
             </>
@@ -611,13 +685,22 @@
             A physical ocean model's SST forecast for race day itself (Open-Meteo Marine,
             ~8-day horizon). When available this is the strongest signal in the ensemble —
             an assimilated forecast beats any statistical decay rule — so it carries the
-            highest weight. Activates automatically in race week.
+            highest weight. If the series stops short of race day, the remainder is bridged
+            at the measured non-collapse cooling rate rather than the whole forecast being
+            discarded: v1 threw the entire series away unless it reached within 2 days of the
+            race, so 12 days out a perfectly good 10-day forecast went completely unused.
           </p>
           {R.m6 ? (
             <>
               <div className="formula">
-                forecast for {R.m6.forecastDate} = <strong>{fmt(R.m6.temp)}°C</strong>
-                {R.m6.gapDays > 0 ? <span> ({R.m6.gapDays} day(s) short of race day — uncertainty widened)</span> : null}
+                ocean-model forecast, {R.m6.horizonDays}-day series, last usable day {R.m6.forecastDate} = <strong>{fmt(R.m6.forecastTemp)}°C</strong><br/>
+                {R.m6.gapDays > 0 ? (
+                  <>bridge to race day = −0.12 × {R.m6.gapDays} = <strong>{fmt(R.m6.bridge)}°C</strong><br/>
+                  prediction = {fmt(R.m6.forecastTemp)} {fmt(R.m6.bridge)} = <strong>{fmt(R.m6.temp)}°C</strong> sea surface<br/>
+                  <em>{R.m6.gapDays} day(s) short of race day — uncertainty widened and weight reduced to {fmt(R.m6.weight, 2)}</em></>
+                ) : (
+                  <>forecast lands on race day itself — no bridge needed, weight {fmt(R.m6.weight, 2)} (the highest in the ensemble)</>
+                )}
               </div>
               <div className="result">
                 <span className="result-temp" style={{color:'var(--green)'}}>{fmt(R.m6.temp)}°C</span>
@@ -627,7 +710,8 @@
             </>
           ) : (
             <div className="formula" style={{color:'var(--muted)'}}>
-              Race day is beyond the ~8-day forecast horizon — method inactive
+              Race day is more than {WE.CONSTANTS.M6_MAX_GAP_DAYS} days beyond the forecast
+              horizon — bridging that far would add nothing over the other methods
             </div>
           )}
         </div>
@@ -642,7 +726,7 @@
             Marine-heatwave anomalies persist for months (e-folding ~65 days — standard
             Mediterranean oceanography, not fitted here), so today's anomaly still carries
             signal to race day even far out. Active only beyond 30 days from the race —
-            inside that window the Live Anomaly method supersedes it. Baseline is the
+            inside that window the live observation supersedes it. Baseline is the
             2023–25 marine archive (recent, warm-leaning years), so the anomaly — and this
             method's pull — is conservative.
           </p>
@@ -661,37 +745,67 @@
             </>
           ) : (
             <div className="formula" style={{color:'var(--muted)'}}>
-              Inactive — race within 30 days (Live Anomaly takes over) or no baseline data
+              Inactive — race within 30 days (the live observation takes over) or no baseline data
             </div>
           )}
         </div>
 
-        {/* ── Bora wind adjustment ────────── */}
-        {R.wind && (
-          <div className="panel" style={{borderColor: R.wind.boraDays.length ? 'var(--blue)' : 'var(--border)'}}>
-            <div className="panel-title">Bora Wind Adjustment</div>
-            <p style={{fontSize:12, color:'var(--ink2)', lineHeight:1.7}}>
-              {R.wind.boraDays.length ? (
-                <>
-                  <strong style={{color:'var(--blue)'}}>NE (Bora-sector) wind forecast on {R.wind.boraDays.join(', ')}.</strong>{' '}
-                  The shallow north Adriatic can drop several degrees in days under NE wind
-                  (2024: 21.5°C, mandatory wetsuits). Mean shifted {fmt(R.wind.shift)}°C and the
-                  cold tail widened by {fmt(R.wind.extraColdSd)}°C — this raises wetsuit probability.
-                </>
-              ) : (
-                <>No significant NE wind in the pre-race forecast window — no cold-drop adjustment applied.
-                A late Bora remains the main way this prediction flips towards colder/wetsuit-legal.</>
-              )}
-            </p>
+        {/* ── Cold-event (northerly wind) risk ────────── */}
+        <div className="panel" style={{borderColor: R.cold.p >= 0.4 ? 'var(--blue)' : 'var(--border)'}}>
+          <div className="panel-title">Cold-Event Risk — Northerly Wind</div>
+          <p style={{fontSize:12, color:'var(--ink2)', lineHeight:1.7, marginBottom:10}}>
+            The shallow north Adriatic can lose 4&ndash;6°C in under a week when strong wind
+            from the northerly half drives upwelling and mixing. That is exactly how 2024 went
+            mandatory-wetsuit: 27.8°C on 9 September, 21.9°C on race day. This risk is applied at
+            <strong> every</strong> lead time. v1 only looked five days ahead, so twelve days out
+            it reported &ldquo;no significant NE wind&rdquo; and applied <em>zero</em> cold risk —
+            treating absence of information as evidence of absence.
+          </p>
+          <div className="prob-grid" style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:10, marginBottom:10}}>
+            <div className="rule-box">
+              <div className="rule-label">P(cold collapse)</div>
+              <div className="rule-temp" style={{color: R.cold.p >= 0.4 ? 'var(--red)' : 'var(--ink)'}}>{fmt(R.cold.p * 100, 0)}%</div>
+            </div>
+            <div className="rule-box">
+              <div className="rule-label">Mean allowance</div>
+              <div className="rule-temp">{fmt(R.cold.shift, 2)}°C</div>
+            </div>
+            <div className="rule-box">
+              <div className="rule-label">Cold tail widened</div>
+              <div className="rule-temp">+{fmt(R.cold.extraColdSd, 2)}°C</div>
+            </div>
+            <div className="rule-box">
+              <div className="rule-label">Cold-wind days ahead</div>
+              <div className="rule-temp">{R.wind.coldWindDays.length}</div>
+            </div>
           </div>
-        )}
+          <p style={{fontSize:11, color:'var(--ink2)', lineHeight:1.7}}>
+            {R.wind.note}
+            {R.cold.blindDays > 0 && <> Of the {R.wind.leadDays} days to the race,{' '}
+              <strong>{R.cold.blindDays}</strong> sit beyond the wind forecast&rsquo;s useful range,
+              so they carry the climatological onset rate (~2%/day) rather than a forecast.</>}
+            {R.wind.coldWindDays.length > 0 && <> Days flagged: <strong>{R.wind.coldWindDays.join(', ')}</strong>.</>}
+          </p>
+          <div className="hint" style={{marginTop:10}}>
+            <strong>The detector was recalibrated in v2.</strong> v1 looked for the NE (Bora)
+            sector 10&ndash;100° at &ge;30 km/h. Checked against the 2023&ndash;25 archive that
+            detector <em>never fires</em> — not even in 2024, the collapse it was written for. The
+            2024 event was driven by <strong>NW wind at 300&ndash;311°</strong>, outside the sector
+            entirely, and no September day in three years reached 30 km/h (the monthly maximum is
+            30.9). The sector now wraps 270°&rarr;90° and the floor is 25 km/h, which separates the
+            archive cleanly: 2024 four cold-wind days, 2023 one, 2025 none. n = 3, so this is
+            judgement, not a fit.
+          </div>
+        </div>
 
         {/* ── Backtest: how good is this model, honestly? ── */}
         <div className="panel panel-alt">
           <div className="panel-title">Model Skill — Leave-One-Out Backtest</div>
           <p style={{fontSize:12, color:'var(--ink2)', lineHeight:1.7, marginBottom:10}}>
-            Each real historical year predicted using only the other years (methods 1–4;
-            no race-week data, i.e. the model's skill when the race is still weeks away).
+            Each real historical year predicted using only the other years — including a
+            reading offset rebuilt without that year — with methods 1–4 only, i.e. the model's
+            skill when the race is still weeks away. Scored against the <em>official reading</em>,
+            so this error already contains the measurement-offset uncertainty.
             Mean absolute error <strong>{fmt(R.backtest.mae)}°C</strong>, wetsuit call correct{' '}
             <strong>{Math.round(R.backtest.callAccuracy * 100)}%</strong> of the time (n={R.backtest.n}).
             The quoted uncertainty is floored at this measured error{R.ensemble.calibration.sdFloorApplied ?
@@ -718,10 +832,49 @@
             </tbody>
           </table>
           <p style={{fontSize:10, color:'var(--muted)', marginTop:8, lineHeight:1.6}}>
-            Take-away: weeks out, this model (like any statistical blend) regresses towards ~23°C while real
-            race days have spanned 21.5–25.0°C — hence "borderline" verdicts far out. The forecast and
-            live-anomaly methods in race week are what genuinely settle the answer.
+            Take-away: with only methods 1&ndash;4 the model regresses towards ~23°C while real race
+            days have spanned 21.5&ndash;25.0°C. That is why the live observation and the ocean-model
+            forecast are now weighted to dominate as the race approaches — see the weight table below.
+            The two remaining large errors are 2018 and 2019, neither of which has an August SST in
+            the archive, so methods 3 and 4 fell back to the 30-year normal for both.
           </p>
+        </div>
+
+        {/* ── Where the weight actually sits ── */}
+        <div className="panel">
+          <div className="panel-title">Ensemble Weights — {R.leadDays != null ? R.leadDays + ' days to race' : 'lead time unknown'}</div>
+          <p style={{fontSize:12, color:'var(--ink2)', lineHeight:1.7, marginBottom:10}}>
+            Methods 1 and 2 are <strong>year-blind</strong>: a historical mean and a 30-year normal know
+            nothing about how hot the sea actually is this year. In v1 they held a fixed 37% of the
+            weight right up to race day. They now decay with lead time, as do methods 3 and 4 — more
+            gently, since those at least know this year&rsquo;s August. Live and forecast data take
+            over as it arrives.
+          </p>
+          <table className="data-table">
+            <thead>
+              <tr><th>Method</th><th>Sea-surface prediction</th><th>σ</th><th>Weight</th><th>Share</th><th>Knows this year?</th></tr>
+            </thead>
+            <tbody>
+              {methods.map(m => {
+                const totalW = methods.reduce((a, x) => a + x.weight, 0);
+                return (
+                  <tr key={m.key}>
+                    <td>{m.key.toUpperCase()} — {m.name}</td>
+                    <td className="temp-cell">{fmt(m.temp)}°C</td>
+                    <td style={{fontFamily:'DM Mono,monospace'}}>{fmt(m.sd, 2)}</td>
+                    <td style={{fontFamily:'DM Mono,monospace'}}>{fmt(m.weight, 2)}{m.deflated ? ' ↓' : ''}</td>
+                    <td style={{fontFamily:'DM Mono,monospace'}}>{fmt(100 * m.weight / totalW, 0)}%</td>
+                    <td style={{color: m.yearBlind ? 'var(--red)' : '#2e7d32'}}>{m.yearBlind ? 'no' : 'yes'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div className="hint" style={{marginTop:8}}>
+            <strong>{fmt(R.sst.currentYearWeightPct, 0)}% of the weight now sits on methods that know
+            this year&rsquo;s sea state.</strong> Deflation factor applied: {fmt(R.sst.deflation, 2)}×
+            to methods 1&ndash;2, {fmt(R.sst.deflationAug, 2)}× to methods 3&ndash;4.
+          </div>
         </div>
 
         {/* ── Method Comparison Chart ─────── */}
@@ -778,79 +931,86 @@
 
         {/* ── Historical Data Table ──────── */}
         <div className="panel">
-          <div className="panel-title">Historical Race Data — Official vs Online SST</div>
+          <div className="panel-title">Historical Race Data — Official Reading vs Each Model Source</div>
           <p style={{fontSize:11, color:'var(--ink2)', marginBottom:12, lineHeight:1.6}}>
-            IRONMAN measures water temperature at 06:00 race morning, at 60cm depth at the swim start.
-            Online satellite SST (seatemperature.info) reports daily average surface temperature for the coastal grid cell.
-            The difference reveals any systematic bias between the official reading and what you'd see online.
+            IRONMAN measures water temperature at <strong>06:00 race morning, 60cm depth at the swim
+            start</strong>. Two model sources are shown against it, because they are not
+            interchangeable: <em>seatemperature.info</em> (a daily average, used for the older
+            editions) and <em>Open-Meteo Marine</em> (the feed that drives the live and forecast
+            methods on this page, archive from 2023). They disagree by 1.7°C on 2023 race day.
+            v1 measured its correction against the first and then applied it to the second — the
+            single biggest error in the old model.
           </p>
           <table className="data-table">
             <thead>
-              <tr><th>Year</th><th>Date</th><th>Official</th><th>Online SST</th><th>Bias</th><th>Wetsuit</th></tr>
+              <tr><th>Year</th><th>Date</th><th>Official</th><th>sti SST</th><th>OM daily max</th><th>OM 6am</th><th>Offset vs OM 6am</th><th>Wetsuit</th></tr>
             </thead>
             <tbody>
               {RACE_HISTORY.map(r => {
-                const bias = r.onlineSST != null ? r.waterTemp - r.onlineSST : null;
+                const omOff = r.omSST6am != null ? r.waterTemp - r.omSST6am : null;
+                const used = r.omSST6am != null && (!r.estimated || r.censoredUpper);
                 return (
-                  <tr key={r.year}>
+                  <tr key={r.year} style={used ? {background:'#f3efe6'} : null}>
                     <td>{r.year}</td>
                     <td>{r.date}</td>
                     <td className="temp-cell">{fmt(r.waterTemp)}°C{r.estimated ? '*' : r.reported ? '†' : ''}</td>
-                    <td className="temp-cell">{r.onlineSST != null ? `${fmt(r.onlineSST)}°C` : 'n/a'}</td>
-                    <td className="temp-cell" style={{color: (r.estimated || bias == null) ? 'var(--muted)' : bias < -0.3 ? 'var(--blue)' : bias > 0.3 ? 'var(--red)' : 'var(--muted)'}}>
-                      {r.estimated ? 'est.' : bias == null ? 'n/a' : `${bias >= 0 ? '+' : ''}${fmt(bias)}°C`}
+                    <td className="temp-cell">{r.onlineSST != null ? `${fmt(r.onlineSST)}°C` : '—'}</td>
+                    <td className="temp-cell">{r.omSSTmax != null ? `${fmt(r.omSSTmax)}°C` : '—'}</td>
+                    <td className="temp-cell">{r.omSST6am != null ? `${fmt(r.omSST6am)}°C` : '—'}</td>
+                    <td className="temp-cell" style={{fontWeight: used ? 500 : 400,
+                      color: omOff == null ? 'var(--muted)' : omOff < -1.5 ? 'var(--red)' : 'var(--ink2)'}}>
+                      {omOff == null ? 'no archive' : `${omOff >= 0 ? '+' : ''}${fmt(omOff, 2)}°C`}
                     </td>
                     <td>{r.wetsuit}</td>
                   </tr>
                 );
               })}
               <tr style={{background:'var(--warm)', fontWeight:500}}>
-                <td colSpan={4} style={{textAlign:'right'}}>Average bias (measured years only)</td>
-                <td className="temp-cell" style={{color: avgBias < -0.3 ? 'var(--blue)' : 'var(--muted)'}}>
-                  {avgBias >= 0 ? '+' : ''}{fmt(avgBias)}°C
-                </td>
+                <td colSpan={6} style={{textAlign:'right'}}>Median offset used (highlighted rows)</td>
+                <td className="temp-cell">{fmt(chain.reading, 2)}°C</td>
                 <td></td>
               </tr>
             </tbody>
           </table>
-          <p style={{fontSize:10, color:'var(--muted)', marginTop:6}}>
-            * No official race-morning reading found — estimated from satellite SST minus the average bias.
-            &nbsp;† Athlete-reported, not an official announcement (2022: storm-delayed race, wetsuit swim at ~21°C —
-            the pre-storm satellite said 25). Estimated years and years without same-day satellite are excluded
-            from the bias calculation.
+          <p style={{fontSize:10, color:'var(--muted)', marginTop:6, lineHeight:1.6}}>
+            * No official race-morning reading found. 2025 is a special case: the swim <em>was</em>
+            wetsuit-legal, so the reading is known to be ≤24.5°C — it is used at that bound, which is
+            deliberately conservative-warm since the true value can only be lower.
+            &nbsp;† Athlete-reported, not an official announcement (2022: storm-delayed race, wetsuit
+            swim at ~21°C — the pre-storm satellite said 25). Highlighted rows are the {chain.readingN}{' '}
+            used for the offset; the Open-Meteo marine archive returns no data before 2023, which is
+            the hard limit on this sample size.
           </p>
 
-          {/* Bias Analysis */}
           <div style={{marginTop:16, padding:14, background:'var(--card-alt)', borderRadius:6, border:'1px solid var(--border)'}}>
             <div style={{fontFamily:'DM Mono,monospace', fontSize:9, fontWeight:500, letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--muted)', marginBottom:6}}>
-              Measurement Bias Analysis
+              What this means in practice
             </div>
             <div style={{fontSize:12, color:'var(--ink2)', lineHeight:1.7}}>
-              <strong>Average bias: {avgBias >= 0 ? '+' : ''}{fmt(avgBias)}°C</strong> (σ = {fmt(biasSd)}°C)<br/>
-              {avgBias < -0.3 ? (
-                <>
-                  The official IRONMAN reading tends to run <strong style={{color:'var(--blue)'}}>cooler</strong> than
-                  satellite SST by ~{fmt(Math.abs(avgBias))}°C on average. This is expected:
-                  the official measurement is taken at 60cm depth at ~06:00, before solar warming,
-                  while satellite SST captures the skin temperature across the full day.
-                  <br/><br/>
-                  <strong>What this means for you:</strong> If online sources show 25.0°C the day before the race,
-                  the official morning reading will likely come in around <strong>{fmt(25.0 + avgBias)}°C</strong>.
-                  This bias works in favour of wetsuit-legal conditions — the official reading that determines
-                  wetsuit rules is typically lower than what you'll see online.
-                </>
-              ) : avgBias > 0.3 ? (
-                <>
-                  The official IRONMAN reading tends to run <strong style={{color:'var(--red)'}}>warmer</strong> than
-                  satellite SST by ~{fmt(avgBias)}°C. This is unusual and may reflect local conditions
-                  (shallow water at swim start warming faster than the open coastal cell).
-                </>
-              ) : (
-                <>
-                  The official IRONMAN reading is broadly consistent with online satellite SST
-                  (within {fmt(Math.abs(avgBias))}°C on average). No significant systematic bias detected.
-                </>
-              )}
+              The official reading runs <strong style={{color:'var(--blue)'}}>cooler</strong> than the
+              model&rsquo;s daily-max sea-surface value by about{' '}
+              <strong>{fmt(Math.abs(chain.total), 1)}°C</strong> in total &mdash;{' '}
+              {fmt(Math.abs(chain.diurnal), 2)}°C of it because 6am is before the day&rsquo;s warming,
+              and {fmt(Math.abs(chain.reading), 2)}°C because the thermometer sits in shallow coastal
+              water rather than the offshore grid cell.
+              <br/><br/>
+              <strong>So: if a forecast or live source shows 25.5°C, expect the referee to read
+              about {fmt(25.5 + chain.total, 1)}°C.</strong> That difference decides wetsuit
+              eligibility on its own in a borderline year, which is why it is shown as its own
+              step rather than buried inside the prediction.
+              <br/><br/>
+              <strong>The honest caveat:</strong> the coastal step rests on{' '}
+              {chain.readingN} race days spanning {fmt(chain.readingSd, 2)}°C, so it is quoted with
+              ±{fmt(chain.sd, 1)}°C of uncertainty &mdash; more than the entire sea-temperature
+              forecast contributes. Sharpening the forecast cannot fix this; only more official
+              readings can.
+              <br/><br/>
+              <span style={{fontSize:11, color:'var(--muted)'}}>
+                For reference, the same calculation against seatemperature.info over 2018&ndash;24
+                gives {fmt(R.bias.avg, 2)}°C (σ {fmt(R.bias.sd, 2)}, n={R.bias.n}). It is
+                <em> not</em> applied to the Open-Meteo methods &mdash; but that it lands close to
+                the {fmt(chain.total, 2)}°C total above is a useful independent check.
+              </span>
             </div>
           </div>
         </div>
@@ -890,7 +1050,7 @@
             <strong>Climatological normals:</strong> 1991–2020 baseline from seatemperature.org (Cervia, Italy).<br/>
             <strong>Warming trend:</strong> +0.04°C/year — Frontiers in Climate (2024), AdriSC model; ESSD Trieste SST series 1899–2015.<br/>
             <strong>Anomaly persistence:</strong> 0.65 monthly lag — consistent with Copernicus Mediterranean reanalysis (CMEMS).<br/>
-            <strong>Cooling rate:</strong> ~0.15°C/day in mid-September — derived from daily satellite SST 2017–2024.<br/>
+            <strong>Cooling rate:</strong> &minus;0.12°C/day, used to carry an observation or forecast to race day. Measured by OLS on the Open-Meteo daily-max archive for September in <em>non-collapse</em> years: &minus;0.096°C/day (2023) and &minus;0.095°C/day (2025). 2024 gives &minus;0.33°C/day but that whole month is a single wind-driven collapse, which is modelled separately as a cold tail. The 30-year normal's implied &minus;0.155°C/day blends collapse years in, so using it here as well would double-count the same risk.<br/>
             <strong>Live SST data:</strong> seatemperature.info/cervia — daily satellite + in-situ observations.<br/>
             <strong>Copernicus Marine:</strong> SST_MED_SST_L4_NRT_OBSERVATIONS_010_004 — Mediterranean SST at 1/16° resolution.
           </p>
