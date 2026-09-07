@@ -58,6 +58,7 @@ sys.path.insert(0, str(BASE / "ironman-analysis"))
 sys.path.insert(0, str(BASE / "lib"))
 
 from primitives.planned_tss import (                            # noqa: E402
+    race_tss, race_tss_from_prev_race,
     planned_session_tss, tss_from_segments, render_workout, segment_if,
     name_intensity_mismatch,
 )
@@ -544,6 +545,123 @@ _DEFACTO_DELOAD_AT = 1.00   # last week <= 1.00 x maintenance = already a de fac
 # absolute numbers drift down a touch more — the safe direction.
 _TAPER_FACTORS = {3: 0.70, 2: 0.55, 1: 0.40}
 
+# RACE WEEK (6 Sep 2026). The ladder above is a WHOLE-WEEK volume target, and in race
+# week the whole week includes the race — the single biggest session of the year, and
+# the one thing on the calendar that was never costed anywhere. validate_week only ever
+# sees the built proposal, so the race sat outside the week total, outside the load cap
+# and outside the CTL-ramp projection, and the ladder's final 40% step was handed to the
+# planner as a TRAINING budget: for a CTL-110 Ironman athlete, ~300 TSS of training in
+# the seven days around a ~540 TSS race. A unit error, not a coaching choice.
+#
+# So the race is deducted first and what remains is the training budget, with a floor:
+# taper theory cuts duration, never frequency, and race week still needs its openers —
+# short sessions carrying a few race-effort minutes. For any long-course race the
+# deduction exceeds the whole-week figure and the floor is what gets prescribed, which
+# is the right answer: openers, then race.
+_RACE_WEEK_MIN = 0.15        # openers floor, as a fraction of the 7 x CTL maintenance load
+
+
+# Every week type that is light BY DESIGN. One definition, because it is asked in five
+# places for two different reasons and they must not drift:
+#
+#   - "do not force quality into this week" (stage1's minimum-quality floor, the
+#     intensity-budget check and the zone-deviation ranking). A race week and a
+#     post-race transition week are as much down-weeks as a deload is; typed only as
+#     deload/taper, those three checks would have demanded a normal week's quality dose
+#     in race week and in the week after an Ironman.
+#   - "this week being light is not evidence of a MISSED week" (the miss-trigger and the
+#     return-to-load step cap below), which must not cascade a recovery week off a week
+#     that was prescribed light on purpose.
+DOWN_WEEK_TYPES = ("deload", "taper", "race", "post_race")
+
+
+# Race intensity, per event, for the OPENERS guidance below. Long-course racing is done
+# at or below the top of Z2 — Jamie's IM Italy bike was 230 W against an FTP of 307, i.e.
+# 75% of FTP, the exact top of the Coggan Z2 band — so telling a long-course athlete to
+# put "a few minutes at race effort" in their race-week openers prescribes a stimulus
+# that is easier than their normal easy riding. Openers are priming, not training: they
+# have to sit ABOVE race intensity to do anything at all. For short-course racing the
+# opposite holds and race pace IS the sharpening intensity.
+_LONG_COURSE_IF = 0.78     # at or below this, race intensity is not a sharpening stimulus
+
+_OPENERS_LONG = ("Openers are SHORT efforts ABOVE race intensity — 3-6 min TOTAL of "
+                 "threshold/VO2 in bursts of 1-3 min with full recovery, inside an "
+                 "otherwise easy 30-45 min. Race intensity for this event sits at or "
+                 "below the top of Z2, so 'a few minutes at race effort' is NOT a "
+                 "stimulus and does not prime anything: go above it, briefly. Race-pace "
+                 "work this week is for pacing and fuelling rehearsal only, at most "
+                 "10-15 min, and is not the sharpening.")
+_OPENERS_SHORT = ("Openers are SHORT efforts at or just above race intensity — 5-8 min "
+                  "total in bursts of 1-2 min with full recovery, inside an otherwise "
+                  "easy 30-45 min. For this event race pace IS the sharpening intensity.")
+
+
+def race_intensity(cfg: dict, profile: dict | None = None) -> float:
+    """Best available whole-race bike IF, for deciding what 'openers' should mean."""
+    pr = ((profile or {}).get("prev_race") or {})
+    try:
+        if pr.get("bike_if"):
+            return float(pr["bike_if"])
+    except (TypeError, ValueError):
+        pass
+    from primitives.planned_tss import _RACE_PROFILE, _RACE_PROFILE_DEFAULT, _race_event_key
+    return _RACE_PROFILE.get(_race_event_key(cfg.get("race_distance") or ""),
+                             _RACE_PROFILE_DEFAULT)[1]
+
+
+def _same_distance(prev_race: dict, cfg: dict) -> bool:
+    """Is the athlete's previous race the same distance as the one being planned?
+
+    This gate has to be POSITIVE, not merely "no evidence against": borrowing a 70.3's
+    cost for a full Ironman would UNDER-price race week by ~240 TSS, which is the exact
+    failure being fixed. Three signals, cheapest first, and the last is the one that
+    actually catches a mismatch — a stated distance is often absent and a name is
+    unreliable ("IM Italy" vs "IM Italy Emilia-Romagna" is the same race).
+    """
+    dist = str(prev_race.get("distance") or "").strip().lower()
+    want = str(cfg.get("race_distance") or "").strip().lower()
+    if dist and want:
+        return dist == want
+    a = str(prev_race.get("name") or "").strip().lower()
+    b = str(cfg.get("race_name") or "").strip().lower()
+    if a and b and (a in b or b in a):
+        return True
+    # Duration plausibility against the event's typical hours: a 70.3 is never within a
+    # third of an Ironman's day.
+    from primitives.planned_tss import (_RACE_PROFILE, _RACE_PROFILE_DEFAULT,
+                                        _race_event_key, _hhmm_min)
+    hours = _RACE_PROFILE.get(_race_event_key(want), _RACE_PROFILE_DEFAULT)[0]
+    total = _hhmm_min(prev_race.get("total_time"))
+    if total is None:
+        total = sum(filter(None, (_hhmm_min(prev_race.get(k))
+                                  for k in ("swim_time", "bike_time", "run_time")))) or None
+    return bool(total and abs(total / 60 - hours) / hours <= 0.35)
+
+
+def race_load(cfg: dict, profile: dict | None = None) -> tuple:
+    """(tss, source) for this athlete's race, best source first:
+
+      explicit   `race_tss` in athletes.json — a stated figure always wins
+      prev_race  what they ACTUALLY cost themselves last time at this distance
+      duration   `race_expected_hours` x the event's whole-race IF
+      event_default
+
+    prev_race outranks the event default because a real race beats a table: Jamie's
+    IM Italy came to 556 TSS summed per leg, against a 539 default that was never his.
+    It is only used when the previous race was the SAME distance.
+    """
+    if cfg.get("race_tss"):
+        return race_tss("", expected_tss=cfg["race_tss"])
+    pr = (profile or {}).get("prev_race") or {}
+    if pr and _same_distance(pr, cfg):
+        got = race_tss_from_prev_race(
+            pr, css_per_100m=(profile or {}).get("swim_css_per_100m"),
+            run_threshold_pace_per_km=(profile or {}).get("run_threshold_pace_per_km"))
+        if got:
+            return got
+    return race_tss(cfg.get("race_distance") or cfg.get("race_name") or "",
+                    expected_hours=cfg.get("race_expected_hours"))
+
 # POST-RACE TRANSITION (6 Sep 2026).
 #
 # There was no branch for "the race has happened". `week_now` simply kept counting past
@@ -739,7 +857,8 @@ def block_deload_weeks(cfg: dict) -> dict:
 
 
 def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
-                 last_week_tss: float | None = None) -> dict:
+                 last_week_tss: float | None = None,
+                 profile: dict | None = None) -> dict:
     """Pure: weekly TSS needed to hit the current phase's CTL target on time,
     plus the ramp-capped safe ceiling — with deload and taper branches. Returns
     {"error": ...} if the athlete has no defensible CTL basis (no fabricated
@@ -857,18 +976,54 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
         weeks_to_race = max(1, -(-days_to_race // 7))          # ceil
         factor = _TAPER_FACTORS.get(min(weeks_to_race, 3), _TAPER_FACTORS[3])
         pre_taper_weekly = 7.0 * float(ctl_today)
-        target = int(round(pre_taper_weekly * factor))
-        return {"phase": "taper", "week_type": "taper", "training_week": week_now,
-                "ctl_today": ctl_today, "race_date": race_s,
-                "weeks_to_race": weeks_to_race, "taper_factor": factor,
-                "weekly_tss_floor": 0,   # taper: unloading is the point
-                "required_weekly_tss": target, "recommended_weekly_tss": target,
-                "note": (f"TAPER, race in {weeks_to_race} wk: volume stepped to "
-                         f"{int(factor * 100)}% of the ~{int(round(pre_taper_weekly))} TSS "
-                         f"maintenance load (70/55/40 step-down). Hold INTENSITY — keep "
-                         f"race-pace/threshold sharpness at reduced dose, keep session "
-                         f"frequency; cut duration, never intensity. Race week: the race "
-                         f"itself is most of the load.")}
+        whole_week = int(round(pre_taper_weekly * factor))
+        out = {"phase": "taper", "week_type": "taper", "training_week": week_now,
+               "ctl_today": ctl_today, "race_date": race_s,
+               "weeks_to_race": weeks_to_race, "taper_factor": factor,
+               "weekly_tss_floor": 0,   # taper: unloading is the point
+               "required_weekly_tss": whole_week, "recommended_weekly_tss": whole_week,
+               "note": (f"TAPER, race in {weeks_to_race} wk: volume stepped to "
+                        f"{int(factor * 100)}% of the ~{int(round(pre_taper_weekly))} TSS "
+                        f"maintenance load (70/55/40 step-down). Hold INTENSITY — keep "
+                        f"sharpness at reduced dose, keep session frequency; cut "
+                        f"duration, never intensity. Sharpness means THRESHOLD and above "
+                        f"in short doses"
+                        + (" — for this event race pace sits at or below the top of Z2, "
+                           "so race-pace work is pacing and fuelling rehearsal, not "
+                           "intensity, and does not count toward holding sharpness."
+                           if race_intensity(cfg, profile) <= _LONG_COURSE_IF else "."))}
+
+        # RACE WEEK: cost the race and prescribe only what is left (see _RACE_WEEK_MIN).
+        if days_to_race <= 6:
+            rt, rt_src = race_load(cfg, profile)
+            floor = int(round(pre_taper_weekly * _RACE_WEEK_MIN))
+            training = max(floor, whole_week - rt)
+            out.update({
+                "week_type": "race",
+                "race_in_week": True,
+                "race_tss_estimate": rt,
+                "race_tss_source": rt_src,
+                "whole_week_tss_incl_race": whole_week,
+                "training_at_floor": training == floor,
+                "required_weekly_tss": training,
+                "recommended_weekly_tss": training,
+                "note": (
+                    f"RACE WEEK — the race is on {race_s} ({days_to_race} day"
+                    f"{'' if days_to_race == 1 else 's'} away) and it is the week's load: "
+                    f"~{rt} TSS ({rt_src.replace('_', ' ')}). The whole-week taper figure is "
+                    f"~{whole_week} TSS, so the TRAINING budget is ~{training} TSS"
+                    + (" — the openers floor, because the race alone exceeds the week's "
+                       "whole-week figure. " if training == floor else " — what is left "
+                       "after the race. ")
+                    + ("Keep session FREQUENCY and cut all duration. "
+                       + (_OPENERS_LONG
+                          if race_intensity(cfg, profile) <= _LONG_COURSE_IF
+                          else _OPENERS_SHORT)
+                       + " Nothing on race day itself, and the day before is rest or one "
+                         "short opener. Do NOT schedule a long ride, a long run, or any "
+                         "full quality session.")),
+            })
+        return out
 
     # Derive phase CTL milestones from race_min when not explicitly configured
     # (mirrors generate-plan.py so athletes with a race_min but no phase_ctl — e.g.
@@ -944,7 +1099,7 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
     last_at_or_below_maint = (
         last_week_tss is not None and maintenance
         and float(last_week_tss) <= _DEFACTO_DELOAD_AT * maintenance
-        and _prev_week_type() not in ("deload", "taper", "race", "post_race"))
+        and _prev_week_type() not in DOWN_WEEK_TYPES)
     if last_at_or_below_maint and rec:
         step_cap = max(int(maintenance), int(round(float(last_week_tss) * _RETURN_STEP)))
         if step_cap < int(rec):
@@ -1033,7 +1188,7 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
         # Classify the prior week by recomputing it — required_tss is pure and the inner
         # call passes last_week_tss=None, so it skips THIS branch (bounded recursion).
         # This also subsumes the old scheduled-deload arithmetic guard (prev type=deload).
-        if _prev_week_type() not in ("deload", "taper", "race", "post_race"):
+        if _prev_week_type() not in DOWN_WEEK_TYPES:
             deload_why = (f"recovery week: last week's executed load "
                           f"({int(last_week_tss)} TSS) was under {int(_MISS_TRIGGER * 100)}% "
                           f"of maintenance (~{int(_MISS_TRIGGER * maintenance)})")

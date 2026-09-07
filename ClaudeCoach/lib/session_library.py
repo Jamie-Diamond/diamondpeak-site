@@ -246,7 +246,11 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         long_run_cap_min = _caps.get("long_run_min_cap")
     except Exception:
         pass
-    req = pt.required_tss(cfg, ctl, today=today, last_week_tss=last_week_tss) if ctl else {}
+    # profile carries prev_race (what the athlete's race ACTUALLY cost them) and their
+    # thresholds, which is how race week prices the race off real data instead of an
+    # event-average table.
+    req = (pt.required_tss(cfg, ctl, today=today, last_week_tss=last_week_tss,
+                           profile=profile) if ctl else {})
     # Long run is a PROGRESSING target for athletes with a configured long-run floor
     # (Kathryn): schedule it NEAR its climbing cap, not a static short run. Athletes
     # without a floor keep cap-only behaviour (no forced target) - unchanged.
@@ -358,6 +362,20 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     lr_factor = event.get("long_ride_factor", 0.9)
     long_ride_min = min(int(round((bike_min or 200) * lr_factor / 15) * 15),
                         240 if ekey == "ironman" else 300)
+    # ...but NOT in race week, and not in the recovery weeks after the race. The long ride
+    # is a HARD blocker in stage1 (`long_ride_missing`), and it is unconditional, so a race
+    # week whose training budget is ~113 TSS would fail every attempt for want of a 4-hour
+    # ride and deliver NO WEEK AT ALL for the most important week of the year. The same
+    # applies to the progressing long run. A week whose whole point is that it is short
+    # cannot also be required to contain the longest session of the week.
+    _no_key_sessions = (req.get("week_type") in ("race", "post_race"))
+    if _no_key_sessions:
+        long_ride_min = None
+        long_run_target_min = None
+        dosing_note += (
+            "NO protected long ride and NO long-run target this week: it is a race week "
+            "or a post-race recovery week, and the long session is exactly what must not "
+            "be in it. Short sessions only. ")
     # Athlete hard rules (protocol prose) — so the proposer obeys them, like the old coach did.
     hard_rules = ""
     rp_path = BASE / "athletes" / slug / "reference" / "rules.md"
@@ -474,7 +492,7 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         "weekly_run_min_cap": weekly_run_min_cap,             # MAX weekly run MINUTES (validate_week cap)
         "long_run_cap_min": long_run_cap_min,                 # MAX single long run (×1.15)
         "long_run_target_min": long_run_target_min,           # PROGRESSING target near cap (configured athletes)
-        "long_ride_target_min": long_ride_min,
+        "long_ride_target_min": long_ride_min,      # None in race / post-race weeks
         "long_swim_target_m": event.get("long_swim_m"),  # OVERDISTANCE weekly long swim (70.3 ~3000, IM ~4500)
         "race_sim_m": event.get("swim_m"),               # EXACT race distance — race-sim rehearsal (70.3 1900, IM 3800)
         "strength_programme": strength,

@@ -873,6 +873,8 @@ def validate_week(
     rest_days_min: int = REST_DAYS_MIN,
     rest_day_waiver: str | None = None,
     long_ride_max_min: int | None = None,
+    race_date: date | None = None,
+    race_name: str | None = None,
 ) -> WeekReport:
     """Validate the planned sessions for the 7 days starting `week_start`.
 
@@ -1130,6 +1132,30 @@ def validate_week(
     #    The waiver IS the "very good reason": supplied, this drops to soft and the
     #    reason is quoted into the report so the decision is on the record; absent,
     #    it is hard, because the whole point is that skipping rest takes an argument.
+    # 12. Nothing on race day. The race is not in `events` (validate_week only ever
+    #     sees the built proposal, which is why its load was never counted either), so
+    #     without this the planner is free to put a session on top of it — and does,
+    #     because race day is just another Saturday to the day rules. Opt-in like every
+    #     other check: no race_date supplied, no assertion.
+    if race_date is not None and week_start <= race_date <= week_end:
+        # The race itself is not one of these: intervals.icu tags it category RACE and
+        # _is_workout already drops it. But a hand-entered race sits in the calendar as a
+        # WORKOUT, and blocking the week because "the race is on race day" would false-fail
+        # every race week it appears in — so anything named like the race is skipped.
+        rn = (race_name or "").strip().lower()
+        on_race_day = [
+            e for e in week_events
+            if _event_date(e) == race_date
+            and not (rn and rn in str(e.get("name") or "").strip().lower())
+        ]
+        if on_race_day:
+            names = ", ".join(str(e.get("name") or "session") for e in on_race_day[:3])
+            violations.append(Violation(
+                code="session_on_race_day", severity="hard",
+                detail=(f"{len(on_race_day)} session(s) planned on race day "
+                        f"{race_date} ({names}). The race IS race day's session; "
+                        f"nothing else goes on it")))
+
     if rest_days_min > 0:
         loaded_days = {_event_date(e) for e in week_events if _planned_load(e) > 0}
         rest = 7 - len(loaded_days)

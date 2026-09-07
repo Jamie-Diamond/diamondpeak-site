@@ -41,14 +41,25 @@ def _req(day: str, **kw):
 
 
 class TestPreRaceUnchanged:
-    def test_final_week_is_still_a_taper(self):
-        r = _req("2026-07-01")
+    def test_the_taper_proper_is_unchanged(self):
+        # CFG's peak runs to week 12, which leaves a one-week taper that IS race week,
+        # so the taper proper needs a config whose peak ends earlier.
+        cfg = dict(CFG, phase_tss=dict(CFG["phase_tss"], peak_end_week=10))
+        r = pt.required_tss(cfg, CTL, today=date(2026, 6, 24))   # 11 days out
         assert r["phase"] == "taper"
         assert r["week_type"] == "taper"
-        assert r["weeks_to_race"] == 1
+        assert r["weeks_to_race"] == 2
+        assert "race_tss_estimate" not in r
+        assert r["recommended_weekly_tss"] == round(MAINTENANCE * pt._TAPER_FACTORS[2])
         assert "TAPER" in r["note"]
 
-    def test_race_day_itself_is_still_a_taper(self):
+    def test_final_week_is_race_week(self):
+        r = _req("2026-07-01")
+        assert r["phase"] == "taper"                # still the taper phase...
+        assert r["week_type"] == "race"             # ...but the race is in it
+        assert r["weeks_to_race"] == 1
+
+    def test_race_day_itself_is_still_the_taper_phase(self):
         r = _req(RACE)
         assert r["phase"] == "taper"
 

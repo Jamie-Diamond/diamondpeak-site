@@ -150,6 +150,57 @@ Pause an athlete by adding them to `config/planning-paused.json` and pushing —
 `cc-gitpull` picks it up on the VM within 30 minutes, no shell access needed.
 Resume by deleting the entry. Reference: `lib/planning_pause.py`.
 
+## Race week
+
+The race is the biggest single session of the year and, until 6 Sep 2026, the one
+thing on the calendar nothing costed — `validate_week` only ever sees the built
+proposal, so the race sat outside the week total, the load cap and the CTL-ramp
+projection. The taper ladder's final step (40% of maintenance) is a *whole-week*
+figure and was being handed to the planner as a *training* budget: ~300 TSS of
+training in the seven days around a ~540 TSS Ironman.
+
+Now the race is costed (`primitives.planned_tss.race_tss`) and deducted first:
+
+    training budget = max(15% of 7xCTL, whole-week taper figure - race TSS)
+
+For any long-course race the race exceeds the whole-week figure, so the openers
+floor is what gets prescribed — which is the right answer. `validate_week` also
+hard-fails a session scheduled on race day (`session_on_race_day`).
+
+Race load comes from, best first: an explicit `race_tss`; the athlete's OWN
+previous race at that distance (`profile.prev_race`, summed per leg — Jamie's IM
+Italy is 556 TSS against a 539 event default that was never his); an expected
+finish time (`race_expected_hours`); the event default. Defaults are whole-event
+`hours x IF^2 x 100`: Full Ironman ~539, 70.3 ~320, Olympic ~178, sportive ~294.
+
+The bike IF must be read from `prev_race.bike_if` as recorded, never recomputed
+from NP against today's FTP — 201 W against an FTP that has gone 275 -> 307 reads
+as 0.65 rather than the 0.73 it was, and the race comes out ~70 TSS light.
+
+**Openers are above race intensity for long course.** Long-course racing happens
+at or below the top of Z2 (Jamie's IM bike: 230 W against FTP 307, i.e. 75% of
+FTP, exactly the top of the Coggan Z2 band), so "a few minutes at race effort" is
+easier than the athlete's normal easy riding and primes nothing. For an event
+whose race IF is at or below `_LONG_COURSE_IF`, race-week openers are short
+threshold/VO2 bursts and race-pace work is pacing and fuelling rehearsal only.
+Short-course racing is the other way round: there, race pace IS the sharpening
+intensity.
+
+Race week carries **no protected long ride and no long-run target**
+(`session_library`): `long_ride_missing` is an unconditional hard blocker, so a
+race week whose budget is ~113 TSS would fail every attempt for want of a 4-hour
+ride and deliver no week at all. The same applies to post-race recovery weeks.
+
+The race on the calendar is safe: intervals.icu tags it category `RACE`, so
+`_is_workout` drops it (no double-count with the deduction) and the replace-push
+delete filter (`WORKOUT` only) cannot remove it. A hand-entered race named like
+the race is skipped by `session_on_race_day` so it cannot false-block its own
+week.
+
+`plan_tools.DOWN_WEEK_TYPES` is the single list of weeks that are light by design
+(`deload`, `taper`, `race`, `post_race`) — used both to relax the quality floors
+and to stop a deliberately light week reading as a missed one.
+
 ## After the race
 
 A race in the **past** puts the athlete in a `transition` phase, not a taper

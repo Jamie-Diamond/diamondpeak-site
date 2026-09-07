@@ -35,6 +35,7 @@ import weekly_availability            # noqa: E402
 import ops_log                        # noqa: E402
 import session_library as sl          # noqa: E402
 import plan_builder as pb             # noqa: E402
+import plan_tools as pt               # noqa: E402
 from primitives.planned_tss import segment_if  # noqa: E402
 
 _QUALITY_IF = 0.85   # a session with any segment at/above this is "quality" (fixed); else endurance
@@ -457,7 +458,7 @@ def _attempt_rank(brief: dict, built: dict, target, proposal: dict):
     load_off = 0
     if target:
         load_off = 0 if abs(built["total_tss"] - target) / target * 100 <= _LOAD_TOL_PCT else 1
-    deload = (brief.get("week_type") or "").lower() in ("deload", "taper")
+    deload = (brief.get("week_type") or "").lower() in pt.DOWN_WEEK_TYPES
     # Phase 5.5: symmetric per-sport per-zone deviation (floor + ceiling) over the TRAILING
     # 2-WEEK rolling aggregate, from the SAME _ZONE_BANDS source the validator uses. Floors drop
     # on deload (ceilings stay); run Z4-5 floor suppressed (ankle-safe). This pulls a normal week
@@ -496,6 +497,7 @@ _SAFETY_BLOCKER_CODES = frozenset({
     "run_long_volume",
     "weekly_tss_cap",           # week over the load ceiling
     "long_ride_over_ceiling",   # ride longer than the athlete's stated maximum
+    "session_on_race_day",      # training stacked on top of the race
 })
 
 
@@ -653,7 +655,7 @@ def audit_built(brief: dict, built: dict, target, proposal: dict):
                                         f"quality present but NOT physio-cleared (injury "
                                         f"cap 0) - keep that zone empty until the physio "
                                         f"raises the allowance"})
-    _deload = (brief.get("week_type") or "").lower() in ("deload", "taper")
+    _deload = (brief.get("week_type") or "").lower() in pt.DOWN_WEEK_TYPES
     try:
         from primitives.validate_plan import check_intensity_budget
         for v in check_intensity_budget(z3_min, tot_min, brief.get("tid_low_mod_high"),
@@ -732,7 +734,7 @@ def build_prompt(slug: str, brief: dict, week_start: date, feedback: str = "") -
     # a hard-gated zone stays EMPTY; an injury-capped zone is cautious toward its effective band.
     quality = ""
     _wt = (brief.get("week_type") or "").lower()
-    if _wt not in ("deload", "taper"):
+    if _wt not in pt.DOWN_WEEK_TYPES:
         _tgt = brief.get("distribution_targets") or {}
         _ib = brief.get("injury_bands") or {}
         _ex = {"Bike": "PREDOMINANTLY Z2 endurance + SWEETSPOT as the MAIN quality (toward the Z3%); add only ONE short VO2/threshold set toward the Z4-5% - a single touch, do NOT stack VO2 across rides (sweetspot dominates, VO2 is small)",

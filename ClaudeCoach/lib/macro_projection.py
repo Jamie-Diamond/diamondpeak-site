@@ -259,7 +259,10 @@ def project_block(
 
     loading = [k for k in weeks if k["week_type"] not in ("taper", "deload", "race")]
     down = [k for k in weeks if k["week_type"] in ("deload", "taper")]
-    pre_taper = [k for k in weeks if k["week_type"] != "taper"]
+    # "race" is a taper week that happens to contain the race (plan_tools sets it so the
+    # race's own load can be deducted from the week's budget). It is emphatically not a
+    # pre-taper loading week, so the pre-taper CTL must not be read off it.
+    pre_taper = [k for k in weeks if k["week_type"] not in ("taper", "race")]
     ctl_pre_taper = pre_taper[-1]["ctl_end"] if pre_taper else None
     ctl_pre_taper_strict = pre_taper[-1]["ctl_end_at_ceiling"] if pre_taper else None
     race_min = (cfg.get("ctl_targets") or {}).get("race_min")

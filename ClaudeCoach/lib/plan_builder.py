@@ -306,7 +306,14 @@ def build_sessions(slug: str, proposal: dict) -> dict:
         _rest_waiver = weekly_availability.rest_day_waiver_for_week(slug, ws)
     except Exception:
         _rest_waiver = None
+    # Race day, when the week contains one: the race is not in `events`, so without
+    # this the validator has no way to see a session stacked on top of it.
+    try:
+        _race_d = (date.fromisoformat(cfg["race_date"]) if cfg.get("race_date") else None)
+    except (ValueError, TypeError):
+        _race_d = None
     rep = validate_week(events, ws, day_rules=dr,
+                        race_date=_race_d, race_name=cfg.get("race_name"),
                         rest_day_waiver=_rest_waiver,
                         weekly_tss_cap=_weekly_tss_cap(slug, phase, week_start=ws),
                         weekly_tss_floor=_floor,
