@@ -350,6 +350,7 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
                             ramp_cap=float(cfg.get("max_ctl_ramp_per_week", 5.0)),
                             strength_max=(dr or {}).get("strength_max"),
                             distribution=phase.get("distribution"),
+                            phase_family=phase.get("family"),
                         # Was an inline LONG_RIDE check here; validate_week now owns it
                         # so plan time and calendar time cannot disagree, and a breach is
                         # reported once. `or 300` keeps the absolute ceiling armed for an
