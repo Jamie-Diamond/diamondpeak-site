@@ -1509,9 +1509,9 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
         _send_followup_nudge(state, session_log_f, chat_id, injuries=injuries, state_file=state_file, slug=slug)
         return
 
-    state["last_id"] = activity_id
-    state["notified_at"] = datetime.now().isoformat()
-    save_state(state, state_file)
+    # last_id/notified_at are set once the debrief send is confirmed below —
+    # not here — so a dropped Telegram send leaves the activity un-debriefed
+    # and the next watcher pass retries it (i183196403).
 
     # Dedup again in case Claude introduced a duplicate stub
     _dedup_session_log(session_log_f)
@@ -1613,6 +1613,7 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     ack_prefix, ack_keys = _acknowledgement(
         slug, activity_id, profile.get("coaching_level", "mid"))
     ack_sent = False
+    debrief_ok = True
 
     if already_discussed:
         # Chat already covered this activity — stay silent, but a durability
@@ -1622,13 +1623,13 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
             # W1: if there is an acknowledgement it leads, and the flag still
             # lands at full strength immediately after. Praise-then-finding is
             # §8.5 move 0; the §8.4 sandwich is the other order.
-            _notify(f"*New activity*\n\n{ack_prefix}{note.lstrip()}"
+            debrief_ok = _notify(f"*New activity*\n\n{ack_prefix}{note.lstrip()}"
                     if ack_prefix else f"*New activity*{note}", chat_id, slug=slug)
-            ack_sent = bool(ack_prefix)
+            ack_sent = bool(ack_prefix) and debrief_ok
     elif analysis and analysis != "none":
         analysis += _run_durability_note(slug, activity_id)[0]
-        _notify(f"*New activity*\n\n{ack_prefix}{analysis}", chat_id, slug=slug)
-        ack_sent = bool(ack_prefix)
+        debrief_ok = _notify(f"*New activity*\n\n{ack_prefix}{analysis}", chat_id, slug=slug)
+        ack_sent = bool(ack_prefix) and debrief_ok
 
     # Marked only once it has actually been said — an unsent occurrence must
     # stay available, or the one message §8.3 exists to produce is silently
@@ -1639,6 +1640,18 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
         except Exception as e:
             print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] acknowledgement "
                   f"state not written: {e}", file=sys.stderr)
+
+    # Only advance last_id/notified_at once the debrief has actually gone out
+    # (or there was never one to send). A failed send leaves last_id behind, so
+    # state.get("last_id") no longer claims this activity was debriefed when
+    # the Telegram message never arrived (i183196403).
+    if debrief_ok:
+        state["last_id"] = activity_id
+        state["notified_at"] = datetime.now().isoformat()
+        save_state(state, state_file)
+    else:
+        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] debrief send failed for "
+              f"activity {activity_id} — leaving un-debriefed for retry", file=sys.stderr)
 
     # Send quick-log keyboard for immediate data capture
     new_entry = None
