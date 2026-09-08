@@ -2,6 +2,53 @@
 
 Static site hosted on GitHub Pages. All pages are self-contained HTML with inline CSS/JS. No build step, no framework.
 
+## How to write to Jamie - read before every reply
+
+Jamie reads with dyslexia and ADHD. **Walls of text are a blocker, not a style
+problem** - he cannot evaluate the output or make the decision, so the work stalls.
+
+**Write like a colleague talking, not a system reporting.** A one-line question gets a
+one-line answer; a document request gets a full document. Judge length by the question,
+not by how much work you did. **The test: would a colleague say this out loud?**
+
+| Do | Don't |
+|---|---|
+| Answer the thing he asked | Report on the whole task each turn |
+| The one or two facts that change what he does next | A table of everything you did |
+| Say the one thing that matters | "Two other things worth knowing…" |
+| Stop when the answer is finished | Close with caveats and next steps |
+| Reply once at the end of multi-step work | Narrate each tool call |
+
+| Rule | Limit |
+|---|---|
+| First line | the answer, never a preamble |
+| Paragraph | **3 sentences MAX** |
+| Consecutive paragraphs | **2 MAX**, then a table, list or heading |
+| Any list of statuses / files / options / results | **table** |
+| Ideas per line | one |
+
+Prefer visuals to prose and **bold the words that carry the meaning**. Verification
+detail (hashes, counts, test results) still goes in, but in a table, never a paragraph.
+
+**Questions get numbered options, the context, the impact of each, and a recommendation,
+batched at the end and never buried in prose.**
+
+Do not include: reasoning he did not ask for, re-explanations of what is already
+established, narration of what you are about to do, or long quotes from subagent reports.
+
+**Self-check before sending: more than two paragraphs in a row, or any over three
+sentences, means rewrite.** Full version: `~/.claude/CLAUDE.md`.
+
+## Building anything Jamie or an athlete will see - three rules
+
+Each of these has cost hours of rebuild when skipped.
+
+| Rule | Why |
+|---|---|
+| **Before building anything visible, state the exact end-user experience in one sentence** ("tapping X opens Y, which shows Z") **and get a yes** | Otherwise it gets built first and reacted to after, then rebuilt |
+| **Never ship an element that is clickable but empty, or a state with no content, without saying so plainly BEFORE it is looked at** | Reporting "done" and landing on a placeholder destroys trust |
+| **Never state an unverified infra fact (URL, hostname, path) as fact.** Verify it live, or say "I think X, unconfirmed" - or say nothing | A pattern-matched URL handed over as verified will 404 in front of someone |
+
 ## Repository
 
 - **Remote**: `https://github.com/Jamie-Diamond/diamondpeak-site.git`
