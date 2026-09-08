@@ -261,6 +261,23 @@ class TestDistributionDrift:
         r = validate_week(evs, WEEK)
         assert not [v for v in r.violations if v.code == "intensity_distribution"]
 
+    def test_missing_distribution_non_taper_still_inert(self):
+        # A future phase's {} distribution is a legitimate not-yet-specified stub —
+        # only Taper is held to a stricter standard (see next test).
+        evs = [_named("2026-06-19", "Ride", "VO2max intervals (5x4)", 75)]
+        r = validate_week(evs, WEEK, distribution={}, phase_family="build")
+        assert not r.hard
+        assert not [v for v in r.violations if v.code == "taper_distribution_missing"]
+
+    def test_missing_distribution_taper_hard_fails(self):
+        # A taper week is about to be raced off — an empty {} here let an
+        # all-race-pace taper week through with nothing to check it against.
+        evs = [_named("2026-06-19", "Ride", "Race-pace ride", 75)]
+        r = validate_week(evs, WEEK, distribution={}, phase_family="taper")
+        hits = [v for v in r.violations if v.code == "taper_distribution_missing"]
+        assert len(hits) == 1 and hits[0].severity == "hard"
+        assert hits[0] in r.hard
+
     def test_swims_and_bricks_excluded(self):
         evs = [
             _named("2026-06-16", "Swim", "CSS test set", 60),

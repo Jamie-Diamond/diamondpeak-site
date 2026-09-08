@@ -869,6 +869,7 @@ def validate_week(
     run_long_min_cap: float | None = None,
     monotony_threshold: float = 2.0,
     distribution: dict | None = None,
+    phase_family: str | None = None,
     dist_tolerance_pp: float = DIST_TOLERANCE_PP,
     rest_days_min: int = REST_DAYS_MIN,
     rest_day_waiver: str | None = None,
@@ -888,6 +889,10 @@ def validate_week(
     effects. A hard check whose input is missing is recorded in report.skipped
     rather than silently passing (fail-noisy): "validated" must never be
     conflated with "not actually checked".
+
+    `phase_family` (e.g. "taper") is ONLY used to decide whether a missing
+    `distribution` is a legitimate stub (any other phase — recorded inert, no
+    violation) or a hard config gap (taper — see check 5).
     """
     rules = _normalise_day_rules(day_rules)
     dated = _dated_day_rules(day_rules)
@@ -1061,10 +1066,24 @@ def validate_week(
 
     # 5. Intensity-distribution drift (soft) — excess planned quality vs the
     #    blueprint phase's Z1–2 share. Only asserted when a distribution is supplied.
+    #    A Taper phase is the exception: {} there is not an unspecified-future-phase
+    #    stub, it is the week the athlete is about to race off, so a missing table
+    #    is a HARD config gap, not a silent skip — see taper_distribution_missing
+    #    below (blueprint's Taper carried {} while every other phase had real
+    #    Z1-2/Z3/Z4-5 splits, so an all-race-pace taper week read as zero quality).
     if distribution:
         violations.extend(
             _check_distribution(week_events, week_start, distribution,
                                 dist_tolerance_pp, skipped))
+    elif phase_family == "taper":
+        violations.append(Violation(
+            code="taper_distribution_missing",
+            severity="hard",
+            detail=(f"week of {week_start}: Taper phase has no intensity distribution "
+                    f"configured in the blueprint, so this taper week cannot be checked "
+                    f"for excess quality (e.g. race-pace work sitting under the Z1–2 "
+                    f"floor) — add a distribution table to the Taper phase"),
+        ))
 
     # 6. Distance/duration internal consistency — walk-run sessions whose stated
     #    distance and stated run/walk cycle count imply different totals.
