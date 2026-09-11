@@ -221,8 +221,16 @@ DELIVERABLES = [
     # sync_ok writes) means only a genuine success satisfies the check. Narrowing
     # here rather than changing sync_failure keeps the blast radius to this one
     # job instead of all five that share the helper.
+    # telegram: False (11 Sep 2026, Jamie) — INFRA MISSES BELONG IN A LOG, NOT ON
+    # HIS PHONE. Both of these are plumbing: nothing an athlete sees changes when a
+    # nightly mirror skips a cycle, and a Telegram he cannot act on at 21:30 is the
+    # noise that trains him to dismiss the two alerts that DO need him. The gap is
+    # still detected and still printed by gap_lines() into the evening digest and the
+    # ops log, so this narrows the ROUTE, not the check. Trade-off stated out loud:
+    # sync-private is the only versioned backup of athletes/, so a mirror dead for
+    # weeks now surfaces only to a reader of the digest.
     {"script": "backup-config",      "label": "config backup",      "window": "daily",
-     "per_athlete": False, "telegram": True, "detail": "sync ok",
+     "per_athlete": False, "telegram": False, "detail": "sync ok",
      "cron": "50 23 * * *",      "cron_cmd": "backup-config.sh",
      "since": "2026-07-28T13:00:37"},   # 5eaae85
     # 28 Jul 2026 — the two live jobs the cron-derived audit itself found on its
@@ -244,7 +252,7 @@ DELIVERABLES = [
     # ops_log — NOT the script filename; get that wrong and this is a false
     # registration that can never see a heartbeat.
     {"script": "sync-private",        "label": "private repo sync",  "window": "daily",
-     "per_athlete": False, "telegram": True, "detail": "sync ok",
+     "per_athlete": False, "telegram": False, "detail": "sync ok",
      "cron": "20 23 * * *",      "cron_cmd": "sync-private-repo.sh",
      "since": "2026-07-28T16:21:45"},   # merged to main (was 5eaae85 commit time)
                                         # its heartbeat write, for every job

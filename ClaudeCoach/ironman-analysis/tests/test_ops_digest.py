@@ -172,19 +172,24 @@ class TestGapLines:
         assert any("morning card" in l and "kathryn" in l for l in gaps)
         assert tg == ["morning card for kathryn"]
 
-    def test_missing_backup_config_flagged_and_telegrammed(self, digest):
-        # 28 Jul 2026: config/athletes.json.enc is the only backup of the
-        # intervals.icu keys — a missing nightly heartbeat is condition 1.
+    def test_missing_backup_config_flagged_but_not_telegrammed(self, digest):
+        # config/athletes.json.enc is the only backup of the intervals.icu keys,
+        # so the CHECK stays; 11 Sep 2026 Jamie took the ROUTE off Telegram
+        # (telegram=False) because an infra miss he cannot act on at 21:30 is the
+        # noise that trains him to dismiss the alerts that do need him. The gap
+        # must therefore still reach the digest and never reach Telegram — the
+        # distinction this test now guards.
         gaps, tg = self.call(digest, drop={("backup-config", "")})
         assert any("config backup" in l for l in gaps)
-        assert tg == ["config backup"]
+        assert tg == []
 
-    def test_missing_sync_private_flagged_and_telegrammed(self, digest):
-        # 28 Jul 2026 (this ticket): the only versioned backup of athletes/,
-        # now that the public repo was cleaned — same class as backup-config.
+    def test_missing_sync_private_flagged_but_not_telegrammed(self, digest):
+        # The only versioned backup of athletes/, now that the public repo was
+        # cleaned — same class as backup-config, and taken off Telegram with it
+        # on 11 Sep 2026. Still flagged in the digest.
         gaps, tg = self.call(digest, drop={("sync-private", "")})
         assert any("private repo sync" in l for l in gaps)
-        assert tg == ["private repo sync"]
+        assert tg == []
 
     def test_missing_activity_watcher_flagged_but_not_telegrammed(self, digest):
         # Plumbing, not a named deliverable — see coach_alert.DELIVERABLES'
@@ -398,9 +403,15 @@ class TestBackupConfigHeartbeat:
         d = next(x for x in coach_alert.DELIVERABLES if x["script"] == "backup-config")
         assert row["script"] == d["script"]
         assert row["detail"] == d["detail"] == "sync ok"
-        assert d["window"] == "daily" and d["per_athlete"] is False and d["telegram"] is True
+        assert d["window"] == "daily" and d["per_athlete"] is False
+        assert d["telegram"] is False    # log-only from 11 Sep 2026 — see DELIVERABLES
 
     def test_transient_failure_does_not_satisfy_the_check(self, digest, logs, monkeypatch):
+        # The subject is the TRAP, not the routing: sync_failure's first
+        # consecutive failure writes ok=True, and for a once-nightly job that
+        # would report a night with no backup as clean. Asserted on `gaps`
+        # because that is where this deliverable is reported now that
+        # telegram=False; an empty `tg` is the routing change, not a weaker check.
         monkeypatch.setattr(ops_log, "SYNC_STATE", logs / "git-sync-state")
         ops_log.sync_failure("backup-config", "push to dpc_private failed")
         row = json.loads(ops_log.RUN_STATUS.read_text().splitlines()[-1])
@@ -408,7 +419,7 @@ class TestBackupConfigHeartbeat:
         row["ts"] = "2026-08-05T07:00:00"   # inside NOW's window — see NOW above
         gaps, tg = digest.gap_lines([row], [row], {}, now=NOW)
         assert any("config backup" in l for l in gaps)
-        assert "config backup" in tg
+        assert "config backup" not in tg
 
     def test_per_athlete_false_matches_sync_oks_empty_athlete(self, digest):
         # sync_ok records athlete="" while per_athlete=False checks athlete=None
@@ -442,12 +453,14 @@ class TestSyncPrivateHeartbeat:
         assert row["script"] == d["script"] == "sync-private"
         assert d["cron_cmd"] == "sync-private-repo.sh"
         assert row["detail"] == d["detail"] == "sync ok"
-        assert d["window"] == "daily" and d["per_athlete"] is False and d["telegram"] is True
+        assert d["window"] == "daily" and d["per_athlete"] is False
+        assert d["telegram"] is False    # log-only from 11 Sep 2026 — see DELIVERABLES
 
     def test_transient_failure_does_not_satisfy_the_check(self, digest, logs, monkeypatch):
         # Same trap as backup-config: sync-private runs once nightly (23:20),
         # so the "1st consecutive failure, usually self-heals" ok=True would
-        # mask a whole missed night if it satisfied the check.
+        # mask a whole missed night if it satisfied the check. Asserted on
+        # `gaps` for the same reason as backup-config's twin above.
         monkeypatch.setattr(ops_log, "SYNC_STATE", logs / "git-sync-state")
         ops_log.sync_failure("sync-private", "push to dpc_private failed")
         row = json.loads(ops_log.RUN_STATUS.read_text().splitlines()[-1])
@@ -455,7 +468,7 @@ class TestSyncPrivateHeartbeat:
         row["ts"] = "2026-08-05T07:00:00"
         gaps, tg = digest.gap_lines([row], [row], {}, now=NOW)
         assert any("private repo sync" in l for l in gaps)
-        assert "private repo sync" in tg
+        assert "private repo sync" not in tg
 
 
 class TestActivityWatcherRollingWindow:
@@ -542,9 +555,12 @@ class TestCoachAlertRouting:
                     if d["telegram"] and d["window"] == "daily"}
         weekly_tg = {d["script"] for d in coach_alert.DELIVERABLES
                      if d["telegram"] and d["window"] == "weekly"}
+        # backup-config and sync-private LEFT this set on 11 Sep 2026 (Jamie):
+        # both are infra plumbing, and an interruption he cannot act on is what
+        # makes the two alerts that matter easy to dismiss. They are still
+        # checked and still printed to the digest — see DELIVERABLES.
         assert daily_tg == {"morning-checkin", "daily-prescription",
-                             "night-before-brief", "evening-checkin",
-                             "backup-config", "sync-private"}
+                             "night-before-brief", "evening-checkin"}
         assert weekly_tg == {"weekly-summary", "stage1-plan"}
 
     def test_a_test_can_never_execute_the_real_notify(self, logs, monkeypatch):
@@ -956,7 +972,9 @@ class TestDueWindows:
 
         29 Jul 21:30. backup-config's 28 Jul 23:50 slot is now both past and after
         its instrumentation, so a night with no successful backup is a real miss
-        and reaches Telegram — 24-hour detection, where the alternative was never.
+        and is REPORTED — 24-hour detection, where the alternative was never.
+        Asserted on the digest line rather than Telegram since 11 Sep 2026, when
+        the route was narrowed to log-only; the detection window is unchanged.
         """
         night = datetime(2026, 7, 29, 21, 30)
         today = [e for e in self.today() if e["script"] != "backup-config"]
@@ -965,8 +983,9 @@ class TestDueWindows:
         for e in today:
             e["ts"] = "2026-07-29T20:35:00"
         gaps, tg = digest.gap_lines(today, today, ATHLETES, now=night)
-        assert "config backup" in tg
+        assert any("config backup" in l and l.startswith("⚠") for l in gaps)
         assert any("config backup" in l and "23:50" in l for l in gaps)
+        assert tg == []
 
     def test_a_failed_backup_is_judged_on_the_previous_cycles_window(self, digest):
         """A "sync ok" from BEFORE the 23:50 slot must not satisfy it — otherwise
@@ -975,8 +994,13 @@ class TestDueWindows:
         stale = _e("backup-config", detail="sync ok")
         stale["ts"] = "2026-07-28T09:00:00"      # before the 28 Jul 23:50 run
         fresh = dict(stale, ts="2026-07-29T00:01:00")   # after it
-        assert "config backup" in digest.gap_lines([stale], [stale], {}, now=night)[1]
-        assert "config backup" not in digest.gap_lines([fresh], [fresh], {}, now=night)[1]
+        # Index 0 (the digest lines), not 1 (Telegram): backup-config is
+        # telegram=False since 11 Sep 2026, so [1] is empty either way and would
+        # make this assertion pass for the wrong reason.
+        assert any("config backup" in l and l.startswith("⚠")
+                   for l in digest.gap_lines([stale], [stale], {}, now=night)[0])
+        assert not any("config backup" in l and l.startswith("⚠")
+                       for l in digest.gap_lines([fresh], [fresh], {}, now=night)[0])
 
     # --- FAULT 2: judged over a window predating its own instrumentation ----
     def test_a_newly_instrumented_deliverable_is_not_judged_on_earlier_cycles(self):
