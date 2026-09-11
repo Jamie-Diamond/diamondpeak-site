@@ -1,5 +1,54 @@
 # plan_audit.py — scheduled, alerting BASELINE-GATED (2026-07-28)
 
+> **The Taper phase now has an intensity distribution, and the live sidecars were
+> PATCHED rather than regenerated (2026-09-11).** `taper_distribution_missing` is a
+> hard rule written for one failure — "an all-race-pace taper week read as zero
+> quality" — and it had never been able to run: `blueprints/blueprint.md` §3.2 stated
+> Base / Build / Peak only, so every generated blueprint carried `distribution: {}`
+> for its Taper and the validator turned that into a hard fail instead of a check.
+> Jamie and Kathryn were both red on it eight days before Cervia. §3.2 now states a
+> Taper row carrying PEAK'S PROPORTIONS UNCHANGED (§2's rule as a share: volume steps
+> 70% -> 55% -> 40% of peak week, intensity touches maintained, so the absolute
+> quality minutes fall with the volume and the mix does not), and §4's Sportive
+> sentence carries a Taper step for Calum.
+>
+> The three live `training-blueprint.json` sidecars were patched in place — ONE key,
+> `phases[taper].distribution`, taken from `generate-blueprint.py`'s own parsed
+> `DISTRIBUTION` so it cannot disagree with the doc. Backups at
+> `*.bak-taperdist-<stamp>`; the diff is that key and nothing else. A full
+> `generate-blueprint.py --athlete <slug>` was deliberately NOT run: it refetches CTL
+> and recomputes `ctl_entry_*`, `tss_ceiling`, the fitness note and the heat window,
+> and for an athlete with no `plan_start`/`phase_tss` in `athletes.json` (calum) it
+> re-derives the phase WINDOWS from weeks-to-race. Rebuilding a phase structure in
+> race week to fix a distribution table is not a trade worth making. The next real
+> regeneration emits the same value from the doc.
+>
+> Measured after the patch: jamie **4 hard -> 0**, kathryn **2 -> 0**. Two of jamie's
+> four were the taper rows; the other two were `swim_forbidden_day` (Thu 10 Sep) and
+> `run_forbidden_day` (Wed 16 Sep), both registered in `day-rules-overrides.json` on
+> Jamie's confirmation that the plan was correct — they belonged to the 7 Sep
+> race-week taper rebuild whose other four off-pattern sessions were registered at the
+> time. `day_rules` was NOT widened: `swim-log.json` shows Wed x6 since 29 Jul against
+> Thu x1, and no Wednesday run since 8 Jul, so the config describes the real pattern
+> and these are genuine exceptions. Drift stands at 2 Thursday swims against
+> `DRIFT_THRESHOLD` 3.
+>
+> The check is now ARMED, not silent: it asserts on jamie's bike in both taper weeks
+> (78% and 80% Z1–2 against a 70% floor — passes). Run stays unchecked in both weeks
+> for want of volume (2 sessions / 95 and 68 min against the check's own >= 2 sessions
+> AND >= 120 min minimum) and swim contributes no measurable minutes at all, so a
+> race-pace swim set is still invisible to the distribution check. That is the check's
+> own design, and it is the next thing to look at if taper quality ever needs real
+> policing.
+>
+> **Two pre-existing items found while verifying, deliberately NOT fixed here.**
+> Calum carries a hard `weekly_tss_cap` (321 TSS in the week of 2026-09-07 against a
+> cap of 108) which is identical before and after this change and never reaches an
+> alert because he is `planning_pause`d. And `jamie.RULES` still sits at 6 in
+> `plan-audit-baseline.json` while his live RULES count is 0, so the next genuinely
+> new hard RULES failure would be absorbed as a known baseline fail — the baseline
+> wants shrinking to the new floor.
+
 > **day_rules are GUIDELINES, and the audit now says so (2026-07-28, later same
 > day).** The coach's ruling: *"I told it this week to swim on wed, so we swim on
 > wed, rules are guidelines."* `day_rules.swim_days=["Tue","Thu"]` is a true
