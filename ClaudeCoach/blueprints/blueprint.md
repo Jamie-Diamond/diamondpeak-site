@@ -144,6 +144,15 @@ Distribution is expressed as a **weekly average per sport**, not a per-session r
 
 Percentages refer to time in zone across all sessions of that sport for the week.
 
+**Taper carries Peak's proportions unchanged.** These are SHARES of a week's time in
+zone, and §2's taper rule is that *volume* steps down (70% → 55% → 40% of peak week)
+while *intensity touches are maintained* — so the absolute quality minutes fall with
+the volume and the mix does not. A Taper row is stated explicitly rather than left
+blank because blank is indistinguishable from "not yet decided", and the taper is the
+one week where an all-race-pace calendar would otherwise pass unexamined (added
+11 Sep 2026). Treat it as a conservative Z1–2 FLOOR, not a prescription: it is the
+number that catches a taper week with no easy work left in it.
+
 **Full Ironman:**
 
 | Phase | Swim | Bike | Run |
@@ -151,6 +160,7 @@ Percentages refer to time in zone across all sessions of that sport for the week
 | Base | 70% Z1–2 / 20% Z3–4 / 10% Z5 | 80% Z1–2 / 12% Z3 / 8% Z4–5 | 85% Z1–2 / 10% Z3 / 5% Z4–5 |
 | Build | 65% Z1–2 / 25% Z3–4 / 10% Z5 | 75% Z1–2 / 15% Z3 / 10% Z4–5 | 80% Z1–2 / 12% Z3 / 8% Z4–5 |
 | Peak | 60% Z1–2 / 25% Z3–4 / 15% Z5 | 70% Z1–2 / 15% Z3 / 15% Z4–5 | 75% Z1–2 / 12% Z3 / 13% Z4–5 |
+| Taper | 60% Z1–2 / 25% Z3–4 / 15% Z5 | 70% Z1–2 / 15% Z3 / 15% Z4–5 | 75% Z1–2 / 12% Z3 / 13% Z4–5 |
 
 **70.3 / Half Ironman:**
 
@@ -159,6 +169,7 @@ Percentages refer to time in zone across all sessions of that sport for the week
 | Base | 70% Z1–2 / 20% Z3–4 / 10% Z5 | 78% Z1–2 / 14% Z3 / 8% Z4–5 | 83% Z1–2 / 12% Z3 / 5% Z4–5 |
 | Build | 65% Z1–2 / 22% Z3–4 / 13% Z5 | 70% Z1–2 / 18% Z3 / 12% Z4–5 | 78% Z1–2 / 12% Z3 / 10% Z4–5 |
 | Peak | 58% Z1–2 / 25% Z3–4 / 17% Z5 | 65% Z1–2 / 18% Z3 / 17% Z4–5 | 72% Z1–2 / 14% Z3 / 14% Z4–5 |
+| Taper | 58% Z1–2 / 25% Z3–4 / 17% Z5 | 65% Z1–2 / 18% Z3 / 17% Z4–5 | 72% Z1–2 / 14% Z3 / 14% Z4–5 |
 
 ---
 
@@ -228,7 +239,7 @@ The following events share the mesocycle algorithm and ramp rules. Their phase-s
 | Ultramarathon | Stub | Volume-dominant; IF ceiling lower (0.60 base, 0.64 peak). Time-on-feet over pace. |
 | Duathlon | Stub | Brick-heavy from base (run–bike–run format). No swim block. |
 | Aquathlon | Stub | Swim–run format. Bike as cross-training. Transitions and pacing across disciplines key. |
-| Road Sportive / Gran Fondo | **Implemented** (`Sportive`) | Bike-only: bike distribution by phase (Base 80/12/8 → Build 70/18/12 → Peak 65/18/17 Z1–2/Z3/Z4–5), FTP tests only (no LTHR/CSS), no bricks. Climbing-weighted via the course modifier on hilly routes. |
+| Road Sportive / Gran Fondo | **Implemented** (`Sportive`) | Bike-only: bike distribution by phase (Base 80/12/8 → Build 70/18/12 → Peak 65/18/17 → Taper 65/18/17 Z1–2/Z3/Z4–5), FTP tests only (no LTHR/CSS), no bricks. Climbing-weighted via the course modifier on hilly routes. |
 | Gravel Race | **Implemented** (maps to `Sportive`) | Shares the Sportive bike-only profile; extended Z2–3 with power management. |
 | Endurance Swim | Stub | Swim-dominant. Run/bike as active recovery only. |
 

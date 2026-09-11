@@ -484,7 +484,11 @@ def _parse_distribution_doc():
             # "70.3 / Half Ironman" in the doc, "70.3" as the event key.
             event = "70.3" if name.startswith("70.3") else name
             continue
-        m = re.match(r"\|\s*(Base|Build|Specific|Peak)\s*\|(.+)\|\s*$", stripped)
+        # Taper joined the doc 11 Sep 2026 - see section 3.2's note. Before that a
+        # Taper phase got `distribution: {}`, which validate_week reads as a HARD
+        # taper_distribution_missing: the taper is the one week where an
+        # all-race-pace calendar would otherwise pass unexamined.
+        m = re.match(r"\|\s*(Base|Build|Specific|Peak|Taper)\s*\|(.+)\|\s*$", stripped)
         if not (m and event):
             continue
         cells = [c.strip() for c in m.group(2).split("|")]
@@ -497,21 +501,28 @@ def _parse_distribution_doc():
             f"distribution rows")
 
     # Sportive is bike-only and the doc states it in the EVENT table (section 4), not in
-    # 3.2, as "Base 80/12/8 -> Build 70/18/12 -> Peak 65/18/17 Z1-2/Z3/Z4-5". Read it
-    # from there. It is emphatically NOT the Ironman bike column: deriving it that way
-    # gives Build 75/15/10 and Peak 70/15/15, which is a different prescription from the
-    # one written down for Calum's event.
+    # 3.2, as "Base 80/12/8 -> Build 70/18/12 -> Peak 65/18/17 -> Taper 65/18/17
+    # Z1-2/Z3/Z4-5". Read it from there. It is emphatically NOT the Ironman bike column:
+    # deriving it that way gives Build 75/15/10 and Peak 70/15/15, which is a different
+    # prescription from the one written down for Calum's event.
+    #
+    # The Taper step is READ, not copied off peak in here, even though the doc states the
+    # same numbers for both today: `out["Sportive"]["taper"] = peak` is exactly the drift
+    # this function exists to prevent, and it would ignore the doc the day Sportive is
+    # given a taper of its own.
     sport_row = re.search(
         r"bike distribution by phase\s*\(\s*Base\s+(\d+)/(\d+)/(\d+)\s*[^B]*Build\s+"
-        r"(\d+)/(\d+)/(\d+)\s*[^P]*Peak\s+(\d+)/(\d+)/(\d+)", md)
+        r"(\d+)/(\d+)/(\d+)\s*[^P]*Peak\s+(\d+)/(\d+)/(\d+)\s*[^T]*Taper\s+"
+        r"(\d+)/(\d+)/(\d+)", md)
     if not sport_row:
         raise AssertionError(
             "Sportive bike distribution not found in blueprint.md section 4 - it is "
-            "stated there as 'Base a/b/c -> Build .. -> Peak ..', not in section 3.2")
+            "stated there as 'Base a/b/c -> Build .. -> Peak .. -> Taper ..', not in "
+            "section 3.2")
     n = [int(x) for x in sport_row.groups()]
     out["Sportive"] = {
         phase: {"Bike": f"{n[i]}% Z1–2 / {n[i + 1]}% Z3 / {n[i + 2]}% Z4–5"}
-        for phase, i in (("base", 0), ("build", 3), ("peak", 6))
+        for phase, i in (("base", 0), ("build", 3), ("peak", 6), ("taper", 9))
     }
 
     # The doc states Base / Build / Peak. A SPECIFIC phase sits between build and peak,
@@ -560,7 +571,13 @@ def dist_table(event: str, phases: list[dict]) -> list[str]:
     seen_fams = set()
     for p in phases:
         fam = content_family(phase_family(p["name"]))
-        if fam == "taper" or fam in seen_fams:
+        # The taper used to be skipped here because there was no row to print
+        # (11 Sep 2026). Now there is one, and printing it is the point: the blueprint
+        # the athlete reads should state the taper's Z1-2 floor where the audit will
+        # hold them to it. `transition` still resolves to base content via
+        # content_family, so it collapses into the Base line rather than printing a
+        # second identical block.
+        if fam in seen_fams:
             continue
         seen_fams.add(fam)
         dist = event_dist.get(fam, {})
