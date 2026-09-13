@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Morning briefing — polls every 15 min from 06:00–09:00 via VM crontab. Sends once per athlete per day, after Garmin sleep data syncs."""
-import fcntl, json, os, subprocess, sys, time
+import fcntl, json, os, re, subprocess, sys, time
 from datetime import datetime
 from datetime import date, timedelta
 from pathlib import Path
@@ -38,7 +38,7 @@ TOOLS = "Read,Bash"
 CALLER = "morning-checkin"
 
 
-def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None, wellness_finalized=True, ask_morning_pain=False, race_block="", ask_weight=False, ask_ankle=True):
+def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None, wellness_finalized=True, ask_morning_pain=False, race_block="", ask_weight=False, ask_ankle=True, prescription_note=""):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -166,6 +166,19 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
         heat_card_line = ("[If sessions_this_week < 2 AND today is Wednesday or later: "
                           "🌡️ Heat bath due — [N] this week (target 2–3×)]")
 
+    # Pre-verified in Python against the calendar fetched JUST NOW for this send (see
+    # run_athlete) — never against the events the 05:00 run saw. The file is written
+    # hours before this card goes out and the wait-for-Garmin-sync retry can push the
+    # send later still, so a same-day edit (swim moved, session swapped) between the
+    # 05:00 write and now leaves the file naming a session that is no longer today's
+    # plan. Passed in pre-checked rather than as a file path so the model cannot
+    # trust a stale line just because its date stamp still says today.
+    prescription_block = (
+        f"\n## 05:00 prescription check (pre-verified against today's live calendar — authoritative)\n"
+        f"{prescription_note}\n"
+        if prescription_note else ""
+    )
+
     long_run_cap_block = ""
     if long_run_cap_km is not None:
         long_run_cap_block = (
@@ -178,7 +191,7 @@ You are generating the morning briefing for {first_name}'s training day.
 
 {_level_block(coaching_level)}
 {illness_lib.prompt_block(slug, first_name=first_name)}
-{recovery_block}{wellness_block}{cycle_block}{planned_section}{race_block}{long_run_cap_block}{heat_block}
+{recovery_block}{wellness_block}{cycle_block}{planned_section}{race_block}{long_run_cap_block}{heat_block}{prescription_block}
 Step 1 — Fetch data via Bash. EVERY icu_fetch.py call you make must carry
 `--caller morning-checkin`. This job reads what is planned and asks how the athlete is; it
 does not write the calendar, and that flag is what makes the refusal automatic rather than a
@@ -189,7 +202,6 @@ Step 2 — Read:
 - ClaudeCoach/athletes/_shared/persistent-rules.md (GLOBAL coaching rules - apply to every athlete)
 - ClaudeCoach/athletes/{slug}/persistent-rules.md (permanent coaching rules — these override defaults and MUST be followed)
 - ClaudeCoach/athletes/{slug}/current-state.md (open actions, watchdog flags — only surface flags dated within the last 3 days)
-- ClaudeCoach/athletes/{slug}/daily-prescription-latest.md — the 05:00 prescription check (no longer messaged directly). Use it ONLY if its date line is today. Key points to carry into the card: whether today's session is GO as planned or was modified/swapped (and the one-line reason). Ignore it if dated earlier than today.
 - ClaudeCoach/athletes/{slug}/current-state.json (weight_readings, injury pain scores)
 {"- ClaudeCoach/athletes/" + slug + "/heat-log.json (count entries in current ISO week to get sessions_this_week)" if heat_protocol else ""}
 - ClaudeCoach/athletes/{slug}/session-log.json — only if today's planned event is a Ride or Brick >90 min: extract the last 4 entries with sport Ride/GravelRide/Brick, duration_min ≥ 90, and nutrition_g_carb set. Compute each g_per_hr and the avg.
@@ -218,7 +230,7 @@ Use the recovery score and signals ONLY to decide what to flag — do NOT show t
   · Form −1 to −20: omit entirely, that's normal training]
 [If recovery ORANGE or RED: ⚠️ [one plain-English sentence on what to do differently — no scores]]
 [If watchdog flag active: ⚠️ [flag in plain English — one line]]
-[If the 05:00 prescription check modified or swapped today's session: 🔁 [what changed and why — one plain line, e.g. "Swapped to easy spin — HRV low". If it confirmed the session as planned, say nothing]]
+[If the pre-verified 05:00 prescription check block above is present and says today's session was modified or swapped: 🔁 [what changed and why — one plain line, e.g. "Swapped to easy spin — HRV low". If it confirmed the session as planned, or the block is absent, say nothing]]
 {cycle_card_line}
 [If today's session is Ride or Brick >90 min: 🍌 Nutrition — target {fuel_target_g_hr}g/hr (progress toward {nutrition_race}g/hr race target) · eat at 15 min then every 25 min]
 [If any travel block, race, or constraint from current-state.md "Travel & training blocks" starts within 5 days: 📌 [constraint name] in [N] days — [one-line impact]]
@@ -678,6 +690,31 @@ def run_athlete(slug, athlete_cfg):
     except Exception as exc:
         print(f"[{slug}] planned-TSS prefetch failed: {exc}", file=sys.stderr)
 
+    # The 05:00 prescription check (daily-prescription.py) named a session hours
+    # before this card sends, and the Garmin-sync wait above can push the send
+    # later still — a same-day calendar edit in that window (session swapped,
+    # moved, or the day rebuilt) leaves the file talking about a session that is
+    # no longer on today's calendar. Cross-check it against `_events`, the fetch
+    # this run JUST made, rather than trusting the model to notice a mismatch.
+    prescription_note = ""
+    try:
+        presc_f = adir / "daily-prescription-latest.md"
+        if presc_f.exists():
+            presc_text = presc_f.read_text()
+            date_m = re.match(r"date:\s*(\d{4}-\d{2}-\d{2})", presc_text)
+            if date_m and date_m.group(1) == today_str:
+                summary = presc_text.split("\n\n", 1)[1].strip() if "\n\n" in presc_text else ""
+                presc_session = summary.split(":", 1)[0].strip().lower()
+                today_names = [str(e.get("name") or "").lower() for e in _events
+                               if (e.get("category") or "WORKOUT").upper() == "WORKOUT"]
+                if summary and presc_session and any(presc_session in n for n in today_names):
+                    prescription_note = summary
+                elif summary:
+                    print(f"[{slug}] 05:00 prescription named '{presc_session}' — no longer "
+                          f"on today's calendar, dropping from card", file=sys.stderr)
+    except Exception as exc:
+        print(f"[{slug}] prescription cross-check failed: {exc}", file=sys.stderr)
+
     coaching_level = profile.get("coaching_level", "mid")
 
     # Menstrual-cycle phase (tracking athletes only) — same wellness rows give the
@@ -718,7 +755,8 @@ def run_athlete(slug, athlete_cfg):
                            ask_weight=ask_weight, ask_ankle=ask_ankle,
                            heat_accl_pct=heat_accl_pct, heat_accl_trend=heat_accl_trend,
                            long_run_cap_km=_long_run_cap_km,
-                           wellness_finalized=wellness_finalized)
+                           wellness_finalized=wellness_finalized,
+                           prescription_note=prescription_note)
 
     with open(log_file, "a") as lf:
         result = claude_call.run_claude(
