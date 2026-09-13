@@ -4177,7 +4177,7 @@ def prefetch_context(slug: str) -> str:
                 f"= projected {roll['projected_week_tss']} Load")
             ctl_now = round(float((wellness[-1].get("ctl") or 0)), 1) if wellness else None
             if ctl_now:
-                req = _pt.required_tss(athletes[slug], ctl_now)
+                req = _pt.required_tss(athletes[slug], ctl_now, profile=prof)
                 if "error" not in req and req.get("recommended_weekly_tss"):
                     lines.append(
                         f"Phase: {req['phase']} (training week {req.get('training_week')}). "

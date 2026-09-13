@@ -248,6 +248,40 @@ class TestRaceLoadFromTheAthletesOwnRace:
                     {"bike_time": "4:55"}, {}):
             assert pt.race_load(CFG, {"prev_race": bad})[1] == "event_default"
 
+    def test_race_leg_distances_key_off_the_event_like_race_tss_does(self):
+        from primitives.planned_tss import race_leg_distances
+        assert race_leg_distances("Full Ironman") == (3800.0, 42.2)
+        assert race_leg_distances("70.3") == (1900.0, 21.1)
+        # Free-text race names normalise the same way event_key does.
+        assert race_leg_distances("IM Italy Emilia-Romagna") == (3800.0, 42.2)
+        assert race_leg_distances("70.3 Somewhere") == (1900.0, 21.1)
+
+    def test_a_70_3_prev_race_is_not_costed_against_full_ironman_distances(self):
+        """race_tss_from_prev_race used to hardcode swim_m=3800/run_km=42.2 regardless
+        of the race actually being planned, so a 70.3 prev_race's swim and run legs were
+        priced against roughly double their real distance."""
+        cfg70 = dict(CFG, race_distance="70.3", race_name="70.3 Somewhere")
+        profile70 = {
+            "swim_css_per_100m": "1:39",
+            "run_threshold_pace_per_km": "4:02",
+            "prev_race": {"name": "70.3 Somewhere", "distance": "70.3",
+                          "date": "2025-06-01", "swim_time": "0:32", "bike_time": "2:30",
+                          "bike_np_watts": 210, "bike_if": 0.78, "run_time": "1:35",
+                          "run_pace": "4:30/km"},
+        }
+        tss, src = pt.race_load(cfg70, profile70)
+        assert src == "prev_race"
+
+        from primitives.planned_tss import race_tss_from_prev_race
+        correct, _ = race_tss_from_prev_race(
+            profile70["prev_race"], profile70["swim_css_per_100m"],
+            profile70["run_threshold_pace_per_km"], swim_m=1900.0, run_km=21.1)
+        wrong, _ = race_tss_from_prev_race(
+            profile70["prev_race"], profile70["swim_css_per_100m"],
+            profile70["run_threshold_pace_per_km"])   # old hardcoded full-IM defaults
+        assert tss == correct
+        assert tss != wrong
+
 
 class TestOpenersAreAboveRaceIntensity:
     """Long-course race intensity sits at or below the top of Z2 — Jamie's IM bike was
