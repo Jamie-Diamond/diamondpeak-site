@@ -58,7 +58,7 @@ sys.path.insert(0, str(BASE / "ironman-analysis"))
 sys.path.insert(0, str(BASE / "lib"))
 
 from primitives.planned_tss import (                            # noqa: E402
-    race_tss, race_tss_from_prev_race,
+    race_tss, race_tss_from_prev_race, race_leg_distances,
     planned_session_tss, tss_from_segments, render_workout, segment_if,
     name_intensity_mismatch,
 )
@@ -654,9 +654,11 @@ def race_load(cfg: dict, profile: dict | None = None) -> tuple:
         return race_tss("", expected_tss=cfg["race_tss"])
     pr = (profile or {}).get("prev_race") or {}
     if pr and _same_distance(pr, cfg):
+        swim_m, run_km = race_leg_distances(cfg.get("race_distance") or cfg.get("race_name") or "")
         got = race_tss_from_prev_race(
             pr, css_per_100m=(profile or {}).get("swim_css_per_100m"),
-            run_threshold_pace_per_km=(profile or {}).get("run_threshold_pace_per_km"))
+            run_threshold_pace_per_km=(profile or {}).get("run_threshold_pace_per_km"),
+            swim_m=swim_m, run_km=run_km)
         if got:
             return got
     return race_tss(cfg.get("race_distance") or cfg.get("race_name") or "",

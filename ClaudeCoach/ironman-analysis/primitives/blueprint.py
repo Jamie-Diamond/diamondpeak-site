@@ -8,6 +8,7 @@ so a malformed sidecar fails loudly at generation time, not at planning time.
 """
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
 
 SCHEMA_VERSION = 1
@@ -69,9 +70,34 @@ def is_multisport(event: str) -> bool:
     return ("swim" in sports) or ("run" in sports)
 
 
+# A race's config often carries only its free-text NAME ("IM Italy Emilia-Romagna",
+# "70.3 Emilia Romagna"), not the canonical distance string — the two content/race-profile
+# tables above are keyed on ("Full Ironman", "70.3", "Olympic", "Sprint"), so a bare name
+# passed straight through missed every key and silently landed on the generic default.
+# Checked in order: "70.3" must win over "ironman" (an event named "Ironman 70.3 X" is a
+# 70.3, not a full).
+_TRI_NAME_PATTERNS = [
+    ("70.3",          re.compile(r"70\.3|half\s*ironman|half\s*im\b", re.I)),
+    ("Full Ironman",  re.compile(r"ironman|140\.6|\bim\b", re.I)),
+    ("Olympic",       re.compile(r"olympic", re.I)),
+    ("Sprint",        re.compile(r"sprint", re.I)),
+]
+
+
 def event_key(event: str) -> str:
-    """Normalise an event to its content-table key (cycling events → 'Sportive')."""
-    return "Sportive" if event in CYCLING_EVENTS else event
+    """Normalise an event to its content-table key.
+
+    Cycling events (CYCLING_EVENTS) collapse to 'Sportive'; canonical distance strings
+    ('Full Ironman', '70.3', 'Olympic', 'Sprint') pass through unchanged; a free-text
+    race name is keyword-matched to the same key, so an athlete config carrying only
+    race_name still resolves to the right content/race-load profile.
+    """
+    if event in CYCLING_EVENTS:
+        return "Sportive"
+    for key, pattern in _TRI_NAME_PATTERNS:
+        if pattern.search(event or ""):
+            return key
+    return event
 
 
 def canonical_phases(

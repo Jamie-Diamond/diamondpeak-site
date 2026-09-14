@@ -405,6 +405,21 @@ class TestEventSports:
         assert event_key("Full Ironman") == "Full Ironman"
         assert event_key("70.3") == "70.3"
 
+    def test_event_key_normalises_free_text_race_names(self):
+        # An athlete config carrying only race_name (no race_distance) must still
+        # resolve to the real event profile, not silently fall to the generic default.
+        assert event_key("IM Italy Emilia-Romagna") == "Full Ironman"
+        assert event_key("Ironman Wales") == "Full Ironman"
+        assert event_key("140.6 Somewhere") == "Full Ironman"
+        assert event_key("70.3 Emilia Romagna") == "70.3"
+        # "Ironman 70.3 X" contains both words — the distance wins, not "Full Ironman".
+        assert event_key("Ironman 70.3 Emilia-Romagna") == "70.3"
+        assert event_key("Half Ironman Staffordshire") == "70.3"
+        assert event_key("Olympic Distance Nationals") == "Olympic"
+        assert event_key("Sprint Triathlon Series") == "Sprint"
+        # An unrecognised free-text name is left alone, same as before.
+        assert event_key("Backyard Ultra Thing") == "Backyard Ultra Thing"
+
     def test_roster_partition_matches_legacy_selector(self):
         # The live roster's race_distance values must produce the same
         # multisport/cycling split the old swim-or-run-threshold heuristic gave:

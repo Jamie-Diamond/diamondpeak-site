@@ -487,6 +487,22 @@ _RACE_PROFILE = {            # event key -> (typical hours, whole-race IF)
 }
 _RACE_PROFILE_DEFAULT = (5.0, 0.75)
 
+# Whole-race leg distances, for costing a prev_race's swim/run legs per-leg (see
+# race_tss_from_prev_race below). Keyed the same way as _RACE_PROFILE: a 70.3 prev_race
+# summed against full-Ironman distances (3800m swim / 42.2km run) overstates its swim and
+# run legs by ~2x, so a call site must resolve this per the race actually being planned,
+# never assume the full-distance default applies.
+_RACE_LEG_DISTANCES = {       # event key -> (swim_m, run_km)
+    "Full Ironman": (3800.0, 42.2),
+    "70.3":         (1900.0, 21.1),
+}
+_RACE_LEG_DISTANCES_DEFAULT = (3800.0, 42.2)
+
+
+def race_leg_distances(event_type: str) -> tuple[float, float]:
+    """(swim_m, run_km) for an event, resolved through the same event_key as _RACE_PROFILE."""
+    return _RACE_LEG_DISTANCES.get(_race_event_key(event_type or ""), _RACE_LEG_DISTANCES_DEFAULT)
+
 
 def race_tss_from_prev_race(prev_race: dict, css_per_100m=None,
                             run_threshold_pace_per_km=None, swim_m: float = 3800.0,
