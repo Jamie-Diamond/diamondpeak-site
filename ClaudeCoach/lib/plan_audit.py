@@ -53,6 +53,7 @@ import ops_log                                                 # noqa: E402
 import coach_alert                                             # noqa: E402
 import day_overrides                                           # noqa: E402
 import weekly_availability                                     # noqa: E402
+import agreed_week                                              # noqa: E402
 
 ATHLETES = BASE / "config" / "athletes.json"
 # Known-baseline signatures (committed, athlete-slug keyed). This check currently
@@ -310,6 +311,20 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
                 f"{tss_floor:.0f} TSS floor is not asserted against it. The weekly "
                 f"generator builds this week on Sunday evening; if it is still empty "
                 f"after that run, that is the failure worth reporting")
+            tss_floor = 0
+        # A WEEK WHERE EVERY DAY IS PINNED IS NOT AN UNDER-TRAINED WEEK EITHER. Same
+        # failure mode as the zero-session case above, different cause: `total` sums
+        # icu_training_load / load_target per event, and a pinned race-day event's
+        # load has often not synced back from ICU yet, so a 100%-agreed week can price
+        # out at 0 TSS against a floor it was never built to in the first place — it
+        # was agreed day by day (agreed_week), not generated against a target. Checked
+        # regardless of wk_evs / win_start, because the week this actually bites is the
+        # CURRENT week (race week), not a future one.
+        elif tss_floor and len(agreed_week.pinned_dates(slug, ws)) >= 7:
+            notes.append(
+                f"week {ws}: FULLY PINNED - every day this week is an agreed session, "
+                f"so the {tss_floor:.0f} TSS floor is not asserted against it. Pinned "
+                f"load (e.g. a race day) may not have synced back from intervals.icu yet")
             tss_floor = 0
         try:
             run_cap = pt.run_caps(client, ws,
