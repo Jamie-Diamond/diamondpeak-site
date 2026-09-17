@@ -1205,17 +1205,21 @@ def post_process(data):
     week_start = today - timedelta(days=today.weekday())
     this_week = [e for e in heat_entries if e.get("date", "") >= week_start.isoformat()]
     last_date = max((e["date"] for e in heat_entries), default=None)
+    accl = _heat_accl_series("jamie")
+    if accl:
+        data["heatAccl"] = accl
     data["heatProtocol"] = {
-        "sessions_cumulative": len(heat_entries),
+        # entries comes from heat.py's own dated-dose count (acclimation_series),
+        # not a raw len() of the log file, so it can never drift from the exposure
+        # count the acclimation score/chart are actually built from. Falls back to
+        # the raw count only if heat.py's own calculation was unavailable.
+        "sessions_cumulative": accl["entries"] if accl else len(heat_entries),
         "sessions_this_week": len(this_week),
         "last_session_date": last_date,
         "protocol_start_date": "2026-05-15",
         "target_min": 14,
         "target_max": 20,
     }
-    accl = _heat_accl_series("jamie")
-    if accl:
-        data["heatAccl"] = accl
 
     # Last-season CTL overlay (cached once — 2025 data never changes)
     if FITNESS_PREV_CACHE.exists():
