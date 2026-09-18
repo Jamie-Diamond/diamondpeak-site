@@ -6,11 +6,13 @@ Every check is opt-in (only fires when its input is supplied).
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 
 from primitives.validate_plan import (
     validate_week, validate_plan, Violation, WeekReport, escalate_repeats,
 )
 
+REPO = Path(__file__).resolve().parents[2]            # ClaudeCoach/
 WEEK = date(2026, 6, 15)   # a Monday
 
 # jamie's real day-rules: swim Tue/Thu only, bike Fri/Sat/Sun only.
@@ -277,6 +279,25 @@ class TestDistributionDrift:
         hits = [v for v in r.violations if v.code == "taper_distribution_missing"]
         assert len(hits) == 1 and hits[0].severity == "hard"
         assert hits[0] in r.hard
+
+    def test_generated_taper_distribution_satisfies_the_guard(self):
+        # blueprint.md 3.2 gained a Taper row (11 Sep 2026) and generate-blueprint.py
+        # reads it into DISTRIBUTION[event]["taper"] — this is the other half of that
+        # fix: a real generated blueprint must actually clear the hard guard above,
+        # not just a hand-written non-empty dict in a unit test.
+        import importlib.util
+
+        gb_path = REPO / "scripts" / "generate-blueprint.py"
+        spec = importlib.util.spec_from_file_location("generate_blueprint_g", gb_path)
+        gb = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gb)
+
+        for event in ("Full Ironman", "70.3", "Sportive"):
+            taper_dist = gb.DISTRIBUTION[event]["taper"]
+            assert taper_dist, f"{event}: taper distribution still empty"
+            evs = [_named("2026-06-19", "Ride", "Race-pace ride", 75)]
+            r = validate_week(evs, WEEK, distribution=taper_dist, phase_family="taper")
+            assert not [v for v in r.violations if v.code == "taper_distribution_missing"], event
 
     def test_swims_and_bricks_excluded(self):
         evs = [
