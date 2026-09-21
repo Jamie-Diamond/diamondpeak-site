@@ -91,6 +91,32 @@ of the flag. Reducing the plan needs an explicit gate:
 Keeping these separate matters: conflating "be kind" with "cut the plan" would hand the
 model a lever against the blueprint-wins rule.
 
+## The neck check — train easy or rest, decided mechanically
+
+This is a separate question from `training_gate` above: given the symptoms, is it fine
+to suggest training easy today, or should the coach say rest? Before this, that
+judgement lived only as a prompt rule, re-added to `persistent-rules.md` every time it
+was dropped from context — 31 times by the time it was traced here as the single
+largest duplication cluster in the file.
+
+`illness.classify_symptom_location(text)` applies the standard neck-check rule to the
+flag's `condition`/`note` text and returns `above_neck`, `below_neck`, or `unknown`:
+
+* **above_neck** — sinus, sore throat, blocked/runny nose, hay fever and similar: fine
+  to train easy through.
+* **below_neck** — chest, fever, flu, GI symptoms, body-wide aching and similar: rest.
+  A message naming both ("sore throat and a fever") reads as `below_neck` — training
+  through a fever is the failure mode the rule exists to stop, so ambiguity resolves
+  toward the safer read.
+* **unknown** — nothing recognisable either way; no advisory is added and the coach
+  should ask rather than guess.
+
+`normalise()` computes this into `symptom_location` on every read, so it is always
+current with whatever the flag's `condition`/`note` say. `prompt_block_from_dir()`
+surfaces it as a `NECK CHECK:` line, but only when `training_gate` is still at its
+`none` default — a `no_quality` or `no_training` gate means the coach already made an
+explicit call, and the neck check must not second-guess it.
+
 ## Where it is read
 
 | Surface | How |
@@ -182,7 +208,8 @@ would otherwise be a silent no-op whose only symptom is the returning bug.
 ## Tests
 
 `ironman-analysis/tests/test_illness.py` — schema and lifecycle, suppression content,
-what is *not* suppressed, the conversational parse, the engine integration (including
+what is *not* suppressed, the neck-check classifier and its wiring into `normalise()`
+and the prompt block, the conversational parse, the engine integration (including
 that an unset flag leaves the prompt byte-identical and that the fingerprint rotates),
 the heat surfacing gate, and a before/after comparison against `main`'s `lib/heat.py`
 proving `base_dose`, `dose_multipliers`, every module constant and `acclimation_score`

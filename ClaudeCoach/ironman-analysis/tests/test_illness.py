@@ -163,6 +163,67 @@ class TestSuppressionContent:
         assert "ACTIVE" in line and "ONCE" in line
 
 
+class TestNeckCheck:
+    """The above-neck/below-neck train-easy-vs-rest rule, mechanically applied —
+    previously only ever a re-added prompt rule, never coded (31 duplicates)."""
+
+    @pytest.mark.parametrize("text", [
+        "sore throat", "blocked nose", "sinusitis", "just a cold", "hay fever",
+    ])
+    def test_above_neck_terms(self, text):
+        assert illness.classify_symptom_location(text) == "above_neck"
+
+    @pytest.mark.parametrize("text", [
+        "chest infection", "fever", "flu", "tonsillitis", "stomach bug",
+        "aching all over", "on antibiotics",
+    ])
+    def test_below_neck_terms(self, text):
+        assert illness.classify_symptom_location(text) == "below_neck"
+
+    def test_unrecognised_text_is_unknown(self):
+        assert illness.classify_symptom_location("feeling a bit off") == "unknown"
+        assert illness.classify_symptom_location("") == "unknown"
+
+    def test_a_below_neck_term_wins_when_both_are_named(self):
+        # training through a fever is the failure mode this rule exists to stop, so a
+        # message naming both is systemic, not above-neck.
+        assert illness.classify_symptom_location("sore throat and a fever") == "below_neck"
+
+    def test_normalise_carries_symptom_location(self, athlete):
+        illness.set_illness_in(athlete, condition="sinus", today=TODAY)
+        assert illness.state_from_dir(athlete, TODAY)["symptom_location"] == "above_neck"
+
+    def test_prompt_block_advises_train_easy_for_above_neck(self, athlete):
+        illness.set_illness_in(athlete, condition="sore throat", today=TODAY)
+        b = illness.prompt_block_from_dir(athlete, TODAY)
+        assert "NECK CHECK" in b and "training easy is fine" in b
+
+    def test_prompt_block_advises_rest_for_below_neck(self, athlete):
+        illness.set_illness_in(athlete, condition="chest infection", today=TODAY)
+        b = illness.prompt_block_from_dir(athlete, TODAY)
+        assert "NECK CHECK" in b and "rest is the prescription today" in b
+
+    def test_no_neck_check_line_when_location_is_unknown(self, athlete):
+        illness.set_illness_in(athlete, condition="", note="not feeling great", today=TODAY)
+        assert "NECK CHECK" not in illness.prompt_block_from_dir(athlete, TODAY)
+
+    def test_an_explicit_training_gate_is_not_overridden_by_the_neck_check(self, athlete):
+        # a coach-set gate is deliberate (see module docstring); the neck check only
+        # fills in when training_gate is left at the "none" default.
+        illness.set_illness_in(athlete, condition="sore throat",
+                              training_gate="no_training", today=TODAY)
+        b = illness.prompt_block_from_dir(athlete, TODAY)
+        assert "NECK CHECK" not in b
+        assert "no training while this flag is active" in b
+
+    def test_parse_illness_message_includes_symptom_location(self):
+        assert illness.parse_illness_message("sore throat and blocked nose", TODAY)[
+            "symptom_location"] == "above_neck"
+        assert illness.parse_illness_message(
+            "I've got tonsillitis, doc put me on a 7 day course of antibiotics", TODAY)[
+            "symptom_location"] == "below_neck"
+
+
 class TestConversationalCapture:
     def test_recognises_the_real_case(self):
         assert illness.looks_like_illness_statement(

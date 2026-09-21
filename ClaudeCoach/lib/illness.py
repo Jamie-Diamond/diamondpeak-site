@@ -96,6 +96,50 @@ def _load_state_in(athlete_dir) -> dict:
         return {}
 
 
+SYMPTOM_LOCATIONS = ("above_neck", "below_neck", "unknown")
+
+# Above the neck only (sinus, throat, head) — the textbook "fine to train easy" case.
+_ABOVE_NECK_TERMS = (
+    "sinus", "sinusitis", "sore throat", "throat infection", "blocked nose",
+    "runny nose", "stuffy nose", "head cold", "cold", "hay fever", "sneezing",
+    "congestion", "earache",
+)
+# Below the neck or systemic (chest, gut, fever, whole-body) — the textbook "rest" case.
+# Checked first: a message naming both ("sore throat and a fever") is systemic, not
+# above-neck, because training through a fever is the failure mode this rule exists
+# to prevent, and a false "above_neck" here is the costly direction to get wrong.
+_BELOW_NECK_TERMS = (
+    "chest infection", "chest", "bronchitis", "fever", "high temperature",
+    "flu", "man flu", "tonsillitis", "glandular fever", "covid", "norovirus",
+    "stomach bug", "food poisoning", "d&v", "vomit", "diarrhoea", "diarrhea",
+    "aching", "body ache", "shivers", "shingles", "laryngitis", "infection",
+    "virus", "antibiotics",
+)
+
+
+def classify_symptom_location(text: str) -> str:
+    """'above_neck' | 'below_neck' | 'unknown' — the neck-check rule, mechanically.
+
+    Above-the-neck-only symptoms (sinus, sore throat, blocked nose) are fine to train
+    easy through. Below-the-neck or systemic symptoms (chest, fever, gut, body-wide
+    aches) mean rest. This used to live only as a prompt rule the coach re-applied by
+    eye; it now reads off the same `condition`/`note` text the flag already stores, so
+    the answer does not depend on a model remembering a standing rule.
+    """
+    if not text:
+        return "unknown"
+    low = text.lower()
+    # "fever" alone is systemic; "hay fever" is above-neck, so it is excluded here
+    # and left to the above-neck pass below.
+    if re.search(r"(?<!hay )\bfever\b", low):
+        return "below_neck"
+    if any(re.search(rf"\b{re.escape(t)}\b", low) for t in _BELOW_NECK_TERMS if t != "fever"):
+        return "below_neck"
+    if any(re.search(rf"\b{re.escape(t)}\b", low) for t in _ABOVE_NECK_TERMS):
+        return "above_neck"
+    return "unknown"
+
+
 def _as_date(v):
     if isinstance(v, datetime):
         return v.date()
@@ -131,6 +175,8 @@ def normalise(raw: dict, today: date | None = None) -> dict | None:
     gate = str(raw.get("training_gate") or "none").strip().lower()
     if gate not in TRAINING_GATES:
         gate = "none"
+    condition = (raw.get("condition") or "").strip() or None
+    note = (raw.get("note") or "").strip() or None
 
     days_in = (today - started).days
     lapsed = bool(until and today > until + timedelta(days=STALE_GRACE_DAYS))
@@ -141,11 +187,12 @@ def normalise(raw: dict, today: date | None = None) -> dict | None:
         needs_review = days_in >= REVIEW_AFTER_DAYS
     out = {
         "status": status,
-        "condition": (raw.get("condition") or "").strip() or None,
+        "condition": condition,
         "started": started.isoformat(),
         "expected_until": until.isoformat() if until else None,
-        "note": (raw.get("note") or "").strip() or None,
+        "note": note,
         "training_gate": gate,
+        "symptom_location": classify_symptom_location(f"{condition or ''} {note or ''}"),
         "active": active,
         "lapsed": lapsed,
         "needs_review": bool(active and needs_review),
@@ -229,6 +276,16 @@ def prompt_block_from_dir(athlete_dir, today: date | None = None,
         lines.append("TRAINING GATE: none set — the blueprint still governs the plan. Do "
                      "NOT zero or reduce a required session or zone slice on the basis of "
                      "this flag alone.")
+        if st["symptom_location"] == "above_neck":
+            lines.append(
+                "NECK CHECK: symptoms read as above the neck only (sinus, throat, head) "
+                "— training easy is fine to suggest today; do not prescribe a rest day "
+                "on the flag alone.")
+        elif st["symptom_location"] == "below_neck":
+            lines.append(
+                "NECK CHECK: symptoms read as below the neck or systemic (chest, fever, "
+                "gut, body-wide aches) — rest is the prescription today; do not suggest "
+                "an easy session in its place.")
     if st["needs_review"]:
         lines.append(
             "STATUS CHECK DUE: this flag is past its expected window"
@@ -441,7 +498,8 @@ def parse_illness_message(text: str, today: date | None = None) -> dict:
 
     return {"condition": condition, "status": status,
             "started": started.isoformat(), "expected_until": expected_until,
-            "note": text.strip()[:160]}
+            "note": text.strip()[:160],
+            "symptom_location": classify_symptom_location(text)}
 
 
 # ---------------------------------------------------------------------------
