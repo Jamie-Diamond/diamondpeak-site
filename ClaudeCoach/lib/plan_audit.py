@@ -326,6 +326,33 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
                 f"so the {tss_floor:.0f} TSS floor is not asserted against it. Pinned "
                 f"load (e.g. a race day) may not have synced back from intervals.icu yet")
             tss_floor = 0
+        # A GENERATED, PARTIALLY-PLANNED POST-RACE RECOVERY/TRANSITION WEEK IS NOT AN
+        # UNDER-TRAINED WEEK EITHER. Same failure mode as the two cases above, a third
+        # cause: required_tss() only recognises "post-race" off cfg["race_date"], so the
+        # moment the NEXT race is configured — routinely done before the blueprint
+        # sidecar is regenerated to match it — race_d stops being in the past and
+        # required_tss falls back to the new block's standard phase target, even on
+        # days the LIVE blueprint still has marked Transition. The blueprint's own
+        # phase family is ground truth for "are we still recovering"; when it disagrees
+        # with required_tss, swap the stale standard-phase floor for the
+        # maintenance-ramp floor 4f9f1f5c introduced for the same-shaped off-season
+        # case, rather than dropping the floor to 0 outright — the week is meant to be
+        # LIGHT, not unchecked.
+        elif tss_floor and ctl and phase.get("family") in ("transition", "recovery"):
+            mct, _mct_src = pt.maintenance_ctl(cfg)
+            basis = float(mct) if mct is not None else float(ctl)
+            ramp_floor = pt.compute_required_tss(float(ctl), basis,
+                                                 pt._MAINTENANCE_CONVERGE_WEEKS)
+            max_ramp = cfg.get("max_ctl_ramp_per_week")
+            if max_ramp:
+                ramp_floor = min(ramp_floor, pt.compute_required_tss(
+                    float(ctl), float(ctl) + float(max_ramp), 1))
+            notes.append(
+                f"week {ws}: POST-RACE {(phase.get('name') or 'Transition').upper()} - "
+                f"the live blueprint still has this week recovering from the A-race, so "
+                f"the {tss_floor:.0f} TSS standard-phase floor is replaced with the "
+                f"{ramp_floor:.0f} TSS maintenance-ramp floor")
+            tss_floor = ramp_floor
         try:
             run_cap = pt.run_caps(client, ws,
                                   run_protocol=cfg.get("run_protocol")).get("weekly_min_cap")
