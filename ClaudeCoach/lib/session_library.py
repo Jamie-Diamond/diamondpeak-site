@@ -258,11 +258,25 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     long_run_target_min = (round(long_run_cap_min * 0.9)
                            if (long_run_cap_min and _lr_floor_cfg is not None) else None)
 
+    # OFF-SEASON BLOCK (plan_tools.OFFSEASON_DISTRIBUTION): the blueprint still reads the
+    # week as Transition, but required_tss has typed it as a training week. Its own
+    # session menu, its own distribution, and progressions counted from the block's
+    # first week rather than from race day.
+    offseason = req.get("week_type") == "offseason"
+    if offseason:
+        phase_name = "offseason"
+        week_in_phase = int(req.get("offseason_week") or 1)
+        ph = dict(ph, distribution=((pt.offseason_cfg(cfg) or {}).get("distribution")
+                                    or pt.OFFSEASON_DISTRIBUTION))
+
     # phase menu ∩ event sports; resolve this-week progression for each quality type
     phase_cfg = lib["phases"].get(phase_name, {})
     menu = phase_cfg.get("menu", [])
     forbid = set(phase_cfg.get("forbid", []))
     vo2_late = phase_cfg.get("vo2") == "late_only"
+    # min_phase gates by block ORDER, and the off-season is not in that order: gate it as
+    # peak (everything unlocked) and let its own menu/forbid decide what is on offer.
+    gate_phase = "peak" if offseason else phase_name
     sports = event.get("sports") or ["swim", "bike", "run"]
     # `strength` and `multi` are cross-cutting groups, not event disciplines, so they are
     # never in event["sports"] and were therefore invisible to the planner. Added
@@ -287,7 +301,7 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
             vo2_unlock = (name == "vo2" and vo2_late)
             if vo2_unlock and week_in_phase < 3:
                 continue
-            if _phase_at_or_before(st.get("min_phase", "base")) > _phase_at_or_before(phase_name):
+            if _phase_at_or_before(st.get("min_phase", "base")) > _phase_at_or_before(gate_phase):
                 continue
             row = {"type": name, "zone": st.get("zone"), "if": st.get("if"), "system": st.get("system")}
             # weeks since this type was unlocked: VO2 unlocks at build wk3, others at phase wk1.
@@ -352,7 +366,14 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
                    "unspendable share to another sport's SAME zone under caps/limits. Obey "
                    "run_protocol (no quality if quality_allowed=false) and hard_rules. No type outside "
                    "available_sessions.")
-    if ekey == "ironman":
+    if offseason:
+        dosing_note += (" OFF-SEASON POWER/SPEED BLOCK: the quality is TOP-END, not race "
+                        "pace. Bike quality = threshold / over-unders / VO2 toward FTP (not "
+                        "sweetspot volume). Run quality = short fast reps, cruise intervals and "
+                        "threshold toward 5k/10k pace, plus strides. Swim quality = CSS and "
+                        "speed sets. Spread the hard sessions so no two land on consecutive "
+                        "days, and hold everything else genuinely easy. ")
+    elif ekey == "ironman":
         dosing_note += (" IM BIKE QUALITY = PREDOMINANTLY sweetspot / race-pace (Z3, ~88-94% FTP) + "
                         "long aerobic endurance, PLUS one short VO2/Z4-5 touch (~a single set) to MEET "
                         "the low bike Z4-5 target (~6%) - present but minimal, do NOT exceed it (an IM "
@@ -368,11 +389,13 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     # ride and deliver NO WEEK AT ALL for the most important week of the year. The same
     # applies to the progressing long run. A week whose whole point is that it is short
     # cannot also be required to contain the longest session of the week.
-    _no_key_sessions = (req.get("week_type") in ("race", "post_race"))
+    _no_key_sessions = (req.get("week_type") in ("race", "post_race", "offseason"))
     if _no_key_sessions:
         long_ride_min = None
         long_run_target_min = None
         dosing_note += (
+            "NO protected long ride and NO long-run target this week: it is an off-season "
+            "power/speed week, where volume is not the point. " if offseason else
             "NO protected long ride and NO long-run target this week: it is a race week "
             "or a post-race recovery week, and the long session is exactly what must not "
             "be in it. Short sessions only. ")
@@ -471,8 +494,10 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
             _ZONE_BANDS),
         "intensity_weights": intensity_weights(
             ph.get("distribution") or _phase_distribution(bp, "peak"), ekey),
-        "emphasis": event.get("emphasis", []),
-        "brick": event.get("brick"),
+        "emphasis": (((pt.offseason_cfg(cfg) or {}).get("emphasis")
+                      or ["threshold", "vo2", "reps", "css", "speed"])
+                     if offseason else event.get("emphasis", [])),
+        "brick": None if offseason else event.get("brick"),
         "day_rules": day_rules_effective,
         "day_rules_default": cfg.get("day_rules"),
         "availability_applied": bool(availability),
@@ -493,8 +518,9 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         "long_run_cap_min": long_run_cap_min,                 # MAX single long run (×1.15)
         "long_run_target_min": long_run_target_min,           # PROGRESSING target near cap (configured athletes)
         "long_ride_target_min": long_ride_min,      # None in race / post-race weeks
-        "long_swim_target_m": event.get("long_swim_m"),  # OVERDISTANCE weekly long swim (70.3 ~3000, IM ~4500)
-        "race_sim_m": event.get("swim_m"),               # EXACT race distance — race-sim rehearsal (70.3 1900, IM 3800)
+        # Neither applies in an off-season block: no race to rehearse, no overdistance build.
+        "long_swim_target_m": None if offseason else event.get("long_swim_m"),  # OVERDISTANCE weekly long swim (70.3 ~3000, IM ~4500)
+        "race_sim_m": None if offseason else event.get("swim_m"),               # EXACT race distance — race-sim rehearsal (70.3 1900, IM 3800)
         "strength_programme": strength,
         "durability": durability,
         "menstrual_forecast": menstrual_forecast,
@@ -503,6 +529,9 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         "available_sessions": available,
         "hard_rules": hard_rules,
         "dosing_note": dosing_note,
+        # Tests and PB attempts booked into THIS week (offseason.bookings). Present only
+        # when there are some: every non-underscore key reaches the prompt verbatim.
+        **({"booked_sessions": req["bookings"]} if req.get("bookings") else {}),
     }
 
 

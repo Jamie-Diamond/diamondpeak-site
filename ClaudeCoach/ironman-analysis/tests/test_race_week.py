@@ -382,6 +382,7 @@ class TestRaceWeekStillGetsAWeek:
 
     def test_the_brief_suppresses_the_long_session_targets(self):
         src = (REPO / "lib" / "session_library.py").read_text()
-        assert '_no_key_sessions = (req.get("week_type") in ("race", "post_race"))' in src
+        assert ('_no_key_sessions = (req.get("week_type") in ("race", "post_race", '
+                '"offseason"))') in src
         assert "long_ride_min = None" in src
         assert "long_run_target_min = None" in src

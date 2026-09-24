@@ -244,6 +244,54 @@
         "vo2",
         "long"
       ]
+    },
+    "offseason": {
+      "family": "polarized",
+      "_note": "Off-season power/speed block (plan_tools.offseason_cfg). Only forbid filters; race-rehearsal and durability types are out, top-end types are in from week 1.",
+      "menu": [
+        "endurance",
+        "easy",
+        "recovery",
+        "aerobic",
+        "technique",
+        "tempo",
+        "sweetspot",
+        "threshold",
+        "over_under",
+        "vo2",
+        "vo2_short",
+        "hill_strength",
+        "strides",
+        "hills",
+        "fartlek",
+        "cruise_intervals",
+        "reps",
+        "progression_run",
+        "css",
+        "speed",
+        "descend_set",
+        "pull_set",
+        "kick_set",
+        "long",
+        "ankle_mobility",
+        "strength_general",
+        "core",
+        "mobility"
+      ],
+      "forbid": [
+        "race_pace_long",
+        "sweetspot_long",
+        "durability",
+        "race_sim",
+        "race_pace_specific",
+        "long_with_quality",
+        "brick_run",
+        "race_pace",
+        "broken_race_pace",
+        "ow_sim",
+        "ow_skills",
+        "brick"
+      ]
     }
   },
   "session_types": {

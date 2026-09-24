@@ -88,25 +88,25 @@ def _days_after_long(proposal):
     return out
 
 
-def _sane_session(proposal, bucket, seg_if_fn):
-    """Same-sport, non-long session on a sane day (not day-after-long) with the most convertible
-    easy minutes. None if no candidate → caller skips + advises."""
+def _sane_session(proposal, bucket, seg_if_fn, protect=lambda s: False):
+    """Same-sport, non-long, non-protected session on a sane day (not day-after-long) with the
+    most convertible easy minutes. None if no candidate → caller skips + advises."""
     after = _days_after_long(proposal)
     cands = [s for s in (proposal.get("sessions") or [])
-             if _is(s.get("sport"), bucket) and not _is_long(s)
+             if _is(s.get("sport"), bucket) and not _is_long(s) and not protect(s)
              and (s.get("date") or "") not in after
              and _easy_min(s, bucket, seg_if_fn) >= _MIN_EASY_TO_CONVERT]
     return max(cands, key=lambda s: _easy_min(s, bucket, seg_if_fn)) if cands else None
 
 
-def _apply(proposal, bucket, zone, delta, seg_if_fn):
+def _apply(proposal, bucket, zone, delta, seg_if_fn, protect=lambda s: False):
     """Return a NEW proposal with `delta` (pp-min) converted: >0 = easy→zone on a sane session
     (coherent block); <0 = trim `-delta` of the zone back to easy Z2. None if up-inject has no
     sane placement."""
     p = copy.deepcopy(proposal)
     c = _cut(bucket)
     if delta > 0:
-        s = _sane_session(p, bucket, seg_if_fn)
+        s = _sane_session(p, bucket, seg_if_fn, protect)
         if s is None:
             return None
         need = delta
@@ -128,7 +128,7 @@ def _apply(proposal, bucket, zone, delta, seg_if_fn):
     else:
         need = -delta
         for s in (p.get("sessions") or []):
-            if not _is(s.get("sport"), bucket) or _is_long(s):
+            if not _is(s.get("sport"), bucket) or _is_long(s) or protect(s):
                 continue
             for sg in list(s.get("segments") or []):
                 if need <= 0:
@@ -152,6 +152,14 @@ def inject_quality(proposal, brief, athlete, target, *, build_fn, audit_fn, seg_
         return proposal, ["deload/taper → no injection (unloading is the point)"]
     targets = brief.get("distribution_targets") or {}
     injury = brief.get("injury_bands") or {}
+    # A booked test / PB attempt is the athlete's max effort: never convert its minutes
+    # and never trim its effort to meet a zone share (plan_tools.booking_matches).
+    books = brief.get("booked_sessions") or []
+    if books:
+        import plan_tools as _pt
+        protect = lambda s: any(_pt.booking_matches(b, s) for b in books)  # noqa: E731
+    else:
+        protect = lambda s: False  # noqa: E731
     prior = brief.get("_prior_zones") or {}
     notes = []
     base_built = build_fn(athlete, proposal, target, brief)
@@ -181,7 +189,7 @@ def inject_quality(proposal, brief, athlete, target, *, build_fn, audit_fn, seg_
             delta = want - _zone_min(proposal, bucket, zone, seg_if_fn)
             if abs(delta) < _MIN_DELTA:
                 continue
-            cand = _apply(proposal, bucket, zone, delta, seg_if_fn)
+            cand = _apply(proposal, bucket, zone, delta, seg_if_fn, protect)
             if cand is None:
                 notes.append(f"{bucket}/{zone}: no sane day → skipped + advise")
                 continue

@@ -225,6 +225,39 @@ Do not use a fixed fraction of 7xCTL as a "hold": 7xCTL is exactly the load that
 keeps CTL level, so a fraction of it prescribes less every week as CTL falls and
 CTL chases it down — from 45 that reaches 23 in twelve weeks, asymptote zero.
 
+### Off-season block (opt-in)
+
+An athlete with an `offseason` block in `config/athletes.json` does not sit in the
+maintenance hold from week 4. Their week is typed `offseason`, which is **not** a
+down-week, so the quality prescription, the quality injector and the zone floors
+all apply again. Built for "keep fitness between 65 and 75 while working on power
+and speed" (Jamie, 24 Sep 2026).
+
+```json
+"ctl_targets": {"maintenance_ctl_band": [65, 75]},
+"offseason": {
+  "focus": "power and speed",
+  "distribution": {"Run": "75% Z1–2 / 10% Z3 / 15% Z4–5"},
+  "bookings": [
+    {"week_start": "YYYY-MM-DD", "sport": "Ride", "name": "FTP test", "match": "FTP test"},
+    {"date": "YYYY-MM-DD", "sport": "Run", "name": "5k PB attempt", "match": "5k"}
+  ]
+}
+```
+
+- **Band.** Load aims at the band's midpoint (converged over ~4 weeks, ramp-capped);
+  the weekly floor is the load that would take CTL to the bottom edge over the same
+  window. `maintenance_ctl_band` also works on its own, without `offseason`.
+- **Content.** The `offseason` phase in `config/session-library.json` (top-end types
+  on, race rehearsal off), `plan_tools.OFFSEASON_DISTRIBUTION` unless
+  `offseason.distribution` overrides a sport. No protected long ride, no long-run
+  target, no overdistance swim.
+- **Bookings.** Tests and PB attempts, on an exact `date` or any day of a
+  `week_start` week. Stage 1 blocks a week that is missing one (`booking_missing`) or
+  that puts more than 10 min of hard work the day before one (`booking_not_fresh`),
+  and the quality injector never edits a booked session. Matched by
+  `plan_tools.booking_matches`: same sport, same date if given, `match` text in the name.
+
 Countdowns come from `races.countdown`, which counts to the next **upcoming**
 race and shows nothing once every configured race has been run. Configure the
 next race and regenerate the blueprint to start a new block.

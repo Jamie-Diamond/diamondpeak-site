@@ -338,7 +338,11 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
         # maintenance-ramp floor 4f9f1f5c introduced for the same-shaped off-season
         # case, rather than dropping the floor to 0 outright — the week is meant to be
         # LIGHT, not unchecked.
-        elif tss_floor and ctl and phase.get("family") in ("transition", "recovery"):
+        # An OFF-SEASON BLOCK week is exempt: required_tss already typed it and gave it
+        # the band floor, which is deliberately below the convergence target this would
+        # substitute (plan_tools.offseason_cfg).
+        elif (tss_floor and ctl and phase.get("family") in ("transition", "recovery")
+              and (req or {}).get("week_type") != "offseason"):
             mct, _mct_src = pt.maintenance_ctl(cfg)
             basis = float(mct) if mct is not None else float(ctl)
             ramp_floor = pt.compute_required_tss(float(ctl), basis,

@@ -721,6 +721,9 @@ def maintenance_ctl(cfg: dict):
     phase CTL, or of race_min), or None when there is no basis for either.
     """
     ct = cfg.get("ctl_targets") or {}
+    band = maintenance_band(cfg)
+    if band:
+        return (band[0] + band[1]) / 2.0, "configured"
     v = ct.get("maintenance_ctl", cfg.get("maintenance_ctl"))
     if v is not None:
         try:
@@ -734,6 +737,99 @@ def maintenance_ctl(cfg: dict):
         except (TypeError, ValueError):
             pass
     return None, None
+
+
+def maintenance_band(cfg: dict):
+    """(lo, hi) from ctl_targets.maintenance_ctl_band, or None when not configured.
+
+    A band rather than one number (Jamie, 24 Sep 2026: "keep fitness between 65-75 in
+    the off season"). The weekly load still aims at ONE number, the band's midpoint,
+    because two edges give the generator nothing to aim at; the edges set the floor
+    and are what the note tells the coach to hold.
+    """
+    raw = (cfg.get("ctl_targets") or {}).get("maintenance_ctl_band")
+    try:
+        lo, hi = float(raw[0]), float(raw[1])
+    except (TypeError, ValueError, IndexError, KeyError):
+        return None
+    return (lo, hi) if 0 < lo < hi else None
+
+
+# OFF-SEASON BLOCK (24 Sep 2026). Without an `offseason` block in athletes.json, week 4
+# onward after the race stays the maintenance hold above: a down-week, easy, "one quality
+# touch a week at most, no progression". With one, it is a TRAINING block that keeps
+# Fitness inside the maintenance band while working on something other than volume
+# (Jamie: power and speed, run PBs, FTP and CSS up). It is not a down-week, so the
+# quality prescription, the quality injector and the zone floors all switch back on.
+#
+# Default per-sport split for a power/speed off-season: polarised, with a bigger Z4-5
+# share than any Ironman phase because the volume is lower and the point is top-end.
+# Overridable per athlete as offseason.distribution.
+OFFSEASON_DISTRIBUTION = {
+    "Swim": "60% Z1–2 / 25% Z3–4 / 15% Z5",
+    "Bike": "70% Z1–2 / 12% Z3 / 18% Z4–5",
+    "Run":  "75% Z1–2 / 10% Z3 / 15% Z4–5",
+}
+
+
+def offseason_cfg(cfg: dict):
+    """The athlete's `offseason` block, or None when they have not opted in."""
+    oc = cfg.get("offseason")
+    return oc if isinstance(oc, dict) and oc else None
+
+
+def offseason_bookings(cfg: dict, week_start) -> list:
+    """The booked sessions (tests, PB attempts) that fall in the week of `week_start`.
+
+    A booking carries either an exact `date` (a parkrun is a Saturday) or a
+    `week_start` (a test that may go on any legal day that week). Returned sorted, in
+    the week's own dates, so the brief and the validator read the same list.
+    """
+    oc = offseason_cfg(cfg) or {}
+    ws = _monday(week_start if isinstance(week_start, date)
+                 else date.fromisoformat(str(week_start)[:10]))
+    we = ws + timedelta(days=6)
+    out = []
+    for b in (oc.get("bookings") or []):
+        if not isinstance(b, dict):
+            continue
+        try:
+            if b.get("date"):
+                d = date.fromisoformat(str(b["date"])[:10])
+                if ws <= d <= we:
+                    out.append(dict(b, date=d.isoformat()))
+            elif b.get("week_start"):
+                if _monday(date.fromisoformat(str(b["week_start"])[:10])) == ws:
+                    out.append(dict(b, week_start=ws.isoformat()))
+        except ValueError:
+            continue
+    return sorted(out, key=lambda b: b.get("date") or b.get("week_start"))
+
+
+def _book_bucket(sport) -> str:
+    s = str(sport or "").lower()
+    for bucket, keys in (("bike", ("bike", "ride")), ("run", ("run",)), ("swim", ("swim",))):
+        if any(k in s for k in keys):
+            return bucket
+    return s
+
+
+def booking_matches(booking: dict, session: dict) -> bool:
+    """Is `session` (a proposal or built session) the booked one?
+
+    Same sport, on the booked date when there is one, and carrying the booking's
+    `match` token (e.g. "FTP", "5k") in its name when one is set. One definition,
+    shared by the stage-1 validator and the quality injector, so the session the
+    validator insists on is the same one the injector keeps its hands off.
+    """
+    if _book_bucket(session.get("sport")) != _book_bucket(booking.get("sport")):
+        return False
+    if booking.get("date") and str(session.get("date") or "")[:10] != booking["date"]:
+        return False
+    token = str(booking.get("match") or "").strip().lower()
+    if not token and not booking.get("date"):
+        token = str(booking.get("name") or "").strip().lower()
+    return (not token) or token in str(session.get("name") or "").lower()
 
 
 # Down-week placement is a BLOCK decision, not a counter (macro projection, 27 Jul
@@ -922,6 +1018,47 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
                "needs_maintenance_target": bool(stale and mct_source != "configured"),
                "maintenance_weekly_tss": int(round(maint)) if maint else None,
                "required_weekly_tss": target, "recommended_weekly_tss": target}
+        oc = offseason_cfg(cfg)
+        band = maintenance_band(cfg)
+        if stale and oc and target is not None:
+            # OFF-SEASON BLOCK: a training week, not a down-week (see OFFSEASON_DISTRIBUTION).
+            # Floor = the load that would take CTL to the band's bottom edge over the same
+            # convergence window, so a week under it is heading out of the band.
+            floor = 0
+            if band:
+                floor = min(target, compute_required_tss(
+                    float(ctl_today), band[0], _MAINTENANCE_CONVERGE_WEEKS))
+            ow = weeks_since - max(_TRANSITION_FACTORS)
+            books = offseason_bookings(cfg, today)
+            band_s = (f"between {band[0]:g} and {band[1]:g}" if band
+                      else f"near {mct if mct is not None else float(ctl_today):g}")
+            book_s = ""
+            if books:
+                book_s = (" BOOKED THIS WEEK (must be in the plan, on the stated date where "
+                          "one is given): " + "; ".join(
+                              f"{b.get('name') or b.get('kind')} ({b.get('sport')}, "
+                              f"{b.get('date') or 'any legal day'})" for b in books)
+                          + ". Each is a MAX effort: the day before it is easy or rest, "
+                          "with no quality in the 48 hours before, and it counts as that "
+                          "sport's quality for the week.")
+            out.update({
+                "phase": "offseason", "week_type": "offseason",
+                "offseason_week": ow, "ctl_band": list(band) if band else None,
+                "in_band": (band[0] <= float(ctl_today) <= band[1]) if band else None,
+                "weekly_tss_floor": floor,
+                "needs_next_race": False,
+                "bookings": books,
+            })
+            out["note"] = (
+                f"OFF-SEASON BLOCK, week {ow} ({days_since} days after {race_s}). Keep "
+                f"Fitness (CTL) {band_s} (now {float(ctl_today):g}): prescribe ~{target} "
+                f"TSS this week, not under ~{floor}. Focus: "
+                f"{oc.get('focus') or 'power and speed'}. This is a TRAINING week, not a "
+                "recovery week: 2-3 quality sessions spread across the sports (run speed, "
+                "bike FTP/VO2, swim CSS), everything else easy. No protected long ride and "
+                "no long-run progression; volume is not the point." + book_s
+                + " There is no race countdown: do not reference one.")
+            return out
         if target is None:
             out["note"] = ("POST-RACE transition (race was "
                            f"{days_since} days ago) and no CTL available, so no volume "

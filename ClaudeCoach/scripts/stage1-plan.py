@@ -528,7 +528,7 @@ def unknown_blocker_codes(blocking) -> list:
     known = _SAFETY_BLOCKER_CODES | {
         "weekly_tss_floor", "no_rest_day", "no_rest_day_waived", "long_ride_missing",
         "day_rules_drifted", "name_intensity_mismatch", "distance_duration_mismatch",
-        "strength_over_cap"}
+        "strength_over_cap", "booking_missing", "booking_not_fresh"}
     out = []
     for e in (blocking or []):
         c = e.get("code") if isinstance(e, dict) else None
@@ -621,6 +621,35 @@ def audit_built(brief: dict, built: dict, target, proposal: dict):
         blocking.append({"code": "long_ride_missing",
                          "msg": f"no protected long ride - longest ride {have}min < "
                                 f"target ~{lrt}min"})
+
+    # ── BOOKED SESSIONS (off-season tests / PB attempts -> BLOCK) ──
+    # A booking is a date the athlete has been told to expect a max effort on. Missing
+    # it, or arriving at it on legs that did quality the day before, defeats the booking,
+    # so both block and feed back to the proposer. Neither is a safety ceiling, so the
+    # empty-week fallback still ships a week rather than none.
+    for b in (brief.get("booked_sessions") or []):
+        label = b.get("name") or b.get("kind") or "booked session"
+        hit = [s for s in proposal.get("sessions", []) if pt.booking_matches(b, s)]
+        if not hit:
+            blocking.append({"code": "booking_missing",
+                             "msg": f"booked {b.get('sport')} session '{label}' is missing - "
+                                    f"it must be in the week"
+                                    + (f" on {b['date']}" if b.get("date") else "")
+                                    + (f", named with '{b['match']}'" if b.get("match") else "")})
+            continue
+        try:
+            eve = (_dt.date.fromisoformat(str(hit[0]["date"])[:10])
+                   - _dt.timedelta(days=1)).isoformat()
+        except (KeyError, ValueError):
+            continue
+        hard_min = sum((sg.get("minutes") or 0)
+                       for s in proposal.get("sessions", []) if str(s.get("date"))[:10] == eve
+                       for sg in (s.get("segments") or [])
+                       if (_seg_if(s.get("sport", ""), sg) or 0) >= 0.90)
+        if hard_min > 10:
+            blocking.append({"code": "booking_not_fresh",
+                             "msg": f"{eve} carries {hard_min:.0f}min of hard work the day "
+                                    f"before '{label}' - make that day easy or rest"})
 
     # ── INTENSITY BUDGET (ADVISORY: drives the loop, never blocks) ──
     # The athlete's OVERALL phase TID (brief.tid_low_mod_high) is the intensity budget: the
@@ -721,13 +750,18 @@ def build_prompt(slug: str, brief: dict, week_start: date, feedback: str = "") -
                 _run_roll = ("Run VO2 follows the SAME 2-week rule: if the 2-week run VO2 is UNDER "
                              "its target add ONE small, cautious VO2 touch this week (keep run VO2 "
                              "LOWEST - impact - and within the mileage / long-run caps), if OVER drop it.")
+            _bike_roll = ("Off-season bike quality is threshold/VO2 toward FTP: if the 2-week "
+                          "bike Z4-5 is UNDER target add a threshold or VO2 set this week, if OVER "
+                          "swap one for easy riding. "
+                          if (brief.get("week_type") or "").lower() == "offseason" else
+                          "IM bike quality is predominantly "
+                          "sweetspot (Z3) with a SMALL VO2 touch to hit ~6% Z4-5: if the 2-week bike VO2 "
+                          "is UNDER target add one short VO2 set this week, if OVER drop it. ")
             roll = ("\nROLLING 2-WEEK BALANCE (Phase 5.4): last week's planned VO2/Z4-5 was "
                     + "; ".join(_parts) + ". The VO2/Z4-5 bands are judged over the 2-WEEK "
                     "average, NOT this week alone - if a sport ran HIGH last week, go LOWER this "
                     "week (and vice versa) so the 2-week mean sits near each sport's TARGET "
-                    "(the bands have a FLOOR and a ceiling). IM bike quality is predominantly "
-                    "sweetspot (Z3) with a SMALL VO2 touch to hit ~6% Z4-5: if the 2-week bike VO2 "
-                    "is UNDER target add one short VO2 set this week, if OVER drop it. " + _run_roll + "\n")
+                    "(the bands have a FLOOR and a ceiling). " + _bike_roll + _run_roll + "\n")
     # QUALITY PRESCRIPTION (proposer fix): build/specific/peak weeks MUST carry quality toward
     # each sport's per-zone target - the LLM otherwise hits TSS with easy volume and hands back
     # an all-easy week. Off on deload/taper (unloading is the point). Honours injury_bands:
@@ -740,6 +774,12 @@ def build_prompt(slug: str, brief: dict, week_start: date, feedback: str = "") -
         _ex = {"Bike": "PREDOMINANTLY Z2 endurance + SWEETSPOT as the MAIN quality (toward the Z3%); add only ONE short VO2/threshold set toward the Z4-5% - a single touch, do NOT stack VO2 across rides (sweetspot dominates, VO2 is small)",
                "Run":  "easy Z2 + tempo sized to the Z3% + short faster reps sized to the Z4-5%",
                "Swim": "aerobic + CSS/threshold sized to the Z4-5% + a little speed"}
+        if _wt == "offseason":
+            _ex = dict(_ex,
+                       Bike="Z2 endurance + THRESHOLD / over-unders / VO2 toward FTP as the MAIN "
+                            "quality (sized to the Z4-5%), a little tempo for the Z3%",
+                       Run="easy Z2 + short fast reps / cruise intervals toward 5k-10k pace (the "
+                           "Z4-5%) + a little tempo (the Z3%) + strides")
         _lines = []
         for sp in ("Bike", "Run", "Swim"):
             z = _tgt.get(sp)
@@ -801,6 +841,10 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
   PROGRESSING session built toward it (climbing week-on-week), not a static short run - near the target,
   within the caps. If run_protocol.quality_allowed is false, EVERY run is
   easy Z2 — NO tempo/threshold/interval/vo2 run (ankle gate). Honour run_protocol format.
+- BOOKED SESSIONS: if the brief has "booked_sessions", put EVERY one in the week — on its
+  "date" where it has one, else on any legal day for that sport — and put its "match" text in
+  the session name. Each is a max effort: warm-up, the effort, cool-down. Keep the day before
+  it easy or rest, and count it as that sport's quality for the week.
 - OBEY hard_rules (the athlete's protocol) absolutely — they override anything else here.
 - Swim sets: express in minutes (not metres). Strength: omit segments.
 - SWIM ENDURANCE scales to the event: the weekly LONG swim is OVERDISTANCE — build toward
