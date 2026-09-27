@@ -148,8 +148,14 @@ def inject_quality(proposal, brief, athlete, target, *, build_fn, audit_fn, seg_
     """Bring each sport/zone to its target midpoint (2-week rolling aware), conservatively placed,
     never blocking. Returns (new_proposal, notes)."""
     wt = (brief.get("week_type") or "").lower()
-    if wt in ("deload", "taper"):
-        return proposal, ["deload/taper → no injection (unloading is the point)"]
+    # EVERY down-week, not just deload/taper. Post-race weeks were missing from this list,
+    # and because a Transition phase has no distribution of its own the brief falls back to
+    # PEAK's, so the injector converted the easy sessions of the recovery weeks after an
+    # Ironman into sweetspot and VO2 ("Easy run + sweetspot", "Endurance spin + VO2" — six
+    # times between 22 and 27 Sep 2026). plan_tools.DOWN_WEEK_TYPES is the one list.
+    import plan_tools as _pt
+    if wt in _pt.DOWN_WEEK_TYPES:
+        return proposal, [f"{wt} week → no injection (unloading is the point)"]
     targets = brief.get("distribution_targets") or {}
     injury = brief.get("injury_bands") or {}
     # A booked test / PB attempt is the athlete's max effort: never convert its minutes

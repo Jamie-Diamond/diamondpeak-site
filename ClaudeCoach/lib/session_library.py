@@ -497,7 +497,9 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         "emphasis": (((pt.offseason_cfg(cfg) or {}).get("emphasis")
                       or ["threshold", "vo2", "reps", "css", "speed"])
                      if offseason else event.get("emphasis", [])),
-        "brick": None if offseason else event.get("brick"),
+        # No brick outside a training block: the IM brick cadence reached the recovery
+        # weeks after the race as "Easy run (off the bike)" (27 Sep 2026).
+        "brick": None if (offseason or _no_key_sessions) else event.get("brick"),
         "day_rules": day_rules_effective,
         "day_rules_default": cfg.get("day_rules"),
         "availability_applied": bool(availability),

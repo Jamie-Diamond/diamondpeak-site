@@ -194,3 +194,27 @@ class TestInjectorLeavesTheBookingAlone:
                         protect=lambda s: pt.booking_matches(book, s))
         assert out["sessions"][0] == tt           # the PB attempt is untouched
         assert out["sessions"][1] != reps          # the trim came from the other run
+
+
+class TestRecoveryWeeksStayEasy:
+    """27 Sep 2026, the sixth time: the week of 28 Sep (recovery week 2 after IM Italy)
+    carried "Easy run + sweetspot", "Endurance spin + VO2" and a run "off the bike"."""
+
+    def test_the_injector_leaves_every_down_week_alone(self):
+        p = {"sessions": [{"sport": "Run", "date": "2026-09-29", "name": "Easy run",
+                           "segments": [{"minutes": 45, "zone": "z2"}]}]}
+        brief = {"week_type": "post_race",
+                 "distribution_targets": {"Run": [75, 12, 13]}}
+        for wt in pt.DOWN_WEEK_TYPES:
+            out, notes = qi.inject_quality(
+                p, dict(brief, week_type=wt), "jamie", 300,
+                build_fn=lambda *a: {"total_tss": 300, "sessions": []},
+                audit_fn=lambda *a: ([], []), seg_if_fn=lambda sp, sg: 0.7)
+            assert out == p and "no injection" in notes[0]
+
+    def test_an_offseason_week_is_still_injected(self):
+        assert "offseason" not in pt.DOWN_WEEK_TYPES
+
+    def test_no_brick_in_race_or_post_race_weeks(self):
+        src = (REPO / "lib" / "session_library.py").read_text()
+        assert '"brick": None if (offseason or _no_key_sessions) else event.get("brick")' in src
