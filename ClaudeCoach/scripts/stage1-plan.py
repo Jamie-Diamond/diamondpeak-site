@@ -94,16 +94,18 @@ _RUN_FLOOR_MIN = 20  # rule 6: a run below this isn't a meaningful session - DRO
                      # close_to_target's TSS-closure step (bike/other-run reallocation).
 
 
-def _scale_or_drop_runs(proposal: dict, run_sessions: list, targets: list, f: float):
+def _scale_or_drop_runs(proposal: dict, run_sessions: list, targets: list, f: float,
+                        floor: int = _RUN_FLOOR_MIN):
     """Scale each session in `targets` (a subset of run_sessions) by factor f. A
-    session whose scaled total would fall below _RUN_FLOOR_MIN is removed from the
-    week entirely instead of being clamped to a token duration (rule 6)."""
+    session whose scaled total would fall below `floor` (the athlete's minimum run, else
+    _RUN_FLOOR_MIN) is removed from the week entirely instead of being clamped to a
+    token duration (rule 6)."""
     for s in list(targets):
         segs = s.get("segments", [])
         cur = sum(sg.get("minutes", 0) for sg in segs)
         if cur <= 0:
             continue
-        if cur * f < _RUN_FLOOR_MIN:
+        if cur * f < floor:
             proposal["sessions"].remove(s)
             run_sessions.remove(s)
             targets.remove(s)
@@ -112,7 +114,8 @@ def _scale_or_drop_runs(proposal: dict, run_sessions: list, targets: list, f: fl
             sg["minutes"] = max(1, round(sg["minutes"] * f))
 
 
-def _clamp_runs_to_cap(proposal: dict, mileage_cap_km: float, lr_cap, pace: float, run_min_cap=None, protect_long=False):
+def _clamp_runs_to_cap(proposal: dict, mileage_cap_km: float, lr_cap, pace: float, run_min_cap=None, protect_long=False,
+                       floor: int = _RUN_FLOOR_MIN):
     """Scale ALL runs down so weekly run MINUTES stay under the ceiling (never up -
     mileage is a MAX), then re-clamp the long run to its own cap. Prefers the explicit
     minute cap (what validate_week enforces) over km x pace, so the closure lever and
@@ -149,13 +152,13 @@ def _clamp_runs_to_cap(proposal: dict, mileage_cap_km: float, lr_cap, pace: floa
         if protect_long and room >= 0 and nonlong_min > room and nonlong_min > 0:
             # protect a PROGRESSING long run: shrink only the easy runs to fit the ceiling
             f = room / nonlong_min
-            _scale_or_drop_runs(proposal, run_sessions, nonlong, f)
+            _scale_or_drop_runs(proposal, run_sessions, nonlong, f, floor)
         else:
             movable = [s for s in run_sessions if not _pinned(s)]
             movable_min = _mins(movable)
             if movable_min > 0:
                 f = max(0.0, (cap_min - pinned_min)) / movable_min
-                _scale_or_drop_runs(proposal, run_sessions, movable, f)
+                _scale_or_drop_runs(proposal, run_sessions, movable, f, floor)
     for s in run_sessions:
         if _pinned(s):
             continue
@@ -177,7 +180,7 @@ def _clamp_runs_to_cap(proposal: dict, mileage_cap_km: float, lr_cap, pace: floa
             s = max(cand, key=lambda s: sum(sg.get("minutes", 0) for sg in s.get("segments", [])))
             s_total = sum(sg.get("minutes", 0) for sg in s.get("segments", []))
             overage = max(1, _tot() - cap_min)
-            if s_total - overage < _RUN_FLOOR_MIN:
+            if s_total - overage < floor:
                 proposal["sessions"].remove(s)
                 run_sessions.remove(s)
                 continue
@@ -190,6 +193,24 @@ def _clamp_runs_to_cap(proposal: dict, mileage_cap_km: float, lr_cap, pace: floa
             sg["minutes"] = sg["minutes"] - overage
 
 
+def _lift_short_easy_runs(proposal: dict, floor) -> None:
+    """Lengthen any un-pinned, non-long EASY run below the athlete's minimum up to it.
+    Easy runs only: the floor is minutes at easy pace, so it says nothing about how far a
+    tempo or interval run covers."""
+    if not floor:
+        return
+    for s in proposal.get("sessions", []):
+        segs = s.get("segments") or []
+        # _seg_if, not _is_endurance: it also reads bare band labels ("z3"), which the
+        # quality injector writes and segment_if scores as easy.
+        if ((s.get("sport") or "").lower() == "run" and not _pinned(s)
+                and not _is_long_run(s) and segs
+                and all((_seg_if("run", sg) or 0) < _QUALITY_IF for sg in segs)):
+            cur = sum(sg.get("minutes", 0) for sg in s.get("segments", []))
+            if 0 < cur < floor:
+                _set_total_minutes(s, floor)
+
+
 def close_to_target(athlete: str, proposal: dict, target, brief: dict, tol=0.06, max_iter=5):
     """Reliable TSS — but PROTECT key sessions. The long run and long ride are CLAMPED to
     their targets (never used to absorb TSS); quality is fixed by dose; only the OTHER easy
@@ -199,7 +220,11 @@ def close_to_target(athlete: str, proposal: dict, target, brief: dict, tol=0.06,
     lrd_min = brief.get("long_ride_target_min")
     mileage_cap_km = brief.get("weekly_run_mileage_cap_km")  # MAX weekly run km
     run_min_cap = brief.get("weekly_run_min_cap")     # MAX weekly run MINUTES (validate_week's cap)
-    PACE = 5.3  # ~easy min/km (matches the audit's km estimate)
+    PACE = pt.EASY_RUN_PACE_MIN_PER_KM  # ~easy min/km (matches the audit's km estimate)
+    # The athlete's minimum run (run_protocol.min_run_km). Unset keeps the old behaviour:
+    # drop below _RUN_FLOOR_MIN, never lengthen.
+    run_floor = brief.get("min_run_min")
+    _lift_short_easy_runs(proposal, run_floor)
 
     # 1. Long ride clamped to its target. Long run: if the athlete has a PROGRESSING target
     #    (configured long-run floor) build it TO that target (up or down, bounded by the cap)
@@ -221,7 +246,7 @@ def close_to_target(athlete: str, proposal: dict, target, brief: dict, tol=0.06,
     #    (protecting a progressing long run - shrink the easy runs first).
     if mileage_cap_km:
         _clamp_runs_to_cap(proposal, mileage_cap_km, lr_cap, PACE, run_min_cap,
-                           protect_long=bool(lr_target))
+                           protect_long=bool(lr_target), floor=run_floor or _RUN_FLOOR_MIN)
 
     # 3. Close the weekly TSS gap. WHICH sessions absorb it is athlete-conditional
     #    (Phase 5b): a run-limited athlete (injury / no run quality, e.g. Jamie's ankle
@@ -268,11 +293,13 @@ def close_to_target(athlete: str, proposal: dict, target, brief: dict, tol=0.06,
             if flex(s):
                 for seg in s.get("segments", []):
                     seg["minutes"] = max(15, round(seg["minutes"] * factor))
+        _lift_short_easy_runs(proposal, run_floor)
         # When runs share the closure, keep them under the weekly mileage ceiling each
         # iteration (mileage is a MAX) so distributing the gap can never breach the run
         # cap; the uncapped bike absorbs any remainder on the next pass.
         if not bike_only_closure and mileage_cap_km:
-            _clamp_runs_to_cap(proposal, mileage_cap_km, lr_cap, PACE, run_min_cap)
+            _clamp_runs_to_cap(proposal, mileage_cap_km, lr_cap, PACE, run_min_cap,
+                               floor=run_floor or _RUN_FLOOR_MIN)
         built = pb.build_sessions(athlete, proposal)
     return built
 

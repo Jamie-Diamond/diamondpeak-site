@@ -218,3 +218,43 @@ class TestRecoveryWeeksStayEasy:
     def test_no_brick_in_race_or_post_race_weeks(self):
         src = (REPO / "lib" / "session_library.py").read_text()
         assert '"brick": None if (offseason or _no_key_sessions) else event.get("brick")' in src
+
+
+class TestMinimumRun:
+    """Jamie, 27 Sep 2026: "5k is the min run length". The TSS closure used to shrink
+    easy runs to 15 min to land a week on target."""
+
+    def test_min_run_minutes(self):
+        assert pt.min_run_minutes({"run_protocol": {"min_run_km": 5}}) == 27     # 5 x 5.3, up
+        assert pt.min_run_minutes({"run_protocol": {"min_run_min": 40}}) == 40
+        assert pt.min_run_minutes({"run_protocol": {}}) is None
+        assert pt.min_run_minutes({}) is None
+
+    def test_short_easy_runs_are_lifted_but_quality_and_pins_are_not(self):
+        s1 = _stage1()
+        easy = {"sport": "Run", "name": "Easy run", "segments": [{"minutes": 15, "zone": "z2"}]}
+        tempo = {"sport": "Run", "name": "Tempo run",
+                 "segments": [{"minutes": 5, "zone": "z2"}, {"minutes": 15, "zone": "z3"}]}
+        pin = {"sport": "Run", "name": "Easy run", "pinned": True,
+               "segments": [{"minutes": 15, "zone": "z2"}]}
+        prop = {"sessions": [easy, tempo, pin]}
+        s1._lift_short_easy_runs(prop, 27)
+        mins = [sum(sg["minutes"] for sg in s["segments"]) for s in prop["sessions"]]
+        assert mins == [27, 20, 15]
+
+    def test_no_floor_configured_changes_nothing(self):
+        s1 = _stage1()
+        prop = {"sessions": [{"sport": "Run", "name": "Easy run",
+                              "segments": [{"minutes": 15, "zone": "z2"}]}]}
+        s1._lift_short_easy_runs(prop, None)
+        assert prop["sessions"][0]["segments"][0]["minutes"] == 15
+
+    def test_a_cap_squeeze_drops_below_the_floor_rather_than_shrinking(self):
+        s1 = _stage1()
+        runs = [{"sport": "Run", "name": "Easy run", "segments": [{"minutes": 30, "zone": "z2"}]},
+                {"sport": "Run", "name": "Easy run 2", "segments": [{"minutes": 50, "zone": "z2"}]}]
+        prop = {"sessions": list(runs)}
+        rs = list(runs)
+        s1._scale_or_drop_runs(prop, rs, list(rs), 0.8, floor=27)
+        assert [s["name"] for s in prop["sessions"]] == ["Easy run 2"]    # 24 < 27 dropped
+        assert prop["sessions"][0]["segments"][0]["minutes"] == 40

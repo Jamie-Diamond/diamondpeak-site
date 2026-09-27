@@ -930,6 +930,29 @@ def offseason_bookings(cfg: dict, week_start) -> list:
     return sorted(out, key=lambda b: b.get("date") or b.get("week_start"))
 
 
+# Easy pace the engine uses to turn run minutes into km (stage1's audit and caps use the
+# same 5.3 min/km), so a distance floor and the mileage arithmetic cannot disagree.
+EASY_RUN_PACE_MIN_PER_KM = 5.3
+
+
+def min_run_minutes(cfg: dict):
+    """The athlete's shortest allowed EASY run, in minutes, or None when unset.
+
+    From run_protocol.min_run_km (Jamie, 27 Sep 2026: "5k is the min run length") at
+    EASY_RUN_PACE_MIN_PER_KM, or run_protocol.min_run_min if stated in minutes. A run
+    below it is dropped rather than shrunk; one proposed below it is lengthened to it.
+    """
+    rp = cfg.get("run_protocol") or {}
+    try:
+        if rp.get("min_run_km"):
+            return int(-(-float(rp["min_run_km"]) * EASY_RUN_PACE_MIN_PER_KM // 1))
+        if rp.get("min_run_min"):
+            return int(rp["min_run_min"])
+    except (TypeError, ValueError):
+        pass
+    return None
+
+
 def _book_bucket(sport) -> str:
     s = str(sport or "").lower()
     for bucket, keys in (("bike", ("bike", "ride")), ("run", ("run",)), ("swim", ("swim",))):

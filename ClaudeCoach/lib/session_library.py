@@ -351,6 +351,7 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
                     "(convert part of an EASY run to a short tempo; keep run VO2 LOWEST - impact; never "
                     "add run minutes or exceed caps). If a sport cannot carry its share, move it to "
                     "another sport's SAME zone (Z3->Z3, VO2->VO2), never easy->VO2. ")
+    min_run_min = pt.min_run_minutes(cfg)
     dosing_note = ("Build to weekly_tss_target - weekly_tss_floor is a HARD minimum (below "
                    "it the week detrains the athlete and validation rejects it; only "
                    "deload/taper weeks may sit under maintenance). " + _closure +
@@ -366,6 +367,10 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
                    "unspendable share to another sport's SAME zone under caps/limits. Obey "
                    "run_protocol (no quality if quality_allowed=false) and hard_rules. No type outside "
                    "available_sessions.")
+    if min_run_min:
+        dosing_note += (f" MINIMUM RUN: no run shorter than {rp.get('min_run_km') or ''}"
+                        f"{' km' if rp.get('min_run_km') else ''} (~{min_run_min} min easy); "
+                        "drop a run rather than shorten it below that.")
     if offseason:
         dosing_note += (" OFF-SEASON POWER/SPEED BLOCK: the quality is TOP-END, not race "
                         "pace. Bike quality = threshold / over-unders / VO2 toward FTP (not "
@@ -525,6 +530,7 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         "weekly_run_min_cap": weekly_run_min_cap,             # MAX weekly run MINUTES (validate_week cap)
         "long_run_cap_min": long_run_cap_min,                 # MAX single long run (×1.15)
         "long_run_target_min": long_run_target_min,           # PROGRESSING target near cap (configured athletes)
+        **({"min_run_min": min_run_min} if min_run_min else {}),  # MIN easy run (run_protocol.min_run_km)
         "long_ride_target_min": long_ride_min,      # None in race / post-race weeks
         # Neither applies in an off-season block: no race to rehearse, no overdistance build.
         "long_swim_target_m": None if offseason else event.get("long_swim_m"),  # OVERDISTANCE weekly long swim (70.3 ~3000, IM ~4500)
