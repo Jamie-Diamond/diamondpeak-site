@@ -185,7 +185,7 @@ class ClaudeResult:
 
 def run_claude(prompt, model=SONNET, *, fallback=None, allowed_tools=None,
                extra_args=None, cwd=None, timeout=300,
-               no_session_persistence=True, stderr=None, label="", env=None):
+               no_session_persistence=False, stderr=None, label="", env=None):
     """Run `claude -p`, retrying down the fallback chain on a limit/overload.
 
     prompt              : the prompt, piped to the CLI on stdin (not argv)
@@ -194,7 +194,12 @@ def run_claude(prompt, model=SONNET, *, fallback=None, allowed_tools=None,
     allowed_tools       : value for --allowedTools (omit flag if None)
     extra_args          : extra CLI args (list), e.g. ["--output-format", "stream-json"]
     cwd, timeout        : passed to subprocess.run
-    no_session_persistence : append --no-session-persistence (default True)
+    no_session_persistence : append --no-session-persistence. Default False since
+                          27 Sep 2026: the session transcript is the only per-run
+                          record of model + token usage, and without it most
+                          scheduled jobs were invisible to scripts/usage-report.py
+                          (the API-cost estimate Jamie asked for). The CLI prunes
+                          transcripts after 30 days, so they do not accumulate.
     stderr              : optional file object for stderr (else captured)
     label               : athlete/script label for ops_log alerts
     env                 : environment for the spawned CLI; None inherits this process's
