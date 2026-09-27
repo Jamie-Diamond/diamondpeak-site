@@ -373,7 +373,7 @@ RECORDED_MEAL = """Here is the breakdown.
  "assumptions":["Large bowl taken as 300 g cooked noodles","1 tbsp oil in the pan",
                 "Small steak taken as 120 g raw, grilled"]}"""
 
-meal = NLU.describe_meal(STIR_FRY_MSG, "claude", "claude-opus-5", log=lambda *a: None,
+meal = NLU.describe_meal(STIR_FRY_MSG, "claude", "claude-opus-5-5", log=lambda *a: None,
                          runner=lambda *a, **k: _Proc(RECORDED_MEAL))
 check("the meal is costed as one table, not four lookups",
       meal is not None and len(meal["components"]) == 5, meal and len(meal["components"]))

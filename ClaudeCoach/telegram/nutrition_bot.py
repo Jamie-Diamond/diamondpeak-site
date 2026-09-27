@@ -80,7 +80,7 @@ LLM_MODEL = "claude-sonnet-5"
 # extraction, where the faster model is the right trade. This one is the whole answer for a
 # meal no database holds, it happens a few times a day, and a cheaper model costing his
 # dinner badly is what the ladder was already doing.
-MEAL_MODEL = "claude-opus-5"
+MEAL_MODEL = "claude-opus-5-5"
 
 HELP = (
     "Just talk to me normally. Some examples:\n\n"
@@ -820,7 +820,7 @@ def clear_pending(store: NutritionStore) -> None:
 # own never bought, which is a corrected reply rather than an apology. Capped at one, and
 # both attempts are logged with their draft text.
 
-GATE_MODEL = "claude-opus-5"
+GATE_MODEL = "claude-opus-5-5"
 # The test seam, and the only way this module is driven offline. None means the real CLI.
 GATE_RUNNER = None
 # Sends that never go through the gate. Kept as text so the reasoning is readable, and

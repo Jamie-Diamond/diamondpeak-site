@@ -1183,8 +1183,8 @@ sent_msgs.clear()
 NB.handle_text(mctx, STIR_FRY, "token", 1)
 check("the ladder never ran on a meal he cooked", _ladder_calls == [])
 check("and it was costed by Opus explicitly, not the config default",
-      _meal_asks and "claude-opus-5" in _meal_asks[0]["cmd"]
-      and NB.MEAL_MODEL == "claude-opus-5")
+      _meal_asks and "claude-opus-5-5" in _meal_asks[0]["cmd"]
+      and NB.MEAL_MODEL == "claude-opus-5-5")
 check("his own words are what the model was given",
       "a large stir fry with egg noodles" in (_meal_asks[0]["prompt"] or ""))
 pend = NB.get_pending(meal_store)

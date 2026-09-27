@@ -19,7 +19,7 @@ PARTS = {
 
 def count(text: str, tok: str) -> int | None:
     body = json.dumps({
-        "model": "claude-opus-5",
+        "model": "claude-opus-5-5",
         "messages": [{"role": "user", "content": text}],
     }).encode()
     req = urllib.request.Request(

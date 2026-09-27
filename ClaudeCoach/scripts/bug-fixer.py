@@ -183,7 +183,7 @@ def count_tokens(text: str) -> tuple[int, str]:
     if tok:
         try:
             import urllib.request
-            body = json.dumps({"model": "claude-opus-5",
+            body = json.dumps({"model": "claude-opus-5-5",
                                "messages": [{"role": "user", "content": text}]}).encode()
             hdrs = {"content-type": "application/json",
                     "anthropic-version": "2023-06-01",

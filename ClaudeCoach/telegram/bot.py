@@ -356,13 +356,14 @@ def _invalidate_prefetch(slug):
         _PREFETCH_CACHE.pop(slug, None)
 
 MODEL_SONNET = "claude-sonnet-5"
-MODEL_OPUS   = "claude-opus-5"
+MODEL_OPUS   = "claude-opus-5-5"
 MODEL_HAIKU  = "claude-haiku-4-5-20251001"  # retired from selection (kept for label map)
 
 _MODEL_LABEL = {
     MODEL_HAIKU:  "H",
     MODEL_SONNET: "S5",
-    MODEL_OPUS:   "O5",
+    MODEL_OPUS:   "O5.5",
+    "claude-opus-5": "O5",
     "claude-opus-4-8": "O4.8",
     "claude-sonnet-4-6": "S",
     "claude-opus-4-7": "O4.7",

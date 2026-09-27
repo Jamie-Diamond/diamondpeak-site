@@ -233,7 +233,7 @@ def _sent(verdict: str, reason: str, ms: int, **extra) -> dict:
 
 
 def verify_reply(athlete_msg: str, proposed_reply: str, context: dict, claude_bin: str,
-                 model: str = "claude-opus-5", log=print, runner=None,
+                 model: str = "claude-opus-5-5", log=print, runner=None,
                  timeout: int = GATE_TIMEOUT_S,
                  model_unavailable=None) -> dict:
     """Judge one outgoing message. Always returns a dict; never raises.
