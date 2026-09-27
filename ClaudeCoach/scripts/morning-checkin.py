@@ -38,7 +38,7 @@ TOOLS = "Read,Bash"
 CALLER = "morning-checkin"
 
 
-def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None, wellness_finalized=True, ask_morning_pain=False, race_block="", ask_weight=False, ask_ankle=True, prescription_note=""):
+def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None, wellness_finalized=True, ask_morning_pain=False, race_block="", ask_weight=False, ask_ankle=True, prescription_note="", post_race_recovery=False):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -149,6 +149,17 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
     )
 
     heat_block = ""
+    # Post-race recovery (plan_tools.in_post_race_recovery): Form is high BECAUSE the
+    # athlete is recovering, so "fresh legs, good day for quality" is exactly wrong
+    # (sent to Jamie on 25 Sep, six days after IM Italy).
+    if post_race_recovery:
+        form_line_rule = ("[Form line — OMIT ENTIRELY: post-race recovery. High Form is "
+                          "expected and is never a cue for quality work.]")
+    else:
+        form_line_rule = """[Form line — only include if notable:
+  · Form < −20: ⚠️ Heavy load today — keep intensity in check
+  · Form > +10: 🟢 Fresh legs — good day for quality work
+  · Form −1 to −20: omit entirely, that's normal training]"""
     heat_card_line = ""
     if heat_protocol:
         # The acclimation score is decision-support for the model, never card copy:
@@ -224,10 +235,7 @@ Use the recovery score and signals ONLY to decide what to flag — do NOT show t
   verbatim. NEVER estimate, recompute, or round Load yourself. If that block is absent, omit the
   Load part entirely rather than guessing.
 
-[Form line — only include if notable:
-  · Form < −20: ⚠️ Heavy load today — keep intensity in check
-  · Form > +10: 🟢 Fresh legs — good day for quality work
-  · Form −1 to −20: omit entirely, that's normal training]
+{form_line_rule}
 [If recovery ORANGE or RED: ⚠️ [one plain-English sentence on what to do differently — no scores]]
 [If watchdog flag active: ⚠️ [flag in plain English — one line]]
 [If the pre-verified 05:00 prescription check block above is present and says today's session was modified or swapped: 🔁 [what changed and why — one plain line, e.g. "Swapped to easy spin — HRV low". If it confirmed the session as planned, or the block is absent, say nothing]]
@@ -419,6 +427,14 @@ def _race_focus(slug, profile, athlete_cfg):
     except Exception as exc:
         print(f"[{slug}] race focus derivation failed: {exc}", file=sys.stderr)
         return []
+
+
+def _post_race_recovery(athlete_cfg) -> bool:
+    try:
+        import plan_tools as _pt
+        return _pt.in_post_race_recovery(athlete_cfg or {})
+    except Exception:
+        return False
 
 
 def _block_fact(athlete_cfg, today):
@@ -756,7 +772,8 @@ def run_athlete(slug, athlete_cfg):
                            heat_accl_pct=heat_accl_pct, heat_accl_trend=heat_accl_trend,
                            long_run_cap_km=_long_run_cap_km,
                            wellness_finalized=wellness_finalized,
-                           prescription_note=prescription_note)
+                           prescription_note=prescription_note,
+                           post_race_recovery=_post_race_recovery(athlete_cfg))
 
     with open(log_file, "a") as lf:
         result = claude_call.run_claude(

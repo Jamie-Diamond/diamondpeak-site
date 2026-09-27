@@ -258,6 +258,24 @@ and speed" (Jamie, 24 Sep 2026).
   and the quality injector never edits a booked session. Matched by
   `plan_tools.booking_matches`: same sport, same date if given, `match` text in the name.
 
+### Post-race recovery hold (opt-in)
+
+`"post_race_hold": true` in `config/athletes.json` keeps week 4 onward after the race
+a `post_race` week at the week-3 recovery level (easy aerobic only, no quality, no
+bricks) until the athlete says they are ready. Built for "until you tell Coach you're
+ready" (Jamie, 27 Sep 2026). Weeks 1–3 are unchanged.
+
+- **Ready.** The bot runs `plan_tools.py post-race-ready --athlete <slug>` when the
+  athlete says so (prompt block from `plan_tools.recovery_hold_prompt_block`, injected
+  by `lib/engine.py`). It sets `post_race_ready`; the next block starts the first Monday
+  on/after that date and counts its weeks from there. `--undo` clears it.
+- **Bookings** dated inside the hold are not planned: the held week's note and weekly
+  message name them, and the `post-race-ready` output lists them as `bookings_to_redate`.
+- **Messages.** From week 3 the weekly message tells the athlete to reply *ready*. A
+  `post_race` week is never failed on load (stage 1 `_load_on_target`, audit
+  WEEKLY_LOAD), and its header shows no target. The morning card drops "good day for
+  quality work" in any post-race recovery week (`plan_tools.in_post_race_recovery`).
+
 Countdowns come from `races.countdown`, which counts to the next **upcoming**
 race and shows nothing once every configured race has been run. Configure the
 next race and regenerate the blueprint to start a new block.

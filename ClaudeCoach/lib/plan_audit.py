@@ -245,7 +245,11 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
             lw = pt.last_week_actual_tss(client) if ws <= date.today() <= ws + timedelta(days=6) else None
             req = pt.required_tss(cfg, ctl, today=ws, last_week_tss=lw)
             tgt = req.get("recommended_weekly_tss")
-            if tgt and abs(total - tgt) > tgt * _LOAD_TOLERANCE:
+            # A post-race recovery week is not judged on load: its target is a recovery
+            # fraction, not a dose (same exemption as stage1's _load_on_target; Jamie,
+            # 27 Sep 2026: no "X% off target" messages).
+            if (tgt and req.get("week_type") != "post_race"
+                    and abs(total - tgt) > tgt * _LOAD_TOLERANCE):
                 fails["WEEKLY_LOAD"].append(
                     f"week {ws}: {total} TSS vs target ~{tgt} (>{int(_LOAD_TOLERANCE*100)}% off)")
         # The day rules for THIS week, declaration included. Same resolution as

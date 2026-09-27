@@ -713,6 +713,128 @@ _MAINTENANCE_CONVERGE_WEEKS = 4
 _MAINTENANCE_FRACTION = 0.60
 
 
+# POST-RACE RECOVERY HOLD (27 Sep 2026). Weeks 1-3 after an A-race were recovery by the
+# calendar alone, and week 4 flipped straight into the off-season block (or the
+# maintenance hold) whether or not the athlete felt ready. Jamie, after IM Italy: "until
+# you tell Coach you're ready, your weekly plan is easy aerobic only, with no bricks, no
+# quality and no 'X% off target' messages."
+#
+# Opt-in per athlete (`post_race_hold: true` in athletes.json), so nobody else's
+# transition changes under them. While the hold is on and the athlete has not said
+# `post_race_ready` on or after the race date, week 4 onward stays a post_race week at
+# the week-3 recovery level instead of starting the next block. Saying ready (plan_tools
+# post-race-ready) releases it; the block after it runs exactly as configured. It never
+# SHORTENS weeks 1-3: ready only ends the hold, it does not skip recovery.
+def post_race_ready_date(cfg: dict):
+    """The date the athlete said they were ready to train again, or None."""
+    raw = cfg.get("post_race_ready")
+    try:
+        return date.fromisoformat(str(raw)[:10]) if raw else None
+    except ValueError:
+        return None
+
+
+def post_race_hold_active(cfg: dict, race_d, as_of=None) -> bool:
+    """True when this athlete holds recovery after `race_d` until they say ready.
+
+    `as_of` is the day being planned (a week's Monday). A ready date AFTER it does not
+    release that week: saying ready on a Wednesday starts the block the next Monday, the
+    same date set_post_race_ready reports, rather than relabelling a week in progress."""
+    if not cfg.get("post_race_hold") or race_d is None:
+        return False
+    ready = post_race_ready_date(cfg)
+    if not ready or ready < race_d:
+        return True
+    return bool(as_of and ready > as_of)
+
+
+def post_race_block_week(cfg: dict, race_d, weeks_since: int) -> int:
+    """Week number within the block that follows post-race recovery (1 = its first week).
+
+    Normally week 4 after the race is block week 1. When a recovery hold released later,
+    the block starts the first Monday on/after the ready date, so its intro/ramp-in weeks
+    are not skipped by counting from week 4 (new-york, 27 Sep 2026)."""
+    start = max(_TRANSITION_FACTORS) + 1
+    ready = post_race_ready_date(cfg) if cfg.get("post_race_hold") else None
+    if ready and race_d and ready >= race_d:
+        first_monday = ready + timedelta(days=(7 - ready.weekday()) % 7)
+        start = max(start, (first_monday - race_d).days // 7 + 1)
+    return max(1, weeks_since - start + 1)
+
+
+def held_bookings(cfg: dict, race_d, until) -> list:
+    """Off-season bookings dated inside a recovery hold (week 4 after the race up to, not
+    including, the Monday the block starts). They were never planned, so they are
+    surfaced to be re-dated rather than silently dropped."""
+    oc = offseason_cfg(cfg)
+    if not oc or not race_d:
+        return []
+    until = until if isinstance(until, date) else date.fromisoformat(str(until)[:10])
+    hold_from = race_d + timedelta(days=7 * max(_TRANSITION_FACTORS))
+    out = []
+    for b in (oc.get("bookings") or []):
+        if not isinstance(b, dict):
+            continue
+        try:
+            d = date.fromisoformat(str(b.get("date") or b.get("week_start"))[:10])
+        except ValueError:
+            continue
+        if _monday(hold_from) <= d < until:
+            out.append(b)
+    return sorted(out, key=lambda b: str(b.get("date") or b.get("week_start")))
+
+
+def in_post_race_recovery(cfg: dict, today=None) -> bool:
+    """True in the recovery weeks after an A-race: weeks 1-3 for everyone, and on past
+    week 3 while a recovery hold is active. The daily surfaces use it so a recovery week's
+    high Form is never read as "good day for quality work"."""
+    today = today or date.today()
+    try:
+        race_d = date.fromisoformat(cfg["race_date"]) if cfg.get("race_date") else None
+    except ValueError:
+        return False
+    if not race_d or race_d >= today:
+        return False
+    # Judged on the PLANNED week (its Monday), so the daily card agrees with the calendar:
+    # a Saturday in week 3 is still a recovery day even though it is 21 days after.
+    wk = max(_monday(today), race_d + timedelta(days=1))
+    weeks_since = (wk - race_d).days // 7 + 1
+    return (weeks_since <= max(_TRANSITION_FACTORS)
+            or post_race_hold_active(cfg, race_d, as_of=wk))
+
+
+# Chat side of the hold. Injected into the athlete's system prompt by lib/engine.py (same
+# route as planning_pause), because the scheduled scripts can read the flag but only the
+# bot hears the athlete say "ready".
+_HOLD_PROMPT = (
+    "POST-RACE RECOVERY MODE is ON for {name} (race {race}). Every plan stays easy aerobic "
+    "only, with no quality and no bricks, until {name} says they are ready. Weeks 1-3 after "
+    "the race stay recovery regardless. When {name} says they are ready to train again "
+    "(for example 'ready' or 'start the off-season'), FIRST run `python3 "
+    "ClaudeCoach/lib/plan_tools.py post-race-ready --athlete {slug}`, then confirm in one "
+    "or two lines: their {next_block} starts on the block_starts date in its output, and "
+    "name every entry in bookings_to_redate as needing a new date. Never set it from your "
+    "own read of how they feel, and never judge a recovery week's load against a target."
+)
+
+
+def recovery_hold_prompt_block(slug: str, first_name: str = "", path=None,
+                               today=None) -> str:
+    """The system-prompt block for an athlete in a post-race recovery hold; '' otherwise."""
+    try:
+        cfg = (json.loads(Path(path or ATHLETES_CONFIG).read_text()) or {}).get(slug) or {}
+        race_s = cfg.get("race_date")
+        race_d = date.fromisoformat(race_s) if race_s else None
+    except Exception:
+        return ""
+    today = today or date.today()
+    if not race_d or race_d >= today or not post_race_hold_active(cfg, race_d, as_of=today):
+        return ""
+    return _HOLD_PROMPT.format(
+        name=first_name or slug.title(), race=race_s, slug=slug,
+        next_block="off-season block" if offseason_cfg(cfg) else "normal training")
+
+
 def maintenance_ctl(cfg: dict):
     """(ctl, source) for the athlete's off-season CTL target.
 
@@ -993,8 +1115,12 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
         stale = weeks_since > max(_TRANSITION_FACTORS)
         mct, mct_source = maintenance_ctl(cfg)
         f = _TRANSITION_FACTORS.get(weeks_since)
-        if not stale:
-            # Weeks 1-3: recovery from the race. A fraction of maintenance, by design.
+        # Past week 3 with the athlete not yet ready: stay at the week-3 recovery level.
+        hold = stale and post_race_hold_active(cfg, race_d, as_of=today)
+        if hold:
+            f = _TRANSITION_FACTORS[max(_TRANSITION_FACTORS)]
+        if not stale or hold:
+            # Weeks 1-3 (and a held week 4+): recovery. A fraction of maintenance, by design.
             target = int(round(maint * f)) if maint else None
         elif not maint:
             target = None
@@ -1014,15 +1140,22 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
                "race_date": race_s, "days_since_race": days_since,
                "weeks_since_race": weeks_since, "transition_factor": f,
                "weekly_tss_floor": 0,          # unloading is the point; no under-training floor
-               "needs_next_race": stale,
+               "needs_next_race": stale and not hold,
+               "recovery_hold": hold,
+               # From week 3, tell a held athlete how to end it (the weekly message).
+               "ready_prompt": bool(post_race_hold_active(cfg, race_d, as_of=today)
+                                    and weeks_since >= max(_TRANSITION_FACTORS)),
+               "next_block": ("off-season block" if offseason_cfg(cfg)
+                              else "normal training"),
+               "held_bookings": offseason_bookings(cfg, today) if hold else [],
                "maintenance_ctl": mct,
                "maintenance_ctl_source": mct_source,
-               "needs_maintenance_target": bool(stale and mct_source != "configured"),
+               "needs_maintenance_target": bool(stale and not hold and mct_source != "configured"),
                "maintenance_weekly_tss": int(round(maint)) if maint else None,
                "required_weekly_tss": target, "recommended_weekly_tss": target}
         oc = offseason_cfg(cfg)
         band = maintenance_band(cfg)
-        if stale and oc and target is not None:
+        if stale and oc and target is not None and not hold:
             # OFF-SEASON BLOCK: a training week, not a down-week (see OFFSEASON_DISTRIBUTION).
             # Floor = the load that would take CTL to the band's bottom edge over the same
             # convergence window, so a week under it is heading out of the band.
@@ -1030,7 +1163,7 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
             if band:
                 floor = min(target, compute_required_tss(
                     float(ctl_today), band[0], _MAINTENANCE_CONVERGE_WEEKS))
-            ow = weeks_since - max(_TRANSITION_FACTORS)
+            ow = post_race_block_week(cfg, race_d, weeks_since)
             books = offseason_bookings(cfg, today)
             band_s = (f"between {band[0]:g} and {band[1]:g}" if band
                       else f"near {mct if mct is not None else float(ctl_today):g}")
@@ -1066,6 +1199,20 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
                            f"{days_since} days ago) and no CTL available, so no volume "
                            "target could be computed. Prescribe easy aerobic only. This is "
                            "NOT a taper: do not reference an upcoming race or a countdown.")
+        elif hold:
+            out["note"] = (f"POST-RACE RECOVERY HOLD, week {weeks_since} after {race_s}: the "
+                           "athlete has NOT yet said they are ready to train, so recovery "
+                           f"continues. Prescribe ~{target} TSS ({int(f * 100)}% of the "
+                           f"~{int(round(maint))} TSS maintenance load). Easy aerobic only: "
+                           "no VO2, no threshold, no sweetspot, no bricks, no long-session "
+                           "progression; frequency and enjoyment over load. The next block "
+                           "starts the first week after they say they are ready. Do not "
+                           "reference a race countdown.")
+            if out["held_bookings"]:
+                out["note"] += (" Booked sessions that fall this week are ON HOLD with it "
+                                "and must NOT be scheduled: " + "; ".join(
+                                    f"{b.get('name') or b.get('kind')} ({b.get('sport')})"
+                                    for b in out["held_bookings"]) + ".")
         elif stale and mct is not None:
             _dir = ("hold" if abs(float(ctl_today) - mct) < 1
                     else ("come down to" if float(ctl_today) > mct else "build back to"))
@@ -1964,6 +2111,43 @@ def cmd_wbal(args) -> dict:
             "sweep": sweep, "worst_case": {"cp_w": worst_cp, **sweep[worst_cp]}}
 
 
+# ── subcommand: post-race-ready ────────────────────────────────────────────────
+def set_post_race_ready(slug: str, when=None, undo: bool = False, path=None) -> dict:
+    """Record (or clear, with undo) the athlete saying they are ready to train again
+    after an A-race. Backs up athletes.json first. Only meaningful for an athlete with
+    `post_race_hold` on; for anyone else it is recorded but changes nothing."""
+    import shutil
+    p = Path(path or ATHLETES_CONFIG)
+    athletes = json.loads(p.read_text())
+    if slug not in athletes:
+        raise SystemExit(_err(f"unknown athlete '{slug}'"))
+    cfg = athletes[slug]
+    before = cfg.get("post_race_ready")
+    if undo:
+        cfg.pop("post_race_ready", None)
+    else:
+        d = when if isinstance(when, date) else (
+            date.fromisoformat(str(when)[:10]) if when else date.today())
+        cfg["post_race_ready"] = d.isoformat()
+    shutil.copy2(p, p.with_name(p.name + f".bak-post-race-ready-{date.today().isoformat()}"))
+    p.write_text(json.dumps(athletes, indent=2) + "\n")
+    race_s = cfg.get("race_date")
+    race_d = date.fromisoformat(race_s) if race_s else None
+    ready = post_race_ready_date(cfg)
+    first_monday = (ready + timedelta(days=(7 - ready.weekday()) % 7)) if ready else None
+    return {"athlete": slug, "post_race_ready": cfg.get("post_race_ready"),
+            "was": before, "post_race_hold": bool(cfg.get("post_race_hold")),
+            "hold_active": post_race_hold_active(cfg, race_d),
+            "block_starts": first_monday.isoformat() if first_monday else None,
+            # Tell the athlete these need a new date: they fell inside the hold.
+            "bookings_to_redate": (held_bookings(cfg, race_d, first_monday)
+                                   if first_monday else [])}
+
+
+def cmd_post_race_ready(args) -> dict:
+    return set_post_race_ready(args.athlete, when=args.date, undo=args.undo)
+
+
 # ── subcommand: log-strength ───────────────────────────────────────────────────
 def cmd_log_strength(args) -> dict:
     """Log a non-device training session (CrossFit / gym / kettlebells) as REAL
@@ -2135,6 +2319,12 @@ def main():
     pls.add_argument("--date", help="YYYY-MM-DD; default today")
     pls.add_argument("--name")
 
+    ppr = sub.add_parser("post-race-ready",
+                         help="athlete says they are ready to train after an A-race: ends the recovery hold")
+    ppr.add_argument("--athlete", required=True)
+    ppr.add_argument("--date", help="YYYY-MM-DD; default today")
+    ppr.add_argument("--undo", action="store_true", help="clear it (back into the recovery hold)")
+
     pnp = sub.add_parser("windowed-np", help="NP for one segment of a ride, reconciled against ICU's own recorded NP")
     pnp.add_argument("--athlete", required=True)
     pnp.add_argument("--activity-id", required=True, dest="activity_id")
@@ -2160,7 +2350,8 @@ def main():
                "wetsuit": cmd_wetsuit, "race-predict": cmd_race_predict,
                "ctl-sweep": cmd_ctl_sweep,
                "sweat-rate": cmd_sweat_rate, "log-strength": cmd_log_strength,
-               "windowed-np": cmd_windowed_np, "wbal": cmd_wbal}[args.cmd]
+               "windowed-np": cmd_windowed_np, "wbal": cmd_wbal,
+               "post-race-ready": cmd_post_race_ready}[args.cmd]
     try:
         result = handler(args)
     except SystemExit:

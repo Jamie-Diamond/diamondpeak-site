@@ -470,6 +470,12 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         # LLM shapes the week accordingly instead of quietly padding volume back.
         "week_type": req.get("week_type") or phase_name,
         "week_note": req.get("note"),
+        # Post-race recovery hold (plan_tools.post_race_hold_active): the weekly message
+        # tells the athlete to say "ready" to end it.
+        "recovery_hold": bool(req.get("recovery_hold")),
+        "ready_prompt": bool(req.get("ready_prompt")),
+        "next_block": req.get("next_block"),
+        "held_bookings": req.get("held_bookings") or [],
         # Taper holds INTENSITY: taper row if configured, else the peak row —
         # never the base 85/10/5 mostly-easy split (audit P0-2: reverting taper
         # intensity to base is the opposite of taper consensus).

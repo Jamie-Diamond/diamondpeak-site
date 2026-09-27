@@ -1198,7 +1198,11 @@ def _plan(args):
     n_blocking = len(blocking)
 
     load_pct_off = (round((built["total_tss"] - target) / target * 100, 1) if target else None)
-    load_on_target = (target is None) or abs(load_pct_off) <= 12
+    # A post-race recovery week is not judged on load (Jamie, 27 Sep 2026: "no 'X% off
+    # target' messages"). Its target is a fraction of maintenance chosen for recovery,
+    # not a dose to hit, and failing it on +-12% is what sent "I'm not happy with it:
+    # load 21.3% off target" the day after IM Italy. The figure stays in the summary.
+    load_on_target = _load_on_target(brief, load_pct_off)
     overall_ok = built["ok"] and load_on_target and n_blocking == 0
     summary = {
         "attempts": attempts,
@@ -1503,7 +1507,8 @@ def _week_message(brief: dict, built: dict, pins: dict | None = None) -> str:
     import datetime as _dt
     target = brief.get("weekly_tss_target")
     header = f"*Week of {built['week_start']}* — {brief.get('phase','')} · {built['total_tss']} TSS"
-    if target:
+    # No target on a post-race week: it is not a dose to hit (see load_on_target).
+    if target and (brief.get("week_type") or "").lower() != "post_race":
         header += f" (target {target})"
     lines = [header]
     floor = brief.get("weekly_tss_floor")
@@ -1548,6 +1553,9 @@ def _week_message(brief: dict, built: dict, pins: dict | None = None) -> str:
     _agreed = agreed_shortfall_clause(brief, built, pins or {})
     if _agreed:
         lines.append(_agreed)
+    _ready = _ready_line(brief)
+    if _ready:
+        lines.append(_ready)
     for s in built["sessions"]:
         wd = _dt.date.fromisoformat(s["date"]).strftime("%a")
         dur = f" {s['duration_min']}min" if s["duration_min"] else ""
@@ -1561,6 +1569,37 @@ def _week_message(brief: dict, built: dict, pins: dict | None = None) -> str:
                      "(full gym / dumbbells-kettlebells / bodyweight only). "
                      "Reply and I'll tailor the sessions.")
     return "\n".join(lines)
+
+
+def _load_on_target(brief: dict, load_pct_off) -> bool:
+    """The week's load verdict: within +-12% of target, and never judged on a post-race
+    recovery week (see the call site)."""
+    if load_pct_off is None:
+        return True
+    if (brief.get("week_type") or "").lower() == "post_race":
+        return True
+    return abs(load_pct_off) <= 12
+
+
+def _ready_line(brief: dict) -> str:
+    """How a held athlete ends post-race recovery (plan_tools.post_race_hold_active).
+
+    Week 3 says recovery carries on unless they speak up; week 4+ says it is still on.
+    Without this line the hold is a state with no way out that anyone was told about."""
+    if not brief.get("ready_prompt"):
+        return ""
+    nxt = brief.get("next_block") or "normal training"
+    if brief.get("recovery_hold"):
+        line = (f"🔄 _Still in recovery mode: easy only until you say you're ready. Reply "
+                f"*ready* when you want your {nxt} to start._")
+        held = [b.get("name") or b.get("kind") or "a booked session"
+                for b in (brief.get("held_bookings") or [])]
+        if held:
+            line += (f"\n📌 _On hold with it this week: {', '.join(held)}. It needs a new "
+                     f"date once you're back._")
+        return line
+    return (f"🔄 _Recovery carries on after this week too, until you tell me you're ready. "
+            f"Reply *ready* when you want your {nxt} to start._")
 
 
 def _fallback_message(brief: dict, built: dict, why: str) -> str:
@@ -1580,6 +1619,9 @@ def _fallback_message(brief: dict, built: dict, why: str) -> str:
              f"planned for that week, and a starting point beats an empty calendar — so "
              f"that is what this is, not a finished week.",
              ""]
+    _ready = _ready_line(brief)
+    if _ready:
+        lines += [_ready, ""]
     for s in built["sessions"]:
         wd = _dt.date.fromisoformat(s["date"]).strftime("%a")
         dur = f" {s['duration_min']}min" if s["duration_min"] else ""

@@ -204,6 +204,13 @@ def system_prompt_with_level(sp_file) -> str:
                 text = text + "\n\n" + pause
         except Exception as e:
             log(f"planning-pause block skipped: {e}")
+    try:
+        import plan_tools as _pt
+        hold = _pt.recovery_hold_prompt_block(slug, first_name)
+        if hold:
+            text = text + "\n\n" + hold
+    except Exception as e:
+        log(f"recovery-hold block skipped: {e}")
     return text
 
 

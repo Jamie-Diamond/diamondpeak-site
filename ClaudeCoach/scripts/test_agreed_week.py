@@ -562,7 +562,10 @@ check("the prompt clause says the target already accounts for the agreed days, s
 check("the clause reaches the prompt text", '_agreed_clause' in _s1
       and _s1.index('brief.get("_agreed_clause")') > _s1.index("DATE GRID"))
 check("the whole-week gates still read the whole-week target",
-      "load_on_target = (target is None) or abs(load_pct_off) <= 12" in _s1
+      # load_pct_off is taken off the WHOLE-week `target`; _load_on_target only adds the
+      # post-race exemption (test_post_race_hold.py) and the same +-12% band.
+      "load_on_target = _load_on_target(brief, load_pct_off)" in _s1
+      and "return abs(load_pct_off) <= 12" in _s1
       and "load_pct_off = (round((built[\"total_tss\"] - target) / target * 100, 1)" in _s1)
 check("the post-splice rebuild and audit use the WHOLE-week target",
       "built = close_to_target(args.athlete, proposal, target, brief)\n"
