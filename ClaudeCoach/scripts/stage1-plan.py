@@ -1506,9 +1506,13 @@ def agreed_shortfall_clause(brief: dict, built: dict, pins: dict) -> str:
 def _week_message(brief: dict, built: dict, pins: dict | None = None) -> str:
     import datetime as _dt
     target = brief.get("weekly_tss_target")
-    header = f"*Week of {built['week_start']}* — {brief.get('phase','')} · {built['total_tss']} TSS"
-    # No target on a post-race week: it is not a dose to hit (see load_on_target).
-    if target and (brief.get("week_type") or "").lower() != "post_race":
+    _post_race = (brief.get("week_type") or "").lower() == "post_race"
+    # A post-race week is labelled recovery, not the blueprint phase (which still reads
+    # the old block's calendar, e.g. "base" the week after IM Italy), and shows no target:
+    # it is not a dose to hit (see _load_on_target).
+    _label = "recovery" if _post_race else brief.get("phase", "")
+    header = f"*Week of {built['week_start']}* — {_label} · {built['total_tss']} TSS"
+    if target and not _post_race:
         header += f" (target {target})"
     lines = [header]
     floor = brief.get("weekly_tss_floor")

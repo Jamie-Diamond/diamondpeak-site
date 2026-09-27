@@ -211,6 +211,7 @@ class TestStage1Messages:
                  "held_bookings": [{"name": "FTP test"}]}
         msg = self.s1._week_message(brief, self._built())
         assert "(target" not in msg
+        assert "— recovery ·" in msg and "transition" not in msg
         assert "Reply *ready*" in msg and "off-season block" in msg
         assert "FTP test" in msg
 
