@@ -72,7 +72,7 @@ POLL_TIMEOUT = 30
 # nothing. The socket timeout below is derived from this rather than inherited from
 # a default that lives in another file.
 CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "/usr/bin/claude")
-LLM_MODEL = "claude-sonnet-5"
+LLM_MODEL = "sonnet"   # CLI aliases track the newest model (lib/model_aliases.py)
 # COSTING A COOKED MEAL GETS THE BEST MODEL AVAILABLE, and it is named here rather than
 # taken from LLM_MODEL on purpose (Jamie, 14 Aug 2026: "I literally went on a generic
 # Opus 5 and told it what I ate and it gave me that table... we have access to any Claude
@@ -80,7 +80,7 @@ LLM_MODEL = "claude-sonnet-5"
 # extraction, where the faster model is the right trade. This one is the whole answer for a
 # meal no database holds, it happens a few times a day, and a cheaper model costing his
 # dinner badly is what the ladder was already doing.
-MEAL_MODEL = "claude-opus-5-5"
+MEAL_MODEL = "opus"
 
 HELP = (
     "Just talk to me normally. Some examples:\n\n"
@@ -820,7 +820,7 @@ def clear_pending(store: NutritionStore) -> None:
 # own never bought, which is a corrected reply rather than an apology. Capped at one, and
 # both attempts are logged with their draft text.
 
-GATE_MODEL = "claude-opus-5-5"
+GATE_MODEL = "opus"
 # The test seam, and the only way this module is driven offline. None means the real CLI.
 GATE_RUNNER = None
 # Sends that never go through the gate. Kept as text so the reasoning is readable, and

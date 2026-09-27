@@ -7,9 +7,12 @@ it is OpenAI's tokenizer and undercounts Claude by 15-20% on prose, more on numb
 import json
 import os
 import pathlib
+import sys
 import urllib.request
 
 BASE = pathlib.Path("/Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach")
+sys.path.insert(0, str(BASE / "lib"))
+import model_aliases  # noqa: E402
 PARTS = {
     "jamie_rules": BASE / "athletes/jamie/persistent-rules.md",
     "shared_rules": BASE / "athletes/_shared/persistent-rules.md",
@@ -19,7 +22,7 @@ PARTS = {
 
 def count(text: str, tok: str) -> int | None:
     body = json.dumps({
-        "model": "claude-opus-5-5",
+        "model": model_aliases.resolved("opus") or "claude-opus-5-5",
         "messages": [{"role": "user", "content": text}],
     }).encode()
     req = urllib.request.Request(

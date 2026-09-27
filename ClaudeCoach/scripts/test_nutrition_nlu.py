@@ -672,7 +672,7 @@ MEAL_TABLE = """{"meal_name":"Large beef stir-fry with egg noodles",
 msink = []
 meal = NLU.describe_meal(
     "a large stir fry with egg noodles, a small steak, soy ginger garlic sauce and veg",
-    "claude", "claude-opus-5-5", log=lambda *a: None,
+    "claude", "opus", log=lambda *a: None,
     runner=fixed_runner(MEAL_TABLE, msink))
 check("the whole meal comes back as one table", meal and len(meal["components"]) == 5)
 check("each component carries a portion and its own figures",

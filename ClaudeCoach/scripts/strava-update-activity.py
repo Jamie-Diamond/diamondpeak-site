@@ -166,7 +166,7 @@ Total under 300 characters. Output nothing else."""
     try:
         claude_env = _resolve_claude_env()
         result = subprocess.run(
-            [CLAUDE, "-p", "--model", "claude-haiku-4-5-20251001"],
+            [CLAUDE, "-p", "--model", "haiku"],
             input=prompt,  # prompt on stdin, not argv (MAX_ARG_STRLEN)
             capture_output=True, text=True, cwd=PROJECT_DIR, timeout=60,
             env=claude_env,

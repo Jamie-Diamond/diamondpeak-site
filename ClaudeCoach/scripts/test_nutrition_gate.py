@@ -70,7 +70,7 @@ check("and the figures behind it", '"kcal": 447' in prompt)
 check("and it asks for a verdict, not a rewrite",
       '"verdict"' in prompt and "never supply or correct a figure" in prompt.lower())
 check("the gate runs on the best model available, not the fast one",
-      "claude-opus-5-5" in seen[0]["cmd"])
+      "opus" in seen[0]["cmd"])
 check("with no tools, so it cannot go looking anything up",
       "--allowedTools" not in seen[0]["cmd"])
 check("and a timeout, so a hung verifier cannot hold the reply",

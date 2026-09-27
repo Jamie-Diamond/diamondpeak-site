@@ -926,7 +926,7 @@ def _parse_args(argv=None):
     # Planning engine runs on Fable 5 (most capable; long-horizon plan reasoning).
     # run_claude falls Fable -> Opus 5 on a cap (fallback=[OPUS] at the call site).
     # The conversational Telegram bot stays on Opus 5 (engine.py / bot.py).
-    ap.add_argument("--model", default="claude-fable-5-1")
+    ap.add_argument("--model", default=claude_call.FABLE)
     ap.add_argument("--max-attempts", type=int, default=3)
     ap.add_argument("--override-json", metavar="PATH",
                     help="skip LLM generation; use this JSON file as the session proposal")

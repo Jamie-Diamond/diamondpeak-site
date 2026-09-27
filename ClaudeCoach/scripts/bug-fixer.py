@@ -40,6 +40,7 @@ BASE = Path(__file__).parent.parent          # ClaudeCoach/
 PROJECT_DIR = str(BASE.parent)               # diamondpeak-site/
 sys.path.insert(0, str(BASE / "lib"))
 import claude_call
+import model_aliases
 import ops_log
 import rules_lint
 import rules_capture
@@ -183,7 +184,10 @@ def count_tokens(text: str) -> tuple[int, str]:
     if tok:
         try:
             import urllib.request
-            body = json.dumps({"model": "claude-opus-5-5",
+            # The raw API takes no CLI alias: use whatever "opus" resolved to
+            # at the last weekly update (the fallback only matters on a fresh box).
+            model = model_aliases.resolved("opus") or "claude-opus-5-5"
+            body = json.dumps({"model": model,
                                "messages": [{"role": "user", "content": text}]}).encode()
             hdrs = {"content-type": "application/json",
                     "anthropic-version": "2023-06-01",

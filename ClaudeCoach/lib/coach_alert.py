@@ -27,6 +27,13 @@ Jamie's decision, 28 Jul 2026: exactly TWO conditions may interrupt him.
      human the next morning. Soft/advisory findings (DISTRIBUTION, FUELLING,
      WEEKLY_LOAD, SKIPPED, DIRECTED) stay log-only and must remain so.
 
+  4. MODEL_CHANGED — a Claude CLI alias ("opus", "sonnet", ...) now answers as a
+     different model. Asked for by Jamie 27 Sep 2026 when he chose automatic model
+     upgrades: the coach changing model without warning is a change in how every
+     athlete is coached, so he hears about it once. Sent only by
+     scripts/claude-cli-update.py, only after the new model passed its smoke test.
+     A FAILED update stays log-only: the bot keeps running on the CLI it has.
+
 Deliberately NOT here, and log-only as a result:
   - git sync stuck (commits piling up locally). It was the one pre-existing
     Telegram path; it is removed because it is not one of the two. The 24-27 Jul
@@ -77,6 +84,7 @@ _REAL_SUBPROCESS = subprocess
 DELIVERABLE_MISSING = "deliverable_missing"
 CLAUDE_AUTH_FAILED  = "claude_auth_failed"
 PLAN_HARD_FAIL      = "plan_hard_fail"
+MODEL_CHANGED       = "model_changed"
 
 # reason -> how loud, and how often at most. Cooldown exists because auth
 # failures recur on EVERY claude_call (many per hour) and a missing deliverable
@@ -94,6 +102,9 @@ REASONS = {
     DELIVERABLE_MISSING: {"cooldown_h": 12},
     CLAUDE_AUTH_FAILED:  {"cooldown_h": 6},
     PLAN_HARD_FAIL:      {"cooldown_h": 14 * 24},
+    # Keyed on the new alias map, so one change is one message however often the
+    # job reruns; the cooldown only matters if a map flaps back and forth.
+    MODEL_CHANGED:       {"cooldown_h": 24},
 }
 
 # Named deliverables the gap-check watches. `telegram` is the routing decision
@@ -323,6 +334,15 @@ DELIVERABLES = [
      "per_athlete": True,  "telegram": True,
      "cron": "0 18 * * 0",       "cron_cmd": "weekly-plan.sh",
      "since": "2026-07-28T11:44:37"},   # ff6fba3
+    # 27 Sep 2026: the weekly CLI update that keeps the model aliases on the newest
+    # models. telegram=False because a missed or failed update changes nothing an
+    # athlete sees this week - the bot runs on the CLI it has. But a job that dies
+    # quietly is exactly how the CLI sat on a May build until September, so the gap
+    # still gets a digest line. detail pins the heartbeat to a clean run.
+    {"script": "claude-cli-update",  "label": "Claude model update", "window": "weekly",
+     "per_athlete": False, "telegram": False, "detail": "checked ok",
+     "cron": "15 3 * * 1",       "cron_cmd": "claude-cli-update.py",
+     "since": "2026-09-27T22:00:00"},
 ]
 
 # The digest's own schedule. Declared so the crontab cross-check can prove what
@@ -897,6 +917,7 @@ OUTCOME_CLASS = {
     "activity-watcher":   FAILURE,   # "Telegram send failed after retry" /
                                      # "activity analysis timed out Nx in a row"
     "stage1-plan":        FAILURE,
+    "claude-cli-update":  FAILURE,   # new CLI failed its smoke test / swap failed
     "bot-watchdog":       FAILURE,   # the bot stopped answering
     "claude_call":        FAILURE,   # auth expired in production
     "cc-gitpull":         FAILURE,

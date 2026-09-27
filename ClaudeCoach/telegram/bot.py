@@ -55,6 +55,7 @@ import open_actions            # the single open-actions store (close/defer/drop
 import day_overrides           # fail-closed register of directed day-rule deviations
 import claude_call
 import engine
+import model_aliases         # alias -> real model id, for the reply footer
 import plan_lock              # per-athlete build lock: no two plan builds on one calendar
 import agreed_week            # the pinned days a plan build must not touch
 import ops_log                 # run-status + ops-alerts, for work that fails unattended
@@ -356,22 +357,16 @@ def _invalidate_prefetch(slug):
     with _PREFETCH_GUARD:
         _PREFETCH_CACHE.pop(slug, None)
 
-MODEL_SONNET = "claude-sonnet-5"
-MODEL_OPUS   = "claude-opus-5-5"
-MODEL_HAIKU  = "claude-haiku-4-5-20251001"  # retired from selection (kept for label map)
-
-_MODEL_LABEL = {
-    MODEL_HAIKU:  "H",
-    MODEL_SONNET: "S5",
-    MODEL_OPUS:   "O5.5",
-    "claude-opus-5": "O5",
-    "claude-opus-4-8": "O4.8",
-    "claude-sonnet-4-6": "S",
-    "claude-opus-4-7": "O4.7",
-}
+# CLI aliases, not version ids: the bot is always on the newest model the installed
+# CLI knows, and scripts/claude-cli-update.py keeps the CLI current (27 Sep 2026).
+MODEL_SONNET = engine.MODEL_SONNET
+MODEL_OPUS   = engine.MODEL_OPUS
+MODEL_HAIKU  = engine.MODEL_HAIKU  # retired from selection
 
 def response_footer(model: str, slug: str = "", athlete_cfg: dict | None = None) -> str:
-    label = _MODEL_LABEL.get(model, model.split("-")[1][0].upper())
+    # The alias does not say which model answered; model_aliases reads what the
+    # weekly update last resolved it to, so the footer still shows "O5.5".
+    label = model_aliases.label(model)
     if athlete_cfg:
         # NEXT race, not the legacy race_date: once the A-race is behind them that field
         # still parses and the old arithmetic counted DOWNWARD past it, so every reply

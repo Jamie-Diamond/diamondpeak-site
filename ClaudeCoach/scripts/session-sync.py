@@ -47,7 +47,7 @@ BUGFIXER        = BASE / "scripts/bug-fixer.py"
 LOG_DIR         = Path.home() / "Library/Logs/ClaudeCoach"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-MODEL   = "claude-sonnet-5"
+MODEL   = "sonnet"
 TOOLS   = "Read,Write,Edit"
 
 # Do not re-kick the reviewed consolidation more than once a day per athlete, even while the

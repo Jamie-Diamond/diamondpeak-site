@@ -23,10 +23,13 @@ import time
 
 CLAUDE = "/usr/bin/claude"
 
-# Model ids (keep in step with telegram/bot.py)
-OPUS   = "claude-opus-5-5"
-SONNET = "claude-sonnet-5"
-HAIKU  = "claude-haiku-4-5-20251001"
+# CLI aliases, not version ids - always the newest model the installed CLI knows.
+# scripts/claude-cli-update.py keeps the CLI current; lib/model_aliases.py says
+# which real model each alias is today. Keep in step with lib/engine.py.
+OPUS   = "opus"
+SONNET = "sonnet"
+HAIKU  = "haiku"
+FABLE  = "fable"
 
 # Default fallback chains keyed by the starting model. Cheap/frequent automation
 # falls to Haiku (preserves the shared all-models pool the Opus chat needs);

@@ -83,9 +83,9 @@ DISALLOWED_TOOLS = (
     "Bash(reboot *) Bash(reboot) Bash(shutdown *) Bash(halt) "
     "Bash(kill *) Bash(pkill *)"
 )
-MODEL_SONNET = "claude-sonnet-5"
-MODEL_OPUS   = "claude-opus-5-5"
-MODEL_HAIKU  = "claude-haiku-4-5-20251001"
+MODEL_SONNET = "sonnet"   # CLI aliases: always the newest model the CLI knows
+MODEL_OPUS   = "opus"     # (lib/model_aliases.py, scripts/claude-cli-update.py)
+MODEL_HAIKU  = "haiku"
 SYSTEM_PROMPT_FILE = BASE / "athletes/jamie/system_prompt.txt"
 
 # How many recent exchanges to feed the model. History is persisted longer on

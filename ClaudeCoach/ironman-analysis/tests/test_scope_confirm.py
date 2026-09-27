@@ -563,7 +563,7 @@ def _run_worker(monkeypatch, tg, stream_result, message="2.5 hours"):
     monkeypatch.setattr(bot, "load_history", lambda f=None: [])
     monkeypatch.setattr(bot, "prefetch_context", lambda slug: "")
     monkeypatch.setattr(bot, "_with_facts", lambda ctx, slug: ctx)
-    monkeypatch.setattr(bot, "select_model", lambda text, history: "claude-opus-5-5")
+    monkeypatch.setattr(bot, "select_model", lambda text, history: bot.MODEL_OPUS)
     monkeypatch.setattr(bot, "_snapshot_rules_text", lambda slug: "")
     monkeypatch.setattr(bot, "_seed_strava_baseline", lambda slug, text: None)
     monkeypatch.setattr(bot, "_voice_mode_on", lambda slug: False)
