@@ -765,8 +765,10 @@ def maintenance_band(cfg: dict):
 # Default per-sport split for a power/speed off-season: polarised, with a bigger Z4-5
 # share than any Ironman phase because the volume is lower and the point is top-end.
 # Overridable per athlete as offseason.distribution.
+# Swim: CSS (IF ~1.0) is bucketed Z4-5 by stage1's classifier (>= 0.90), so the CSS focus
+# lives in the Z4-5 share here, not in a "Z3–4" middle bucket that the classifier never fills.
 OFFSEASON_DISTRIBUTION = {
-    "Swim": "60% Z1–2 / 25% Z3–4 / 15% Z5",
+    "Swim": "65% Z1–2 / 10% Z3 / 25% Z4–5",
     "Bike": "70% Z1–2 / 12% Z3 / 18% Z4–5",
     "Run":  "75% Z1–2 / 10% Z3 / 15% Z4–5",
 }
