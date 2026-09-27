@@ -166,6 +166,15 @@ def run_summary(slug: str = "jamie") -> str:
     wellness_14d    = client.get_wellness(14)
     activities_7d   = client.get_training_history(7)
 
+    # 27 Sep 2026: activity ids whose HR lib/hr_quality.py judged bad/none, loaded once.
+    # The threshold fit, realised TID and power:HR below treat that HR as missing; an
+    # activity not in the quality log is unaffected, and a load failure filters nothing.
+    try:
+        import hr_quality
+        _hr_untrusted = hr_quality.untrusted_ids(slug)
+    except Exception:
+        _hr_untrusted = set()
+
     # Passive run-threshold estimate (audit P1-8): GAP-at-HR fit vs the configured
     # threshold — flags placeholder/stale run thresholds before they seed race
     # targets when quality resumes. Flag-only, never auto-applied.
@@ -173,7 +182,7 @@ def run_summary(slug: str = "jamie") -> str:
     try:
         from thresholds import estimate_run_threshold_from_gap
         import ops_log as _ops2
-        _est = estimate_run_threshold_from_gap(client)
+        _est = estimate_run_threshold_from_gap(client, untrusted=_hr_untrusted)
         if _est:
             run_thr_line = (f"Passive run-threshold estimate: {_est['pace']}/km "
                             f"(GAP-at-HR fit, {_est['n_runs']} steady runs, R2 {_est['r2']})")
@@ -211,7 +220,7 @@ def run_summary(slug: str = "jamie") -> str:
                 _lthr = (client.get_sport_settings("Run") or {}).get("lthr")
             except Exception:
                 _lthr = None
-        _rt = realised_tid(activities_7d, lthr=_lthr)
+        _rt = realised_tid(activities_7d, lthr=_lthr, untrusted=_hr_untrusted)
         if _rt:
             _ekeyv = _ekey(_cfg, profile)
             _bp = _read_json(adir / "reference" / "training-blueprint.json", {})
@@ -271,6 +280,8 @@ def run_summary(slug: str = "jamie") -> str:
             if (a.get("type") or "") not in ("Run", "TrailRun", "VirtualRun"):
                 continue
             ph = a.get("icu_power_hr")
+            if str(a.get("id")) in _hr_untrusted:
+                ph = None                 # untrusted HR (hr_quality): as if no power:HR
             if not ph or (a.get("moving_time") or 0) < 1200:
                 continue
             d = date.fromisoformat((a.get("start_date_local") or "")[:10])

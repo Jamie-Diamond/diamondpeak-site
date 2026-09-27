@@ -195,13 +195,15 @@ if __name__ == "__main__":
 
 
 def estimate_run_threshold_from_gap(client, lthr: float | None = None,
-                                    days: int = 90) -> dict | None:
+                                    days: int = 90,
+                                    untrusted: set | None = None) -> dict | None:
     """Passive run-threshold estimate (audit P1-8, no-test regime): linear fit of
     grade-adjusted speed (ICU `gap`, m/s) against average HR over steady runs,
     extrapolated to LTHR. FLAG-ONLY — the configured threshold is never changed
     automatically. Returns None when the data cannot support an estimate
     (needs >=6 steady runs >=30 min with GAP+HR, >=15 bpm HR spread, R^2 >= 0.5,
-    positive slope)."""
+    positive slope). `untrusted`: optional ICU activity ids whose HR must not be used
+    (hr_quality.untrusted_ids); None means no filtering."""
     pts = []
     for a in client.get_training_history(days=days) or []:
         if (a.get("type") or "") not in ("Run", "TrailRun", "VirtualRun"):
@@ -209,6 +211,11 @@ def estimate_run_threshold_from_gap(client, lthr: float | None = None,
         if (a.get("moving_time") or 0) < 1800:
             continue
         gap, hr, dec = a.get("gap"), a.get("average_heartrate"), a.get("decoupling")
+        # 27 Sep 2026: a run whose HR lib/hr_quality.py judged bad/none is dropped like a
+        # run with no HR — a cadence-locked 175 would drag the whole fit. An activity not
+        # in the quality log is unaffected.
+        if untrusted and str(a.get("id")) in untrusted:
+            hr = None
         if not gap or not hr:
             continue
         if dec is not None and abs(float(dec)) > 8:      # drifting runs poison the fit

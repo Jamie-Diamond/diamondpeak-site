@@ -23,8 +23,10 @@ SKIP_TYPES = {"WeightTraining", "Workout", "Yoga", "Pilates"}   # not TID-releva
 RUN_SPORTS = {"Run", "TrailRun", "VirtualRun"}                  # HR/LTHR only — never power IF
 
 
-def classify_activity(a: dict, lthr: float | None = None) -> str | None:
-    """low / moderate / high, or None when the activity carries no usable signal."""
+def classify_activity(a: dict, lthr: float | None = None,
+                      untrusted: set | None = None) -> str | None:
+    """low / moderate / high, or None when the activity carries no usable signal.
+    `untrusted`: optional ICU activity ids whose HR must not be used (hr_quality)."""
     t = float(a.get("moving_time") or 0)
     sport = a.get("type") or ""
     if t <= 0 or sport in SKIP_TYPES:
@@ -37,18 +39,24 @@ def classify_activity(a: dict, lthr: float | None = None) -> str | None:
                 if_ /= 100.0
             return "low" if if_ < IF_LOW else ("moderate" if if_ < IF_HIGH else "high")
     hr = a.get("average_heartrate")
+    # 27 Sep 2026: HR that lib/hr_quality.py judged bad/none is treated as missing, so a
+    # cadence-locked easy run is unclassified rather than "high" (a ride's power IF above
+    # still counts). An activity not in the quality log is unaffected.
+    if untrusted and str(a.get("id")) in untrusted:
+        hr = None
     if hr and lthr:
         r = float(hr) / float(lthr)
         return "low" if r < HR_LOW else ("moderate" if r < HR_HIGH else "high")
     return None
 
 
-def realised_tid(activities: list, lthr: float | None = None) -> dict | None:
+def realised_tid(activities: list, lthr: float | None = None,
+                 untrusted: set | None = None) -> dict | None:
     """% of classified moving time in low/moderate/high. None if nothing classifiable."""
     time_in = {"low": 0.0, "moderate": 0.0, "high": 0.0}
     skipped = 0
     for a in activities or []:
-        c = classify_activity(a, lthr)
+        c = classify_activity(a, lthr, untrusted)
         if c is None:
             skipped += 1
             continue

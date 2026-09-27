@@ -65,6 +65,21 @@ Browser (React+Vite SPA / PWA)  ──HTTPS──►  Cloudflare Tunnel + Access
 - Stand up FastAPI on the VM (systemd service beside the bot), behind a **Cloudflare Tunnel + Access** at `coach.diamondpeak.uk`. Map CF Access email → athlete slug.
 - Scaffold the React + Vite SPA; FastAPI serves the built static assets (one origin, no CORS).
 
+### Onboarding and HR quality — carry across, do not rebuild (added 2026-09-27)
+Built in the Telegram bot first (Jamie, 27 Sep: "build it in Telegram now, but note it in
+the app plan"). The web app must reuse these modules, not re-implement them. Design and
+status: `docs/onboarding-baseline-and-hr-quality.md`.
+- **Baseline block** (`lib/baseline.py`): a new athlete's first week is fitness tests
+  (ramp, 30-min run TT, CSS 400/200), not a plan; zones are set from confirmed results;
+  an untested sport is prescribed by RPE. The web onboarding flow replaces the Telegram
+  question state machine in `telegram/bot.py` but must write the same `baseline.json`.
+- **HR quality** (`lib/hr_quality.py`): per-activity HR trust. Web dashboards and chat
+  must read `hr_quality.untrusted_ids()` exactly as the Telegram-era consumers do, and
+  show "HR unreliable" rather than the number.
+- **Web must add**: the result-confirm step as a button in the app (today it is a
+  Telegram inline keyboard, `bl:` callbacks), and the athlete's tested / estimated /
+  missing labels per sport on the profile screen.
+
 ### Phase 1 — Live, auth'd dashboards
 - SPA renders each athlete's **full private** dashboards from the API (fitness/form/load/recovery/durability/compliance, plan, current state) — live, not the nightly public subset.
 - Replaces the read-only GitHub Pages dashboards. Mobile-first layout from day one.

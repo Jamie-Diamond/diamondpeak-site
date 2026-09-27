@@ -62,6 +62,7 @@ import rules_capture
 import rule_registry
 import coach_facts             # per-turn computed FACTS block (superlatives/records/thresholds)
 import write_verify            # verify-after-write for Strava / ICU calendar claims
+import baseline as baseline_lib   # new athletes' baseline block (onboarding, 27 Sep 2026)
 from engine import call_claude, call_claude_with_image, stream_claude
 HEARTBEAT_FILE = BASE.parent / ".bot_heartbeat"  # touched each poll loop; watched by bot-watchdog.py
 try:
@@ -3116,6 +3117,38 @@ def _handle_test_confirm(token, chat_id, data, message_id, athletes):
     return True
 
 
+def _handle_baseline_confirm(token, chat_id, data, message_id, athletes):
+    """bl:yes|no:<slug>:<bike|run|swim> from a baseline test result (lib/baseline.py).
+    Yes writes the threshold to Intervals.icu sport settings (the renderer's source),
+    profile.json and the block state; no discards it and leaves that sport on RPE."""
+    if not data.startswith("bl:"):
+        return False
+    parts = data.split(":")
+    if len(parts) != 4:
+        return False
+    _, verdict, slug, family = parts
+    athlete = athletes.get(chat_id)
+    if not athlete or athlete["slug"] != slug or family not in baseline_lib.FAMILIES:
+        return False
+    if verdict == "yes":
+        try:
+            reply = baseline_lib.confirm(slug, family, _icu_client(slug))
+            done = "✅ Zones set"
+        except Exception as e:
+            log(f"[{slug}] baseline confirm {family} failed: {e}")
+            ops_log.alert("bot", f"baseline confirm {family} failed: {e}", athlete=slug)
+            reply = ("I couldn't update Intervals.icu just now, so nothing has changed. "
+                     "Tap the button again in a few minutes.")
+            done = None
+    else:
+        reply, done = baseline_lib.reject(slug, family), "❌ Not used"
+    if message_id and done:
+        edit_keyboard_confirm(token, chat_id, message_id, f"🔬 {family.title()} test result: {done}")
+    send(token, chat_id, reply)
+    _append_capture_history(chat_id, slug, f"[tapped: {family} test {verdict}]", reply)
+    return True
+
+
 # Race capture. chat_id -> {"parsed": {...}, "expiry": epoch}. In-memory like
 # _PENDING_REPLAN and _PENDING_BUG_EDIT above: a dropped capture on a bot restart just
 # means the athlete says it again, whereas a half-written race on disk is a wrong race.
@@ -4404,22 +4437,55 @@ _OB_PHASE1 = [
     ("icu_key", "Now your *Intervals.icu API key*.\n\nSame place: intervals.icu → *Settings* → scroll to the bottom → *Developer settings* → click *Show API key*. Copy and paste the full key here."),
 ]
 
-# Always asked after ICU fetch, regardless of what ICU returned
+# Always asked after ICU fetch, regardless of what ICU returned. The slug question is
+# held back and asked LAST (see _build_remaining_queue), after the HR / power / test
+# questions added on 27 Sep 2026 for the baseline block (lib/baseline.py).
 _OB_QUALITATIVE = [
     ("a_goal",     "What's your *A goal* for {race_name}?"),
-    ("experience", "How many full-distance triathlons have you raced? What do you most want to work on?"),
+    ("experience", "How long have you been doing endurance sport, and what's the longest event you've finished? What do you most want to work on?"),
     ("injuries",   "Any current injuries or health constraints? (or _none_)"),
     ("max_hours",  "What's the *maximum hours per week* you can realistically train?"),
-    ("slug",       "Last one: choose a short *account handle* for your profile. Lowercase letters and numbers only (e.g. _sarah_). Can't be changed later."),
+    ("hr_source",  "What do you wear for *heart rate*?\n\n1 A chest or arm strap\n2 Just my watch (wrist)\n3 A mix of the two\n4 Nothing\n\nReply with the number."),
 ]
+_OB_SLUG = ("slug", "Last one: choose a short *account handle* for your profile. Lowercase letters and numbers only (e.g. _sarah_). Can't be changed later.")
+_OB_POWER = ("power", "Do you ride with *power* (a power meter or a smart trainer)? _yes_ or _no_")
+_HR_SOURCE_BY_DIGIT = {"1": "strap", "2": "wrist", "3": "mixed", "4": "none"}
+_NO_WORDS = re.compile(r"^\s*(no|nope|n|0|none|not sure|unsure|don'?t know|dunno|idk|\?)\s*\.?\s*$", re.I)
 
-# (icu_data_key, answer_key, question) -- only asked if ICU returned nothing for icu_data_key
+# (icu_data_key, answer_key, sport family, question) -- only asked if ICU returned nothing
+# for icu_data_key AND the athlete races that sport. A threshold is only worth typing in
+# if it was TESTED: anything else is exactly the guess the baseline week replaces, so
+# "no" is a full answer and that sport is tested in week one.
 _OB_GAPS = [
-    ("ftp_watts",                 "ftp",          "I couldn't find your *FTP* in Intervals.icu. What is it in watts?"),
-    ("run_threshold_pace_per_km", "run_threshold", "No run threshold pace found. What's yours per km? (e.g. _4:15_)"),
-    ("swim_css_per_100m",         "swim_css",      "No swim CSS found. What's yours per 100m? (e.g. _1:45_)"),
-    ("weight_kg",                 "weight",        "No weight recorded in Intervals.icu. Current weight in kg?"),
+    ("ftp_watts",                 "ftp",           "bike", "No *FTP* in Intervals.icu. If you've *tested* it in the last 6 weeks, send the number in watts. Otherwise reply _no_ and your first week will test it."),
+    ("run_threshold_pace_per_km", "run_threshold", "run",  "No *run threshold pace* in Intervals.icu. If you've *tested* it in the last 6 weeks (e.g. a 30-min time trial), send it per km, e.g. _4:15_. Otherwise reply _no_ and your first week will test it."),
+    ("swim_css_per_100m",         "swim_css",      "swim", "No *swim CSS* in Intervals.icu. If you've *tested* it in the last 6 weeks, send it per 100m, e.g. _1:45_. Otherwise reply _no_ and your first week will test it."),
+    ("weight_kg",                 "weight",        None,   "No weight recorded in Intervals.icu. Current weight in kg?"),
 ]
+_ICU_THRESHOLD_LABEL = (("bike", "ftp_watts", "Bike FTP {} W"),
+                        ("run", "run_threshold_pace_per_km", "Run threshold {}/km"),
+                        ("swim", "swim_css_per_100m", "Swim CSS {}/100m"))
+
+
+def _race_sports(race_data: dict, race_str: str) -> list:
+    """The disciplines this athlete races, in swim/bike/run order. From the looked-up
+    race distances first; the race type or name only when those are missing; full
+    triathlon when nothing says otherwise (the historic default)."""
+    rd = race_data or {}
+    by_km = [f for f, k in (("swim", "swim_km"), ("bike", "bike_km"), ("run", "run_km"))
+             if (rd.get(k) or 0) > 0]
+    if by_km:
+        return by_km
+    t = f"{rd.get('race_type') or ''} {race_str or ''}".lower()
+    if re.search(r"duathlon", t):
+        return ["bike", "run"]
+    if re.search(r"tri|ironman|70\.3|140\.6", t):
+        return ["swim", "bike", "run"]
+    if re.search(r"marathon|\brun|10k|5k|half|ultra|trail", t):
+        return ["run"]
+    if re.search(r"cycl|fondo|sportive|gravel|bike|road race|\btt\b|traka", t):
+        return ["bike"]
+    return ["swim", "bike", "run"]
 
 
 def load_pending():
@@ -4461,9 +4527,21 @@ def _validate_ob_answer(key, answer):
     if key == "max_hours":
         if not re.search(r'\d', answer):
             return "Please enter a number -- e.g. _12_ for 12 hours/week."
+    if key == "hr_source":
+        if not re.search(r'[1-4]', answer):
+            return "Reply with a number from 1 to 4 -- e.g. _2_ if it's just your watch."
+    if key == "power":
+        if not re.match(r'^\s*(y|yes|yep|n|no|nope)\b', answer, re.I):
+            return "Just _yes_ or _no_ -- do you ride with a power meter or smart trainer?"
+    if key == "recent_tests":
+        if not re.fullmatch(r'[\s,0-3]+', answer):
+            return "Reply with the numbers of the ones you tested, e.g. _1 3_, or _0_ for none."
     if key == "ftp":
-        if not re.search(r'\d', answer):
-            return "Please enter your FTP as a number in watts -- e.g. _280_."
+        if not _NO_WORDS.match(answer) and not re.search(r'\d', answer):
+            return "Send your tested FTP as a number in watts -- e.g. _280_ -- or _no_."
+    if key in ("run_threshold", "swim_css"):
+        if not _NO_WORDS.match(answer) and not re.search(r'\d{1,2}:\d{2}', answer):
+            return "Send it as minutes:seconds -- e.g. _4:15_ -- or _no_."
     if key == "weight":
         if not re.search(r'\d', answer):
             return "Please enter your weight as a number in kg -- e.g. _82_."
@@ -4477,13 +4555,17 @@ def _fetch_icu_data(icu_id, icu_key):
     from icu_api import IcuClient
 
     client = IcuClient(icu_id.strip(), icu_key.strip())
-    profile, ride, run_s, swim, wellness = client.fetch_all(
+    profile, ride, run_s, swim, wellness, recent = client.fetch_all(
         "get_athlete_profile",
         ("get_sport_settings", "Ride"),
         ("get_sport_settings", "Run"),
         ("get_sport_settings", "Swim"),
         ("get_wellness", 7),
+        ("get_training_history", 60),
     )
+    # Rides with power in the last 60 days settle the power question without asking.
+    has_power = any(a.get("device_watts") for a in (recent if isinstance(recent, list) else [])
+                    if baseline_lib.family_of(a.get("type")) == "bike")
 
     weight = None
     if isinstance(profile, dict):
@@ -4510,6 +4592,7 @@ def _fetch_icu_data(icu_id, icu_key):
         "icu_name":                  (profile or {}).get("name"),
         "ctl":                       last_w.get("ctl"),
         "tsb":                       (last_w.get("ctl", 0) or 0) - (last_w.get("atl", 0) or 0),
+        "has_power":                 has_power,
     }
 
     # Summary message
@@ -4535,26 +4618,82 @@ def _fetch_icu_data(icu_id, icu_key):
         if not icu_data.get(icu_field):
             missing.append(label)
     if missing:
-        lines.append(f"_Not found: {', '.join(missing)} -- I'll ask about those in a moment._")
+        lines.append(f"_Not in Intervals.icu: {', '.join(missing)}._")
 
     return icu_data, "\n".join(lines)
 
 
-def _build_remaining_queue(answers, icu_data):
-    """Build qualitative + gap questions after ICU fetch."""
+def _recent_tests_question(icu_data, sports):
+    """(question, [family per option number]) for the thresholds Intervals.icu already
+    holds for raced sports, or (None, []) when it holds none."""
+    opts = [(f, label.format(icu_data[key])) for f, key, label in _ICU_THRESHOLD_LABEL
+            if f in sports and icu_data.get(key)]
+    if not opts:
+        return None, []
+    listing = "\n".join(f"{i} {label}" for i, (_, label) in enumerate(opts, 1))
+    q = ("Intervals.icu has these for you:\n\n" + listing + "\n\nWhich came from a proper "
+         "*test in the last 6 weeks*? Reply with the numbers (e.g. _1 3_), or _0_ for none. "
+         "Anything not tested gets tested in your first week, so your zones are real.")
+    return q, [f for f, _ in opts]
+
+
+def _build_remaining_queue(answers, icu_data, sports=None):
+    """Build qualitative + gap questions after ICU fetch. Returns (queue, recent_map):
+    recent_map is the sport family behind each option number of the recent-tests
+    question, kept in the session so the answer can be read back."""
     race_str  = answers.get("race", "your race")
     race_name = race_str
     dm = re.search(r'(\d{4}-\d{2}-\d{2})', race_str)
     if dm:
         race_name = race_str[:dm.start()].strip().rstrip(", ")
+    sports = sports or ["swim", "bike", "run"]
 
     qual = [(key, q.format(race_name=race_name)) for key, q in _OB_QUALITATIVE]
+    if "bike" in sports and not icu_data.get("has_power"):
+        qual.append(_OB_POWER)
+    recent_q, recent_map = _recent_tests_question(icu_data, sports)
+    if recent_q:
+        qual.append(("recent_tests", recent_q))
     gaps = [
         (answer_key, question)
-        for icu_field, answer_key, question in _OB_GAPS
-        if not icu_data.get(icu_field)
+        for icu_field, answer_key, fam, question in _OB_GAPS
+        if not icu_data.get(icu_field) and (fam is None or fam in sports)
     ]
-    return qual + gaps
+    return qual + gaps + [_OB_SLUG], recent_map
+
+
+def _baseline_inputs(answers, icu_data, sports, recent_map):
+    """What lib/baseline.new_state needs, from the onboarding answers. A number typed
+    into a gap question counts as tested: the question only asks for a tested one."""
+    known, stated = {}, set()
+    if icu_data.get("ftp_watts"):
+        known["bike"] = {"ftp": icu_data["ftp_watts"], "_source": "icu"}
+    elif answers.get("ftp") and not _NO_WORDS.match(answers["ftp"]):
+        m = re.search(r'\d+', answers["ftp"])
+        if m:
+            known["bike"] = {"ftp": int(m.group()), "_source": "athlete"}
+            stated.add("bike")
+    for fam, icu_key, ans_key, field in (("run", "run_threshold_pace_per_km", "run_threshold", "threshold_pace"),
+                                         ("swim", "swim_css_per_100m", "swim_css", "css")):
+        if icu_data.get(icu_key):
+            known[fam] = {field: icu_data[icu_key], "_source": "icu"}
+        elif answers.get(ans_key) and not _NO_WORDS.match(answers[ans_key]):
+            m = re.search(r'\d{1,2}:\d{2}', answers[ans_key])
+            if m:
+                known[fam] = {field: m.group(), "_source": "athlete"}
+                stated.add(fam)
+    for d in re.findall(r'[1-3]', answers.get("recent_tests", "")):
+        i = int(d) - 1
+        if 0 <= i < len(recent_map):
+            stated.add(recent_map[i])
+    hr = _HR_SOURCE_BY_DIGIT.get((re.search(r'[1-4]', answers.get("hr_source", "")) or [None])[0])
+    if icu_data.get("has_power"):
+        has_power = True
+    elif "power" in answers:
+        has_power = bool(re.match(r'^\s*y', answers["power"], re.I))
+    else:
+        has_power = None
+    return known, stated, hr, has_power
 
 
 def _lookup_race(race_name: str, race_date: str) -> dict:
@@ -4590,7 +4729,7 @@ def _lookup_race(race_name: str, race_date: str) -> dict:
     return {}
 
 
-def _scaffold_athlete(chat_id, answers, icu_data, race_data=None):
+def _scaffold_athlete(chat_id, answers, icu_data, race_data=None, sports=None, recent_map=None):
     """Create athletes/{slug}/ folder, write seed files, update athletes.json. Returns slug."""
     from string import Template
 
@@ -4606,9 +4745,15 @@ def _scaffold_athlete(chat_id, answers, icu_data, race_data=None):
         try: return float(re.sub(r'[^\d.]', '', str(s)))
         except Exception: return None
 
-    ftp      = icu_data.get("ftp_watts")      or _int(answers.get("ftp", ""))
-    run_thr  = icu_data.get("run_threshold_pace_per_km") or answers.get("run_threshold") or None
-    swim_css = icu_data.get("swim_css_per_100m")         or answers.get("swim_css")      or None
+    # A "no" to a gap question is an answer, not a threshold (27 Sep 2026: those
+    # questions now ask for a TESTED number or "no", and the baseline week tests it).
+    def _ans(key):
+        v = (answers.get(key) or "").strip()
+        return None if (not v or _NO_WORDS.match(v)) else v
+
+    ftp      = icu_data.get("ftp_watts")      or _int(_ans("ftp") or "")
+    run_thr  = icu_data.get("run_threshold_pace_per_km") or _ans("run_threshold")
+    swim_css = icu_data.get("swim_css_per_100m")         or _ans("swim_css")
     weight   = icu_data.get("weight_kg")      or _float(answers.get("weight", ""))
     lthr     = icu_data.get("lthr")
     max_hours = _int(answers.get("max_hours", ""))
@@ -4653,6 +4798,9 @@ def _scaffold_athlete(chat_id, answers, icu_data, race_data=None):
         "experience": answers.get("experience", ""),
         "injuries": injuries,
     }
+    sports = sports or _race_sports(rd, race_str)
+    known, stated, hr_src, has_power = _baseline_inputs(answers, icu_data, sports, recent_map or [])
+    profile.update({"sports": sports, "hr_source": hr_src, "has_power": has_power})
 
     adir = BASE.parent / "athletes" / slug
     adir.mkdir(parents=True, exist_ok=True)
@@ -4707,6 +4855,10 @@ def _scaffold_athlete(chat_id, answers, icu_data, race_data=None):
     if rules_template.exists():
         rules = Template(rules_template.read_text()).safe_substitute(**template_vars)
         (adir / "reference" / "rules.md").write_text(rules)
+
+    # Baseline block (lib/baseline.py): pending until /approve schedules it. Its
+    # presence is also what gates the weekly plan until the tests are done.
+    baseline_lib.save(slug, baseline_lib.new_state(sports, hr_src, has_power, known, stated))
 
     # Riskiest write last
     athletes_data = json.loads(ATHLETES_CONFIG.read_text()) if ATHLETES_CONFIG.exists() else {}
@@ -4799,7 +4951,10 @@ def handle_onboarding(token, chat_id, text):
         else:
             send(token, chat_id, "_Race details not found — I'll use what you've told me._")
 
-        remaining = _build_remaining_queue(session["answers"], icu_data)
+        sports = _race_sports(race_data, race_str)
+        remaining, recent_map = _build_remaining_queue(session["answers"], icu_data, sports)
+        session["sports"] = sports
+        session["recent_map"] = recent_map
         session["queue"] = [[k, q] for k, q in remaining]
         next_key, next_q = session["queue"].pop(0)
         session["current_key"] = next_key
@@ -4819,7 +4974,8 @@ def handle_onboarding(token, chat_id, text):
     save_onboarding_state(ob_state)
     send(token, chat_id, "_Setting up your profile..._")
     try:
-        slug = _scaffold_athlete(chat_id, session["answers"], session["icu_data"], session.get("race_data"))
+        slug = _scaffold_athlete(chat_id, session["answers"], session["icu_data"], session.get("race_data"),
+                                 sports=session.get("sports"), recent_map=session.get("recent_map"))
     except Exception as e:
         log(f"Onboarding scaffold failed for {chat_id}: {e}")
         send(token, chat_id, f"Something went wrong setting up your profile -- please contact your coach. (Error: {e})")
@@ -4852,7 +5008,8 @@ def handle_onboarding(token, chat_id, text):
     send(token, chat_id,
          f"You're all set, *{first_name}*! Your profile has been created.\n\n"
          f"Your account isn't live yet -- your coach will activate it shortly "
-         f"and you'll get a message here when you're good to go.")
+         f"and you'll get a message here when you're good to go. Your first week "
+         f"will be a short set of fitness tests, so your zones are built on real numbers.")
 
     config_data = load_config()
     admin_id = str(config_data.get("admin_chat_id", ""))
@@ -4900,8 +5057,24 @@ def handle_admin_command(token, chat_id, text, config):
             send(token, approved_cid,
                  f"Welcome aboard, *{approved_name}*! ClaudeCoach is now active for you.\n\n"
                  f"Try: _how am I looking?_ or _what's today's session?_")
+        # Baseline block: schedule it and push it now; baseline-week.py then messages the
+        # athlete with their test days (after the welcome above). Only for an athlete
+        # onboarded with one; a failure is reported to the admin, never swallowed.
+        _bl = baseline_lib.load(slug_to_approve)
+        bl_note = ""
+        if _bl and _bl.get("status") == "pending":
+            try:
+                r = subprocess.run(
+                    ["python3", str(BASE.parent / "scripts/baseline-week.py"), "start",
+                     "--athlete", slug_to_approve],
+                    capture_output=True, text=True, cwd=str(PROJECT_DIR), timeout=180)
+                bl_note = ("\n\nBaseline week scheduled and sent to them." if r.returncode == 0
+                           else f"\n\n⚠️ Baseline week did NOT schedule: {(r.stderr or r.stdout)[-300:]}")
+            except Exception as e:
+                bl_note = f"\n\n⚠️ Baseline week did NOT schedule: {e}"
+            log(f"Baseline start for {slug_to_approve}: {bl_note.strip()}")
         send(token, chat_id,
-             f"Athlete `{slug_to_approve}` is now active.\n\n"
+             f"Athlete `{slug_to_approve}` is now active.{bl_note}\n\n"
              f"_Strava write-back: run this on the VM to enable activity descriptions:_\n"
              f"`python3 ClaudeCoach/scripts/strava-auth.py --athlete {slug_to_approve}`")
         log(f"Admin approved athlete: {slug_to_approve}")
@@ -6439,6 +6612,21 @@ def _route_text(token, chat_id, text, athletes, config):
                          cwd=config.get("project_dir"), start_new_session=True)
         return
 
+    # Baseline swim test times ("400 in 7:10, 200 in 3:25"), only while the swim test is
+    # waiting for them because the watch reps were unreadable (lib/baseline.py). Sends
+    # the CSS result with its confirm keyboard. A bare-times message is consumed; a
+    # longer one still goes on to the model, so "felt awful, shoulder sore" is heard.
+    try:
+        _swim = baseline_lib.capture_swim_times(slug, text)
+    except Exception as e:
+        _swim = None
+        log(f"[{slug}] baseline swim-times capture failed: {e}")
+    if _swim:
+        send(token, chat_id, _swim["text"], reply_markup=_swim["keyboard"])
+        if len(text) <= 60:
+            _append_capture_history(chat_id, slug, text, _swim["text"])
+            return
+
     # CAPTURES. Four deterministic parsers, each of which does its own write or asks its
     # own confirming question, run before the model so the athlete gets an exact read-back
     # of what was stored rather than a paraphrase of it.
@@ -6787,6 +6975,8 @@ def main():
                 if _handle_quick_log(token, chat_id, text, msg_id, athletes):
                     continue
                 if _handle_test_confirm(token, chat_id, text, msg_id, athletes):
+                    continue
+                if _handle_baseline_confirm(token, chat_id, text, msg_id, athletes):
                     continue
                 if _handle_replan_confirm(token, chat_id, text, msg_id, athletes):
                     continue

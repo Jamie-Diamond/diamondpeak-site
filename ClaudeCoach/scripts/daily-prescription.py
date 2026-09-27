@@ -16,6 +16,7 @@ import illness as illness_lib   # structured illness/compromised flag (surfacing
 import menstrual
 import ops_log
 import planning_pause    # tracking-only athletes: no prescribing, no adherence
+import baseline          # new athletes' baseline block: tests, not modulated
 import progression_guard
 import rpe_context
 import injury_scope
@@ -878,6 +879,17 @@ def main():
             print(planning_pause.skip_line(slug, "daily-prescription", cfg), file=sys.stderr)
             continue
         if not cfg.get("daily_prescription", True):
+            continue
+        # Baseline block (lib/baseline.py): today's session is a fitness test or an easy
+        # day by feel. Modulating it would turn a test into something else (the "ftp"
+        # keyword alone classifies a test as bike_threshold). Stand down for the block.
+        # The heartbeat is a real run that decided nothing was due; without it the
+        # ops digest would report a missing prescription to Jamie every block day.
+        if baseline.in_window(slug, date.today()):
+            print(f"[daily-prescription] {slug}: baseline block day, not modulated",
+                  file=sys.stderr)
+            ops_log.record_run("daily-prescription", athlete=slug, ok=True,
+                               detail="baseline block day, nothing to modulate")
             continue
         if processed:
             # Space the athletes' Claude runs out — back-to-back large requests

@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+"""Offline end-to-end test of Telegram onboarding into the baseline block (27 Sep 2026).
+Run: python3 ClaudeCoach/scripts/test_onboarding_baseline.py
+
+Drives telegram/bot.py's real onboarding state machine, message by message, with
+Telegram, Intervals.icu, the race lookup, git and subprocesses replaced by fakes, and
+every path pointed at a tmpdir. Checks what a new athlete is asked and what lands on
+disk, then the /approve hand-off and the result-confirm button.
+
+WHAT IT GUARDS:
+  - the new questions are asked, in order, and only when they apply (no power question
+    for someone ICU already shows riding with power; no swim question for a runner)
+  - a "no" to a threshold question is an answer, not a threshold
+  - the answers become the right baseline state: which sports are tested, estimated,
+    missing, and which get a test
+  - /approve starts the block, and the confirm button writes Intervals.icu
+Never touches a real athlete directory or the network.
+"""
+import json
+import shutil
+import sys
+import tempfile
+from pathlib import Path
+
+_here = Path(__file__).resolve().parent
+CC = _here.parent
+sys.path.insert(0, str(CC / "lib"))
+sys.path.insert(0, str(CC / "telegram"))
+import bot as B   # noqa: E402
+
+FAILS = []
+
+
+def check(name, cond, detail=""):
+    print(("PASS " if cond else "FAIL ") + name + (f"  [{detail}]" if detail and not cond else ""))
+    if not cond:
+        FAILS.append(name)
+
+
+tmp = Path(tempfile.mkdtemp(prefix="ob-test-"))
+(tmp / "telegram").mkdir()
+(tmp / "config").mkdir()
+(tmp / "athletes").mkdir()
+shutil.copytree(CC / "onboarding", tmp / "onboarding")
+
+B.BASE = tmp / "telegram"
+B.PENDING_FILE = tmp / "config/pending.json"
+B.ONBOARDING_FILE = tmp / "config/onboarding_state.json"
+B.ATHLETES_CONFIG = tmp / "config/athletes.json"
+B.baseline_lib.BASE = tmp
+
+SENT = []
+B.send = lambda token, chat_id, text, **kw: SENT.append((str(chat_id), text, kw.get("reply_markup")))
+B._git_commit = lambda *a, **k: None
+B.load_config = lambda: {"admin_chat_id": "999"}
+B.log = lambda *a, **k: None
+
+
+class _NoPopen:
+    def __init__(self, *a, **k):
+        pass
+
+
+RUNS = []
+
+
+class _Ran:
+    returncode, stdout, stderr = 0, "{}", ""
+
+
+def _fake_run(args, **kw):
+    RUNS.append(args)
+    return _Ran()
+
+
+B.subprocess.Popen = _NoPopen
+B.subprocess.run = _fake_run
+
+
+def fake_icu(icu, race):
+    B._fetch_icu_data = lambda i, k: (dict(icu), "*Found in Intervals.icu:*")
+    B._lookup_race = lambda name, d: dict(race)
+
+
+TRI = {"race_type": "70.3 Triathlon", "swim_km": 1.9, "bike_km": 90, "run_km": 21.1}
+ICU_TRI = {"ftp_watts": 250, "run_threshold_pace_per_km": None, "swim_css_per_100m": None,
+           "weight_kg": 70, "lthr": None, "has_power": False}
+
+
+def onboard(chat, answers):
+    """Send each answer; return the questions asked (text of each bot message)."""
+    B.save_pending([chat])
+    asked = []
+    B.handle_onboarding("t", chat, "hi")
+    for a in answers:
+        n = len(SENT)
+        B.handle_onboarding("t", chat, a)
+        asked.extend(t for c, t, _ in SENT[n:] if c == chat)
+    return asked
+
+
+# ── 1. a 70.3 athlete: wrist HR, rides with power, one tested swim number ──────
+fake_icu(ICU_TRI, TRI)
+asked = onboard("123", ["Sam Smith", "70.3 Test, 2027-06-01", "i123", "key",
+                        "sub 5", "3 years, longest a marathon", "none", "10",
+                        "7",             # invalid HR answer
+                        "2",             # wrist
+                        "yes",           # power
+                        "0",             # FTP 250 was not a test
+                        "no",            # run threshold: not tested
+                        "1:45",          # swim CSS: tested in last 6 weeks
+                        "sam"])
+blob = "\n".join(asked)
+check("asks what they wear for heart rate", "What do you wear for *heart rate*" in blob)
+check("rejects an HR answer outside 1-4", "number from 1 to 4" in blob)
+check("asks about power when ICU shows none", "ride with *power*" in blob)
+check("asks whether the ICU FTP was a real test", "Bike FTP 250 W" in blob and "last 6 weeks" in blob)
+check("experience question is not triathlon-only", "full-distance triathlons" not in blob)
+_setup = next((i for i, t in enumerate(asked) if "Setting up your profile" in t), None)
+check("handle is the last question before setup",
+      _setup is not None and "account handle" in asked[_setup - 1], asked[-3:])
+st = json.loads((tmp / "athletes/sam/baseline.json").read_text())
+prof = json.loads((tmp / "athletes/sam/profile.json").read_text())
+ss = st["sports_state"]
+check("baseline state is pending until approved", st["status"] == "pending")
+check("sports from the race distances", st["sports"] == ["swim", "bike", "run"], st["sports"])
+check("hr_source wrist in state and profile", st["hr_source"] == "wrist" and prof["hr_source"] == "wrist")
+check("power yes recorded", st["has_power"] is True)
+check("ICU FTP not tested = estimated, gets the ramp",
+      ss["bike"]["confidence"] == "estimated" and ss["bike"]["test"]["protocol"] == "bike_ramp", ss["bike"])
+check("run 'no' = missing, gets the 30-min TT",
+      ss["run"]["confidence"] == "missing" and ss["run"]["test"]["protocol"] == "run_tt", ss["run"])
+check("typed tested CSS = tested, no swim test, remembered as the athlete's number",
+      ss["swim"]["confidence"] == "tested" and ss["swim"]["test"] is None
+      and ss["swim"]["value_source"] == "athlete" and ss["swim"]["values"] == {"css": "1:45"}, ss["swim"])
+check("'no' is not written as a run threshold", prof.get("run_threshold_pace_per_km") in (None, ""),
+      prof.get("run_threshold_pace_per_km"))
+check("athletes.json entry inactive until approved",
+      json.loads(B.ATHLETES_CONFIG.read_text())["sam"]["active"] is False)
+
+# ── 2. /approve hands off to baseline-week.py start ─────────────────────────
+RUNS.clear()
+SENT.clear()
+B.handle_admin_command("t", "999", "/approve sam", {"admin_chat_id": "999"})
+check("/approve runs baseline-week.py start for the athlete",
+      any("baseline-week.py" in " ".join(map(str, r)) and "start" in r and "sam" in r for r in RUNS), RUNS)
+check("admin is told the baseline week was scheduled",
+      any(c == "999" and "Baseline week scheduled" in t for c, t, _ in SENT), SENT)
+
+# ── 3. a marathon runner: no bike or swim questions at all ───────────────────
+fake_icu({"ftp_watts": None, "run_threshold_pace_per_km": "4:30", "swim_css_per_100m": None,
+          "weight_kg": 60, "has_power": False},
+         {"race_type": "Running Marathon", "run_km": 42.2})
+asked = onboard("124", ["Ali Run", "London Marathon, 2027-04-25", "i124", "key",
+                        "sub 3:30", "5 years", "none", "6", "1", "1", "ali"])
+blob = "\n".join(asked)
+check("runner: no power question", "ride with *power*" not in blob)
+check("runner: no FTP or CSS gap question", "FTP" not in blob and "CSS" not in blob, blob[-400:])
+st = json.loads((tmp / "athletes/ali/baseline.json").read_text())
+check("runner: run only", st["sports"] == ["run"], st["sports"])
+check("runner: stated recent test of the ICU pace = tested, no test",
+      st["sports_state"]["run"]["confidence"] == "tested" and st["sports_state"]["run"]["test"] is None,
+      st["sports_state"]["run"])
+
+# ── 4. race sports from name when the lookup has no distances ────────────────
+check("gran fondo -> bike", B._race_sports({"race_type": "Cycling Gran Fondo"}, "") == ["bike"])
+check("duathlon -> bike, run", B._race_sports({}, "Powerman Duathlon") == ["bike", "run"])
+check("unknown -> triathlon default", B._race_sports({}, "Something 2027") == ["swim", "bike", "run"])
+
+# ── 5. the confirm button writes Intervals.icu ───────────────────────────────
+st = json.loads((tmp / "athletes/sam/baseline.json").read_text())
+st["status"] = "active"
+st["sports_state"]["bike"]["test"].update(status="result_pending",
+                                          pending={"ftp": 240, "best1m_w": 320})
+B.baseline_lib.save("sam", st)
+
+
+class FakeICU:
+    puts = []
+
+    def _put(self, path, payload):
+        FakeICU.puts.append((path, payload))
+
+
+B._icu_client = lambda slug: FakeICU()
+B.edit_keyboard_confirm = lambda *a, **k: None
+B._append_capture_history = lambda *a, **k: None
+SENT.clear()
+handled = B._handle_baseline_confirm("t", "123", "bl:yes:sam:bike", 5, {"123": {"slug": "sam"}})
+check("confirm tap is handled", handled)
+check("confirm writes FTP 240 to Intervals.icu", FakeICU.puts == [("sport-settings/Ride", {"ftp": 240})],
+      FakeICU.puts)
+check("confirm reply goes to the athlete", SENT and SENT[-1][0] == "123" and "zones set" in SENT[-1][1], SENT)
+check("another athlete's tap is ignored",
+      B._handle_baseline_confirm("t", "555", "bl:yes:sam:bike", 5, {"555": {"slug": "ali"}}) is False)
+
+shutil.rmtree(tmp, ignore_errors=True)
+print()
+print("ALL PASS" if not FAILS else f"{len(FAILS)} FAILED: {FAILS}")
+sys.exit(1 if FAILS else 0)

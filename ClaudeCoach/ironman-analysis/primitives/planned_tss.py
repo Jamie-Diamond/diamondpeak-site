@@ -345,7 +345,34 @@ def name_intensity_mismatch(sport: str, name: str, description: str) -> dict | N
     return {"claim": word, "required": need, "found": found}
 
 
-def render_workout(sport: str, segments: list, name: str = "") -> dict:
+# RPE-only rendering (27 Sep 2026, lib/baseline.py). A new athlete's sport with no
+# TESTED threshold is prescribed by feel: a "% Pace" step would resolve against a guessed
+# (or absent) Intervals.icu threshold and put a wrong number on the watch. Each step keeps
+# its duration and its computed TSS; the target becomes a cue word plus RPE, written
+# BEFORE the duration so ICU stores it as step text with no target (verified live).
+# Keyed on the %-of-threshold midpoint of the step's band, so it tracks _ZONE_BAND.
+_RPE_CUES = {
+    "bike": ((56, "Very easy, RPE 2"), (76, "Easy, RPE 3, conversational"),
+             (88, "Steady, RPE 5"), (95, "Comfortably hard, RPE 6"),
+             (106, "Hard but sustainable, RPE 7"), (121, "Very hard, RPE 8"),
+             (999, "All out, RPE 9")),
+    "run": ((70, "Very easy, RPE 2"), (86, "Easy, RPE 3, conversational"),
+            (93, "Steady, RPE 5"), (97, "Comfortably hard, RPE 6"),
+            (104, "Hard but sustainable, RPE 7"), (112, "Very hard, RPE 8"),
+            (999, "All out, RPE 9")),
+}
+_RPE_CUES["swim"] = _RPE_CUES["run"]
+
+
+def rpe_cue(sport: str, lo: float, hi: float) -> str:
+    mid = (lo + hi) / 2
+    for top, cue in _RPE_CUES.get(_norm_sport(sport), _RPE_CUES["bike"]):
+        if mid < top:
+            return cue
+    return "All out, RPE 9"
+
+
+def render_workout(sport: str, segments: list, name: str = "", rpe_only: bool = False) -> dict:
     """Render time-at-intensity segments into an Intervals.icu STRUCTURED workout
     (the `description` text push_workout sends → parsed into steps → synced to
     Garmin). Bike steps are %FTP power; run/swim are %threshold pace.
@@ -357,7 +384,10 @@ def render_workout(sport: str, segments: list, name: str = "") -> dict:
     `name` is OPTIONAL and only narrows a coarse TID band label to the system the name
     claims (_refine_to_claim); omitting it reproduces the old behaviour exactly, which is
     why lib/plan_tools.py's manual `render-workout` CLI is left as it is (off the Sunday
-    build path, and owned by a concurrent ticket)."""
+    build path, and owned by a concurrent ticket).
+
+    `rpe_only` renders every step as an RPE cue with no target (see _RPE_CUES); the
+    TSS is computed exactly as before, so the week's load arithmetic is unchanged."""
     sp = _norm_sport(sport)
     suffix = "" if sp == "bike" else " Pace"   # bare % = power; "% Pace" = pace
     claim_zone = claimed_zone(sport, name) if name else None
@@ -390,6 +420,12 @@ def render_workout(sport: str, segments: list, name: str = "") -> dict:
         # NO trailing zone label: a token like "Z2" makes ICU parse the step as power
         # ZONE 2 and discard the explicit %-range target (-> empty chart). The %-range
         # IS the target; the human zone name lives in description_raw.
+        if rpe_only:
+            cue = rpe_cue(sport, lo, hi)
+            if secs < 60:
+                return f"- {cue} {secs}s", secs / 60.0
+            mins = int(round(secs / 60.0))
+            return f"- {cue} {mins}m", mins
         if secs < 60:
             return f"- {secs}s {lo}-{hi}%{suffix}", secs / 60.0
         mins = int(round(secs / 60.0))

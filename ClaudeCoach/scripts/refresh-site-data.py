@@ -210,6 +210,18 @@ def _zone_distribution(slug, activities, today):
         return None
 
 
+def _hr_untrusted_ids(slug):
+    """ICU activity ids whose HR lib/hr_quality.py judged bad/none. Empty on any
+    failure: a quality log that will not load filters nothing, it never breaks a page."""
+    try:
+        sys.path.insert(0, str(BASE / "lib"))
+        import hr_quality
+        return hr_quality.untrusted_ids(slug)
+    except Exception as e:
+        log(f"[{slug}] HR quality log unavailable, no HR filtering (non-fatal): {e}")
+        return set()
+
+
 NP_CURVE_CACHE = BASE / "athletes/jamie/np-curve-cache.json"
 _BIKE_TYPES = ("Ride", "VirtualRide", "GravelRide", "MountainBikeRide")
 
@@ -1235,8 +1247,15 @@ def post_process(data):
         except Exception:
             pass
 
+    # 27 Sep 2026: activity ids whose HR lib/hr_quality.py judged bad/none. Decoupling
+    # and EF below treat that HR as missing; an activity not in the quality log, or no
+    # log at all, leaves both exactly as before.
+    hr_untrusted = _hr_untrusted_ids("jamie")
+
     # Decoupling trend
     dcoup = json.loads(DECOUPLING_LOG.read_text()) if DECOUPLING_LOG.exists() else []
+    if hr_untrusted:
+        dcoup = [e for e in dcoup if str(e.get("activity_id")) not in hr_untrusted]
     data["decouplingTrend"] = sorted(dcoup, key=lambda e: e.get("date", ""))
 
     # CTL projection
@@ -1411,6 +1430,10 @@ def post_process(data):
                 if cur is None or sum(v is not None for v in s.values()) > sum(v is not None for v in cur.values()):
                     best[k] = s
             all_s = list(best.values())
+            # Untrusted HR (hr_quality) reads as no avg_hr: a ride keeps NP/VI with EF
+            # and HR blank, a run drops out of the HR-only EF chart as it would today.
+            def _hr_of(s):
+                return None if str(s.get("activity_id")) in hr_untrusted else s.get("avg_hr")
             long_rides = sorted(
                 [s for s in all_s if s.get("sport") == "Ride"
                  and s.get("norm_power") and s.get("avg_power")
@@ -1419,7 +1442,7 @@ def post_process(data):
             )
             hr_runs = sorted(
                 [s for s in all_s if s.get("sport") == "Run"
-                 and s.get("avg_hr") and s.get("distance_km")
+                 and _hr_of(s) and s.get("distance_km")
                  and int(s.get("duration_min") or 0) >= 60],     # runs > 60 min only
                 key=lambda x: x["date"]
             )
@@ -1433,8 +1456,8 @@ def post_process(data):
                 "rides": [
                     {"date": s["date"], "np": s["norm_power"],
                      "vi": round(s["norm_power"] / s["avg_power"], 3),
-                     "ef": round(s["norm_power"] / s["avg_hr"], 3) if s.get("avg_hr") else None,
-                     "hr": s.get("avg_hr"), "dur": s.get("duration_min"),
+                     "ef": round(s["norm_power"] / s["avg_hr"], 3) if _hr_of(s) else None,
+                     "hr": _hr_of(s), "dur": s.get("duration_min"),
                      "name": (s.get("name") or "")[:40]}
                     for s in long_rides
                 ],

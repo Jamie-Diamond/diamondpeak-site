@@ -50,6 +50,8 @@ import write_verify            # read-back verdicts for the Strava writes below
 import heat as heat_lib
 import profile_fields
 import claude_call
+import hr_quality              # per-activity HR trust (wrist-sensor artefacts)
+import baseline as baseline_lib   # new athletes' baseline block: test capture + close
 from git_sync import sync_commit_push
 from primitives.run_durability import compute_run_durability, fade_line
 
@@ -114,8 +116,10 @@ def _quick_log_keyboard(activity_id, slug, sport, has_injury, duration_min):
     return {"inline_keyboard": rows}
 
 
-def _build_prompt(slug, first_name, ftp, injuries, profile=None, run_hr_cap=150, nutrition_target=90, recent_chat=""):
-    """Build the per-athlete activity analysis prompt."""
+def _build_prompt(slug, first_name, ftp, injuries, profile=None, run_hr_cap=150, nutrition_target=90, recent_chat="",
+                  hr_note=""):
+    """Build the per-athlete activity analysis prompt. `hr_note` is the code-side HR
+    check for the recent activities (_hr_quality_pass); empty when every HR is fine."""
     today = date.today().isoformat()
     # Injury context for the athlete line and run analysis
     injury_line = ""
@@ -169,6 +173,9 @@ Check for new activities for {first_name} and stub them into the session log.
 {_level_block(coaching_level)}
 {planning_pause.prompt_block(slug, first_name)}
 {illness_lib.prompt_block(slug, first_name=first_name)}
+{hr_quality.prompt_block(profile)}
+{baseline_lib.prompt_block(slug, first_name)}
+{hr_note}
 {ack_lib.PROMPT_NOTE}
 
 
@@ -385,6 +392,10 @@ def _credit_heat_exposure(slug: str, activity_id: str, profile: dict) -> None:
                 print(f"[heat-credit:{slug}] latlng stream fallback failed: {e}", file=sys.stderr)
             return None
 
+        # Untrusted HR (lib/hr_quality.py) must not scale the dose: drop it so the dose
+        # falls back to load-per-hour, exactly as for an activity with no HR at all.
+        if act and hr_quality.is_untrusted(slug, activity_id):
+            act = {**act, "average_heartrate": None}
         entry = heat_lib.exposure_entry(act, latlng_fallback=_latlng_from_streams) if act else None
         if not entry:
             return
@@ -447,6 +458,10 @@ def _run_durability_note(slug: str, activity_id: str) -> tuple[str, bool]:
     message. Returns (note, flagged); ("", False) when not a run / no power /
     too short / any failure. `flagged` comes from the metrics rather than from
     a marker in the rendered text, so the prose is free to change."""
+    # Power:HR decoupling off a cadence-locked or dropped-out HR is a number about the
+    # sensor. No line and no log entry for an activity lib/hr_quality.py judged bad.
+    if hr_quality.is_untrusted(slug, activity_id):
+        return "", False
     try:
         from icu_api import IcuClient
         cfg = json.loads(ATHLETES_CONFIG.read_text())[slug]
@@ -475,6 +490,93 @@ def _run_durability_note(slug: str, activity_id: str) -> tuple[str, bool]:
     except Exception as exc:
         print(f"[run-durability:{slug}] {exc}", file=sys.stderr)
         return "", False
+
+
+def _hr_quality_pass(slug: str, chat_id: str) -> str:
+    """Code-side HR check and baseline-test capture for the last 3 days' activities,
+    run BEFORE the analysis prompt is built so the model is told which HR to ignore.
+
+    HR (27 Sep 2026, lib/hr_quality.py): each run/ride/swim not yet in the athlete's
+    hr-quality-log.json is judged from its streams and recorded; consumers then skip
+    the bad ones. Returns the prompt note naming this window's untrusted activities
+    ("" when none), so a cadence-locked "175 bpm easy run" is never debriefed as hard.
+
+    Baseline (lib/baseline.py): an activity that is a scheduled baseline test has its
+    result read here, deterministically, and sent with a confirm keyboard; nothing is
+    applied until the athlete taps. Fail-soft throughout: an ICU hiccup costs this
+    cycle's check, never the debrief."""
+    try:
+        from icu_api import IcuClient
+        cfg = json.loads(ATHLETES_CONFIG.read_text())[slug]
+        client = IcuClient(cfg["icu_athlete_id"], cfg["icu_api_key"])
+        acts = client.get_training_history(days=3)
+    except Exception as exc:
+        print(f"[hr-quality:{slug}] history fetch failed: {exc}", file=sys.stderr)
+        return ""
+    log = hr_quality.load_log(slug)
+    st = baseline_lib.load(slug)
+    changed = False
+    for a in acts:
+        aid = str(a.get("id", ""))
+        fam = baseline_lib.family_of(a.get("type"))
+        if not aid or not fam:
+            continue
+        is_test = bool(st) and baseline_lib.match_test(st, a) is not None
+        if aid in log and not is_test:
+            continue
+        try:
+            streams = hr_quality.streams_by_type(client.get_activity_streams(aid))
+            res = hr_quality.assess(streams, a.get("type") or "", a.get("athlete_max_hr"),
+                                    bool(a.get("race")))
+            hr_quality.record(slug, a, res, log=log, save=False)
+            changed = True
+            if is_test:
+                ivs = None
+                if fam == "swim":
+                    ivs = (client.get_extended_metrics(aid) or {}).get("icu_intervals")
+                out = baseline_lib.capture(slug, a, streams, hr_quality.trusted(res),
+                                           intervals=ivs, st=st)
+                if out:
+                    if out.get("keyboard"):
+                        _tg_send_keyboard(chat_id, out["text"], out["keyboard"])
+                        try:
+                            _log_to_history(slug, out["text"])
+                        except Exception:
+                            pass
+                    else:
+                        _notify(out["text"], chat_id, slug=slug)
+        except Exception as exc:
+            print(f"[hr-quality:{slug}] {aid}: {exc}", file=sys.stderr)
+    if changed:
+        try:
+            hr_quality.save_log(slug, log)
+        except Exception as exc:
+            print(f"[hr-quality:{slug}] log not saved: {exc}", file=sys.stderr)
+    bad = []
+    for a in acts:
+        r = log.get(str(a.get("id", "")))
+        if r and r.get("verdict") in ("bad", "none") and not r.get("informational"):
+            why = hr_quality.describe(r) or "unreliable"
+            bad.append(f"  - {a.get('id')} ({(a.get('start_date_local') or '')[:10]} "
+                       f"{a.get('type')}, \"{a.get('name') or ''}\"): {why}")
+    if not bad:
+        return ""
+    return ("HR CHECK (done in code from the raw streams; trust it over the HR numbers):\n"
+            + "\n".join(bad) + "\n"
+            "For THESE activities the heart rate is untrusted: do NOT quote average/max HR, HR "
+            "zones, time under an HR cap or decoupling, and do not judge the effort by HR. "
+            "Describe the session by pace/power and RPE, and say once, plainly, that the "
+            "heart rate looked unreliable on this one. Do not output a DECOUPLING line for them.")
+
+
+def _baseline_tick(slug: str, chat_id: str) -> None:
+    """Close a finished baseline block and tell the athlete, once."""
+    try:
+        msg = baseline_lib.tick(slug)
+        if msg and chat_id:
+            _notify(msg, chat_id, slug=slug)
+    except Exception as exc:
+        print(f"[baseline:{slug}] tick failed: {exc}", file=sys.stderr)
 
 
 def _dedup_session_log(path: Path) -> None:
@@ -1362,6 +1464,7 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     # Test reminders and Strava refresh run every cycle regardless of new activity
     _check_test_reminders(adir, chat_id, state, state_file)
     _strava_refresh_updated(slug, state, state_file)
+    _baseline_tick(slug, chat_id)
 
     # Snapshot existing IDs before Claude runs
     existing_ids: set = set()
@@ -1402,9 +1505,10 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
         except Exception:
             pass
 
+    hr_note = _hr_quality_pass(slug, chat_id)
     prompt = _build_prompt(slug, first_name, ftp, injuries, profile,
                            run_hr_cap=run_hr_cap, nutrition_target=nutrition_target,
-                           recent_chat=recent_chat)
+                           recent_chat=recent_chat, hr_note=hr_note)
 
     t_start = time.time()
     # Sonnet -> Haiku fallback: keeps activity analysis alive when the Sonnet
@@ -1527,8 +1631,10 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
         script="activity-watcher", athlete=slug,
     )
 
-    # Log decoupling for long rides
-    if decoupling_raw and decoupling_raw != "none":
+    # Log decoupling for long rides. Never for an activity whose HR failed the code-side
+    # check (lib/hr_quality.py): the prompt says so too, this is the gate that holds.
+    if decoupling_raw and decoupling_raw != "none" and \
+            not hr_quality.is_untrusted(slug, decoupling_raw.split("|")[0].strip()):
         try:
             parts = decoupling_raw.split("|")
             if len(parts) == 7:
@@ -1696,8 +1802,11 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
 
     _send_followup_nudge(state, session_log_f, chat_id, injuries=injuries, state_file=state_file, slug=slug)
 
-    # Zone-spotting: if Claude detected a threshold test, prompt for confirmation
-    if test_result_raw and test_result_raw != "none":
+    # Zone-spotting: if Claude detected a threshold test, prompt for confirmation.
+    # Not for an athlete with a baseline block: their tests are read in code by
+    # _hr_quality_pass and confirmed through the block's own keyboard, and a second
+    # keyboard would write local files only (this path never reaches Intervals.icu).
+    if test_result_raw and test_result_raw != "none" and baseline_lib.load(slug) is None:
         try:
             parts = test_result_raw.split("|")
             if len(parts) == 3:

@@ -44,6 +44,12 @@ except Exception:
     _illness = None
 
 try:
+    import hr_quality as _hr_quality
+    import baseline as _baseline
+except Exception:
+    _hr_quality = _baseline = None
+
+try:
     from claude_call import is_limit_message as _is_limit_message
 except Exception:
     def _is_limit_message(text: str) -> bool:  # type: ignore[misc]
@@ -188,6 +194,7 @@ def system_prompt_with_level(sp_file) -> str:
     profile_path = sp_file.parent / "profile.json"
     slug = sp_file.parent.name
     first_name = slug.title()
+    profile = {}
     if profile_path.exists():
         try:
             profile = json.loads(profile_path.read_text())
@@ -197,6 +204,16 @@ def system_prompt_with_level(sp_file) -> str:
                 text = text + "\n\n" + block
         except Exception:
             pass
+    # HR source and baseline block (27 Sep 2026). Both are empty for an athlete
+    # onboarded before then: no hr_source in profile.json, no baseline.json.
+    if _hr_quality is not None and _baseline is not None:
+        try:
+            for extra in (_hr_quality.prompt_block(profile),
+                          _baseline.prompt_block(slug, first_name)):
+                if extra:
+                    text = text + "\n\n" + extra
+        except Exception as e:
+            log(f"hr/baseline block skipped: {e}")
     if _planning_pause is not None:
         try:
             pause = _planning_pause.prompt_block(slug, first_name)

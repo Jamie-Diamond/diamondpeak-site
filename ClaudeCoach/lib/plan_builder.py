@@ -189,12 +189,26 @@ def cap_source(slug, phase, week_start=None) -> str:
     return "none"
 
 
+def _sport_family(sport: str) -> str:
+    s = (sport or "").lower()
+    return "swim" if "swim" in s else "run" if "run" in s else "bike" if (
+        "ride" in s or "bike" in s or "cycl" in s) else s
+
+
 def build_sessions(slug: str, proposal: dict) -> dict:
     """Turn a Stage-1 proposal into push-ready, validated sessions. Pure except
     for reading athlete config/session-log; never pushes."""
     cfg = _cfg(slug)
     fuel, run_fuel = _fuel_for(slug, cfg)
     built, events = [], []
+    # A new athlete's raced sport with no TESTED threshold is prescribed by RPE, never
+    # by a % of a guessed threshold (lib/baseline.py, 27 Sep 2026). Empty set for an
+    # established athlete, so their rendering is unchanged.
+    try:
+        import baseline as _baseline
+        _rpe_only = _baseline.rpe_only_families(slug)
+    except Exception:
+        _rpe_only = set()
     for s in proposal.get("sessions", []):
         sport = s.get("sport", "")
         date_s = s.get("date")
@@ -209,7 +223,8 @@ def build_sessions(slug: str, proposal: dict) -> dict:
             # NAME passed in: it disambiguates a coarse TID band label (the library gives
             # both tempo and sweetspot the label Z3), so "Sweetspot 2x20" renders at 88-94%
             # FTP instead of 76-84% and stops hard-blocking on name_intensity_mismatch.
-            r = render_workout(sport, segs, s.get("name", ""))
+            r = render_workout(sport, segs, s.get("name", ""),
+                               rpe_only=_sport_family(sport) in _rpe_only)
             desc, load, dur = r["description"], r["tss"], r["duration_min"]
         else:
             # No structured segments (Strength, or a session Stage 1 left unstructured):

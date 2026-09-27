@@ -44,6 +44,7 @@ from primitives.blueprint import current_phase                # noqa: E402
 from primitives.nutrition import fuel_target, recent_avg_g_hr  # noqa: E402
 from primitives.planned_tss import name_intensity_mismatch     # noqa: E402
 import planning_pause                                          # noqa: E402
+import baseline as baseline_block                              # noqa: E402
 import plan_tools as pt                                        # noqa: E402
 from plan_builder import _weekly_tss_cap                       # noqa: E402
 # IMPORTED, not restated: which of the hours ceiling / ramp-permitted maximum is the
@@ -591,8 +592,14 @@ def main():
     # --all means every athlete being COACHED. A tracking-only athlete has no plan to
     # audit, so auditing them can only produce findings about a plan that was
     # deliberately not built (lib/planning_pause.py). Naming one explicitly still works.
+    # A new athlete inside their baseline block (lib/baseline.py) has tests and easy
+    # days on the calendar, not a plan; every weekly invariant would "fail" on it and
+    # alert Jamie about a week that was never meant to be a training week.
+    _mon = date.today() - timedelta(days=date.today().weekday())
     slugs = ([s for s, c in athletes.items()
-              if c.get("active", True) and not planning_pause.is_paused(s, c)] if args.all
+              if c.get("active", True) and not planning_pause.is_paused(s, c)
+              and not any(baseline_block.blocks_week(s, _mon + timedelta(days=7 * k))
+                          for k in range(args.weeks))] if args.all
              else [args.athlete])
     baseline = _load_baseline()
     reports, any_hard = [], False

@@ -31,6 +31,7 @@ import agreed_week                    # noqa: E402
 import claude_call                    # noqa: E402
 import plan_lock                      # noqa: E402
 import planning_pause                 # noqa: E402
+import baseline                       # noqa: E402
 import weekly_availability            # noqa: E402
 import ops_log                        # noqa: E402
 import session_library as sl          # noqa: E402
@@ -986,6 +987,18 @@ def _plan(args):
         sys.exit(0)
     today = date.today()
     week_start = date.fromisoformat(args.week_start) if args.week_start else _next_monday(today)
+    # A new athlete's baseline block owns its weeks (lib/baseline.py, 27 Sep 2026): tests
+    # and easy days, already on the calendar. A plan built over them would delete the
+    # tests on push. Exit 0, nothing was due; unlike the pause gate it DOES beat, because
+    # the athlete is still coached and the ops digest expects a weekly plan from them.
+    # No baseline.json (every athlete onboarded before 27 Sep) = never blocks.
+    if baseline.blocks_week(args.athlete, week_start):
+        print(f"[stage1-plan] {args.athlete}: week of {week_start} is their baseline block; "
+              f"no plan built", file=sys.stderr)
+        _beat(True, "baseline block week, no plan due")
+        print(json.dumps({"athlete": args.athlete, "pushed": False,
+                          "skipped": "baseline_block"}))
+        sys.exit(0)
     # today=week_start, NOT the run date: the Sunday cron plans NEXT week, and
     # phase / week_in_phase / required-tss / deload detection must all be
     # evaluated for the week being planned. Planning with the run date briefed

@@ -99,12 +99,15 @@ BASIS_LABEL = {"power": "power", "pace": "pace", "hr": "heart rate",
                "gap": "grade-adjusted pace"}
 
 
-def zone_seconds(activity, basis):
+def zone_seconds(activity, basis, untrusted=None):
     """{zone_index: seconds} for one activity on a given basis, or {}.
 
     Zone indices are 1-based to match the Z1..Z7 the blueprint and the app both speak.
     {} means this activity carries nothing usable on this basis, which the caller
     counts as unclassified rather than silently treating as easy.
+
+    `untrusted` is an optional set of ICU activity ids whose HR must not be used
+    (hr_quality.untrusted_ids); None means no filtering.
     """
     sport = SPORT_DISPLAY.get(activity.get("type") or "")
     if not sport:
@@ -127,6 +130,11 @@ def zone_seconds(activity, basis):
         return out
 
     if basis == "hr":
+        # 27 Sep 2026: HR that lib/hr_quality.py judged bad/none (cadence lock, flatline,
+        # no HR) gives no HR zone seconds, exactly as if icu_hr_zone_times were absent.
+        # An activity not in the quality log is unaffected.
+        if untrusted and str(activity.get("id")) in untrusted:
+            return {}
         arr = activity.get("icu_hr_zone_times")
     elif sport == "Run" and activity.get("use_gap_zone_times") and \
             activity.get("gap_zone_times"):
@@ -182,13 +190,14 @@ def current_phase(blueprint, on):
     return None
 
 
-def build(activities, blueprint, today, week_start=None):
+def build(activities, blueprint, today, week_start=None, untrusted=None):
     """The published `zoneDistribution` block.
 
     activities   full intervals.icu activity objects (get_training_history output)
     blueprint    athletes/<slug>/reference/training-blueprint.json, parsed
     today        date
     week_start   Monday of the current week; derived when omitted
+    untrusted    ICU activity ids whose HR must not count (hr_quality); None = all
     """
     if week_start is None:
         week_start = today - timedelta(days=today.weekday())
@@ -215,7 +224,7 @@ def build(activities, blueprint, today, week_start=None):
                "moving": 0, "labels": set()}
         for a in acts:
             acc["moving"] += int(a.get("moving_time") or 0)
-            zs = zone_seconds(a, basis)
+            zs = zone_seconds(a, basis, untrusted)
             if not zs:
                 acc["unclassified"] += 1
                 continue
@@ -290,10 +299,20 @@ def build(activities, blueprint, today, week_start=None):
     }
 
 
+def _untrusted_hr_ids(slug):
+    """Activity ids whose HR lib/hr_quality.py judged bad/none, or None. Any failure to
+    load the log means no filtering: this must never cost the athlete the chart."""
+    try:
+        import hr_quality
+        return hr_quality.untrusted_ids(slug)
+    except Exception:
+        return None
+
+
 def build_for_slug(base, slug, activities, today):
     """Convenience wrapper: reads the athlete's blueprint, returns None if absent."""
     try:
         bp = json.loads((base / f"athletes/{slug}/reference/training-blueprint.json").read_text())
     except Exception:
         return None
-    return build(activities, bp, today)
+    return build(activities, bp, today, untrusted=_untrusted_hr_ids(slug))
