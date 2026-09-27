@@ -183,6 +183,15 @@ Each tool is a `.tool-card` link card with an icon, title, description, and arro
 
 All ClaudeCoach scheduled tasks (watchdog, activity-watcher, refresh-site-data, checkins) run via **crontab on the VM only**. The scripts live in `ClaudeCoach/scripts/`. Do NOT use `CronCreate` for any of these — it injects prompts into the user's interactive session and survives context compaction. If asked to schedule something, add it to the VM crontab instead.
 
+## ClaudeCoach ops alerts - developer inbox, never Jamie's chat
+
+Ops alerts ("did not deliver", missing heartbeats, plan-audit findings) are a log for
+development sessions, **not** athlete messages (Jamie, 27 Sep 2026). None of the
+deliverable checks Telegram him. At the start of any ClaudeCoach session, read the last
+few days of alerts on the VM and fix what is real before other work:
+`ssh -i ~/.ssh/id_rsa -o IdentitiesOnly=yes root@178.105.95.208 'tail -80 /root/Library/Logs/ClaudeCoach/ops-alerts.log'`
+Tell Jamie only what needs his decision, in athlete terms.
+
 ## Git Workflow
 
 - Push directly to `main` — GitHub Pages deploys automatically

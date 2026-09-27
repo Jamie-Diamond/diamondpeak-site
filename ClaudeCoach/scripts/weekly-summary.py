@@ -60,8 +60,10 @@ def _tg_send(chat_id: str, text: str):
                     _post({"chat_id": chat_id, "text": chunk})
                 else:
                     raise
+        return True
     except Exception as e:
         print(f"Telegram send failed: {e}", file=sys.stderr)
+        return False
 
 
 def _read_file(path: Path, default="(not found)") -> str:
@@ -842,8 +844,17 @@ Wrap your entire output in <telegram> and </telegram> tags. Output nothing outsi
     raw = result.stdout.strip()
     m = _re.search(r"<telegram>(.*?)</telegram>", raw, _re.DOTALL)
     output = m.group(1).strip() if m else ""
-    if output:
-        _tg_send(chat_id, output)
+    # The delivery heartbeat (27 Sep 2026). Until now the ONLY weekly-summary
+    # heartbeat was the training-balance note above, so every week the card went
+    # out WITHOUT a balance finding read to the ops digest as "did not deliver"
+    # (21, 22 and 26 Sep: false alarms sent to Jamie). Recorded only once the card
+    # is actually sent; a card that never rendered or never sent stays a real gap.
+    if output and _tg_send(chat_id, output):
+        try:
+            import ops_log as _ops_sent
+            _ops_sent.record_run("weekly-summary", athlete=slug, ok=True, detail="card sent")
+        except Exception as e:
+            print(f"[weekly-summary][{slug}] heartbeat not written: {e}", file=sys.stderr)
 
     # -- Acknowledgement state -------------------------------------------------
     # Written ONLY once the card actually went out. A card that never rendered

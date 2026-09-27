@@ -28,6 +28,23 @@ def digest():
     return mod
 
 
+# 27 Sep 2026: the athlete deliverables stopped routing to Telegram (Jamie - a
+# development log, not an athlete message; see coach_alert.DELIVERABLES). The tests
+# that prove the ROUTING MACHINERY still works if one is switched back on use this
+# fixture to turn the flags on for that test only; production routing is asserted
+# separately in TestCoachAlertRouting.
+_ATHLETE_DELIVERABLES = {"morning-checkin", "daily-prescription", "night-before-brief",
+                         "evening-checkin", "weekly-summary", "stage1-plan"}
+
+
+@pytest.fixture
+def telegram_routing_on(monkeypatch):
+    import coach_alert
+    for d in coach_alert.DELIVERABLES:
+        if d["script"] in _ATHLETE_DELIVERABLES:
+            monkeypatch.setitem(d, "telegram", True)
+
+
 @pytest.fixture
 def logs(monkeypatch, tmp_path):
     monkeypatch.setattr(ops_log, "ALERT_LOG", tmp_path / "ops-alerts.log")
@@ -167,7 +184,7 @@ class TestGapLines:
         assert not any("night-before" in l or "capture reminder" in l for l in gaps)
         assert tg == []
 
-    def test_missing_morning_card_flagged_and_telegrammed(self, digest):
+    def test_missing_morning_card_flagged_and_telegrammed(self, digest, telegram_routing_on):
         gaps, tg = self.call(digest, drop={("morning-checkin", "kathryn")})
         assert any("morning card" in l and "kathryn" in l for l in gaps)
         assert tg == ["morning card for kathryn"]
@@ -208,7 +225,7 @@ class TestGapLines:
         assert any("session sync" in l and "jamie" in l for l in gaps)
         assert tg == []
 
-    def test_recorded_failure_IS_a_gap_and_alerts(self, digest):
+    def test_recorded_failure_IS_a_gap_and_alerts(self, digest, telegram_routing_on):
         """DELIBERATE REVERSAL, 28 Jul 2026 — do not "fix" this back.
 
         This test used to be test_recorded_failure_is_not_also_a_gap and asserted
@@ -548,23 +565,25 @@ class TestCoachAlertRouting:
         assert coach_alert.send("git_sync_stuck", "text") == "refused"
         assert coach_alert.send(coach_alert.DELIVERABLE_MISSING, "text") == "dry-run"
 
-    def test_daily_and_weekly_deliverables_route_to_telegram(self):
-        # Changed 28 Jul 2026: weekly deliverables now Telegram too (owner
-        # approved), but only via ops-digest.py's separate weekly_alerts() path —
-        # gap_lines() itself still only surfaces DAILY items (asserted in
-        # TestGapLines.test_weekly_gap_is_log_only / test_weekly_plan_gap_is_log_only).
+    def test_no_deliverable_routes_to_telegram(self):
+        # 27 Sep 2026 (Jamie): "ClaudeCoach did not deliver" is a development log,
+        # not an athlete message. backup-config and sync-private left Telegram on
+        # 11 Sep; the athlete deliverables followed. Every one is still CHECKED and
+        # printed to the digest - only the route changed.
         import coach_alert
-        daily_tg = {d["script"] for d in coach_alert.DELIVERABLES
-                    if d["telegram"] and d["window"] == "daily"}
-        weekly_tg = {d["script"] for d in coach_alert.DELIVERABLES
-                     if d["telegram"] and d["window"] == "weekly"}
-        # backup-config and sync-private LEFT this set on 11 Sep 2026 (Jamie):
-        # both are infra plumbing, and an interruption he cannot act on is what
-        # makes the two alerts that matter easy to dismiss. They are still
-        # checked and still printed to the digest — see DELIVERABLES.
-        assert daily_tg == {"morning-checkin", "daily-prescription",
-                             "night-before-brief", "evening-checkin"}
-        assert weekly_tg == {"weekly-summary", "stage1-plan"}
+        assert {d["script"] for d in coach_alert.DELIVERABLES if d["telegram"]} == set()
+        assert _ATHLETE_DELIVERABLES <= {d["script"] for d in coach_alert.DELIVERABLES}
+
+    def test_a_missed_deliverable_is_in_the_digest_but_not_telegrammed(self, digest, logs,
+                                                                       monkeypatch):
+        import coach_alert
+        monkeypatch.setenv("CC_ALERT_DRY_RUN", "1")
+        monkeypatch.setattr(coach_alert, "STATE", logs / "coach-alert-state.json")
+        now = NOW
+        gaps, tg = digest.gap_lines([], [], ATHLETES, now=now)
+        assert any(l.startswith("⚠") for l in gaps)       # still judged, still reported
+        assert tg == []                                    # never interrupts Jamie
+        assert digest.weekly_alerts([], ATHLETES, now=now) == []
 
     def test_a_test_can_never_execute_the_real_notify(self, logs, monkeypatch):
         """The regression lock for 28 Jul 2026, when the test below this class's
@@ -734,6 +753,7 @@ class TestSendFailureDoesNotEatTheCooldown:
         assert ca.send(ca.CLAUDE_AUTH_FAILED, "x", key="k") == "cooldown"
 
 
+@pytest.mark.usefixtures("telegram_routing_on")
 class TestWeeklyAlerts:
     """WEEKLY deliverables Telegram once per occurrence (28 Jul 2026 change), not
     once per evening the 7-day window still shows them missing, and once per
@@ -1115,7 +1135,8 @@ class TestDueWindows:
             [_e("capture-reminder", "jamie", ok=False, detail="x")]) == []
         # the capture ask is now covered by a deliverable on the same schedule
         ec = next(d for d in ca.DELIVERABLES if d["script"] == "evening-checkin")
-        assert ec["cron"] == "0 21 * * *" and ec["telegram"] is True
+        # (telegram False since 27 Sep 2026 - routing only; the check still runs)
+        assert ec["cron"] == "0 21 * * *"
         gaps, tg = digest.gap_lines(self.today(), self.today() + self.week(),
                                     ATHLETES, now=NOW)
         assert not any("capture reminder" in l for l in gaps)
@@ -1476,7 +1497,7 @@ class TestCronDerivedRegistry:
 
     # --- FAIL SAFE ---------------------------------------------------------
     def test_an_unreadable_crontab_keeps_the_alarm_working_and_says_so(
-            self, digest, monkeypatch):
+            self, digest, monkeypatch, telegram_routing_on):
         """Two failure modes to avoid, in opposite directions: silently disabling the
         alarm, and starting to alert on everything. Neither happens — the check runs
         off the static registry exactly as before, and the fact that it could not be

@@ -9,6 +9,9 @@ there is no second route to read.
 Jamie's decision, 28 Jul 2026: exactly TWO conditions may interrupt him.
 
   1. DELIVERABLE_MISSING — a named deliverable (daily OR weekly) did not happen.
+     27 Sep 2026: every DELIVERABLES entry is now telegram=False (Jamie: a
+     development log, not an athlete message), so in practice this reason is
+     log-only. The machinery stays so re-routing one deliverable is one flag.
   2. CLAUDE_AUTH_FAILED  — the Claude CLI could not authenticate in production.
 
   3. PLAN_HARD_FAIL — a HARD planning-invariant breach on an athlete's live
@@ -157,21 +160,28 @@ REASONS = {
 #   The alternative fix — seeding heartbeats into run-status.jsonl — was rejected:
 #   that file is the audit trail, and writing runs into it that never happened
 #   corrupts the only record of what the system actually did.
+# 27 Sep 2026 (Jamie): NONE of these reach Telegram any more. "That is a log for us
+# when we're here developing, not for me as an athlete" - a "ClaudeCoach did not
+# deliver" message landed in his coach chat on 21, 22 and 26 Sep, and he has nothing
+# to do with it there. The checks all stay: every gap is still judged, still printed
+# to the ops digest and ops-alerts.log, which a development session reads first
+# (CLAUDE.md, ClaudeCoach ops section). Same move as backup-config / sync-private on
+# 11 Sep, now for the athlete deliverables too. Re-routing one is its `telegram` flag.
 DELIVERABLES = [
     {"script": "morning-checkin",    "label": "morning card",       "window": "daily",
-     "per_athlete": True,  "telegram": True,  "detail": "card sent",
+     "per_athlete": True,  "telegram": False,  "detail": "card sent",
      "cron": "*/30 6-9 * * *",   "cron_cmd": "morning-checkin.py",
      "since": "2026-06-10T00:00:00"},
     {"script": "daily-prescription", "label": "daily prescription", "window": "daily",
-     "per_athlete": True,  "telegram": True,
+     "per_athlete": True,  "telegram": False,
      "cron": "0 5 * * *",        "cron_cmd": "daily-prescription.py",
      "since": "2026-06-10T00:00:00"},
     {"script": "night-before-brief", "label": "night-before brief", "window": "daily",
-     "per_athlete": True,  "telegram": True,
+     "per_athlete": True,  "telegram": False,
      "cron": "30 20 * * *",      "cron_cmd": "night-before-brief.py",
      "since": "2026-07-28T11:44:37"},   # ff6fba3
     {"script": "evening-checkin",    "label": "evening check-in",   "window": "daily",
-     "per_athlete": True,  "telegram": True,
+     "per_athlete": True,  "telegram": False,
      "cron": "0 21 * * *",       "cron_cmd": "evening-checkin.py",
      "since": "2026-06-10T00:00:00"},
     # Internal plumbing and nudges — a gap is worth a digest line, not a message.
@@ -322,7 +332,7 @@ DELIVERABLES = [
     # via this per-day cooldown — ops-digest.py's weekly_alerts() sends these on
     # its own occurrence-based key so one miss is one message, not one per evening.
     {"script": "weekly-summary",     "label": "weekly summary",     "window": "weekly",
-     "per_athlete": True,  "telegram": True,
+     "per_athlete": True,  "telegram": False,
      "cron": "0 20 * * 0",       "cron_cmd": "weekly-summary.sh",
      "since": "2026-07-12T00:00:00"},
     # per_athlete stays True even though one crashed Sunday build is one root
@@ -331,7 +341,7 @@ DELIVERABLES = [
     # messages. weekly-plan.sh invokes stage1-plan.py once per athlete, so a
     # single-athlete failure is a real shape that per_athlete=False would hide.
     {"script": "stage1-plan",        "label": "weekly plan",        "window": "weekly",
-     "per_athlete": True,  "telegram": True,
+     "per_athlete": True,  "telegram": False,
      "cron": "0 18 * * 0",       "cron_cmd": "weekly-plan.sh",
      "since": "2026-07-28T11:44:37"},   # ff6fba3
     # 27 Sep 2026: the weekly CLI update that keeps the model aliases on the newest
