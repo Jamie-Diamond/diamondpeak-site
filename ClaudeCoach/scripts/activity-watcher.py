@@ -565,8 +565,9 @@ def _hr_quality_pass(slug: str, chat_id: str) -> str:
             + "\n".join(bad) + "\n"
             "For THESE activities the heart rate is untrusted: do NOT quote average/max HR, HR "
             "zones, time under an HR cap or decoupling, and do not judge the effort by HR. "
-            "Describe the session by pace/power and RPE, and say once, plainly, that the "
-            "heart rate looked unreliable on this one. Do not output a DECOUPLING line for them.")
+            "Describe the session by pace/power and RPE. Where HR was recorded but is "
+            "unreliable, say so once, plainly; where none was recorded, just leave HR out. "
+            "Do not output a DECOUPLING line for them.")
 
 
 def _baseline_tick(slug: str, chat_id: str) -> None:
