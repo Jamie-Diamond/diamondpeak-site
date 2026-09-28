@@ -75,21 +75,22 @@ def cost(model: str, u: dict) -> float:
             + (u.get("output_tokens") or 0) * p_out) / 1e6
 
 
-JOBS = [  # (label, regex on the first prompt) - first match wins
+JOBS = [  # (label, regex on the first prompt) - first match wins. Checked against
+          # the real prompts of 28 Sep 2026, the first day every job was logged.
     ("chat",            r"^You are ClaudeCoach, "),
+    ("session sync",    r"^Session sync|ClaudeCoach session sync"),
     ("voice rewrite",   r"^Rewrite the following coaching reply"),
     ("strava write-up", r"^Write a Strava activity description"),
     ("evening check-in", r"^Evening training log check"),
     ("activity debrief", r"^Check for new activities for"),
-    ("morning card",    r"morning (card|check-?in)"),
-    ("daily prescription", r"prescri"),
+    ("morning card",    r"morning briefing|morning (card|check-?in)"),
+    ("daily prescription", r"daily session prescription"),
+    ("watchdog",        r"daily watchdog"),
+    ("night-before brief", r"night-before"),
+    ("weekly summary",  r"weekly summary"),
     ("weekly plan",     r"Stage.?1|propos\w+ (the|a|next) week|weekly plan"),
-    ("weekly summary",  r"weekly summary|Weekly summary"),
-    ("night-before brief", r"night.before|tomorrow's session"),
+    ("bug fixer",       r"bug-triage|bug.?fix"),
     ("nutrition",       r"nutrition|fuelling"),
-    ("session sync",    r"session.?sync|persistent-rules"),
-    ("watchdog",        r"watchdog|trigger"),
-    ("bug fixer",       r"bug|feedback-log"),
     ("smoke test",      r"^Say OK"),
 ]
 
@@ -102,6 +103,18 @@ def classify(prompt: str) -> str:
 
 
 def athlete_of(prompt: str, athletes: dict) -> str:
+    # A chat prompt names its athlete in its first words; trust that over anything
+    # later in the prompt (a chat can quote another athlete's file as an example).
+    m = re.match(r"You are ClaudeCoach, (\w+)", prompt)
+    if m:
+        for slug, a in athletes.items():
+            if m.group(1).lower() in (slug, (a.get("name") or "").split()[0].lower()):
+                return slug
+    # Then the athlete's own file paths anywhere in the prompt (session sync names
+    # the athlete only in paths, deep in a long prompt).
+    paths = {slug: len(re.findall(r"athletes/%s/" % re.escape(slug), prompt)) for slug in athletes}
+    if any(paths.values()):
+        return max(paths.items(), key=lambda kv: kv[1])[0]
     head = prompt[:4000]
     scores = {}
     for slug, a in athletes.items():
