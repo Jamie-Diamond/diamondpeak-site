@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
-"""Offline tests for session-sync's nothing-new gate (28 Sep 2026).
+"""Offline tests for session sync: Python every slot, Claude once a night (28 Sep 2026).
 Run: python3 ClaudeCoach/scripts/test_session_sync_gate.py
 
-The gate exists to stop the model re-running 8 times a day on unchanged input ($270 of
-a ~$830/month API-priced bill). It fails in two directions and both are guarded:
-  - it skips a run that had something new (a rule the athlete stated goes uncaptured)
-  - it runs when nothing changed (the saving silently disappears)
+Jamie's call: session sync keeps its data work in Python every two hours and runs Claude
+only at the last slot of the day, only when the athlete wrote something new. Guarded in
+both directions:
+  - the saving: no model run in the day slots, none at night without new athlete chat,
+    none for coach-only messages
+  - the safety net: a night with new athlete chat does run it, a failed run is retried
+    the next night, and the Python pass really does prune and refresh
 No network, no model, no real athlete file.
 """
 import importlib.util
 import json
 import sys
 import tempfile
+from datetime import date
 from pathlib import Path
 
 _here = Path(__file__).resolve().parent
@@ -38,7 +42,15 @@ ops_log.RUN_STATUS = tmp / "run-status.jsonl"
 adir = tmp / "athletes/sam"
 (adir / "telegram").mkdir(parents=True)
 (adir / "persistent-rules.md").write_text("- [perm] Long ride on Saturday\n")
-(adir / "current-state.md").write_text("# Sam\n")
+(adir / "current-state.md").write_text(
+    "# Sam\n\n## Last updated: 2026-09-28\n\n## Recent context (auto-summary)\n\n- raced Sunday\n\n"
+    "## Travel & training blocks\n\n| Dates | Location |\n|---|---|\n"
+    "| 2026-08-01 to 2026-08-10 | Alps |\n| 2026-09-25 to 2026-10-05 | Girona |\n| summer | TBC |\n")
+(adir / "session-log.json").write_text(json.dumps([
+    {"date": "2026-09-27", "sport": "Ride", "name": "Long ride", "duration_min": 180, "tss": 190, "rpe": 6},
+    {"date": "2026-09-26", "sport": "Run", "name": "Easy run", "duration_min": 40, "tss": 35},
+]))
+(adir / "current-state.json").write_text(json.dumps({"weight_readings": [{"date": "2026-09-28", "kg": 70.2}]}))
 hist = adir / "telegram/history.json"
 
 CALLS = []
@@ -51,62 +63,58 @@ class _R:
 
 
 ss.claude_call.run_claude = lambda *a, **k: CALLS.append(1) or _R(RC[0])
-
-
-class _D:  # a date whose isoformat we control
-    today_value = "2026-09-28"
-
-    @classmethod
-    def today(cls):
-        return type("X", (), {"isoformat": lambda self: cls.today_value})()
-
-
-ss.date = _D
+ss.date = type("D", (), {"today": staticmethod(lambda: date(2026, 9, 28)),
+                         "fromisoformat": staticmethod(date.fromisoformat)})
 
 
 def write(history):
     hist.write_text(json.dumps(history))
 
 
-def run():
+def run(night):
     n = len(CALLS)
-    ss.run_athlete("sam", {"chat_id": ""})
+    ss.run_athlete("sam", {"chat_id": ""}, claude_pass=night)
     return len(CALLS) - n
 
 
 write([{"user": "no bike on Friday please", "assistant": "Logged."}])
-check("first run of the day runs the model", run() == 1)
-check("same input again: skipped", run() == 0)
+check("a day slot never runs the model, even with new chat", run(False) == 0)
+md = (adir / "current-state.md").read_text()
+check("the day slot writes the Latest data section", "## Latest data (auto)" in md, md[:300])
+check("  ...above the auto-summary", md.index("## Latest data (auto)") < md.index("## Recent context"))
+check("  ...with the last sessions, RPE and a missing RPE called out",
+      "Load 190" in md and "RPE 6" in md and "RPE not given" in md, md[:600])
+check("  ...and the latest weight", "70.2 kg" in md)
+check("a travel row that ended over a week ago is pruned", "Alps" not in md)
+check("a current travel row stays", "Girona" in md)
+check("a row with no parseable date stays", "summer" in md)
+run(False)
+check("a second day slot rewrites the data section in place, not twice",
+      (adir / "current-state.md").read_text().count("## Latest data (auto)") == 1)
+
+check("the night slot with new athlete chat runs the model", run(True) == 1)
+check("the same night again: skipped", run(True) == 0)
 
 h = json.loads(hist.read_text())
 h.append({"user": "", "assistant": "*Morning card* Easy 45 min run today."})
 write(h)
-check("a coach-only message (morning card) does not re-run it", run() == 0)
+check("a coach-only message (morning card) does not re-arm it", run(True) == 0)
 
 h.append({"user": "I've moved my long run to Sunday", "assistant": "Noted."})
 write(h)
-check("a new athlete message runs it", run() == 1)
-check("  ...and then it is quiet again", run() == 0)
-
-(adir / "session-log.json").write_text('[{"activity_id": "i1", "rpe": 6}]')
-check("a new logged session runs it (the rolling summary covers sessions)", run() == 1)
-
-_D.today_value = "2026-09-29"
-check("a new day always runs it once (date-based pruning)", run() == 1)
-check("  ...and only once", run() == 0)
-
-h.append({"user": "swap Tuesday swim for a rest day", "assistant": "Done."})
-write(h)
 RC[0] = 1
-check("a failed model run...", run() == 1)
+check("new athlete chat at night runs it...", run(True) == 1)
 RC[0] = 0
-check("  ...is retried at the next slot, not treated as done", run() == 1)
-check("  ...and then quiet", run() == 0)
+check("  ...a failed run is retried the next night", run(True) == 1)
+check("  ...and then quiet", run(True) == 0)
 
 beats = [json.loads(l) for l in ops_log.RUN_STATUS.read_text().splitlines()]
-check("every pass still records its heartbeat (skips included)",
-      len(beats) == 11 and all(b["ok"] for b in beats), len(beats))
-check("a skip says so in the heartbeat", any("model skipped" in b["detail"] for b in beats))
+check("every pass records a heartbeat", len(beats) == 8 and all(b["ok"] for b in beats), len(beats))
+check("a python-only pass says so", any("model not run" in b["detail"] for b in beats))
+
+prompt = ss._build_prompt("sam", "Sam", [], "2026-09-28", 1, [], {})
+check("the model is told not to touch the Latest data section", "never edit it" in prompt)
+check("the model is no longer asked to prune (code does it)", "PRUNE" not in prompt)
 
 print()
 print("ALL PASS" if not FAILS else f"{len(FAILS)} FAILED: {FAILS}")

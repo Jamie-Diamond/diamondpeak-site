@@ -260,7 +260,9 @@ _FEEDBACK_LOG_RULE = (
     "actually write it to the correct file with the Write or Edit tool BEFORE confirming, and "
     "never say it is saved unless that write completed in this reply. Then confirm in one short "
     "line naming what you saved (e.g. 'Logged: no cycling Thu/Fri added to your rules.'). Do not "
-    "reply with the bare word 'Logged.' on its own. If the message reports a genuine fault in the "
+    "reply with the bare word 'Logged.' on its own. If the athlete asks you to save, remember "
+    "or note something, save it in THIS reply: nothing else writes rules before the nightly "
+    "sync. If the message reports a genuine fault in the "
     "coaching system, record it as a bug in feedback-log.json."
 )
 

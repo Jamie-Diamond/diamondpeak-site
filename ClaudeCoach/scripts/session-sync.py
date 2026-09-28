@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
-Session sync — runs hourly (07:00-22:00) via VM crontab.
+Session sync — runs every 2 hours (07:40-21:40) via VM crontab.
 
-Reads the last N message pairs from history.json, extracts any new coaching rules
-that weren't written during the session, prunes expired/stale entries, and alerts
-Jamie if ClaudeCoach made promises it hasn't confirmed completing.
+Every slot, in Python: prunes expired rules and stale travel rows, keeps a small
+"Latest data" block current, and runs the rule-pile tiers B and C below. At the last
+slot of the day, and only if the athlete wrote something new, Claude reads the chat
+for rules the live chat did not save and rewrites the rolling context summary
+(see "Python every slot, Claude once a night" below, 28 Sep 2026).
 
 Rule-pile self-maintenance (11 Jul 2026). The sync used to only ever ADD [perm] rules and
 never remove them, so the standing-rule pile grew without bound — the root cause of the coach
@@ -287,17 +289,7 @@ correctly, showing units, and preview-before-write. Also:
      - OVER CEILING: the pile is at/over {CEILING} (see the note above). Do not APPEND; folding
        (1b) is still allowed.
 
-2. PRUNE expired entries from {rules_file}.
-   Remove any line where [expires:YYYY-MM-DD] date is strictly before today ({today}).
-   Use the Edit tool to remove those lines only. Leave all [perm] lines untouched.
-
-3. PRUNE stale entries from {state_file}:
-   - Travel/training block table rows where the block end date + 7 days < {today} → remove the row
-   - Open actions where status = done AND the completion date > 7 days ago → remove the entry
-   Use the Edit tool for surgical removals — never rewrite whole sections.
-   If nothing qualifies for pruning, skip this task entirely.
-
-4. MAINTAIN the rolling context summary in {state_file} so the coach keeps context
+2. MAINTAIN the rolling context summary in {state_file} so the coach keeps context
    across long conversations. Keep a section headed EXACTLY "## Recent context (auto-summary)".
    If it does not exist, create it once (insert near the top, just after the title /
    "Last updated" line). Each run, REPLACE only THIS section's body (leave every other
@@ -309,53 +301,50 @@ correctly, showing units, and preview-before-write. Also:
    - any open commitments or things {first_name} recently asked for
    - notable preferences or changes from the recent conversation NOT already a [perm] rule
    Keep it under ~15 bullets; drop anything older than ~10 days unless still relevant.
+   The "## Latest data (auto)" section just above it (last sessions, weight, due actions)
+   is rewritten by code every two hours: never edit it, and do not repeat its lines.
+   (Expired rules and stale travel rows are also removed by code; do not prune them.)
    Use the Edit tool to replace only this section's contents (match from the
    "## Recent context (auto-summary)" header to the next "## " header).
 
 OUTPUT FORMAT:
-- Use tools to write/edit files for tasks 1-4.
+- Use tools to write/edit files for tasks 1-2.
 - No text output under any circumstances. Absolute silence.
 """
 
 
-# ── Nothing-new gate (28 Sep 2026) ───────────────────────────────────────────
-# The sync ran its model 8 times a day per athlete whatever had happened, at ~$0.40-0.70
-# a run on API pricing: $270 of a ~$830/month bill, the single biggest line, and the log
-# shows it mostly concluding "no edits made". The model's inputs are exactly the prompt
-# (chat history + today's date) plus the files it reads and edits. If none of those has
-# changed since the last COMPLETED run, the model would be asked the identical question
-# again, so it is skipped. Only exchanges where the ATHLETE wrote something count as new
-# chat: every morning card, debrief and brief is appended to history.json as a coach-only
-# entry, and those carry no rule or preference to capture - counting them would re-arm
-# the model several times a day for nothing. The date is in the prompt, so every athlete still gets at least
-# one full run a day (the date-based pruning), and any new chat, session or rule change
-# triggers a run at the next slot exactly as before. The deterministic tiers B and C run
-# every time regardless: they are free and their debounce clock must keep ticking.
-_SYNC_INPUT_FILES = ("current-state.md", "current-state.json", "persistent-rules.md",
-                     "session-log.json")
+# ── Python every slot, Claude once a night (28 Sep 2026, Jamie) ─────────────────
+# The sync ran Claude 8 times a day per athlete (~$80/month at API prices even after a
+# nothing-new gate). Only two of its jobs need a language model: spotting rules the
+# athlete stated that the chat did not save, and the conversation-derived part of the
+# rolling summary (decisions, open questions, promises). Measured over the last two
+# weeks it added a rule in 6 of 240 runs; the chat itself saves a rule the moment the
+# athlete states one (engine._FEEDBACK_LOG_RULE + rules_capture guards), so "save it
+# now" never waited on this job. So:
+#   - EVERY SLOT, Python only: expired rules and duplicates (tier B), the reviewed
+#     consolidation trigger (tier C), stale travel-block rows, and a small
+#     "## Latest data (auto)" section (last sessions, weight, due actions) that keeps
+#     the summary's data current between the nightly passes.
+#   - THE LAST SLOT OF THE DAY (21:40, CLAUDE_PASS_HOUR), Claude, and only if the
+#     athlete wrote something since its last pass: rules the chat missed, and the
+#     "## Recent context (auto-summary)" narrative.
+# Coach-only history entries (morning cards, debriefs, briefs) are not "new chat": they
+# carry nothing the athlete said.
+CLAUDE_PASS_HOUR = 21
 _SYNC_STATE = ".session-sync-state.json"
+LATEST_HEADING = "## Latest data (auto)"
+SUMMARY_HEADING = "## Recent context (auto-summary)"
 
 
-def _gate_key(history: list, today: str) -> str:
-    """What the gate treats as the conversation: today's date + athlete-written pairs."""
+def _chat_fingerprint(history: list) -> str:
     said = [(p.get("user", ""), p.get("assistant", "")) for p in history
             if (p.get("user") or "").strip()]
-    return today + "\n" + json.dumps(said, ensure_ascii=False)
-
-
-def _input_fingerprint(key: str, adir: Path) -> str:
-    h = hashlib.sha256(key.encode())
-    for name in _SYNC_INPUT_FILES:
-        f = adir / name
-        h.update(b"\0" + name.encode() + b"\0")
-        if f.exists():
-            h.update(f.read_bytes())
-    return h.hexdigest()
+    return hashlib.sha256(json.dumps(said, ensure_ascii=False).encode()).hexdigest()
 
 
 def _last_fingerprint(adir: Path) -> str | None:
     try:
-        return json.loads((adir / _SYNC_STATE).read_text()).get("fingerprint")
+        return json.loads((adir / _SYNC_STATE).read_text()).get("chat_fingerprint")
     except Exception:
         return None
 
@@ -363,12 +352,86 @@ def _last_fingerprint(adir: Path) -> str | None:
 def _save_fingerprint(adir: Path, fp: str) -> None:
     try:
         (adir / _SYNC_STATE).write_text(json.dumps(
-            {"fingerprint": fp, "at": datetime.now().isoformat(timespec="seconds")}))
+            {"chat_fingerprint": fp, "at": datetime.now().isoformat(timespec="seconds")}))
     except Exception:
-        pass    # worst case the next slot runs the model, as it did before this gate
+        pass    # worst case tomorrow night's pass re-reads the same chat
 
 
-def run_athlete(slug: str, athlete_cfg: dict) -> None:
+_ISO = re.compile(r"\b(20\d{2}-\d{2}-\d{2})\b")
+
+
+def _prune_travel_blocks(md: str, today: date) -> tuple[str, list]:
+    """Drop travel/training-block table rows whose LAST date is more than 7 days ago.
+    Rows without a parseable ISO date are left alone: a wrong deletion is worse than a
+    stale row."""
+    out, removed, in_travel = [], [], False
+    for ln in md.split("\n"):
+        if ln.startswith("## "):
+            in_travel = "travel" in ln.lower()
+        if in_travel and ln.startswith("|") and not set(ln) <= set("|-: "):
+            first = ln.split("|")[1] if ln.count("|") >= 2 else ""
+            dates = _ISO.findall(first)
+            if dates and (today - date.fromisoformat(max(dates))).days > 7:
+                removed.append(ln)
+                continue
+        out.append(ln)
+    return "\n".join(out), removed
+
+
+def _latest_data(adir: Path, slug: str, today: date) -> str:
+    """Last sessions, latest weight and due actions, straight from the athlete's files."""
+    lines = [LATEST_HEADING,
+             f"_Updated {datetime.now():%Y-%m-%d %H:%M} from the session log and state files. "
+             f"The coach's own notes are in the auto-summary below._", ""]
+    try:
+        log = json.loads((adir / "session-log.json").read_text())
+    except Exception:
+        log = []
+    recent = sorted((e for e in log if isinstance(e, dict) and e.get("date")),
+                    key=lambda e: e["date"], reverse=True)[:5]
+    for e in recent:
+        d = date.fromisoformat(e["date"][:10])
+        bits = [f"{d:%a %d %b}", e.get("sport") or "", f"\"{(e.get('name') or '').strip()}\""]
+        if e.get("duration_min"):
+            bits.append(f"{round(float(e['duration_min']))} min")
+        if e.get("tss"):
+            bits.append(f"Load {round(float(e['tss']))}")
+        bits.append(f"RPE {e['rpe']}" if e.get("rpe") is not None else "RPE not given")
+        lines.append("- " + " · ".join(b for b in bits if b))
+    try:
+        cs = json.loads((adir / "current-state.json").read_text())
+        w = [r for r in cs.get("weight_readings") or [] if r.get("kg")]
+        if w:
+            lines.append(f"- Weight: {w[-1]['kg']} kg ({w[-1].get('date')})")
+    except Exception:
+        pass
+    try:
+        import open_actions as _oa
+        due = [i for i in _oa.open_items(_oa.evaluate(slug, today))
+               if i["bucket"] in ("overdue", "due_soon")][:3]
+        for i in due:
+            lines.append("- Action: " + _oa.render_line(i).replace("*", ""))
+    except Exception:
+        pass
+    return "\n".join(lines) + "\n"
+
+
+def _upsert_section(md: str, heading: str, body: str) -> str:
+    """Replace the section starting at `heading` (up to the next "## "), or insert it just
+    before the auto-summary, or after the first heading block if there is none."""
+    lines = md.split("\n")
+    if heading in lines:
+        i = lines.index(heading)
+        j = next((k for k in range(i + 1, len(lines)) if lines[k].startswith("## ")), len(lines))
+        return "\n".join(lines[:i] + body.rstrip("\n").split("\n") + [""] + lines[j:])
+    if SUMMARY_HEADING in lines:
+        i = lines.index(SUMMARY_HEADING)
+    else:
+        i = next((k for k in range(1, len(lines)) if lines[k].startswith("## ")), len(lines))
+    return "\n".join(lines[:i] + body.rstrip("\n").split("\n") + [""] + lines[i:])
+
+
+def run_athlete(slug: str, athlete_cfg: dict, claude_pass: bool = False) -> None:
     adir     = BASE / f"athletes/{slug}"
     chat_id  = athlete_cfg.get("chat_id", "")
     log_file = LOG_DIR / "session-sync.log"
@@ -421,13 +484,28 @@ def run_athlete(slug: str, athlete_cfg: dict) -> None:
     prompt = _build_prompt(slug, first_name, history, today,
                            rule_count, prefs, engine_rules)
 
-    gate_key = _gate_key(history, today)
-    ran_model = _input_fingerprint(gate_key, adir) != _last_fingerprint(adir)
+    # PYTHON PASS (every slot): stale travel rows, and the always-current data block.
+    state_md_path = adir / "current-state.md"
+    if state_md_path.exists():
+        md_before = state_md_path.read_text()
+        md_after, pruned = _prune_travel_blocks(md_before, date.fromisoformat(today))
+        md_after = _upsert_section(md_after, LATEST_HEADING,
+                                   _latest_data(adir, slug, date.fromisoformat(today)))
+        if md_after != md_before:
+            state_md_path.write_text(md_after)
+        for row in pruned:
+            _log(f"pruned stale travel row: {row[:100]}")
+
+    # CLAUDE PASS (last slot of the day, only on new athlete chat).
+    chat_fp = _chat_fingerprint(history)
+    ran_model = claude_pass and chat_fp != _last_fingerprint(adir)
     model_ok = True
-    if not ran_model:
-        _log(f"nothing new since the last sync, model not run (rules={rule_count}/{CEILING})")
+    if not claude_pass:
+        _log(f"python pass (rules={rule_count}/{CEILING}); model runs at the {CLAUDE_PASS_HOUR}:40 slot")
+    elif not ran_model:
+        _log(f"nightly pass: no new athlete chat since the last one, model not run")
     else:
-        _log(f"running sync (rules={rule_count}/{CEILING})")
+        _log(f"nightly pass: running sync (rules={rule_count}/{CEILING})")
         with open(log_file, "a") as lf:
             # Sonnet -> Haiku fallback (frequent, low-stakes): keeps sync alive when
             # the Sonnet weekly bucket is maxed, without draining the all-models pool.
@@ -503,17 +581,20 @@ def run_athlete(slug: str, athlete_cfg: dict) -> None:
     # Completed the whole pass for this athlete. The sync is silent by design (the
     # prompt forbids output), so there is no "sent" to record — the heartbeat IS the
     # only evidence it ran, which is why its absence had to become detectable.
-    # Fingerprint AFTER the whole pass, so the sync's own edits do not read as "new"
-    # next slot. Only on a completed model run (or a skip): a failed or timed-out run
-    # leaves the old fingerprint, so the next slot retries.
-    if model_ok:
-        _save_fingerprint(adir, _input_fingerprint(gate_key, adir))
+    if ran_model and model_ok:
+        _save_fingerprint(adir, chat_fp)    # a failed run leaves it, so tomorrow retries
     ops_log.record_run("session-sync", athlete=slug, ok=True,
                        detail=(f"synced (rules {rule_count}->{final_count})" if ran_model
-                               else f"nothing new, model skipped (rules {final_count})"))
+                               else f"python pass, model not run (rules {final_count})"))
 
 
 def main() -> None:
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--claude-now", action="store_true",
+                    help="run the nightly Claude pass now, whatever the hour")
+    args = ap.parse_args()
+    claude_pass = args.claude_now or datetime.now().hour >= CLAUDE_PASS_HOUR
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{ts}] session-sync starting", file=sys.stderr)
     _LAUNCH_STATE["fired"] = False   # at most one reviewed consolidation launched per run
@@ -533,7 +614,7 @@ def main() -> None:
             print(planning_pause.skip_line(slug, "session-sync", cfg), file=sys.stderr)
             continue
         try:
-            run_athlete(slug, cfg)
+            run_athlete(slug, cfg, claude_pass=claude_pass)
         except Exception as exc:
             print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] session-sync error: {exc}",
                   file=sys.stderr)
