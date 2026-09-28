@@ -1,4 +1,4 @@
-"""scripts/claude-cli-update.py and lib/model_aliases.py - the weekly job that keeps
+"""scripts/claude-cli-update.py and lib/model_aliases.py - the daily job that keeps
 the model aliases on the newest models, and the footer label that says which one.
 
 Nothing here spawns the CLI or npm: every external step is a monkeypatched seam.

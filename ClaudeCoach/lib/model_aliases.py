@@ -3,10 +3,10 @@
 Every ClaudeCoach call passes an ALIAS to `claude --model`, never a version id, so
 the bot is on the newest model the installed CLI knows. Jamie's call, 27 Sep 2026:
 "how do we make sure we always get new models?" - the answer is aliases plus
-scripts/claude-cli-update.py, which updates the CLI weekly behind a smoke test.
+scripts/claude-cli-update.py, which updates the CLI daily behind a smoke test.
 
 The catch with an alias is that nothing in the code says which model answered. The
-weekly job resolves each alias by actually calling it and writes the result to
+daily job resolves each alias by actually calling it and writes the result to
 RESOLVED_FILE; this module reads it back for the two places that need a real id:
 the reply footer label (O5.5, not just O) and raw-API calls such as count_tokens,
 which do not accept CLI aliases.
@@ -66,7 +66,7 @@ def pretty(model_id: str) -> tuple[str, str]:
 def label(model: str) -> str:
     """Footer label: "O5.5", "S5", "H4.5", "F5.1".
 
-    An alias that has not been resolved yet (fresh box, before the first weekly
+    An alias that has not been resolved yet (fresh box, before the first daily
     run) falls back to its initial rather than guessing a version."""
     family, version = pretty(resolved(model) or "")
     if family:

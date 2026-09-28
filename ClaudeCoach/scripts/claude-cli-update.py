@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Weekly: update the Claude CLI behind a smoke test, and tell Jamie when a model changes.
+"""Daily: update the Claude CLI behind a smoke test, and tell Jamie when a model changes.
 
 Why (27 Sep 2026, Jamie: "how do we make sure we always get new models?"): every
 call names its model by CLI alias ("opus", "sonnet", "haiku", "fable"), so it runs
@@ -16,7 +16,11 @@ it rejected Opus 5.5 and Fable 5.1 outright. This job keeps the CLI current.
      to model_aliases.RESOLVED_FILE. Any failure -> the live CLI is untouched.
   4. An alias now answering as a different model -> Telegram (MODEL_CHANGED).
      A failed update is a digest line only: the bot keeps working on the CLI it
-     already has, so there is nothing for Jamie to do at 03:15 on a Monday.
+     already has, so there is nothing for Jamie to do at 03:15.
+
+Daily, not weekly, since 28 Sep 2026: Sonnet 5.5 shipped hours after that
+Monday's 03:15 run and would have waited a week. A no-change day is ~20 seconds
+and five one-word replies.
 
 No bot restart is needed: engine spawns the CLI per reply, so the next reply runs
 the new binary, and the footer re-reads the alias map when the file changes.
@@ -215,7 +219,7 @@ def main() -> int:
 
     if problems:
         head = (f"CLI {target} failed its smoke test - staying on {live}" if target
-                else f"CLI {live} failed its weekly smoke test")
+                else f"CLI {live} failed its daily smoke test")
         ops_log.alert(SCRIPT, head + ": " + "; ".join(problems))
         return 1
 

@@ -1195,7 +1195,7 @@ _CRON_LINES = [
     f"0 0 * * * /root/.claude/cc-run python3 {CC}/scripts/bug-fixer.py --fix >> /root/Library/Logs/ClaudeCoach/bug-fixer.log 2>&1",
     f"20 23 * * * /root/.claude/cc-run bash {CC}/scripts/sync-private-repo.sh >> ~/Library/Logs/ClaudeCoach/sync-private.log 2>&1",
     f"25 6 * * * /root/.claude/cc-run python3 {CC}/lib/plan_audit.py --all >> /root/Library/Logs/ClaudeCoach/plan-audit.log 2>&1",
-    f"15 3 * * 1 /root/.claude/cc-run python3 {CC}/scripts/claude-cli-update.py >> /root/Library/Logs/ClaudeCoach/claude-cli-update.log 2>&1",
+    f"15 3 * * * /root/.claude/cc-run python3 {CC}/scripts/claude-cli-update.py >> /root/Library/Logs/ClaudeCoach/claude-cli-update.log 2>&1",
 ]
 
 # FIXED 28 Jul 2026 (this ticket): activity-watcher.py and sync-private-repo.sh

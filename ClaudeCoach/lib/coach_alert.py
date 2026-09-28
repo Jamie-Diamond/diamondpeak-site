@@ -344,14 +344,15 @@ DELIVERABLES = [
      "per_athlete": True,  "telegram": False,
      "cron": "0 18 * * 0",       "cron_cmd": "weekly-plan.sh",
      "since": "2026-07-28T11:44:37"},   # ff6fba3
-    # 27 Sep 2026: the weekly CLI update that keeps the model aliases on the newest
-    # models. telegram=False because a missed or failed update changes nothing an
-    # athlete sees this week - the bot runs on the CLI it has. But a job that dies
+    # 27 Sep 2026: the CLI update that keeps the model aliases on the newest models.
+    # Weekly until 28 Sep, daily since (Sonnet 5.5 shipped hours after the Monday
+    # run). telegram=False because a missed or failed update changes nothing an
+    # athlete sees today - the bot runs on the CLI it has. But a job that dies
     # quietly is exactly how the CLI sat on a May build until September, so the gap
     # still gets a digest line. detail pins the heartbeat to a clean run.
-    {"script": "claude-cli-update",  "label": "Claude model update", "window": "weekly",
+    {"script": "claude-cli-update",  "label": "Claude model update", "window": "daily",
      "per_athlete": False, "telegram": False, "detail": "checked ok",
-     "cron": "15 3 * * 1",       "cron_cmd": "claude-cli-update.py",
+     "cron": "15 3 * * *",       "cron_cmd": "claude-cli-update.py",
      "since": "2026-09-27T22:00:00"},
 ]
 
