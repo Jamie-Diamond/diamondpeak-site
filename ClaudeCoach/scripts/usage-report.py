@@ -47,6 +47,7 @@ PRICES = {
     "claude-opus-4-8":  (5.0, 25.0, 0.50),
     "claude-opus-4-7":  (5.0, 25.0, 0.50),
     "claude-opus-4-6":  (5.0, 25.0, 0.50),
+    "claude-sonnet-5-5": (2.0, 10.0, 0.20),   # checked on the live pricing page 28 Sep 2026
     "claude-sonnet-5":  (2.0, 10.0, 0.20),
     "claude-sonnet-4-6": (3.0, 15.0, 0.30),
     "claude-haiku-4-5": (1.0, 5.0, 0.10),
@@ -58,6 +59,9 @@ def price_key(model: str) -> str | None:
     return m if m in PRICES else None
 
 
+UNPRICED: set = set()
+
+
 def cost(model: str, u: dict, writes_5m: bool = False) -> float:
     """API list-price cost of one response. writes_5m re-prices every cache write at the
     5-minute rate: on a subscription Claude Code writes the main conversation with the
@@ -66,6 +70,8 @@ def cost(model: str, u: dict, writes_5m: bool = False) -> float:
     scheduled job never idles between its calls, so the 1-hour lifetime buys it nothing."""
     k = price_key(model)
     if not k:
+        if model and not model.startswith("<"):
+            UNPRICED.add(model)
         return 0.0
     p_in, p_out, p_read = PRICES[k]
     cc = u.get("cache_creation") or {}
@@ -200,6 +206,9 @@ def main():
             by_ath_job[(ath, job)] += session_cost
             runs[(ath, job)] += 1
 
+    if UNPRICED:
+        print(f"WARNING: no price for {sorted(UNPRICED)} - those calls are counted as $0; "
+              f"add them to PRICES", file=__import__("sys").stderr)
     span_days = max(1.0, ((last_ts - first_ts).total_seconds() / 86400) if first_ts else 1.0)
     scale = 30.0 / span_days
     out = {
