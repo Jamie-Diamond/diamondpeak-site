@@ -262,15 +262,17 @@ class TestRateLimitFallbackBranch:
         assert all(c["env"]["CC_ATHLETE_SCOPE"] == "tester" for c in made), \
             "the fallback spawn must stay scoped, not run unscoped"
 
-    def test_already_on_sonnet_is_never_retried_again(self, athlete, cfg, runs, monkeypatch):
-        """The guard `model != MODEL_SONNET` stops an infinite bounce: if Sonnet
-        itself reports a limit there is nowhere lower to fall."""
+    def test_capped_sonnet_falls_back_to_opus_once_and_never_bounces(self, athlete, cfg, runs,
+                                                                       monkeypatch):
+        """28 Sep 2026: Sonnet is the chat default, so a capped Sonnet must answer on Opus
+        rather than show the athlete a rate-limit notice. Exactly ONE retry: if Opus is
+        capped too, the turn ends there instead of bouncing between tiers."""
         monkeypatch.setattr(engine, "_is_limit_message", lambda t: True)
-        made = runs(_ok("still capped"))
+        made = runs(_ok("still capped"), _ok("still capped"))
         result = engine.call_claude("hello", cfg, [], model=engine.MODEL_SONNET,
                                     system_prompt_file=athlete, athlete_name="Tester")
         assert result == "still capped"
-        assert len(made) == 1
+        assert [c["model"] for c in made] == [engine.MODEL_SONNET, engine.MODEL_OPUS]
 
     def test_uncapped_reply_never_touches_sonnet(self, athlete, cfg, runs):
         made = runs(_ok("ordinary answer"))

@@ -217,7 +217,119 @@ def ramp_trail(breaches: list[dict]) -> str:
     return "\n".join(out)
 
 
-def build_prompt(slug: str, name: str, race_name: str, race_date: str, chat_id: str, heat: dict | None = None, strength_target: int | None = None) -> str:
+# -- Pre-loaded data (28 Sep 2026) --------------------------------------------
+# The watchdog used to fetch its own data: four icu_fetch calls, an activity_detail
+# call per recent ride for T6, and a Read of each file, ~20-30 model turns a run. Every
+# turn re-sends the whole conversation, so the fetching, not the judging, was most of
+# its ~$65/month (API prices). The same data is now fetched here, in parallel, trimmed
+# to what the triggers use, and handed over in the prompt: the model judges and logs,
+# typically in a handful of turns. Nothing it can see is lost: ride decoupling comes
+# from the history rows (ICU's own `decoupling` field, the number activity_detail
+# returned), and current-state.md is excerpted to every line dated in the suppression
+# window. If any of this fails the prompt falls back to the old fetch-it-yourself
+# instructions, so a data hiccup costs money, never a missed trigger.
+PRELOAD_DAYS = 14
+_ACT_FIELDS = ("id", "start_date_local", "type", "name", "moving_time", "distance",
+               "icu_training_load", "icu_intensity", "decoupling", "average_heartrate")
+_SESSION_FIELDS = ("date", "sport", "name", "duration_min", "tss", "rpe", "notes",
+                   "activity_id", "stub")
+
+
+def load_json(path: Path):
+    try:
+        return json.loads(path.read_text()) if path.exists() else {}
+    except Exception:
+        return {}
+
+
+def _recent_lines(md: str, today: date, days: int = 4) -> str:
+    """Every current-state.md line dated in the last `days` days: the watchdog's
+    daily-nag suppression window is 3 days, so this is all it needs to see."""
+    stamps = [(today - timedelta(days=i)).isoformat() for i in range(days)]
+    keep = [ln for ln in md.splitlines() if any(s in ln for s in stamps)]
+    return "\n".join(keep[-120:]) or "(nothing dated in the last few days)"
+
+
+def _section(md: str, heading_word: str) -> str:
+    out, on = [], False
+    for ln in md.splitlines():
+        if ln.startswith("## "):
+            on = heading_word.lower() in ln.lower()
+        if on:
+            out.append(ln)
+    return "\n".join(out[:60])
+
+
+def preload_block(slug: str, today: date, has_ankle: bool, heat_on: bool) -> str | None:
+    try:
+        from icu_api import IcuClient
+        import hr_quality
+        acfg = json.loads(CONFIG.read_text())[slug]
+        client = IcuClient(acfg["icu_athlete_id"], acfg["icu_api_key"])
+        wellness, history, events = client.fetch_all(
+            ("get_wellness", PRELOAD_DAYS),
+            ("get_training_history", PRELOAD_DAYS),
+            ("get_events", (today - timedelta(days=7)).isoformat(), today.isoformat(), "WORKOUT"),
+        )
+        untrusted = hr_quality.untrusted_ids(slug)
+        well = [{"date": w.get("id"), "ctl": w.get("ctl"), "atl": w.get("atl"),
+                 "hrv": w.get("hrv"), "sleep_h": round(w["sleepSecs"] / 3600, 2)
+                 if w.get("sleepSecs") else None, "resting_hr": w.get("restingHR"),
+                 "final": w.get("wellness_finalized")} for w in wellness or []]
+        acts = []
+        for a in history or []:
+            row = {k: a.get(k) for k in _ACT_FIELDS if a.get(k) is not None}
+            if str(a.get("id")) in untrusted:
+                row["hr_untrusted"] = True      # lib/hr_quality: ignore its HR/decoupling
+            acts.append(row)
+        planned = [{"date": (e.get("start_date_local") or "")[:10], "type": e.get("type"),
+                    "name": e.get("name"), "load": e.get("load_target")} for e in events or []]
+        adir = BASE / "athletes" / slug
+        md = (adir / "current-state.md").read_text() if (adir / "current-state.md").exists() else ""
+        cs = load_json(adir / "current-state.json")
+        cs_keep = {k: cs.get(k) for k in ("ankle", "watchdog_flags", "illness", "missed_sessions")
+                   if cs.get(k) is not None}
+        log = load_json(adir / "session-log.json")
+        since = (today - timedelta(days=PRELOAD_DAYS)).isoformat()
+        def _short(v):
+            return v[:200] if isinstance(v, str) else v
+        sessions = [{k: _short(e.get(k)) for k in _SESSION_FIELDS if e.get(k) is not None}
+                    for e in (log if isinstance(log, list) else []) if (e.get("date") or "") >= since]
+        parts = [
+            "DATA - already loaded for you from intervals.icu and the athlete's files. Do NOT "
+            "run icu_fetch.py and do NOT re-read these files; use exactly these numbers.",
+            f"wellness_last_{PRELOAD_DAYS}d (ctl/atl = Fitness/Fatigue; 'final' false = today's "
+            f"figure still recalculating):\n{json.dumps(well, ensure_ascii=False)}",
+            f"activities_last_{PRELOAD_DAYS}d (icu_intensity = IF x100; decoupling = ICU's aerobic "
+            f"decoupling %, the same number activity_detail returns; hr_untrusted = the HR on that "
+            f"activity failed the code-side sensor check, so ignore its HR and decoupling):\n"
+            f"{json.dumps(acts, ensure_ascii=False)}",
+            f"planned_workouts_last_7d (for T5):\n{json.dumps(planned, ensure_ascii=False)}",
+            f"session_log_last_{PRELOAD_DAYS}d:\n{json.dumps(sessions, ensure_ascii=False)}",
+            f"current-state.json (relevant keys):\n{json.dumps(cs_keep, ensure_ascii=False)}",
+            "current-state.md - every line dated in the last 4 days (for the daily-nag "
+            f"suppression check):\n{_recent_lines(md, today)}",
+        ]
+        if has_ankle:
+            parts.append(f"current-state.md ankle section:\n{_section(md, 'Ankle')}")
+        dp = adir / "reference" / "decision-points.md"
+        if dp.exists():
+            parts.append(f"decision-points.md (for T9b):\n{dp.read_text()[:12000]}")
+        if heat_on:
+            hl = load_json(adir / "heat-log.json")
+            recent_heat = [h for h in (hl if isinstance(hl, list) else [])
+                           if (h.get("date") or "") >= since]
+            parts.append(f"heat-log.json entries in the last {PRELOAD_DAYS} days "
+                         f"(most recent overall: {max((h.get('date') or '') for h in hl) if hl else 'none'}):"
+                         f"\n{json.dumps(recent_heat, ensure_ascii=False)}")
+        return "\n\n".join(parts)
+    except Exception as e:
+        with open(LOG_FILE, "a") as lf:
+            lf.write(f"[watchdog:{slug}] preload failed, model fetches for itself: {e}\n")
+        return None
+
+
+def build_prompt(slug: str, name: str, race_name: str, race_date: str, chat_id: str, heat: dict | None = None, strength_target: int | None = None, data_block: str | None = None) -> str:
     today = date.today().isoformat()
     athlete_dir = BASE / "athletes" / slug
 
@@ -289,10 +401,14 @@ def build_prompt(slug: str, name: str, race_name: str, race_date: str, chat_id: 
             f"  sessions (Tier C needs no equipment)\".\n"
         )
 
-    return f"""You are running the daily watchdog check for {name}'s {race_name} coaching system.
-Run silently — only produce output if a trigger fires.
-
-Read these files (skip any that do not exist):
+    if data_block:
+        gather = (f"Today is {today}; use it for all calculations.\n"
+                  f"Read {athlete_dir}/reference/rules.md only if a trigger below needs a rule "
+                  f"it names. Everything else you need is here:\n\n{data_block}\n")
+        t6_how = ("  Use the `decoupling` field on the ride rows above (rides with icu_intensity < 75); "
+                  "do NOT call activity_detail.\n")
+    else:
+        gather = f"""Read these files (skip any that do not exist):
 - {athlete_dir}/current-state.md
 - {athlete_dir}/current-state.json
 - {athlete_dir}/reference/rules.md
@@ -304,7 +420,14 @@ Pull live data via Bash (use today's date {today} for all calculations):
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint fitness --days 14
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint history --days 14
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint wellness --days 14
+"""
+        t6_how = (f"  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint activity_detail "
+                  f"--activity-id ID\n")
 
+    return f"""You are running the daily watchdog check for {name}'s {race_name} coaching system.
+Run silently — only produce output if a trigger fires.
+
+{gather}
 Evaluate these triggers in order (skip any whose required data files are missing):
 T1 (Tier 2): ATL > CTL + 25 for 3+ consecutive days
 {t2}
@@ -313,9 +436,8 @@ T4 (Tier 1): Sleep <7h for 3+ days in last 7 (skip if no sleep data available)
 T5 (Tier 1): Missed planned sessions >=2 in last rolling 7 days
   Suppression: before sending Telegram, check current-state.md for the most recent T5 entry.
   If T5 fired yesterday (or earlier) and the SAME missed session dates are already logged there, do NOT send a Telegram message — log to current-state.md only. Only send Telegram if there is a new missed session not present in the prior T5 entry.
-T6 (Tier 1): Aerobic decoupling >5% on any Z2 ride in last 7 days (check via activity_detail for rides with IF < 0.75):
-  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint activity_detail --activity-id ID
-  Suppression: before sending Telegram, check current-state.md for the most recent T6 entry.
+T6 (Tier 1): Aerobic decoupling >5% on any Z2 ride in last 7 days (rides with IF < 0.75):
+{t6_how}  Suppression: before sending Telegram, check current-state.md for the most recent T6 entry.
   If T6 fired in the last 3 days and all flagged rides are already logged there (same activity dates), do NOT send a Telegram message — log to current-state.md only. Only send Telegram if there is a new Z2 ride with decoupling >5% not present in the prior T6 entry.
 {heat_triggers}{t9}T12: ALREADY EVALUATED in Python before this prompt ran (realised week-on-week
   CTL ramp vs the athlete\'s max_ctl_ramp_per_week, off the intervals.icu fitness endpoint).
@@ -343,12 +465,10 @@ If ANY trigger fires:
    the athlete being reminded of the same unfinished thing every single morning.
 2. For genuinely new/changed triggers only: update current-state.md — append to the relevant
    section with today's date and trigger name + signal value. Do not rewrite untouched sections.
-3. If you appended anything, commit it by running EXACTLY this one command and nothing else:
-   /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/cc-git-commit-push.sh "watchdog: [trigger list] {today}" ClaudeCoach/athletes/{slug}/current-state.md
-   Do NOT run git add, git commit, git push, git pull or git rebase yourself, and do not
-   add any other git command before or after this one. This wrapper takes the repo-wide
-   lock and retries a push that loses a race; raw git bypasses both and collides with the
-   other jobs that write this same repository every few minutes.
+   (The file is long: find the section with `grep -n "^## " {athlete_dir}/current-state.md`,
+   Read just that part with offset/limit, then Edit.)
+3. Do NOT commit or run any git command. ClaudeCoach/athletes/ is gitignored (athlete
+   privacy); the saved file is synced to the private repo nightly.
 4. Output one L2 reasoning trail per trigger to stdout (this goes to the coaching log only — NOT to athletes):
    [signal with real number] -> [rule: T1-T10] -> [suggested adjustment] -> [expected effect]
    Example: "ATL 148 vs CTL 121 for 4 days -> T1 (ATL > CTL +25) -> insert recovery day -> TSB recovers ~8 pts by weekend"
@@ -367,8 +487,11 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
     if profile.get("strength_programme"):
         strength_target = int((cfg.get("day_rules") or {}).get("strength_max", 2))
 
+    has_ankle = bool((load_json(BASE / "athletes" / slug / "current-state.json") or {}).get("ankle"))
+    data_block = preload_block(slug, date.today(), has_ankle,
+                               bool(heat.get("active") and not heat.get("silent")))
     prompt = build_prompt(slug, name, race_name, race_date, chat_id, heat=heat,
-                          strength_target=strength_target)
+                          strength_target=strength_target, data_block=data_block)
 
     # T12 runs HERE, in Python, before the model is asked anything: the flag is
     # written from the session log whether or not the Claude call succeeds.

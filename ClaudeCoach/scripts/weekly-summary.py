@@ -816,12 +816,9 @@ Using the Write tool, update ClaudeCoach/athletes/{slug}/current-state.md:
   say so in one clause in Step 4 and leave the status alone — closing it is the athlete's
   call, made with `lib/open_actions.py --set-status`.
 
-Then using Bash, run EXACTLY this one command and nothing else:
-  /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/cc-git-commit-push.sh "weekly: state update week ending {week_end}" ClaudeCoach/athletes/{slug}/current-state.md
-  Do NOT run git add, git commit, git push, git pull or git rebase yourself, and do not
-  add any other git command before or after this one. This wrapper takes the repo-wide
-  lock and retries a push that loses a race; raw git bypasses both and collides with the
-  other jobs that write this same repository every few minutes.
+Do NOT commit or run any git command: ClaudeCoach/athletes/ is gitignored (athlete
+privacy) and the saved file is synced to the private repo nightly. (28 Sep 2026: the
+commit instruction here had been failing every week since that change, costing turns.)
 
 ## Output
 

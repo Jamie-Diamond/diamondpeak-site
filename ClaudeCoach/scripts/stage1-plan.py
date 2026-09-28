@@ -923,10 +923,13 @@ def _parse_args(argv=None):
     ap.add_argument("--push", action="store_true")
     ap.add_argument("--notify", action="store_true", help="message the athlete on completion")
     ap.add_argument("--week-start", help="Monday YYYY-MM-DD to plan (default: next Monday)")
-    # Planning engine runs on Fable 5 (most capable; long-horizon plan reasoning).
-    # run_claude falls Fable -> Opus 5 on a cap (fallback=[OPUS] at the call site).
-    # The conversational Telegram bot stays on Opus 5 (engine.py / bot.py).
-    ap.add_argument("--model", default=claude_call.FABLE)
+    # Planning engine runs on Opus (28 Sep 2026, Jamie, for cost: Fable is ~2.5x the
+    # per-token price and the Sunday build retries up to 3 times per athlete). The week is
+    # validated and repaired in code either way (close_to_target, audit_built,
+    # validate_week), which is what keeps a plan honest, not the model tier. On a cap it
+    # falls to Fable, never down, so a capped week is built by a stronger model, not a
+    # weaker one. `--model fable` still runs it on Fable by hand.
+    ap.add_argument("--model", default=claude_call.OPUS)
     ap.add_argument("--max-attempts", type=int, default=3)
     ap.add_argument("--override-json", metavar="PATH",
                     help="skip LLM generation; use this JSON file as the session proposal")
@@ -1117,7 +1120,8 @@ def _plan(args):
                                   proposer_brief(brief, protected, p_target),
                                   week_start, feedback)
             proc = claude_call.run_claude(
-                prompt, model=args.model, fallback=[claude_call.OPUS],
+                prompt, model=args.model,
+                fallback=[claude_call.FABLE if args.model == claude_call.OPUS else claude_call.OPUS],
                 cwd=PROJECT_DIR, timeout=840, label=args.athlete,
             )
             try:

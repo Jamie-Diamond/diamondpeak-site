@@ -391,53 +391,62 @@ def _strip_model_countdown(text: str, athlete_cfg: dict | None) -> str:
     )
     return re.sub(r'\n{3,}', '\n\n', pattern.sub('', text)).strip()
 
-# Model selection (Jamie's directive 15 Jun: Sonnet for simple, Opus for hard).
-# Reverted 11 Jul (Phase 4): the 2 Jul Sonnet-5 default is rolled back - Opus is
-# the safe default again for everyday interactive chat and the ask-anything path.
-# The Sonnet-5 trial routed ~70% of chat to the weaker model and quality regressed.
-#
-# Design: Opus is the SAFE DEFAULT. Mis-routing a substantive question to a
-# weaker model is the expensive error (it caused the 14 Jun planning mess), so
-# anything not clearly trivial goes to Opus. Two reasons not to key "hard" off a
-# narrow regex: (1) trivia is a small, closed set, so match THAT and default
-# everything else up; (2) stickiness - once a substantive thread is open, a short
-# follow-up ("make Saturday shorter") needs the same brain as the message before
-# it, so the thread stays on Opus.
+# Model selection history: 15 Jun Sonnet for simple / Opus for hard; 2 Jul a Sonnet 5
+# default trial; 11 Jul reverted to Opus-by-default after quality slipped (the 14 Jun
+# planning mess and the 4-11 Jul feedback-log entries are the evidence). 28 Sep: Sonnet by
+# default again, this time with the accuracy prompt and three Opus routes, below.
 
-# Clearly trivial: greetings, acknowledgements, short pain logs, bare values.
-_TRIVIAL_RE = re.compile(
-    r"^(hi|hey|hello|yo|good\s+(morning|evening|afternoon)|"
-    r"thanks?|thank\s+you|cheers|ta|"
-    r"ok(ay)?|kk|got\s+it|noted|perfect|great|nice|cool|good|awesome|"
-    r"yes|yep|yup|yeah|no|nope|nah|sure|done)\b[\s!.]{0,3}$"
-    r"|^(ankle|niggle|pain|knee|achilles|calf|hamstring)\s+\d{1,2}\b.{0,30}$"
-    r"|^\d{1,3}(\.\d)?\s*(kg|km|k|mi|miles?|min|minutes?|hrs?|hours?|w|watts?|bpm)?\s*$",
+# ── Chat model routing (28 Sep 2026, Jamie: "Sonnet by default, Opus for planning;
+# work on prompting as a first response, go back to Opus as a last resort") ────────
+# Cost: chat on Opus was the largest line of the API-priced bill. The July Sonnet trial
+# was reverted because answer quality slipped (misread data -> wrong verdicts, re-asking
+# what the athlete had said, a rule on file ignored); those failure modes are now
+# addressed in the prompt (engine._ACCURACY_BLOCK), which is the first response to any
+# Sonnet quality problem. Opus is the last resort, in three places only:
+#   1. PLANNING: building, changing or moving training, race strategy and pacing,
+#      periodisation. These write the calendar or set the season, where a weak answer
+#      costs the most.
+#   2. PUSHBACK: the athlete says the last answer was wrong ("that's wrong", "I already
+#      told you", "are you sure", "try again"). That message and the next two go to
+#      Opus automatically.
+#   3. ON REQUEST: a message starting "opus" (e.g. "opus: why was Tuesday so hard?").
+# Both 1 and 2 are sticky over the athlete's last three messages, so a thread does not
+# flip model mid-conversation (each model keeps its own prompt cache; a switch re-reads
+# the whole conversation uncached).
+# If Sonnet answers a class of question badly: fix the prompt first. Add a pattern
+# here only when prompting has demonstrably failed for that class.
+_PLANNING_RE = re.compile(
+    r"\b(plan|planning|replan|re-plan|rebalance|reschedul\w*|move|moving|swap|shift|"
+    r"push\s+(it|back)|skip|skipping|cancel|drop|add\s+(a|an|another)|"
+    r"taper|periodi[sz]\w*|phase|block|mesocycle|build\s+(me|a|the|my|up)|"
+    r"race\s+(plan|strateg\w*|day|pac\w*|week)|pacing|strateg\w*|"
+    r"next\s+(week|month|block|season)|off.?season|season|peak(ing)?|"
+    r"generate|programme|program|structure)\b",
     re.IGNORECASE,
 )
-
-# Topics that always warrant Opus AND make the surrounding thread sticky to Opus.
-_HARD_RE = re.compile(
-    r"\b(plan|planning|tss|ctl|atl|tsb|form|fitness|build|taper|phase|periodi[sz]e|"
-    r"week|weekly|block|ramp|load|projec|forecast|fuell?ing|nutrition|race|pacing|"
-    r"strateg|why|analy|compare|should\s+i|how\s+(do|should|much|many|far)|workout|"
-    r"session|brick|threshold|interval|zone|recovery|fatigue|overreach|long\s+run)\b",
+_PUSHBACK_RE = re.compile(
+    r"\b(that'?s\s+(wrong|not\s+right|incorrect|not\s+what|not\s+true)|you'?re\s+wrong|"
+    r"wrong|incorrect|not\s+true|doesn'?t\s+make\s+sense|makes\s+no\s+sense|"
+    r"try\s+again|i\s+(already|just)\s+(told|said|gave|sent)|are\s+you\s+sure|"
+    r"check\s+again|re-?check|you\s+(missed|forgot|ignored)|buggy|mistake|nonsense|rubbish)\b",
     re.IGNORECASE,
 )
+_OPUS_REQUEST_RE = re.compile(r"^\s*(/?opus)\b[:,]?", re.IGNORECASE)
 
 
 def select_model(text: str, history=None) -> str:
-    """Opus for anything substantive or planning-adjacent, Sonnet for clear trivia.
-    Sticky: stays on Opus through a substantive thread. Stickiness keys on the
-    ATHLETE's recent messages only - the assistant's coaching replies are full of
-    'week/session/load/recovery' and would otherwise pin everything to Opus,
-    defeating the Sonnet path for genuine trivia."""
+    """Sonnet by default; Opus for planning, pushback, or an explicit "opus" request.
+    Stickiness keys on the ATHLETE's recent messages only - the coach's replies are full
+    of plan vocabulary and would pin every thread to Opus."""
     t = text.strip()
     recent = " ".join(h.get("user", "") for h in (history or [])[-3:])
-    if _HARD_RE.search(t) or _HARD_RE.search(recent):
+    if _OPUS_REQUEST_RE.match(t):
         return MODEL_OPUS
-    if _TRIVIAL_RE.match(t):
-        return MODEL_SONNET
-    return MODEL_OPUS  # safe default - never silently downgrade the unknown
+    if _PLANNING_RE.search(t) or _PUSHBACK_RE.search(t):
+        return MODEL_OPUS
+    if _PLANNING_RE.search(recent) or _PUSHBACK_RE.search(recent):
+        return MODEL_OPUS
+    return MODEL_SONNET
 
 
 # Persistent reply keyboard (expense-bot style) — always pinned at the bottom of the

@@ -214,6 +214,7 @@ def system_prompt_with_level(sp_file) -> str:
                     text = text + "\n\n" + extra
         except Exception as e:
             log(f"hr/baseline block skipped: {e}")
+    text = text + "\n\n" + _ACCURACY_BLOCK
     if _planning_pause is not None:
         try:
             pause = _planning_pause.prompt_block(slug, first_name)
@@ -229,6 +230,29 @@ def system_prompt_with_level(sp_file) -> str:
     except Exception as e:
         log(f"recovery-hold block skipped: {e}")
     return text
+
+
+# Accuracy rules for every chat reply (28 Sep 2026). Written when chat moved to Sonnet by
+# default, from the failures that ended the July Sonnet trial (feedback-log 4-11 Jul
+# 2026): a wrong "not easy" verdict from misread numbers, a data point asked for twice,
+# a standing rule ignored in a session preview, a run debriefed twice. Prompting is the
+# first response to a Sonnet quality problem; routing a message class to Opus
+# (telegram/bot.py select_model) is the last resort. They help Opus too, so every
+# model gets them.
+_ACCURACY_BLOCK = (
+    "ACCURACY - before you send any reply:\n"
+    "1. Every number you state comes from data you fetched or read in THIS turn, or from "
+    "the FACTS block. Before any verdict (easy / not easy, on or off target, better or "
+    "worse), re-read the raw values you are judging and state them.\n"
+    "2. Never ask the athlete for something they have already given: check the "
+    "conversation and the session log first, and use what is there.\n"
+    "3. Before previewing, suggesting or changing a session, check persistent-rules.md for "
+    "rules about that sport and day, and apply them.\n"
+    "4. If an activity has already been debriefed, do not debrief it again; answer only "
+    "what was asked.\n"
+    "5. If data is missing or two sources disagree, say so in one line and fetch it. Never "
+    "fill a gap with a plausible number."
+)
 
 
 _FEEDBACK_LOG_RULE = (
@@ -878,15 +902,16 @@ def call_claude(user_message, config, history, model=MODEL_OPUS,
             extra, prompt, mode, st = _plan_session(user_message, config, history,
                                                     sp_file, athlete_name, context)
             text, sid, rc = _run_once(prompt, model, extra, config["project_dir"], env=env)
-        if _is_limit_message(text) and model != MODEL_SONNET:
-            # Opus is primary now: a capped bucket must not surface a rate-limit
-            # notice to the athlete while Sonnet 5 still has headroom, so fall
-            # DOWN to Sonnet so the bot still answers.
-            log(f"[limit] {model} capped - retrying on {MODEL_SONNET}")
+        if _is_limit_message(text):
+            # A capped bucket must never surface a rate-limit notice to the athlete while
+            # the other tier has headroom: Opus falls to Sonnet, and (since Sonnet became
+            # the chat default, 28 Sep 2026) Sonnet falls to Opus.
+            other = MODEL_OPUS if model == MODEL_SONNET else MODEL_SONNET
+            log(f"[limit] {model} capped - retrying on {other}")
             # env= on the fallback too: a rate-limited turn must not run unscoped.
-            text, sid, rc = _run_once(prompt, MODEL_SONNET, extra, config["project_dir"],
+            text, sid, rc = _run_once(prompt, other, extra, config["project_dir"],
                                       env=env)
-            model = MODEL_SONNET
+            model = other
         # Read the turn index BEFORE _finish_session, which increments st["turns"]
         # IN PLACE - reading it afterwards logs the NEXT turn, not the one just served.
         turn_idx = _turn_index(st)
@@ -1096,16 +1121,16 @@ def stream_claude(user_message, config, history, model=MODEL_OPUS,
                 prompt, model, extra, config["project_dir"], env=env, run=run)
 
         text = (final if final is not None else streamed).strip()
-        if not run.cancelled and _is_limit_message(text) and model != MODEL_SONNET:
-            # Opus is primary now: fall DOWN to Sonnet 5 on a cap so the athlete
-            # still gets an answer rather than a rate-limit notice. Same guard as
-            # above - a cancelled turn does not get retried on another model.
-            log(f"[limit] {model} capped - retrying on {MODEL_SONNET}")
+        if not run.cancelled and _is_limit_message(text):
+            # Either tier capped: answer on the other one rather than show a rate-limit
+            # notice (see call_claude). A cancelled turn is not retried.
+            other = MODEL_OPUS if model == MODEL_SONNET else MODEL_SONNET
+            log(f"[limit] {model} capped - retrying on {other}")
             # env= on the fallback too: a rate-limited turn must not run unscoped.
             final, streamed, sid, rc, t_init, t_first = yield from _stream_once(
-                prompt, MODEL_SONNET, extra, config["project_dir"], env=env, run=run)
+                prompt, other, extra, config["project_dir"], env=env, run=run)
             text = (final if final is not None else streamed).strip()
-            model = MODEL_SONNET
+            model = other
 
         # Before _finish_session: it increments st["turns"] in place (see call_claude).
         turn_idx = _turn_index(st)
