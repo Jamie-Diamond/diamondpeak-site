@@ -33,6 +33,7 @@ degradation. It now closes the loop in three tiers:
 When in doubt, tier B routes to tier C rather than deleting: only exact-content duplicate /
 expired / engine-restatement lines are ever auto-cleared. Everything else stays.
 """
+import hashlib
 import importlib.util
 import json, re, subprocess, sys, time
 from datetime import date, datetime
@@ -317,6 +318,56 @@ OUTPUT FORMAT:
 """
 
 
+# ── Nothing-new gate (28 Sep 2026) ───────────────────────────────────────────
+# The sync ran its model 8 times a day per athlete whatever had happened, at ~$0.40-0.70
+# a run on API pricing: $270 of a ~$830/month bill, the single biggest line, and the log
+# shows it mostly concluding "no edits made". The model's inputs are exactly the prompt
+# (chat history + today's date) plus the files it reads and edits. If none of those has
+# changed since the last COMPLETED run, the model would be asked the identical question
+# again, so it is skipped. Only exchanges where the ATHLETE wrote something count as new
+# chat: every morning card, debrief and brief is appended to history.json as a coach-only
+# entry, and those carry no rule or preference to capture - counting them would re-arm
+# the model several times a day for nothing. The date is in the prompt, so every athlete still gets at least
+# one full run a day (the date-based pruning), and any new chat, session or rule change
+# triggers a run at the next slot exactly as before. The deterministic tiers B and C run
+# every time regardless: they are free and their debounce clock must keep ticking.
+_SYNC_INPUT_FILES = ("current-state.md", "current-state.json", "persistent-rules.md",
+                     "session-log.json")
+_SYNC_STATE = ".session-sync-state.json"
+
+
+def _gate_key(history: list, today: str) -> str:
+    """What the gate treats as the conversation: today's date + athlete-written pairs."""
+    said = [(p.get("user", ""), p.get("assistant", "")) for p in history
+            if (p.get("user") or "").strip()]
+    return today + "\n" + json.dumps(said, ensure_ascii=False)
+
+
+def _input_fingerprint(key: str, adir: Path) -> str:
+    h = hashlib.sha256(key.encode())
+    for name in _SYNC_INPUT_FILES:
+        f = adir / name
+        h.update(b"\0" + name.encode() + b"\0")
+        if f.exists():
+            h.update(f.read_bytes())
+    return h.hexdigest()
+
+
+def _last_fingerprint(adir: Path) -> str | None:
+    try:
+        return json.loads((adir / _SYNC_STATE).read_text()).get("fingerprint")
+    except Exception:
+        return None
+
+
+def _save_fingerprint(adir: Path, fp: str) -> None:
+    try:
+        (adir / _SYNC_STATE).write_text(json.dumps(
+            {"fingerprint": fp, "at": datetime.now().isoformat(timespec="seconds")}))
+    except Exception:
+        pass    # worst case the next slot runs the model, as it did before this gate
+
+
 def run_athlete(slug: str, athlete_cfg: dict) -> None:
     adir     = BASE / f"athletes/{slug}"
     chat_id  = athlete_cfg.get("chat_id", "")
@@ -370,18 +421,25 @@ def run_athlete(slug: str, athlete_cfg: dict) -> None:
     prompt = _build_prompt(slug, first_name, history, today,
                            rule_count, prefs, engine_rules)
 
-    _log(f"running sync (rules={rule_count}/{CEILING})")
-    with open(log_file, "a") as lf:
-        # Sonnet -> Haiku fallback (frequent, low-stakes): keeps sync alive when
-        # the Sonnet weekly bucket is maxed, without draining the all-models pool.
-        result = claude_call.run_claude(
-            prompt, model=claude_call.SONNET, allowed_tools=TOOLS,
-            stderr=lf, cwd=PROJECT_DIR, timeout=300, label=slug,
-        )
+    gate_key = _gate_key(history, today)
+    ran_model = _input_fingerprint(gate_key, adir) != _last_fingerprint(adir)
+    model_ok = True
+    if not ran_model:
+        _log(f"nothing new since the last sync, model not run (rules={rule_count}/{CEILING})")
+    else:
+        _log(f"running sync (rules={rule_count}/{CEILING})")
+        with open(log_file, "a") as lf:
+            # Sonnet -> Haiku fallback (frequent, low-stakes): keeps sync alive when
+            # the Sonnet weekly bucket is maxed, without draining the all-models pool.
+            result = claude_call.run_claude(
+                prompt, model=claude_call.SONNET, allowed_tools=TOOLS,
+                stderr=lf, cwd=PROJECT_DIR, timeout=300, label=slug,
+            )
+        model_ok = result.returncode == 0
 
-    output = (result.stdout or "").strip()
-    if output:
-        _log(f"unexpected output: {output[:200]}")
+        output = (result.stdout or "").strip()
+        if output:
+            _log(f"unexpected output: {output[:200]}")
 
     # TIER A — capture guard: revert any appended [perm] line that breaks a gate; permit a
     # loss-free in-place fold of a refinement into the rule it extends; refuse any lossy edit.
@@ -445,8 +503,14 @@ def run_athlete(slug: str, athlete_cfg: dict) -> None:
     # Completed the whole pass for this athlete. The sync is silent by design (the
     # prompt forbids output), so there is no "sent" to record — the heartbeat IS the
     # only evidence it ran, which is why its absence had to become detectable.
+    # Fingerprint AFTER the whole pass, so the sync's own edits do not read as "new"
+    # next slot. Only on a completed model run (or a skip): a failed or timed-out run
+    # leaves the old fingerprint, so the next slot retries.
+    if model_ok:
+        _save_fingerprint(adir, _input_fingerprint(gate_key, adir))
     ops_log.record_run("session-sync", athlete=slug, ok=True,
-                       detail=f"synced (rules {rule_count}->{final_count})")
+                       detail=(f"synced (rules {rule_count}->{final_count})" if ran_model
+                               else f"nothing new, model skipped (rules {final_count})"))
 
 
 def main() -> None:

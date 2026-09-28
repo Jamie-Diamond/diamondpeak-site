@@ -32,7 +32,7 @@ Run:  python3 ClaudeCoach/scripts/bug-fixer.py [--athlete jamie] [--json]
       python3 ClaudeCoach/scripts/bug-fixer.py --apply-prune <review_id>
 Cron: 0 0 * * *  (midnight, Stage 1 only)
 """
-import argparse, json, os, re, sys, subprocess, py_compile, difflib
+import argparse, hashlib, json, os, re, sys, subprocess, py_compile, difflib
 from datetime import date
 from pathlib import Path
 
@@ -637,7 +637,20 @@ THE LOG:
 """
 
 
-def plan(slug: str) -> dict:
+# Nightly no-change skip (28 Sep 2026). The planner re-read the whole feedback log with
+# Sonnet every night at ~$1.60 a run whether or not anything had changed: identical input
+# gives the same triage, and the previous night already drafted whatever it found. With
+# --if-changed (the nightly cron only; session-sync's consolidation launches and every
+# manual run are unaffected) a planner prompt byte-identical to the last completed one is
+# not sent again.
+_PLAN_HASH_DIR = BASE / "athletes"
+
+
+def _plan_hash_file(slug: str) -> Path:
+    return _PLAN_HASH_DIR / slug / ".bugplan-last.sha256"
+
+
+def plan(slug: str, if_changed: bool = False) -> dict:
     entries = _load_entries(slug)
     if not entries:
         return {"groups": [], "_note": "no log entries"}
@@ -654,6 +667,13 @@ def plan(slug: str) -> dict:
               .replace("{confirmed_prefs}", "\n".join(prefs) if prefs else "(none marked)")
               .replace("{recurrence}", _format_recurrence(rmap))
               .replace("{log}", _format_entries(entries)))
+    digest = hashlib.sha256(prompt.encode()).hexdigest()
+    if if_changed:
+        try:
+            if _plan_hash_file(slug).read_text().strip() == digest:
+                return {"groups": [], "_note": "no change since the last triage, planner not run"}
+        except OSError:
+            pass
     result = claude_call.run_claude(
         prompt, model=claude_call.SONNET, fallback=[claude_call.OPUS],
         allowed_tools=TOOLS, cwd=PROJECT_DIR, timeout=800, label=f"bugplan:{slug}",
@@ -663,7 +683,12 @@ def plan(slug: str) -> dict:
     if not m:
         return {"groups": [], "_error": "no <plan> block", "_raw": out[:800]}
     try:
-        return json.loads(m.group(1).strip())
+        parsed = json.loads(m.group(1).strip())
+        try:
+            _plan_hash_file(slug).write_text(digest)   # only a completed, parsed plan counts
+        except OSError:
+            pass
+        return parsed
     except Exception as e:
         return {"groups": [], "_error": f"json parse: {e}", "_raw": m.group(1)[:800]}
 
@@ -1006,11 +1031,11 @@ def apply_prune(rid):
     print(f"[bug-fixer] apply-prune {rid}: applied ({rv.get('stat','')}); backup at {backup.name}")
 
 
-def run_fix(slug, dry_run):
-    plan_obj  = plan(slug)
+def run_fix(slug, dry_run, if_changed=False):
+    plan_obj  = plan(slug, if_changed=if_changed)
     all_groups = plan_obj.get("groups", [])
     if not all_groups:
-        print("No groups produced - nothing to fix.")
+        print(plan_obj.get("_note") or "No groups produced - nothing to fix.")
         return
     # Deterministic backstops (belt and braces on the planner):
     #  - recurrence: never re-draft a patch for a bug we already fixed once; route to a human.
@@ -1176,6 +1201,8 @@ def main():
                     help="apply an APPROVED rule consolidation to the live rules file (invoke on Yes for a prune review)")
     ap.add_argument("--repost", action="store_true", help="re-post cards for all awaiting reviews (e.g. after a failed post)")
     ap.add_argument("--reconcile", action="store_true", help="normalise feedback-log.json schema and back-fill resolution_commit from git history")
+    ap.add_argument("--if-changed", action="store_true", dest="if_changed",
+                    help="with --fix: skip the planner when its input is identical to the last completed run (nightly cron)")
     args = ap.parse_args()
     if args.apply_prune:
         apply_prune(args.apply_prune)
@@ -1187,7 +1214,7 @@ def main():
         reconcile(args.athlete)
     elif args.fix:
         rules_lint_report(args.dry_run)
-        run_fix(args.athlete, args.dry_run)
+        run_fix(args.athlete, args.dry_run, if_changed=args.if_changed)
     else:
         p = plan(args.athlete)
         print(json.dumps(p, indent=2) if args.json else _render(p))
