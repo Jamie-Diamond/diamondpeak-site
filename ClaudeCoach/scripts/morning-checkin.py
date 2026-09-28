@@ -664,12 +664,14 @@ def run_athlete(slug, athlete_cfg):
     try:
         _gate_state = ask_gate.load_state_from_dir(adir)
         for _q, _eligible in ((ask_gate.WEIGHT,
-                               ask_gate.weight_reading_due(_cs_data, date.today())),
+                               ask_gate.weight_reading_due(_cs_data, date.today(),
+                                                           wellness_rows=wellness_rows)),
                               (ask_gate.ANKLE_SCORE, bool(injuries))):
             _gate_state, _dec = ask_gate.decide(
                 _gate_state, _q, today=date.today(),
                 answered_on=ask_gate.answer_date(_q, current_state=_cs_data,
-                                                 session_log=_sl_data))
+                                                 session_log=_sl_data,
+                                                 wellness_rows=wellness_rows))
             if _q == ask_gate.WEIGHT:
                 ask_weight = _eligible and _dec["ask"]
             else:
@@ -684,7 +686,8 @@ def run_athlete(slug, athlete_cfg):
         # Fail OPEN: an unreadable gate must not silence the card's only question.
         print(f"[{slug}] standing-ask gate failed ({exc}) — asking as normal",
               file=sys.stderr)
-        ask_weight = ask_gate.weight_reading_due(_cs_data, date.today())
+        ask_weight = ask_gate.weight_reading_due(_cs_data, date.today(),
+                                                 wellness_rows=wellness_rows)
         ask_ankle = bool(injuries)
         passive_lines = []
 

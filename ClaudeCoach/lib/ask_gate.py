@@ -518,7 +518,7 @@ def note_passive_in(athlete_dir, question, today=None) -> None:
 # answer sources for the standing asks (design rule 1)
 # ---------------------------------------------------------------------------
 
-def answer_date(question, current_state=None, session_log=None):
+def answer_date(question, current_state=None, session_log=None, wellness_rows=None):
     """The most recent date this standing question was answered ANYWHERE.
 
     Reads the stores the answers land in, because the writer (`telegram/bot.py`
@@ -529,8 +529,14 @@ def answer_date(question, current_state=None, session_log=None):
     log = session_log if isinstance(session_log, list) else []
 
     if question == WEIGHT:
-        return _max_date(r.get("date") for r in (cs.get("weight_readings") or [])
-                         if isinstance(r, dict))
+        # A smart-scale reading lands in ICU wellness, never in current-state, so
+        # a card reading only current-state told Jamie "weigh-ins have gone quiet"
+        # on 28 Sep 2026 the morning after two synced weigh-ins.
+        cands = [r.get("date") for r in (cs.get("weight_readings") or [])
+                 if isinstance(r, dict)]
+        cands += [r.get("id") or r.get("date") for r in (wellness_rows or [])
+                  if isinstance(r, dict) and r.get("weight")]
+        return _max_date(cands)
 
     if question == ANKLE_SCORE:
         ankle = cs.get("ankle") if isinstance(cs.get("ankle"), dict) else {}
@@ -548,7 +554,7 @@ def answer_date(question, current_state=None, session_log=None):
     return None
 
 
-def weight_reading_due(current_state, today=None, stale_days=3) -> bool:
+def weight_reading_due(current_state, today=None, stale_days=3, wellness_rows=None) -> bool:
     """No weight reading in the last `stale_days` days.
 
     Moved out of the morning prompt (where the model checked it by reading
@@ -557,7 +563,7 @@ def weight_reading_due(current_state, today=None, stale_days=3) -> bool:
     a model that may or may not have looked.
     """
     today = today or date.today()
-    last = answer_date(WEIGHT, current_state=current_state)
+    last = answer_date(WEIGHT, current_state=current_state, wellness_rows=wellness_rows)
     if last is None:
         return True
     return (today - last).days > stale_days
