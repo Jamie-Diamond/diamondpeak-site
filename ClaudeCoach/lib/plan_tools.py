@@ -736,7 +736,8 @@ def recovery_race(cfg: dict, today=None):
     weeks, the hold and the off-season block all switched off, and week_now (still counted
     from the OLD plan_start) fell through to the taper branch 27 weeks out. The finished
     race is the latest past A-race in the registry (or a past `race_date`), and it governs
-    until a NEW plan_start is set after it, which is what starts the next race's block."""
+    until a NEW plan_start after it has ARRIVED: a block set to start in November does not
+    end October's recovery early."""
     today = today or date.today()
     cands = []
     for raw in [{"date": cfg.get("race_date"), "priority": "A"}] + list(cfg.get("races") or []):
@@ -755,7 +756,7 @@ def recovery_race(cfg: dict, today=None):
         ps = date.fromisoformat(cfg["plan_start"]) if cfg.get("plan_start") else None
     except ValueError:
         ps = None
-    if ps and ps > race_d:
+    if ps and race_d < ps <= today:
         return None, None            # the next block has started; that race is history
     return race_d.isoformat(), race_d
 

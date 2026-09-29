@@ -38,3 +38,12 @@ def test_new_plan_start_ends_the_old_race_recovery():
     cfg = _cfg(plan_start="2026-11-02")
     r = pt.required_tss(cfg, 80.0, today=date(2026, 11, 10))
     assert r["week_type"] == "base"
+
+
+def test_future_plan_start_does_not_end_recovery_early():
+    cfg = _cfg(plan_start="2026-11-02",
+               phase_tss={"base_end_week": 8, "build_end_week": 14,
+                          "specific_end_week": 17, "peak_end_week": 19})
+    r = pt.required_tss(cfg, 85.0, today=date(2026, 10, 12))
+    assert r["week_type"] == "post_race"
+    assert pt.required_tss(cfg, 72.0, today=date(2026, 11, 2))["week_type"] == "base"
