@@ -3707,6 +3707,8 @@
           ATHLETES = me.athletes;
           state.me = me;
           buildGate();
+          var gf = document.querySelector('.gate-foot');
+          if (gf) gf.textContent = 'Signed in as ' + me.email + '.';
           wirePullToRefresh();
         }
         // A remembered profile skips the gate entirely - being asked who you are on
