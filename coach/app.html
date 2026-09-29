@@ -6,7 +6,9 @@
 <title>Peak — Diamond Peak Coaching</title>
 <meta name="description" content="Training almanac for Diamond Peak athletes.">
 
-<link rel="manifest" href="manifest.webmanifest">
+<!-- use-credentials: on coach.diamondpeak.uk every file sits behind the Cloudflare sign-in,
+     and a manifest fetched without the cookie would get the login page instead. -->
+<link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
 <meta name="theme-color" content="#eceff2">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
