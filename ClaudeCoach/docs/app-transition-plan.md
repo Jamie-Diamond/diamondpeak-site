@@ -1,7 +1,7 @@
 # ClaudeCoach — Transition to Full Web App
 
 **Written:** 2026-05-27 · **Revised:** 2026-06-18
-**Status:** Phase 0 in progress — shared engine extracted (`lib/engine.py`, commit 8f1749c, live + verified). Next: FastAPI skeleton + CF Tunnel/Access, then SPA scaffold.
+**Status:** Phase 0 in progress — shared engine extracted (`lib/engine.py`, commit 8f1749c, live + verified). **29 Sep 2026: backend live** — `api/server.py` (FastAPI) on the VM behind Cloudflare Tunnel + Access at `coach.diamondpeak.uk`, serving each athlete their private data. Decision (Jamie, 29 Sep): keep the existing Peak app (`/coach/`, plain JS) and point it at the backend rather than scaffold a React SPA. Next: Phase 1 live dashboards, then Phase 2 web chat.
 
 > ### What changed in the 2026-06-18 revision (read first)
 > The 27 May v1 is superseded on four points, all decided/validated this session:

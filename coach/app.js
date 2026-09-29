@@ -3561,10 +3561,22 @@
     if (TABS.some(function (t) { return t.id === h; })) state.tab = h;
     show(state.tab);
 
-    // A remembered profile skips the gate entirely - being asked who you are on
-    // every launch is the thing that makes a web app feel like a website.
-    var s = stored();
-    if (s) { closeGate(); load(s); } else { openGate(); }
+    // On coach.diamondpeak.uk the backend (ClaudeCoach/api/server.py) says who is signed
+    // in and which athletes they may see, and serves their private data under the same
+    // paths. On GitHub Pages /api/me is a 404 and the picker is unchanged.
+    fetch('/api/me', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; })
+      .then(function (me) {
+        if (me && me.athletes && me.athletes.length) {
+          ATHLETES = me.athletes;
+          buildGate();
+        }
+        // A remembered profile skips the gate entirely - being asked who you are on
+        // every launch is the thing that makes a web app feel like a website.
+        var s = stored() || (ATHLETES.length === 1 ? ATHLETES[0].slug : null);
+        if (s) { closeGate(); load(s); } else { openGate(); }
+      });
 
     loadLibrary();
     if ('serviceWorker' in navigator && location.protocol === 'https:') {

@@ -1,0 +1,7 @@
+{
+  "_comment": "VM-only (gitignored). Which Cloudflare Access email sees which athlete. coach: true sees every active athlete.",
+  "users": {
+    "coach@example.com":   {"slug": "jamie", "coach": true},
+    "athlete@example.com": {"slug": "kathryn"}
+  }
+}

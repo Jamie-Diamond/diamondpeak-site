@@ -1,0 +1,18 @@
+[Unit]
+Description=ClaudeCoach web API (Peak backend, coach.diamondpeak.uk)
+After=network-online.target
+
+[Service]
+WorkingDirectory=/Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/api
+# Identity mode lives here, not in the repo - see the docstring in server.py.
+# Private test mode:  CC_API_DEV_EMAIL=<email>
+# Production:         CF_ACCESS_TEAM=<team> and CF_ACCESS_AUD=<application AUD tag>
+#   Always:             CC_WEB_ACCESS=/etc/claudecoach/web-access.json (email -> athlete, outside the repo)
+EnvironmentFile=/etc/claudecoach-api.env
+ExecStart=/opt/claudecoach-api/venv/bin/uvicorn server:app --host 127.0.0.1 --port 8787 --workers 1 --proxy-headers
+Restart=on-failure
+RestartSec=5
+MemoryMax=300M
+
+[Install]
+WantedBy=multi-user.target
