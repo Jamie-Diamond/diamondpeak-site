@@ -546,6 +546,24 @@ table.tbl tr.hl td{background:rgba(16,101,107,.05)}
   margin:-4px 0 14px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.13em;
   text-transform:uppercase;color:var(--muted);
 }
+.hint.upd{margin:14px 0 0;text-align:center}
+.linkish{background:none;border:0;padding:0;font:inherit;letter-spacing:inherit;
+  text-transform:inherit;color:var(--accent);text-decoration:underline;cursor:pointer}
+
+/* ── private-only cards + pull-to-refresh (29 Sep 2026) ─────────────────── */
+.cs-row{display:flex;gap:12px;padding:7px 0;border-bottom:1px solid var(--rule-soft);font-size:13.5px;color:var(--ink-2)}
+.cs-row:last-child{border-bottom:0}
+.cs-row b{flex:0 0 84px;font-family:'DM Mono',monospace;font-weight:400;font-size:9.5px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding-top:3px}
+.card .figures{margin:0 0 10px}
+.spark{display:block;width:100%;height:60px}
+.spark polyline{fill:none;stroke:var(--accent);stroke-width:1.6;vector-effect:non-scaling-stroke}
+.ptr{position:fixed;left:50%;top:0;transform:translate(-50%,-110%);z-index:50;
+  padding:8px 14px;border-radius:0 0 4px 4px;background:var(--ink);color:var(--paper);
+  font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  transition:transform .18s ease}
+.ptr.on{transform:translate(-50%,calc(env(safe-area-inset-top) + 0px))}
+.ptr.busy{background:var(--accent)}
 
 /* ── seg: sub-navigation inside a tab ───────────────────────────────────── */
 /* Trends holds five charts. Stacked they are a long busy scroll, so only one is
@@ -937,6 +955,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=38" defer></script>
+<script src="app.js?v=39" defer></script>
 </body>
 </html>

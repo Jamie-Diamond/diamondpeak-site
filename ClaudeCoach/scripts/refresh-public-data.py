@@ -32,6 +32,8 @@ PUBLIC_REL = "ClaudeCoach/public/site-data.json"
 sys.path.insert(0, str(BASE / "ClaudeCoach/lib"))
 from public_sanitise import sanitise_site_data, write_public_json
 
+PUBLISH_PUBLIC = False
+
 # Rolling window for CTL history on the public chart
 CTL_HISTORY_DAYS = 120
 
@@ -131,7 +133,13 @@ def main():
     PRIVATE.write_text(json.dumps(pub, separators=(",", ":")))
     log(f"Wrote private {PRIVATE} with {len(athletes_out)} athlete(s): {list(athletes_out)}")
 
-    # Sanitised public copy - the only one that goes to GitHub Pages.
+    # Nothing is published any more (29 Sep 2026): athlete data is served privately
+    # by api/server.py at coach.diamondpeak.uk, and the public dashboards that read
+    # public/site-data.json were retired. The code below is kept, unreachable, so the
+    # sanitised path can be restored deliberately rather than rebuilt.
+    if not PUBLISH_PUBLIC:
+        log("Public publishing is off - private roll-up only.")
+        return
     try:
         write_public_json(sanitise_site_data(pub), PUBLIC)
     except Exception as exc:

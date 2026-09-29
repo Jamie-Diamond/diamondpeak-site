@@ -10,7 +10,10 @@ Nothing is published unless the athlete's profile.json carries
 appear, which is why Kathryn and Calum are off by default: the flag is opt-in, not
 opt-out, so a new athlete can never be published by omission.
 
-THIS DIRECTORY IS PUBLIC
+NO LONGER PUBLISHED (29 Sep 2026): the output is athletes/<slug>/nutrition-app.json,
+served only to the signed-in athlete by api/server.py. The note below is history.
+
+THIS DIRECTORY WAS PUBLIC
 `public/` is served from a PUBLIC repo, and every write here is a permanent commit in
 public git history. Jamie decided on 10 Aug 2026 that his own weight, body fat and food
 log may be public, and was told the exposure includes the history, not just the URL.
@@ -476,7 +479,9 @@ def main(argv=None):
             print(f"{slug}: {FLAG} not set, skipping (nothing published)")
             continue
         data = build(slug, today)
-        out = PUBLIC / f"nutrition-{slug}.json"
+        # PRIVATE since 29 Sep 2026: the app reads this through api/server.py at
+        # coach.diamondpeak.uk, so nothing is written under public/ any more.
+        out = BASE / "athletes" / slug / "nutrition-app.json"
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(data, separators=(",", ":")) + "\n")
         written.append(str(out.relative_to(BASE)))

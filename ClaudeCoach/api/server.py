@@ -21,9 +21,10 @@ A coach may read every active athlete; anyone else reads exactly one slug.
 Paths mirror the GitHub Pages layout so Peak runs unchanged:
   /coach/...                                  the app itself
   /ClaudeCoach/public/training-data-<slug>.json  PRIVATE file, not the public subset
-  /ClaudeCoach/public/nutrition-<slug>.json
+  /ClaudeCoach/public/nutrition-<slug>.json    PRIVATE athletes/<slug>/nutrition-app.json
   /ClaudeCoach/public/session-library.json
   /api/me                                     who you are, which athletes you may see
+  POST /api/refresh/<slug>                    rebuild that athlete's data from Intervals.icu now
 Anything else (the site's other tools) redirects to https://diamondpeak.uk.
 
 Run: uvicorn server:app --host 127.0.0.1 --port 8787  (see system/claudecoach-api.service)
@@ -33,6 +34,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -164,10 +167,49 @@ def training_data(slug: str, request: Request):
 @app.get("/ClaudeCoach/public/nutrition-{slug}.json")
 def nutrition(slug: str, request: Request):
     require_slug(request, slug)
-    path = PUBLIC_DIR / f"nutrition-{slug}.json"
+    path = CC / "athletes" / slug / "nutrition-app.json"
     if not path.exists():
         raise HTTPException(404)  # opt-in per athlete; Peak treats 404 as "not enabled"
     return FileResponse(path, media_type="application/json", headers=NO_STORE)
+
+
+# ── pull-to-refresh ──
+
+REFRESH_MIN_GAP_S = 60
+REFRESH_TIMEOUT_S = 180
+_refresh_lock = threading.Lock()
+_last_refresh: dict[str, float] = {}
+
+
+def run_refresh(slug: str) -> int:
+    """refresh-site-data.py --athlete: pure Python ICU pulls, no Claude call."""
+    r = subprocess.run([os.environ.get("CC_PYTHON", "/usr/bin/python3"),
+                        str(CC / "scripts" / "refresh-site-data.py"), "--athlete", slug],
+                       cwd=str(SITE), capture_output=True, text=True, timeout=REFRESH_TIMEOUT_S)
+    return r.returncode
+
+
+@app.post("/api/refresh/{slug}")
+def refresh(slug: str, request: Request):
+    # A custom header forces a CORS preflight, so another site can't trigger this
+    # with the athlete's Cloudflare cookie.
+    if request.headers.get("x-peak") != "1":
+        raise HTTPException(400, "missing app header")
+    require_slug(request, slug)
+    with _refresh_lock:
+        wait = REFRESH_MIN_GAP_S - (time.time() - _last_refresh.get(slug, 0))
+        if wait > 0:
+            raise HTTPException(429, f"refreshed moments ago - try again in {int(wait) + 1}s")
+        _last_refresh[slug] = time.time()
+    try:
+        code = run_refresh(slug)
+    except subprocess.TimeoutExpired:
+        raise HTTPException(504, "Intervals.icu was too slow - the last data is still shown")
+    if code == 3:
+        raise HTTPException(409, "a refresh is already running - try again shortly")
+    if code != 0:
+        raise HTTPException(502, "refresh failed - the last data is still shown")
+    return JSONResponse({"ok": True}, headers=NO_STORE)
 
 
 @app.get("/ClaudeCoach/public/session-library.json")

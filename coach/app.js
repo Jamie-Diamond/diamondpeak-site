@@ -28,6 +28,14 @@
 (function () {
   'use strict';
 
+  // Athlete data has been private since 29 Sep 2026 and is no longer published to
+  // GitHub Pages. The app lives at coach.diamondpeak.uk, behind a sign-in.
+  if (/(^|\.)diamondpeak\.uk$/.test(location.hostname) &&
+      location.hostname !== 'coach.diamondpeak.uk') {
+    location.replace('https://coach.diamondpeak.uk/coach/app.html' + location.hash);
+    return;
+  }
+
   var ATHLETES = [
     { slug: 'jamie', name: 'Jamie' },
     { slug: 'kathryn', name: 'Kathryn' },
@@ -104,6 +112,9 @@
 
   var state = {
     slug: 'jamie', tab: 'today', data: null, lib: null,
+    // me: the signed-in user from /api/me (private host only). updated: when the
+    // athlete's data file was last rebuilt, from its Last-Modified header.
+    me: null, updated: null, refreshing: false,
     // fitMetric is 'tss' (CTL) or 'dur' (hours/week). fitSport is shared by both, so
     // the discipline you were looking at survives a switch of metric.
     chart: null, todayChart: null, trend: 'fit', fitSport: 'all', fitMetric: 'tss',
@@ -557,11 +568,23 @@
         { foot: 'Daily TSS by sport, faded where still planned. Line is form (TSB).' });
     }
 
+    h += currentStateCard(d.currentState);
+
     h += card('Coming up', '<div class="body-flush">' +
       (next.length ? groupByDay(next) : '<div class="empty">Nothing planned yet</div>') +
       '</div>', { flush: true });
 
+    h += weightCard(d.weightTrend);
+
+    if (state.me) {
+      h += '<p class="hint upd">' + (state.updated ? 'Updated ' + esc(state.updated) + ' · ' : '') +
+        '<button type="button" class="linkish" id="refreshNow">refresh now</button>' +
+        ' or pull down</p>';
+    }
+
     $('#v-today').innerHTML = h;
+    var rb = $('#refreshNow');
+    if (rb) rb.onclick = refreshNow;
     var th = $('#v-today');
     if (th && !th.dataset.sessNav) {
       th.dataset.sessNav = '1';
@@ -574,6 +597,112 @@
         }
       });
     }
+  }
+
+  /* Private-only fields (29 Sep 2026). Both cards are left out entirely when the
+     athlete has no data for them, rather than shown empty. */
+
+  function currentStateCard(cs) {
+    if (!cs) return '';
+    var rows = [];
+    // Pain scores are stored as <part>_pain_<when> (e.g. ankle_pain_next_morning).
+    var pain = {};
+    Object.keys(cs).forEach(function (k) {
+      var m = /^(.+)_pain_(.+)$/.exec(k);
+      if (m && typeof cs[k] === 'number') {
+        (pain[m[1]] = pain[m[1]] || []).push(m[2].replace(/_/g, ' ') + ' ' + cs[k]);
+      }
+    });
+    Object.keys(pain).forEach(function (part) {
+      rows.push('<div class="cs-row"><b>' + esc(part.charAt(0).toUpperCase() + part.slice(1)) +
+        ' pain</b><span>' + esc(pain[part].join(' · ')) + '</span></div>');
+    });
+    var open = (cs.open_actions || []).filter(function (a) {
+      return !a.closed && a.status !== 'done' && a.status !== 'dropped';
+    }).sort(function (a, b) { return String(a.due || '9').localeCompare(String(b.due || '9')); });
+    open.slice(0, 5).forEach(function (a) {
+      rows.push('<div class="cs-row"><b>' + esc(a.due ? dow(a.due) + ' ' + dnum(a.due) : 'Open') +
+        '</b><span>' + esc(a.action || '') + '</span></div>');
+    });
+    if (!rows.length) return '';
+    return card('Current state', '<div class="cs">' + rows.join('') + '</div>',
+      { foot: open.length > 5 ? (open.length - 5) + ' more open actions' : null });
+  }
+
+  function weightCard(wt) {
+    var pts = (wt || []).filter(function (p) { return p && p.kg != null; });
+    if (pts.length < 2) return '';
+    var kg = pts.map(function (p) { return Number(p.kg); });
+    var last = kg[kg.length - 1];
+    var mean7 = kg.slice(-7).reduce(function (a, b) { return a + b; }, 0) / Math.min(7, kg.length);
+    var change = last - kg[0];
+    var lo = Math.min.apply(null, kg), hi = Math.max.apply(null, kg), span = (hi - lo) || 1;
+    var W = 300, H = 60;
+    var line = kg.map(function (v, i) {
+      return (i / (kg.length - 1) * W).toFixed(1) + ',' + (H - 4 - (v - lo) / span * (H - 8)).toFixed(1);
+    }).join(' ');
+    return card('Weight',
+      '<div class="figures">' +
+        fig(last.toFixed(1), 'Latest', 'kg') +
+        fig(mean7.toFixed(1), '7-day mean', 'kg') +
+        fig(signed(change), 'Change', pts.length + ' readings') +
+      '</div>' +
+      '<svg class="spark" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
+        '<polyline points="' + line + '"/></svg>',
+      { foot: 'Scale readings from Intervals.icu since ' + dow(pts[0].date) + ' ' +
+              dnum(pts[0].date) + '.' });
+  }
+
+  /* ── refresh (private host only) ─────────────────────────────────────── */
+
+  function refreshNow() {
+    if (!state.me || state.refreshing) return;
+    state.refreshing = true;
+    ptrShow('Refreshing from Intervals.icu…', true);
+    fetch('/api/refresh/' + encodeURIComponent(state.slug),
+          { method: 'POST', headers: { 'X-Peak': '1' }, cache: 'no-store' })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          if (!r.ok) throw new Error(j.detail || 'Refresh failed');
+        });
+      })
+      .then(function () { ptrHide(); load(state.slug); })
+      .catch(function (e) { ptrShow(e.message, false); setTimeout(ptrHide, 3500); })
+      .then(function () { state.refreshing = false; });
+  }
+
+  function ptrShow(text, busy) {
+    var el = $('#ptr');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'ptr';
+      document.body.appendChild(el);
+    }
+    el.textContent = text;
+    el.className = 'ptr on' + (busy ? ' busy' : '');
+  }
+  function ptrHide() { var el = $('#ptr'); if (el) el.className = 'ptr'; }
+
+  // Pull down from the top of Today to refresh. Standalone PWAs have no browser
+  // pull-to-refresh, so this is the only way to get it on an installed app.
+  function wirePullToRefresh() {
+    var y0 = null, pulled = 0, PULL = 80;
+    window.addEventListener('touchstart', function (e) {
+      y0 = (state.me && state.tab === 'today' && window.scrollY <= 0 && !state.refreshing)
+        ? e.touches[0].clientY : null;
+      pulled = 0;
+    }, { passive: true });
+    window.addEventListener('touchmove', function (e) {
+      if (y0 == null) return;
+      pulled = e.touches[0].clientY - y0;
+      if (pulled > 20) ptrShow(pulled > PULL ? 'Release to refresh' : 'Pull to refresh', false);
+      else ptrHide();
+    }, { passive: true });
+    window.addEventListener('touchend', function () {
+      if (y0 == null) return;
+      y0 = null;
+      if (pulled > PULL) refreshNow(); else ptrHide();
+    });
   }
 
   /* ── Calendar (month grid) ───────────────────────────────────────────── */
@@ -3514,7 +3643,13 @@
     state.calMonth = null; state.calDay = null;
     skeleton();
     fetch('../ClaudeCoach/public/training-data-' + slug + '.json', { cache: 'no-cache' })
-      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (r) {
+        if (!r.ok) throw new Error(r.status);
+        var lm = r.headers.get('Last-Modified');
+        state.updated = lm ? new Date(lm).toLocaleString([], { weekday: 'short',
+          hour: '2-digit', minute: '2-digit' }) : null;
+        return r.json();
+      })
       .then(function (j) { state.data = j; renderAll(); })
       .then(loadNutrition)
       .catch(function () {
@@ -3570,7 +3705,9 @@
       .then(function (me) {
         if (me && me.athletes && me.athletes.length) {
           ATHLETES = me.athletes;
+          state.me = me;
           buildGate();
+          wirePullToRefresh();
         }
         // A remembered profile skips the gate entirely - being asked who you are on
         // every launch is the thing that makes a web app feel like a website.

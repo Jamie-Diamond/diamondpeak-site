@@ -128,3 +128,46 @@ def test_missing_wrong_audience_or_expired_token_is_refused(cf):
     assert client.get("/api/me").status_code == 401  # dev email is NOT a fallback
     for bad in (token(aud="other"), token(iss="https://evil.cloudflareaccess.com"), token(exp=-10)):
         assert client.get("/api/me", headers={"cf-access-jwt-assertion": bad}).status_code == 401
+
+
+# ── pull-to-refresh ──
+
+@pytest.fixture()
+def refresh_env(env, monkeypatch):
+    calls = []
+    monkeypatch.setattr(server, "_last_refresh", {})
+    monkeypatch.setattr(server, "run_refresh", lambda slug: calls.append(slug) or 0)
+    return env, calls
+
+
+def test_refresh_rebuilds_only_your_own_athlete(refresh_env, monkeypatch):
+    client, calls = refresh_env
+    dev(monkeypatch, "kat@example.com")
+    assert client.post("/api/refresh/kathryn", headers={"x-peak": "1"}).status_code == 200
+    assert client.post("/api/refresh/jamie", headers={"x-peak": "1"}).status_code == 403
+    assert calls == ["kathryn"]
+
+
+def test_refresh_needs_the_app_header_and_is_rate_limited(refresh_env, monkeypatch):
+    client, calls = refresh_env
+    dev(monkeypatch, "kat@example.com")
+    assert client.post("/api/refresh/kathryn").status_code == 400
+    assert client.post("/api/refresh/kathryn", headers={"x-peak": "1"}).status_code == 200
+    assert client.post("/api/refresh/kathryn", headers={"x-peak": "1"}).status_code == 429
+    assert calls == ["kathryn"]
+
+
+def test_refresh_reports_busy_and_failure(refresh_env, monkeypatch):
+    client, _ = refresh_env
+    dev(monkeypatch, "coach@example.com")
+    monkeypatch.setattr(server, "run_refresh", lambda slug: 3)
+    assert client.post("/api/refresh/jamie", headers={"x-peak": "1"}).status_code == 409
+    monkeypatch.setattr(server, "run_refresh", lambda slug: 1)
+    assert client.post("/api/refresh/kathryn", headers={"x-peak": "1"}).status_code == 502
+
+
+def test_nutrition_is_served_from_the_private_file(env, monkeypatch):
+    dev(monkeypatch, "coach@example.com")
+    assert env.get("/ClaudeCoach/public/nutrition-jamie.json").status_code == 404
+    (server.CC / "athletes" / "jamie" / "nutrition-app.json").write_text('{"n":1}')
+    assert env.get("/ClaudeCoach/public/nutrition-jamie.json").json() == {"n": 1}

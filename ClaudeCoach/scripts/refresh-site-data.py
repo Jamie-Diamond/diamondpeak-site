@@ -1979,10 +1979,17 @@ def _build_athlete_training_data(slug, athlete_cfg):
     # files were published complete with sessionLog (injury/pain, notes,
     # hydration, nutrition), kpi.hrv, kpi.rhr, profile.weight_kg and
     # profile.lthr. Every athlete now goes through the same allow-list.
-    pub_rel = write_public_variant(data, slug)
-    if pub_rel:
-        _PUBLISHED.append(pub_rel)
+    # No public variant since 29 Sep 2026 - see PUBLISH_PUBLIC.
+    if PUBLISH_PUBLIC:
+        pub_rel = write_public_variant(data, slug)
+        if pub_rel:
+            _PUBLISHED.append(pub_rel)
 
+
+# Athlete data is no longer published to GitHub Pages (29 Sep 2026). The app reads
+# the PRIVATE files through api/server.py at coach.diamondpeak.uk, behind Cloudflare
+# Access. Only the session library (methodology, no athlete data) is still published.
+PUBLISH_PUBLIC = False
 
 # Repo-relative paths of the sanitised public files written this run. Only these
 # are ever staged; it is populated exclusively by write_public_variant().
@@ -2003,10 +2010,43 @@ def release_lock():
         pass
 
 
+def refresh_one(slug):
+    """Rebuild ONE athlete's private training data and nothing else - no library,
+    no publish. The app's pull-to-refresh calls this through api/server.py."""
+    sys.path.insert(0, str(BASE / "lib"))
+    from icu_api import IcuClient
+    acfg = json.loads(ATHLETES_CONFIG.read_text()).get(slug)
+    if not acfg or not acfg.get("active", True):
+        log(f"[{slug}] not an active athlete")
+        return 2
+    if slug == "jamie":
+        data = _build_jamie_data(IcuClient(acfg["icu_athlete_id"], acfg["icu_api_key"]))
+        try:
+            data = post_process(data)
+        except Exception as e:
+            log(f"Post-processing warning: {e} — continuing without extra fields")
+        OUT_FILE.write_text(json.dumps(data, separators=(",", ":")))
+        log(f"[jamie] refreshed: CTL {data['kpi'].get('ctl')}")
+    else:
+        _build_athlete_training_data(slug, acfg)
+    try:
+        subprocess.run([sys.executable, str(BASE / "scripts" / "publish-nutrition-data.py"), slug],
+                       capture_output=True, text=True, timeout=120)
+    except Exception as e:
+        log(f"[{slug}] nutrition refresh warning: {e}")
+    return 0
+
+
 def main():
+    one = sys.argv[2] if len(sys.argv) == 3 and sys.argv[1] == "--athlete" else None
     if not acquire_lock():
         log("Already running — skipping")
-        sys.exit(0)
+        sys.exit(3 if one else 0)  # 3 tells the app "busy, try shortly"
+    if one:
+        try:
+            sys.exit(refresh_one(one))
+        finally:
+            release_lock()
 
     try:
         sys.path.insert(0, str(BASE / "lib"))
@@ -2045,10 +2085,7 @@ def main():
             )
             out = (r.stdout or r.stderr).strip().splitlines()
             log("Nutrition: " + ("; ".join(out[-3:]) if out else "nothing published"))
-            for line in out:
-                slug = line.split(":")[0].strip()
-                if "wrote" in line and slug:
-                    _PUBLISHED.append(f"ClaudeCoach/public/nutrition-{slug}.json")
+            # Written privately now (athletes/<slug>/nutrition-app.json) - nothing to stage.
         except Exception as e:
             log(f"Nutrition publish warning: {e}, app keeps last copy")
 
@@ -2074,9 +2111,10 @@ def main():
         # exactly the confusion that kept the leak invisible for 11 weeks.
         # Nothing on the box reads it (only HTTP did, and the dashboards now
         # fetch public/ instead). The stale file is left on disk untouched.
-        pub_rel = write_public_variant(data, "jamie")
-        if pub_rel:
-            _PUBLISHED.append(pub_rel)
+        if PUBLISH_PUBLIC:
+            pub_rel = write_public_variant(data, "jamie")
+            if pub_rel:
+                _PUBLISHED.append(pub_rel)
 
         # Refresh per-athlete training data for other athletes (using IcuClient directly)
         if ATHLETES_CONFIG.exists():
