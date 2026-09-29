@@ -4,7 +4,7 @@ Generate a personalised training blueprint for an athlete.
 
 Usage:
   python3 ClaudeCoach/scripts/generate-blueprint.py --athlete {slug}
-  python3 ClaudeCoach/scripts/generate-blueprint.py --athlete {slug} --fitness-choice B
+  python3 ClaudeCoach/scripts/generate-blueprint.py --athlete {slug} --fitness-choice hold_shift
 
 Reads:
   ClaudeCoach/athletes/{slug}/profile.json
@@ -373,12 +373,27 @@ def test_schedule(phases: list[dict], sports: list[str] | None = None) -> list[s
 # -- Fitness check -------------------------------------------------------------
 
 def fitness_check(slug: str, event: str, current_ctl: float,
-                  phases: list[dict], choice: str | None) -> str | None:
+                  phases: list[dict], choice: str | None, cfg: dict | None = None) -> str | None:
     """
     Returns None if no issue, or a status string.
     If AWAITING_DECISION, returns the full decision block.
-    If choice is set, applies it and returns a short note.
+    If choice is set (here, or recorded by the athlete via plan_tools.py fitness-choice),
+    applies it and returns a short note.
+
+    Run races are HYBRID (lib/race_fitness): total Fitness is checked here against the
+    athlete's own floor; RUNNING Fitness needs run history and is checked every week by
+    the planner (session_library.planning_brief fitness_check).
     """
+    import race_fitness as _rf
+    choice = choice or _rf.surplus_choice(cfg or {})
+    run_ev = _rf.run_event_key(event)
+    if run_ev:
+        tfloor = _rf.total_floor(cfg or {})
+        if tfloor is not None and current_ctl < tfloor:
+            return (f"WARNING: total Fitness {current_ctl:.0f} is under this athlete's floor "
+                    f"({tfloor:g}). Running Fitness for the {run_ev.replace('_', ' ')} is "
+                    f"checked weekly by the planner.")
+        return None
     # Check entry fitness for the phase containing TODAY — a mid-plan regen must
     # not compare current CTL against the long-finished first phase (CTL 80 vs
     # Base 55–70 misfired nine weeks into the plan). Before plan start there is
@@ -411,24 +426,25 @@ def fitness_check(slug: str, event: str, current_ctl: float,
     if current_ctl > high * 1.10:
         if choice:
             return (
-                f"Fitness choice {choice} applied. "
-                f"Current CTL {current_ctl:.0f} vs entry target {low}–{high}. "
-                f"Blueprint generated with choice {choice} noted."
+                f"Fitter than the goal: current CTL {current_ctl:.0f} vs entry target "
+                f"{low}–{high}. Athlete's choice: {choice} "
+                f"({_rf.SURPLUS_CHOICES.get(choice, choice)})."
             )
+        # FITTER THAN THE GOAL is the athlete's call (Jamie, 29 Sep 2026). The weekly plan
+        # asks them the same three options and holds until they answer.
         return (
             f"AWAITING_DECISION: athlete={slug} current_ctl={current_ctl:.0f} "
             f"phase={first_non_taper['name']} phase_target_ctl={low}–{high}\n\n"
             f"Your fitness ({current_ctl:.0f} CTL) is above the recommended entry level "
-            f"for {first_non_taper['name']} ({low}–{high} CTL).\n\n"
-            f"A  Taper down first — reduce volume 1–2 weeks to lower fatigue (TSB), then enter phase on schedule.\n"
-            f"   Best for: athletes who feel flat or fatigued despite good numbers.\n\n"
-            f"B  Increase quality now — enter Build early, adding race-pace work to convert fitness to form.\n"
-            f"   Best for: athletes feeling sharp, healthy, and training well.\n\n"
-            f"C  Hold and compress — maintain current load, compress next phase by 1 week.\n"
-            f"   Best for: athletes who want to stay the course but are ahead of schedule.\n\n"
-            f"D  Custom — flag for manual coach review.\n\n"
-            f"Run with: python3 ClaudeCoach/scripts/generate-blueprint.py "
-            f"--athlete {slug} --fitness-choice [A|B|C|D]"
+            f"for {first_non_taper['name']} ({low}–{high} CTL). The athlete decides:\n\n"
+            f"hold_shift  Hold total Fitness and shift the mix toward the goal sport "
+            f"(e.g. more running, let swimming fade).\n\n"
+            f"drift       Let total Fitness drift down to their floor and put the freed time "
+            f"into speed.\n\n"
+            f"raise_goal  Raise the goal.\n\n"
+            f"The weekly plan asks them this and holds until they answer. Record it with: "
+            f"python3 ClaudeCoach/lib/plan_tools.py fitness-choice --athlete {slug} "
+            f"--choice <hold_shift|drift|raise_goal>, or pass --fitness-choice here."
         )
 
     if current_ctl < low * 0.85:
@@ -839,9 +855,10 @@ def main():
     parser.add_argument("--athlete", required=True, help="Athlete slug (e.g. jamie)")
     parser.add_argument(
         "--fitness-choice",
-        choices=["A", "B", "C", "D"],
+        choices=["hold_shift", "drift", "raise_goal"],
         default=None,
-        help="Resolution choice if athlete is over-fitness for entry phase",
+        help="How to handle being fitter than the entry phase needs (the athlete's call; "
+             "normally recorded via plan_tools.py fitness-choice)",
     )
     parser.add_argument(
         "--skip-events", action="store_true",
@@ -910,7 +927,7 @@ def main():
     event = profile.get("race_distance", "Full Ironman")
     fitness_note = None
     if current_ctl is not None:
-        fitness_note = fitness_check(slug, event, current_ctl, phases, choice)
+        fitness_note = fitness_check(slug, event, current_ctl, phases, choice, acfg)
 
     blueprint = render_blueprint(slug, profile, phases, current_ctl, fitness_note, choice)
 

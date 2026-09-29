@@ -276,6 +276,20 @@ ready" (Jamie, 27 Sep 2026). Weeks 1–3 are unchanged.
   WEEKLY_LOAD), and its header shows no target. The morning card drops "good day for
   quality work" in any post-race recovery week (`plan_tools.in_post_race_recovery`).
 
+### Race fitness, A/B/C races, fitter than the goal
+
+`lib/race_fitness.py` holds the numbers `blueprints/blueprint.md` §2, §2.1 and §4.4 state.
+
+- **Run races are hybrid**: running Fitness against the race's range and total Fitness
+  against the athlete's own floor (`ctl_targets.total_fitness_floor`, else the bottom of
+  `maintenance_ctl_band`), each on its own. The brief carries both as `fitness_check`.
+- **A/B/C**: a registry B race makes its week an easy week (65%); B and C races and
+  dated off-season bookings (`priority`, default C) put easy days either side
+  (`booking_easy_dates`, enforced by stage 1 as `booking_not_fresh` / `booking_recovery`).
+- **Fitter than the goal** is the athlete's call: the week holds, the Sunday message asks,
+  and the bot records the answer with `plan_tools.py fitness-choice` (`hold_shift`,
+  `drift`, `raise_goal`), which `required_tss` then applies.
+
 Countdowns come from `races.countdown`, which counts to the next **upcoming**
 race and shows nothing once every configured race has been run. Configure the
 next race and regenerate the blueprint to start a new block.

@@ -29,6 +29,7 @@ import plan_tools as pt                                    # noqa: E402
 import injury as _injury                                   # noqa: E402  (Phase 5.6)
 import thresholds as th                                    # noqa: E402
 import weekly_availability as _wa                          # noqa: E402  (day-rule precedence)
+import race_fitness as _rf                                 # noqa: E402  (run-race fitness, A/B/C)
 
 LIBRARY = BASE / "config" / "session-library.json"
 ATHLETES = BASE / "config" / "athletes.json"
@@ -352,6 +353,39 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
                     "add run minutes or exceed caps). If a sport cannot carry its share, move it to "
                     "another sport's SAME zone (Z3->Z3, VO2->VO2), never easy->VO2. ")
     min_run_min = pt.min_run_minutes(cfg)
+
+    # RUN RACE FITNESS IS HYBRID (race_fitness): running Fitness against the race's range
+    # AND total Fitness against the athlete's own floor, each on its own. Only for a run
+    # race; RUNNING Fitness needs ~6 months of run history, so it is fetched only here.
+    fitness_check = None
+    if ekey in _rf.RUN_EVENTS and ctl:
+        run_ctl = None
+        try:
+            from icu_api import IcuClient as _IC
+            run_ctl = _rf.run_ctl(_IC(cfg["icu_athlete_id"], cfg["icu_api_key"])
+                                  .get_training_history(days=180), today)
+        except Exception:
+            pass
+        tfloor = _rf.total_floor(cfg)
+        fitness_check = {
+            "event": ekey,
+            "running": _rf.running_status(ekey, phase_name, run_ctl),
+            "total": {"ctl": ctl, "floor": tfloor,
+                      "status": (None if tfloor is None
+                                 else ("under" if ctl < tfloor else "ok"))},
+            "surplus_choice": _rf.surplus_choice(cfg),
+        }
+
+    # Easy days around B/C races: booked off-season attempts (default C) and races in
+    # the registry. The validator blocks hard work on them (stage1 audit_built).
+    _near = []
+    if offseason:
+        _near += [dict(b, priority=b.get("priority") or "C")
+                  for b in ((pt.offseason_cfg(cfg) or {}).get("bookings") or [])
+                  if isinstance(b, dict) and b.get("date")]
+    _near += [r for r in (cfg.get("races") or [])
+              if str(r.get("priority") or "").upper() in ("B", "C") and r.get("date")]
+    booking_easy_dates = _rf.easy_dates(_near, plan_start) if _near else {}
     dosing_note = ("Build to weekly_tss_target - weekly_tss_floor is a HARD minimum (below "
                    "it the week detrains the athlete and validation rejects it; only "
                    "deload/taper weeks may sit under maintenance). " + _closure +
@@ -546,6 +580,15 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         # Tests and PB attempts booked into THIS week (offseason.bookings). Present only
         # when there are some: every non-underscore key reaches the prompt verbatim.
         **({"booked_sessions": req["bookings"]} if req.get("bookings") else {}),
+        # Days that must carry no hard work: either side of a B/C race or PB attempt.
+        **({"booking_easy_dates": booking_easy_dates} if booking_easy_dates else {}),
+        # Run race: running and total Fitness, each against its own floor.
+        **({"fitness_check": fitness_check} if fitness_check else {}),
+        # Fitter than the goal (plan_tools.required_tss): the athlete decides.
+        **({"fitness_surplus": req["fitness_surplus"]} if req.get("fitness_surplus") else {}),
+        **({"needs_surplus_choice": True} if (req.get("needs_surplus_choice") or (
+            fitness_check and (fitness_check.get("running") or {}).get("status") == "over"
+            and not fitness_check.get("surplus_choice"))) else {}),
     }
 
 

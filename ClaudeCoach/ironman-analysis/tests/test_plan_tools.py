@@ -168,10 +168,14 @@ def test_weekly_tss_floor_enforces_maintenance_when_phase_target_is_lower():
     # still hold at maintenance — it must never be undercut by a lower phase
     # number (Jamie, 5 Jul 2026 under-training floor; regressed to min()
     # instead of max() and silently let this happen).
+    # Since 29 Sep 2026 the recommendation no longer silently undercuts maintenance
+    # either: being fitter than the goal is the athlete's call, so the week HOLDS and
+    # the athlete is asked (race_fitness.SURPLUS_CHOICES).
     out = pt.required_tss(_JAMIE_CFG, 100.0, today=date(2026, 6, 22))
     maintenance = out["maintenance_weekly_tss"]
     rec = out["recommended_weekly_tss"]
-    assert rec < maintenance
+    assert out["fitness_surplus"]["phase_target_ctl"] < 100
+    assert rec == maintenance and out["needs_surplus_choice"] is True
     assert out["weekly_tss_floor"] == maintenance
 
 

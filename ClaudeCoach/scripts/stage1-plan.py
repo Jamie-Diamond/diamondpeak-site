@@ -556,7 +556,7 @@ def unknown_blocker_codes(blocking) -> list:
     known = _SAFETY_BLOCKER_CODES | {
         "weekly_tss_floor", "no_rest_day", "no_rest_day_waived", "long_ride_missing",
         "day_rules_drifted", "name_intensity_mismatch", "distance_duration_mismatch",
-        "strength_over_cap", "booking_missing", "booking_not_fresh"}
+        "strength_over_cap", "booking_missing", "booking_not_fresh", "booking_recovery"}
     out = []
     for e in (blocking or []):
         c = e.get("code") if isinstance(e, dict) else None
@@ -566,6 +566,14 @@ def unknown_blocker_codes(blocking) -> list:
             continue
         out.append(c)
     return sorted(set(out))
+
+
+def _hard_minutes_on(proposal: dict, day: str) -> float:
+    """Minutes at >= 0.90 IF across every session on `day` (the injector's "high" cut)."""
+    return sum((sg.get("minutes") or 0)
+               for s in proposal.get("sessions", []) if str(s.get("date"))[:10] == day
+               for sg in (s.get("segments") or [])
+               if (_seg_if(s.get("sport", ""), sg) or 0) >= 0.90)
 
 
 def audit_built(brief: dict, built: dict, target, proposal: dict):
@@ -665,19 +673,26 @@ def audit_built(brief: dict, built: dict, target, proposal: dict):
                                     + (f" on {b['date']}" if b.get("date") else "")
                                     + (f", named with '{b['match']}'" if b.get("match") else "")})
             continue
+        if b.get("date") and brief.get("booking_easy_dates"):
+            continue          # a dated booking's easy days are checked below, with the rest
         try:
             eve = (_dt.date.fromisoformat(str(hit[0]["date"])[:10])
                    - _dt.timedelta(days=1)).isoformat()
         except (KeyError, ValueError):
             continue
-        hard_min = sum((sg.get("minutes") or 0)
-                       for s in proposal.get("sessions", []) if str(s.get("date"))[:10] == eve
-                       for sg in (s.get("segments") or [])
-                       if (_seg_if(s.get("sport", ""), sg) or 0) >= 0.90)
+        hard_min = _hard_minutes_on(proposal, eve)
         if hard_min > 10:
             blocking.append({"code": "booking_not_fresh",
                              "msg": f"{eve} carries {hard_min:.0f}min of hard work the day "
                                     f"before '{label}' - make that day easy or rest"})
+    # Easy days either side of a B/C race or PB attempt (race_fitness.PRIORITY_RULES):
+    # a C gets one each side, a B three. Includes the days after last week's race.
+    for d, why in (brief.get("booking_easy_dates") or {}).items():
+        hard_min = _hard_minutes_on(proposal, d)
+        if hard_min > 10:
+            blocking.append({"code": "booking_not_fresh" if "before" in why else "booking_recovery",
+                             "msg": f"{d} carries {hard_min:.0f}min of hard work but must be "
+                                    f"easy ({why}) - make that day easy or rest"})
 
     # ── INTENSITY BUDGET (ADVISORY: drives the loop, never blocks) ──
     # The athlete's OVERALL phase TID (brief.tid_low_mod_high) is the intensity budget: the
@@ -872,7 +887,8 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
 - BOOKED SESSIONS: if the brief has "booked_sessions", put EVERY one in the week — on its
   "date" where it has one, else on any legal day for that sport — and put its "match" text in
   the session name. Each is a max effort: warm-up, the effort, cool-down. Keep the day before
-  it easy or rest, and count it as that sport's quality for the week.
+  it easy or rest, and count it as that sport's quality for the week. Every date in
+  "booking_easy_dates" is an EASY day (no hard work) - the days either side of a B/C race.
 - OBEY hard_rules (the athlete's protocol) absolutely — they override anything else here.
 - Swim sets: express in minutes (not metres). Strength: omit segments.
 - SWIM ENDURANCE scales to the event: the weekly LONG swim is OVERDISTANCE — build toward
@@ -1604,6 +1620,9 @@ def _week_message(brief: dict, built: dict, pins: dict | None = None) -> str:
     _ready = _ready_line(brief)
     if _ready:
         lines.append(_ready)
+    _surplus = _surplus_line(brief)
+    if _surplus:
+        lines.append(_surplus)
     for s in built["sessions"]:
         wd = _dt.date.fromisoformat(s["date"]).strftime("%a")
         dur = f" {s['duration_min']}min" if s["duration_min"] else ""
@@ -1627,6 +1646,26 @@ def _load_on_target(brief: dict, load_pct_off) -> bool:
     if (brief.get("week_type") or "").lower() == "post_race":
         return True
     return abs(load_pct_off) <= 12
+
+
+def _surplus_line(brief: dict) -> str:
+    """The Sunday question when the athlete is fitter than their goal needs (Jamie,
+    29 Sep 2026: "can ask how to deal with that with the user"). Asked until answered;
+    the bot records the answer with plan_tools.py fitness-choice."""
+    if not brief.get("needs_surplus_choice"):
+        return ""
+    fs = brief.get("fitness_surplus") or {}
+    run = ((brief.get("fitness_check") or {}).get("running") or {})
+    if fs:
+        why = (f"your Fitness ({fs.get('ctl'):g}) is above what this phase needs "
+               f"({fs.get('phase_target_ctl')})")
+    else:
+        why = (f"your running Fitness ({run.get('ctl')}) is above what this race needs "
+               f"({run.get('range', ['?', '?'])[0]}-{run.get('range', ['?', '?'])[1]})")
+    return (f"❓ _You're fitter than the goal needs: {why}. I'm holding it for now. How do "
+            f"you want to use it? Reply *1* hold it and shift toward your goal sport (e.g. more "
+            f"running, let swimming fade), *2* let it drift down and put the time into speed, "
+            f"or *3* raise the goal._")
 
 
 def _ready_line(brief: dict) -> str:

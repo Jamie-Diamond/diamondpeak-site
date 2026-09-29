@@ -72,6 +72,7 @@ from primitives.blueprint import current_phase                   # noqa: E402
 from primitives.nutrition import fuel_target, recent_avg_g_hr   # noqa: E402
 from rpe_context import SPORT_FAMILY                             # noqa: E402
 import replan_gate                                               # noqa: E402
+import race_fitness as rf                                        # noqa: E402
 
 # The three subcommands lib/icu_fetch.py's push_workout/edit_workout gate on (the
 # ad-hoc-replan fix, 24 Aug 2026 — see replan_gate.py). Running one of these for the
@@ -1219,6 +1220,15 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
                     float(ctl_today), band[0], _MAINTENANCE_CONVERGE_WEEKS))
             ow = post_race_block_week(cfg, race_d, weeks_since)
             books = offseason_bookings(cfg, today)
+            # A B-priority booking (race_fitness.PRIORITY_RULES) makes its week lighter,
+            # the same "3-5 easier days" a B-race gets anywhere else. C does not.
+            b_race = next((b for b in books if str(b.get("priority") or "").upper() == "B"), None)
+            if b_race:
+                fct = rf.PRIORITY_RULES["B"]["race_week_factor"]
+                target = int(round(target * fct))
+                floor = 0
+                out.update({"required_weekly_tss": target, "recommended_weekly_tss": target,
+                            "b_race_week": b_race.get("name"), "b_race_factor": fct})
             band_s = (f"between {band[0]:g} and {band[1]:g}" if band
                       else f"near {mct if mct is not None else float(ctl_today):g}")
             book_s = ""
@@ -1227,9 +1237,13 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
                           "one is given): " + "; ".join(
                               f"{b.get('name') or b.get('kind')} ({b.get('sport')}, "
                               f"{b.get('date') or 'any legal day'})" for b in books)
-                          + ". Each is a MAX effort: the day before it is easy or rest, "
-                          "with no quality in the 48 hours before, and it counts as that "
-                          "sport's quality for the week.")
+                          + ". Each is a MAX effort and counts as that sport's quality for the "
+                          "week. Keep the listed easy days (booking_easy_dates) free of hard "
+                          "work: a C attempt gets an easy day either side, a B attempt three.")
+                if b_race:
+                    book_s += (f" This is a B-RACE WEEK ({b_race.get('name')}): load is "
+                               f"{int(rf.PRIORITY_RULES['B']['race_week_factor'] * 100)}% of "
+                               "a normal off-season week.")
             out.update({
                 "phase": "offseason", "week_type": "offseason",
                 "offseason_week": ow, "ctl_band": list(band) if band else None,
@@ -1417,6 +1431,49 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
     # week to recovery.
     rec = out["recommended_weekly_tss"]
     out["week_type"] = phase
+    maintenance_now = int(round(7 * float(ctl_today))) if ctl_today else None
+    surplus_drift = False
+    if maintenance_now and rec is not None and int(rec) < maintenance_now:
+        # FITTER THAN THE GOAL (Jamie, 29 Sep 2026): current Fitness is above this
+        # phase's target, so the CTL line asks for LESS than holding it. That used to be
+        # prescribed silently (with the floor below then contradicting it at 7 x CTL).
+        # It is the athlete's call: hold and shift the mix, let it drift to their floor,
+        # or raise the goal. Until they say, hold.
+        choice = rf.surplus_choice(cfg)
+        tfloor = rf.total_floor(cfg)
+        out["fitness_surplus"] = {"ctl": float(ctl_today), "phase_target_ctl": target_ctl,
+                                  "total_floor": tfloor, "choice": choice}
+        if choice == "drift":
+            drift_to = max(float(target_ctl), tfloor or 0.0)
+            rec = min(maintenance_now,
+                      compute_required_tss(ctl_today, drift_to, weeks_remaining))
+            surplus_drift = True
+            s_note = (f" FITTER THAN THE GOAL: Fitness {float(ctl_today):g} is above the "
+                      f"{phase} target {target_ctl}. The athlete chose to let it drift down "
+                      f"toward {drift_to:g} (never below their floor): ~{rec} TSS, with the "
+                      "freed time going into speed/quality in the goal sport.")
+        else:
+            rec = maintenance_now
+            if choice == "hold_shift":
+                s_note = (f" FITTER THAN THE GOAL: Fitness {float(ctl_today):g} is above the "
+                          f"{phase} target {target_ctl}. The athlete chose to HOLD it (~{rec} "
+                          "TSS) and shift the mix toward the goal sport: more of the goal "
+                          "sport, let the other sports fade (e.g. more running, less swimming).")
+            elif choice == "raise_goal":
+                s_note = (f" FITTER THAN THE GOAL: Fitness {float(ctl_today):g} is above the "
+                          f"{phase} target {target_ctl}. The athlete wants to RAISE THE GOAL: "
+                          f"holding (~{rec} TSS) until the new goal and its targets are set.")
+            else:
+                out["needs_surplus_choice"] = True
+                s_note = (f" FITTER THAN THE GOAL: Fitness {float(ctl_today):g} is above the "
+                          f"{phase} target {target_ctl}, so holding it this week (~{rec} TSS). "
+                          "ASK the athlete which they want: (1) hold total Fitness and shift the "
+                          "mix toward the goal sport, (2) let it drift down to their floor"
+                          + (f" ({tfloor:g})" if tfloor else "") + " and put the freed time "
+                          "into speed, or (3) raise the goal. Record the answer with "
+                          "plan_tools.py fitness-choice.")
+        out.update({"recommended_weekly_tss": rec,
+                    "note": (out.get("note") or "") + s_note})
     # UNDER-TRAINING floor (Jamie, 5 Jul 2026): a training week must at least
     # reach maintenance (7 x CTL) even when the phase-required TSS is lower than
     # that — otherwise a light phase target would silently let the floor sit
@@ -1471,14 +1528,28 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
             })
             rec = out["recommended_weekly_tss"]
 
-    out["weekly_tss_floor"] = max(int(rec), maintenance) if (rec and maintenance) else None
+    out["weekly_tss_floor"] = ((int(rec) if surplus_drift else max(int(rec), maintenance))
+                               if (rec and maintenance) else None)
     # Manual easy-week override (B-race taper etc.): a hand-declared week that the
     # mechanical every-Nth-week cadence doesn't know about. Keyed on the Monday of
     # the week `today` falls in, so it survives regardless of training-week drift.
     # Takes precedence over the scheduled-deload/recovery logic below. Semantics =
     # taper (hold intensity, cut volume, no floor), not accumulation deload.
     week_monday = (today - timedelta(days=today.weekday())).isoformat()
-    for ew in (cfg.get("manual_easy_weeks") or []):
+    # B races in the race registry get the B-race week automatically (race_fitness
+    # PRIORITY_RULES); a hand-declared manual_easy_weeks entry for the week still wins.
+    auto_b = []
+    for r in (cfg.get("races") or []):
+        try:
+            rd = date.fromisoformat(str(r.get("date"))[:10])
+        except ValueError:
+            continue
+        if (str(r.get("priority") or "").upper() == "B"
+                and (rd - timedelta(days=rd.weekday())).isoformat() == week_monday):
+            auto_b.append({"week_start": week_monday,
+                           "reason": f"B race: {r.get('name') or 'race'} on {rd.isoformat()}",
+                           "factor": rf.PRIORITY_RULES["B"]["race_week_factor"]})
+    for ew in list(cfg.get("manual_easy_weeks") or []) + auto_b:
         if isinstance(ew, str):
             ew = {"week_start": ew}
         if ew.get("week_start") == week_monday:
@@ -2212,6 +2283,56 @@ def cmd_post_race_ready(args) -> dict:
     return set_post_race_ready(args.athlete, when=args.date, undo=args.undo)
 
 
+# ── subcommand: fitness-choice ─────────────────────────────────────────────────
+def set_fitness_choice(slug: str, choice: str = None, clear: bool = False, path=None) -> dict:
+    """Record (or clear) how the athlete wants to handle being fitter than their goal
+    needs (race_fitness.SURPLUS_CHOICES). Backs up athletes.json first."""
+    import shutil
+    if not clear and choice not in rf.SURPLUS_CHOICES:
+        raise SystemExit(_err(f"choice must be one of {sorted(rf.SURPLUS_CHOICES)}"))
+    p = Path(path or ATHLETES_CONFIG)
+    athletes = json.loads(p.read_text())
+    if slug not in athletes:
+        raise SystemExit(_err(f"unknown athlete '{slug}'"))
+    cfg = athletes[slug]
+    before = cfg.get("fitness_surplus_choice")
+    if clear:
+        cfg.pop("fitness_surplus_choice", None)
+    else:
+        cfg["fitness_surplus_choice"] = choice
+    shutil.copy2(p, p.with_name(p.name + f".bak-fitness-choice-{date.today().isoformat()}"))
+    p.write_text(json.dumps(athletes, indent=2) + "\n")
+    return {"athlete": slug, "fitness_surplus_choice": cfg.get("fitness_surplus_choice"),
+            "was": before,
+            "means": rf.SURPLUS_CHOICES.get(cfg.get("fitness_surplus_choice"))}
+
+
+def cmd_fitness_choice(args) -> dict:
+    return set_fitness_choice(args.athlete, choice=args.choice, clear=args.clear)
+
+
+# Chat side of the choice: only the bot hears the athlete answer the Sunday question.
+_SURPLUS_PROMPT = (
+    "FITTER THAN THE GOAL: when {name}'s Fitness is above what their goal needs, the "
+    "weekly plan asks how to handle it. When {name} answers, FIRST run `python3 "
+    "ClaudeCoach/lib/plan_tools.py fitness-choice --athlete {slug} --choice <c>` with "
+    "(the weekly message numbers them 1, 2, 3) 1 = hold_shift (hold total Fitness, shift the mix toward the goal sport, e.g. more "
+    "running and let swimming fade), 2 = drift (let it drift down to their floor and put the "
+    "freed time into speed) or 3 = raise_goal; `--clear` to undo. Never choose for them.{cur}"
+)
+
+
+def fitness_choice_prompt_block(slug: str, first_name: str = "", path=None) -> str:
+    """The system-prompt block telling the bot how to record the athlete's answer."""
+    try:
+        cfg = (json.loads(Path(path or ATHLETES_CONFIG).read_text()) or {}).get(slug) or {}
+    except Exception:
+        return ""
+    c = rf.surplus_choice(cfg)
+    cur = f" Current answer: {c} ({rf.SURPLUS_CHOICES[c]})." if c else ""
+    return _SURPLUS_PROMPT.format(name=first_name or slug.title(), slug=slug, cur=cur)
+
+
 # ── subcommand: log-strength ───────────────────────────────────────────────────
 def cmd_log_strength(args) -> dict:
     """Log a non-device training session (CrossFit / gym / kettlebells) as REAL
@@ -2389,6 +2510,12 @@ def main():
     ppr.add_argument("--date", help="YYYY-MM-DD; default today")
     ppr.add_argument("--undo", action="store_true", help="clear it (back into the recovery hold)")
 
+    pfc = sub.add_parser("fitness-choice",
+                         help="how the athlete wants to handle being fitter than their goal needs")
+    pfc.add_argument("--athlete", required=True)
+    pfc.add_argument("--choice", choices=sorted(rf.SURPLUS_CHOICES))
+    pfc.add_argument("--clear", action="store_true", help="forget the answer (the plan holds and asks again)")
+
     pnp = sub.add_parser("windowed-np", help="NP for one segment of a ride, reconciled against ICU's own recorded NP")
     pnp.add_argument("--athlete", required=True)
     pnp.add_argument("--activity-id", required=True, dest="activity_id")
@@ -2415,7 +2542,8 @@ def main():
                "ctl-sweep": cmd_ctl_sweep,
                "sweat-rate": cmd_sweat_rate, "log-strength": cmd_log_strength,
                "windowed-np": cmd_windowed_np, "wbal": cmd_wbal,
-               "post-race-ready": cmd_post_race_ready}[args.cmd]
+               "post-race-ready": cmd_post_race_ready,
+               "fitness-choice": cmd_fitness_choice}[args.cmd]
     try:
         result = handler(args)
     except SystemExit:

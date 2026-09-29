@@ -229,6 +229,13 @@ def system_prompt_with_level(sp_file) -> str:
             text = text + "\n\n" + hold
     except Exception as e:
         log(f"recovery-hold block skipped: {e}")
+    try:
+        import plan_tools as _pt
+        surplus = _pt.fitness_choice_prompt_block(slug, first_name)
+        if surplus:
+            text = text + "\n\n" + surplus
+    except Exception as e:
+        log(f"fitness-choice block skipped: {e}")
     return text
 
 

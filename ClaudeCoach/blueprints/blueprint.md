@@ -76,29 +76,45 @@ When `generate-blueprint.py` runs, it fetches the athlete's live CTL from interv
 | Peak | 80–95 | 60–75 |
 | Taper start | 85–100 | 65–80 |
 
-If the athlete's current CTL is **> phase target × 1.10** (i.e. significantly above), the script outputs an `AWAITING_DECISION` block and presents four resolution options:
+If the athlete's current CTL is **> phase target × 1.10**, they are **fitter than the goal
+needs**. What to do with that is **the athlete's call** (Jamie, 29 Sep 2026), never decided
+for them. The weekly plan asks, and holds Fitness until they answer:
 
-```
-AWAITING_DECISION: athlete={slug} current_ctl={n} phase_target_ctl={m}
+| Choice | What the plan does |
+|---|---|
+| `hold_shift` | Hold total Fitness and shift the mix toward the goal sport (e.g. more running, let swimming fade) |
+| `drift` | Let total Fitness drift down, never below the athlete's floor (§2.1), and put the freed time into speed |
+| `raise_goal` | Hold, while a faster goal and its targets are agreed |
 
-Your fitness ({n} CTL) is significantly above the recommended entry level for {phase} ({m} CTL).
-This means you have built a solid base ahead of schedule. Choose how to handle this:
-
-A  Taper down first — reduce volume for 1–2 weeks to lower fatigue (TSB), then enter phase on schedule.
-   Best for: athletes who feel flat or fatigued despite good numbers.
-
-B  Increase quality now — enter Build early, adding race-pace work to convert fitness to form.
-   Best for: athletes feeling sharp, healthy, and training well.
-
-C  Hold and compress — maintain current load, but compress the next phase by 1 week.
-   Best for: athletes who want to stay the course but acknowledge they are ahead.
-
-D  Custom — flag for manual coach review.
-
-Run with: python3 generate-blueprint.py --athlete {slug} --fitness-choice [A|B|C|D]
-```
+The answer is saved per athlete (`fitness_surplus_choice`, set by the coach bot with
+`plan_tools.py fitness-choice`) and applies until they change it. `generate-blueprint.py`
+reports the same decision (`AWAITING_DECISION` until one is recorded). Constants:
+`lib/race_fitness.py`.
 
 If CTL is **< phase target × 0.85** (significantly below), the script logs a warning but proceeds, noting that phase TSS targets will be moderated to the athlete's actual fitness level.
+
+### 2.1 Run Races — Hybrid Fitness Floors
+
+A run race is judged on **two floors, each on its own**:
+
+- **Running Fitness** (42-day average of run load only) against the race's range below.
+- **Total Fitness** against the **athlete's own total floor** (`ctl_targets.total_fitness_floor`,
+  else the bottom of their `maintenance_ctl_band`). Athletes without one get only the running floor.
+
+A triathlete can be far above a 5k's needs on total and still under it on running (Jamie,
+29 Sep 2026: total 95, running 32), so neither number alone says whether they are ready.
+
+**Running Fitness on race day** (strong amateur; estimates):
+
+| Race | Running Fitness | A-race taper |
+|---|---|---|
+| 5k | 35–50 | 5–7 days |
+| 10k | 40–55 | 5–7 days |
+| Half Marathon | 45–60 | 7–10 days |
+| Marathon | 55–75 | 2–3 weeks |
+
+Phase entry = race-day range × Base 0.70 / Build 0.80 / Specific 0.90 / Peak 0.95 / Taper 1.00.
+Running above the range is "fitter than the goal" (§2); below it, the block builds running.
 
 ---
 
@@ -232,16 +248,33 @@ The following events share the mesocycle algorithm and ramp rules. Their phase-s
 
 | Event | Status | Key divergence from ironman methodology |
 |---|---|---|
-| Marathon | Stub | Run-dominant; bike and swim as cross-training only in base. Peak = 3×20 min race-pace sessions. |
-| Half Marathon | Stub | Higher Z4–5 run proportion in peak. Short taper (7–10 days). |
-| 10k | Stub | Significant Z5–7 work in build/peak. Taper = 5–7 days. |
-| 5k | Stub | Speed-dominant; Z5–7 forms 25% of weekly run volume in peak. |
+| Marathon | Fitness + taper defined (§2.1) | Run-dominant; bike and swim as cross-training only in base. Peak = 3×20 min race-pace sessions. Taper 2–3 weeks. |
+| Half Marathon | Fitness + taper defined (§2.1) | Higher Z4–5 run proportion in peak. Taper 7–10 days. |
+| 10k | Fitness + taper defined (§2.1) | Significant Z5–7 work in build/peak. Taper 5–7 days. |
+| 5k | Fitness + taper defined (§2.1) | Speed-dominant; Z5–7 forms 25% of weekly run volume in peak. Taper 5–7 days. |
 | Ultramarathon | Stub | Volume-dominant; IF ceiling lower (0.60 base, 0.64 peak). Time-on-feet over pace. |
 | Duathlon | Stub | Brick-heavy from base (run–bike–run format). No swim block. |
 | Aquathlon | Stub | Swim–run format. Bike as cross-training. Transitions and pacing across disciplines key. |
 | Road Sportive / Gran Fondo | **Implemented** (`Sportive`) | Bike-only: bike distribution by phase (Base 80/12/8 → Build 70/18/12 → Peak 65/18/17 → Taper 65/18/17 Z1–2/Z3/Z4–5), FTP tests only (no LTHR/CSS), no bricks. Climbing-weighted via the course modifier on hilly routes. |
 | Gravel Race | **Implemented** (maps to `Sportive`) | Shares the Sportive bike-only profile; extended Z2–3 with power management. |
 | Endurance Swim | Stub | Swim-dominant. Run/bike as active recovery only. |
+
+### 4.4 Race Priority — A / B / C
+
+Every race in the registry (`races` in athletes.json) and every booked off-season attempt
+carries a priority. The planner applies it; constants in `lib/race_fitness.py`.
+
+| | A | B | C |
+|---|---|---|---|
+| Plan built around it | Yes, the whole block | No | No |
+| Taper | The event's full taper (§4.1, §4.2, §2.1) | 3 easier days before; race week at **65%** load | None: an easy day before |
+| Recovery after | Ironman 3 weeks, 70.3 ~10 days, marathon 1–2 weeks, half ~1 week, 5k/10k 2–3 days | 3 easy days | 1 easy day |
+| How many | 1–2 a year | 2–4 | Any |
+
+"Easy" = no hard work (nothing over 10 min at ≥ 0.90 IF). The easy days either side of a
+B or C race carry across week boundaries, so a Saturday race's recovery lands in the next
+week's plan. A B race in the registry makes its week an easy week automatically; a
+hand-declared `manual_easy_weeks` entry for that week still wins.
 
 ---
 
