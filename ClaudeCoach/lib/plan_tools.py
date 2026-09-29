@@ -544,6 +544,9 @@ _DEFACTO_DELOAD_AT = 1.00   # last week <= 1.00 x maintenance = already a de fac
 # that holds current fitness); CTL decays slightly through the taper so the
 # absolute numbers drift down a touch more — the safe direction.
 _TAPER_FACTORS = {3: 0.70, 2: 0.55, 1: 0.40}
+# A taper this far out is a plan_start left over from an earlier race, not a taper
+# (a long phase_tss tail can legitimately reach 4-5 weeks, so this is generous).
+_STALE_TAPER_DAYS = 56
 
 # RACE WEEK (6 Sep 2026). The ladder above is a WHOLE-WEEK volume target, and in race
 # week the whole week includes the race — the single biggest session of the year, and
@@ -725,6 +728,38 @@ _MAINTENANCE_FRACTION = 0.60
 # the week-3 recovery level instead of starting the next block. Saying ready (plan_tools
 # post-race-ready) releases it; the block after it runs exactly as configured. It never
 # SHORTENS weeks 1-3: ready only ends the hold, it does not skip recovery.
+def recovery_race(cfg: dict, today=None):
+    """(race_s, race_d) of the finished A-race the post-race state hangs off, or (None, None).
+
+    Setting the NEXT A-race moves `race_date` into the future (Brighton, 29 Sep 2026), and
+    every post-race check read only `race_date`, so the finished race vanished: recovery
+    weeks, the hold and the off-season block all switched off, and week_now (still counted
+    from the OLD plan_start) fell through to the taper branch 27 weeks out. The finished
+    race is the latest past A-race in the registry (or a past `race_date`), and it governs
+    until a NEW plan_start is set after it, which is what starts the next race's block."""
+    today = today or date.today()
+    cands = []
+    for raw in [{"date": cfg.get("race_date"), "priority": "A"}] + list(cfg.get("races") or []):
+        if not isinstance(raw, dict) or str(raw.get("priority") or "").upper() != "A":
+            continue
+        try:
+            d = date.fromisoformat(str(raw.get("date"))[:10])
+        except ValueError:
+            continue
+        if d < today:
+            cands.append(d)
+    if not cands:
+        return None, None
+    race_d = max(cands)
+    try:
+        ps = date.fromisoformat(cfg["plan_start"]) if cfg.get("plan_start") else None
+    except ValueError:
+        ps = None
+    if ps and ps > race_d:
+        return None, None            # the next block has started; that race is history
+    return race_d.isoformat(), race_d
+
+
 def post_race_ready_date(cfg: dict):
     """The date the athlete said they were ready to train again, or None."""
     raw = cfg.get("post_race_ready")
@@ -789,11 +824,8 @@ def in_post_race_recovery(cfg: dict, today=None) -> bool:
     week 3 while a recovery hold is active. The daily surfaces use it so a recovery week's
     high Form is never read as "good day for quality work"."""
     today = today or date.today()
-    try:
-        race_d = date.fromisoformat(cfg["race_date"]) if cfg.get("race_date") else None
-    except ValueError:
-        return False
-    if not race_d or race_d >= today:
+    _, race_d = recovery_race(cfg, today)
+    if not race_d:
         return False
     # Judged on the PLANNED week (its Monday), so the daily card agrees with the calendar:
     # a Saturday in week 3 is still a recovery day even though it is 21 days after.
@@ -823,12 +855,11 @@ def recovery_hold_prompt_block(slug: str, first_name: str = "", path=None,
     """The system-prompt block for an athlete in a post-race recovery hold; '' otherwise."""
     try:
         cfg = (json.loads(Path(path or ATHLETES_CONFIG).read_text()) or {}).get(slug) or {}
-        race_s = cfg.get("race_date")
-        race_d = date.fromisoformat(race_s) if race_s else None
+        today = today or date.today()
+        race_s, race_d = recovery_race(cfg, today)
     except Exception:
         return ""
-    today = today or date.today()
-    if not race_d or race_d >= today or not post_race_hold_active(cfg, race_d, as_of=today):
+    if not race_d or not post_race_hold_active(cfg, race_d, as_of=today):
         return ""
     return _HOLD_PROMPT.format(
         name=first_name or slug.title(), race=race_s, slug=slug,
@@ -1129,9 +1160,8 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
     # POST-RACE first: a race in the PAST is never a taper (see _TRANSITION_FACTORS).
     # Checked ahead of the phase branches, not inside the taper one, so it also catches a
     # stale plan_start that leaves week_now inside 'peak' after race day.
-    race_s = cfg.get("race_date")
-    race_d = date.fromisoformat(race_s) if race_s else None
-    if race_d and race_d < today:
+    race_s, race_d = recovery_race(cfg, today)
+    if race_d:
         days_since = (today - race_d).days
         weeks_since = days_since // 7 + 1
         maint = 7.0 * float(ctl_today or 0)      # the load that HOLDS current CTL
@@ -1272,6 +1302,17 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
                            "work. This is NOT a taper: there is no upcoming race, so never "
                            "mention a countdown or race-week sharpening.")
         return out
+
+    race_s = cfg.get("race_date")
+    race_d = date.fromisoformat(race_s) if race_s else None
+    if phase == "taper" and race_d and (race_d - today).days > _STALE_TAPER_DAYS:
+        # The week count ran off the end of the phases but the race is not close: the
+        # plan_start belongs to an earlier race. Never taper on that (29 Sep 2026: a
+        # 27-weeks-out marathon read as taper). No target until the block is re-anchored.
+        return {"error": f"plan_start {cfg.get('plan_start')} predates the plan for the "
+                         f"race on {race_s} ({(race_d - today).days // 7} weeks away): set "
+                         "a new plan_start and phase_tss for this block before prescribing "
+                         "a load. This is NOT a taper."}
 
     if phase == "taper":
         # Shaped taper: stepped volume targets so the load checks stay ENGAGED
@@ -2154,8 +2195,7 @@ def set_post_race_ready(slug: str, when=None, undo: bool = False, path=None) -> 
         cfg["post_race_ready"] = d.isoformat()
     shutil.copy2(p, p.with_name(p.name + f".bak-post-race-ready-{date.today().isoformat()}"))
     p.write_text(json.dumps(athletes, indent=2) + "\n")
-    race_s = cfg.get("race_date")
-    race_d = date.fromisoformat(race_s) if race_s else None
+    race_s, race_d = recovery_race(cfg)
     ready = post_race_ready_date(cfg)
     first_monday = (ready + timedelta(days=(7 - ready.weekday()) % 7)) if ready else None
     return {"athlete": slug, "post_race_ready": cfg.get("post_race_ready"),
