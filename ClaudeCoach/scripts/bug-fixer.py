@@ -807,6 +807,13 @@ def _tg_card(chat_id, review):
             {"text": "❌ No",   "callback_data": f"bf:no:{rid}"},
             {"text": "✏️ Edit", "callback_data": f"bf:edit:{rid}"},
         ]]}
+        try:
+            import outbox
+            outbox.record(chat_id, text, kb, source="bug-fixer", parse_mode="HTML")
+            if not outbox.telegram_on(chat_id):
+                return
+        except Exception:
+            pass
         ctx = ssl.create_default_context(
             cafile="/etc/ssl/cert.pem" if Path("/etc/ssl/cert.pem").exists() else None)
         body = json.dumps({"chat_id": chat_id, "text": text, "parse_mode": "HTML",

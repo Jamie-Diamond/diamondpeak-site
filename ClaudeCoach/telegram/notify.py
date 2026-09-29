@@ -14,6 +14,14 @@ from pathlib import Path
 _cafile = "/etc/ssl/cert.pem" if __import__("os").path.exists("/etc/ssl/cert.pem") else None
 SSL_CONTEXT = ssl.create_default_context(cafile=_cafile)
 
+# Every message is also recorded for the web app, and skips Telegram entirely for an
+# athlete who has moved to the web (lib/outbox.py). Soft import: never block a send.
+sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
+try:
+    import outbox
+except Exception:
+    outbox = None
+
 config  = json.loads((Path(__file__).parent / "config.json").read_text())
 token   = config["bot_token"]
 
@@ -56,7 +64,19 @@ def _append_history(message):
         pass
 
 
+def _web_only(text="", photo=None):
+    """Record for the web app; True when this athlete no longer gets Telegram."""
+    if outbox is None:
+        return False
+    outbox.record(chat_id, text, photo=photo, source="notify", parse_mode="Markdown")
+    return not outbox.telegram_on(chat_id)
+
+
 def send_text(text):
+    if _web_only(text):
+        if log_history:
+            _append_history(text)
+        return
     for chunk in [text[i:i+4096] for i in range(0, len(text), 4096)]:
         payload = json.dumps({"chat_id": chat_id, "text": chunk, "parse_mode": "Markdown"}).encode()
         req = urllib.request.Request(
@@ -91,6 +111,10 @@ def send_text(text):
 
 
 def send_photo(photo_bytes, caption=""):
+    if _web_only(caption, photo=photo_bytes):
+        if log_history:
+            _append_history(("[chart/photo sent] " + caption).strip())
+        return
     boundary = "CCbound"
     parts = (
         f"--{boundary}\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n{chat_id}\r\n"

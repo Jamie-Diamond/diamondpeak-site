@@ -719,6 +719,12 @@
 
   var chatState = { loaded: false, busy: false };
 
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && state.tab === 'chat' && state.me && !chatState.busy && $('#chatLog')) {
+      loadChatHistory();
+    }
+  });
+
   function wireChat() {
     var fab = $('#chatFab');
     if (fab) {
@@ -763,7 +769,9 @@
       return;
     }
     if (!$('#chatLog')) {
-      v.innerHTML = '<p class="hint chat-k">Your chat with the coach · shared with Telegram</p>' +
+      v.innerHTML = notifyBar() +
+        '<p class="hint chat-k">' + (state.me.state === 'active'
+          ? 'Your chat with the coach' : 'Setting up your coaching') + '</p>' +
         '<div class="chat-log" id="chatLog"></div>' +
         '<p class="chat-status" id="chatStatus"></p>' +
         '<form class="composer" id="composer">' +
@@ -789,9 +797,42 @@
       $('#chatMic').onclick = toggleRecord;
       $('#chatCam').onclick = function () { if (!chatState.busy) $('#chatFile').click(); };
       $('#chatFile').onchange = function () { pickPhoto(this.files && this.files[0]); };
+      $('#chatLog').addEventListener('click', onChatTap);
+      wireNotifyBar();
+      if (state.me.state !== 'active') { $('#chatCam').hidden = true; }
+      if (state.me.state === 'waiting') {
+        $('#composer').hidden = true;
+        $('#chatStatus').textContent = 'Your coach is activating your account. You\u2019ll get a message here.';
+      }
     }
-    if (!chatState.loaded) loadChatHistory();
-    else chatScroll();
+    loadChatHistory();                     // every open: scheduled messages may have arrived
+  }
+
+  function addButtons(el, rows) {
+    if (!rows || !rows.length) return;
+    var box = document.createElement('div');
+    box.className = 'btns';
+    box.innerHTML = rows.map(function (row) {
+      return '<div class="btn-row">' + row.map(function (b) {
+        return b.url
+          ? '<a href="' + esc(b.url) + '" target="_blank" rel="noopener">' + esc(b.text) + '</a>'
+          : '<button type="button" data-cb="' + esc(b.data) + '">' + esc(b.text) + '</button>';
+      }).join('') + '</div>';
+    }).join('');
+    el.appendChild(box);
+  }
+
+  function addPhoto(el, src) {
+    var img = document.createElement('img');
+    img.className = 'msg-img'; img.alt = ''; img.src = src;
+    el.insertBefore(img, el.firstChild);
+  }
+
+  function coachItem(text, buttons, photoSrc, cls) {
+    var el = bubble('coach', text || '', cls);
+    if (photoSrc) addPhoto(el, photoSrc);
+    addButtons(el, buttons);
+    return el;
   }
 
   function loadChatHistory() {
@@ -799,17 +840,97 @@
       .then(function (r) { return r.ok ? r.json() : { history: [] }; })
       .then(function (j) {
         chatState.loaded = true;
+        if (chatState.busy) return;          // don't wipe a turn in progress
         $('#chatLog').innerHTML = '';
-        (j.history || []).forEach(function (e) {
-          if (e.user) bubble('me', e.kind === 'image' ? '📷 ' + e.user : e.user);
-          if (e.assistant) bubble('coach', e.assistant);
+        (j.history || []).forEach(function (m) {
+          if (m.who === 'me') bubble('me', m.text);
+          else coachItem(m.text, m.buttons, m.photo ? '/api/media/' + encodeURIComponent(m.photo) : null);
         });
         if (!(j.history || []).length) {
-          $('#chatLog').innerHTML = '<div class="empty">No messages yet</div>';
+          $('#chatLog').innerHTML = '<div class="empty">' + (state.me && state.me.state === 'onboarding'
+            ? 'Welcome to Peak. Send any message to start setting up your coaching.'
+            : 'No messages yet') + '</div>';
         }
         chatScroll();
       })
       .catch(function () { /* stays empty; sending still works */ });
+  }
+
+  // Tapping a button on any coach message runs it through the bot's own button handlers.
+  function onChatTap(e) {
+    var b = e.target.closest('.btns button[data-cb]');
+    if (!b || chatState.busy) return;
+    Array.prototype.forEach.call(b.closest('.btns').querySelectorAll('button'), function (x) {
+      x.disabled = true;
+    });
+    b.classList.add('picked');
+    bubble('me', b.textContent, 'tap');
+    streamTurn('/api/chat/button', JSON.stringify({ data: b.getAttribute('data-cb') }), 'application/json');
+  }
+
+  /* ── notifications ── */
+  function isIOS() { return /iPhone|iPad|iPod/.test(navigator.userAgent); }
+  function standalone() {
+    return window.navigator.standalone === true ||
+      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  }
+  function pushSupported() { return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window; }
+  function pushState() {
+    if (!state.me) return 'off';
+    if (isIOS() && !standalone()) return 'ios-install';
+    if (!pushSupported()) return 'unsupported';
+    if (Notification.permission === 'denied') return 'denied';
+    if (Notification.permission === 'granted' && state.me.push > 0) return 'on';
+    return 'ask';
+  }
+  function b64ToBytes(b64) {
+    var pad = '='.repeat((4 - b64.length % 4) % 4);
+    var raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+    var out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  function enablePush() {
+    return Notification.requestPermission().then(function (perm) {
+      if (perm !== 'granted') throw new Error('Notifications were not allowed.');
+      return Promise.all([navigator.serviceWorker.ready,
+        fetch('/api/push/key').then(function (r) { return r.json(); })]);
+    }).then(function (x) {
+      var reg = x[0], key = x[1].key;
+      return reg.pushManager.getSubscription().then(function (old) {
+        return old || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(key) });
+      });
+    }).then(function (sub) {
+      return fetch('/api/push/subscribe', { method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Peak': '1' },
+        body: JSON.stringify({ subscription: sub.toJSON() }) });
+    }).then(function (r) {
+      if (!r.ok) throw new Error('Could not save the notification setting.');
+      state.me.push = (state.me.push || 0) + 1;
+      return fetch('/api/push/test', { method: 'POST', headers: { 'X-Peak': '1' } });
+    });
+  }
+  function notifyBar() {
+    var st = pushState(), msg = null, btn = false;
+    if (st === 'ask') { msg = 'Get a notification when the coach messages you.'; btn = true; }
+    if (st === 'ios-install') msg = 'For notifications on iPhone: tap Share, then Add to Home Screen, and open Peak from there.';
+    if (st === 'denied') msg = 'Notifications are blocked for this site in your browser settings.';
+    if (!msg) return '';
+    return '<div class="notify-bar" id="notifyBar"><span>🔔 ' + esc(msg) + '</span>' +
+      (btn ? '<button type="button" id="notifyOn">Turn on</button>' : '') + '</div>';
+  }
+  function wireNotifyBar() {
+    var b = $('#notifyOn');
+    if (!b) return;
+    b.onclick = function () {
+      b.disabled = true; b.textContent = '…';
+      enablePush().then(function () {
+        var bar = $('#notifyBar'); if (bar) bar.outerHTML = '';
+      }).catch(function (e) {
+        b.disabled = false; b.textContent = 'Turn on';
+        bubble('coach', e.message || 'Notifications could not be turned on.', 'err');
+      });
+    };
   }
 
   function chatSetStatus(t) { var el = $('#chatStatus'); if (el) el.textContent = t || ''; }
@@ -853,8 +974,9 @@
     chatScroll();
     var draft = null, lastCoach = null;
 
-    function onEvent(kind, text) {
+    function onEvent(kind, text, obj) {
       if (kind === 'status') { chatSetStatus(text); return; }
+      if (kind === 'photo') { coachItem('', null, 'data:image/png;base64,' + text); chatScroll(); return; }
       if (kind === 'heard') {
         var mine = $('#chatLog .msg.me.pending');
         if (mine) { mine.classList.remove('pending'); mine.innerHTML = '🎙 ' + esc(text); }
@@ -868,7 +990,7 @@
       }
       if (kind === 'message' || kind === 'error') {
         if (draft) { draft.remove(); draft = null; }
-        lastCoach = bubble('coach', text, kind === 'error' ? 'err' : '');
+        lastCoach = coachItem(text, (obj || {}).buttons, null, kind === 'error' ? 'err' : '');
         if (kind === 'error') { var p = $('#chatLog .msg.me.pending'); if (p) p.remove(); }
         chatScroll();
         return;
@@ -897,7 +1019,7 @@
                 else if (line.indexOf('data: ') === 0) data += line.slice(6);
               });
               if (!kind) return;               // keep-alive comment
-              try { onEvent(kind, JSON.parse(data).text); } catch (e) { /* ignore a bad frame */ }
+              try { var o = JSON.parse(data); onEvent(kind, o.text, o); } catch (e) { /* ignore a bad frame */ }
             });
             return pump();
           });
@@ -1025,6 +1147,111 @@
     var t = $('#chatThumb'); if (t) { t.hidden = true; t.innerHTML = ''; }
     $('#chatIn').placeholder = 'Message the coach';
     $('#chatFile').value = '';
+  }
+
+  /* ── coach admin (Settings, coach only) ──────────────────────────────── */
+
+  function alertRow(el, text) {
+    var s = el.querySelector('.gate-row-t span');
+    if (s) s.textContent = text;
+  }
+
+  function postJSON(url, body) {
+    return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Peak': '1' },
+      body: JSON.stringify(body) }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok) throw new Error(j.detail || 'Failed');
+        return j;
+      });
+    });
+  }
+
+  // Runs a coach command (e.g. /approve) through your own chat and returns the reply.
+  function coachCommand(text) {
+    return fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Peak': '1' },
+      body: JSON.stringify({ text: text }) }).then(function (r) {
+      if (!r.ok) return r.json().then(function (j) { throw new Error(j.detail || 'Failed'); });
+      return r.text();
+    }).then(function (body) {
+      var last = '';
+      body.split('\n\n').forEach(function (b) {
+        if (b.indexOf('event: message') === 0) {
+          try { last = JSON.parse(b.split('data: ')[1]).text; } catch (e) { /* skip */ }
+        }
+      });
+      return last;
+    });
+  }
+
+  function loadAdmin() {
+    fetch('/api/admin/athletes', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        var box = $('#adminBox');
+        if (!box || !j) return;
+        var rows = j.athletes.map(function (a) {
+          var chan = a.web_only ? 'Web only' : (a.telegram ? 'Telegram + Peak' : 'Peak only');
+          return '<div class="adm-row"><div class="adm-t"><b>' + esc(a.name) + '</b><span>' +
+            esc((a.active ? '' : 'NOT ACTIVE · ') + chan +
+                (a.emails.length ? ' · ' + a.emails.join(', ') : ' · no web login')) + '</span></div>' +
+            (!a.active && a.web_only ? '<button type="button" data-approve="' + esc(a.slug) + '">Approve</button>' : '') +
+            (a.web_only ? '' : '<button type="button" data-tg="' + esc(a.slug) + '" data-on="' + (!a.telegram) + '">' +
+              (a.telegram ? 'Telegram off' : 'Telegram on') + '</button>') + '</div>';
+        }).join('');
+        var inv = (j.invites || []).map(function (i) {
+          return '<div class="adm-row"><div class="adm-t"><b>' + esc(i.email) + '</b><span>invited · ' +
+            esc(i.state) + '</span></div></div>';
+        }).join('');
+        var opts = j.athletes.map(function (a) {
+          return '<option value="' + esc(a.slug) + '">' + esc(a.name) + '</option>';
+        }).join('');
+        box.innerHTML = rows + inv +
+          '<form class="adm-form" id="invForm"><b>Invite a new athlete</b>' +
+          '<input type="email" id="invEmail" placeholder="their email" required>' +
+          '<button type="submit">Invite</button></form>' +
+          '<form class="adm-form" id="linkForm"><b>Give an athlete web access</b>' +
+          '<input type="email" id="linkEmail" placeholder="their email" required>' +
+          '<select id="linkSlug">' + opts + '</select><button type="submit">Add</button></form>' +
+          '<p class="adm-msg" id="admMsg"></p>';
+        var msg = function (t) { $('#admMsg').textContent = t; };
+        box.onclick = function (e) {
+          var t = e.target.closest('button[data-tg]');
+          if (t) {
+            t.disabled = true;
+            postJSON('/api/admin/telegram', { slug: t.dataset.tg, on: t.dataset.on === 'true' })
+              .then(loadAdmin).catch(function (err) { msg(err.message); t.disabled = false; });
+          }
+          var ap = e.target.closest('button[data-approve]');
+          if (ap) {
+            ap.disabled = true; ap.textContent = '…';
+            coachCommand('/approve ' + ap.dataset.approve).then(function (reply) {
+              msg(reply.replace(/[*_`]/g, '')); loadAdmin();
+            }).catch(function (err) { msg(err.message); ap.disabled = false; ap.textContent = 'Approve'; });
+          }
+        };
+        $('#invForm').onsubmit = function (e) {
+          e.preventDefault();
+          var em = $('#invEmail').value.trim();
+          postJSON('/api/admin/invite', { email: em }).then(function () {
+            loadAdmin();
+            setTimeout(function () {
+              msg('Invited ' + em + '. Next: add this email to the Peak policy in Cloudflare ' +
+                  '(Zero Trust \u2192 Access \u2192 Applications \u2192 Peak \u2192 Policies), ' +
+                  'then send them coach.diamondpeak.uk. Their sign-up questions run in the chat.');
+            }, 300);
+          }).catch(function (err) { msg(err.message); });
+        };
+        $('#linkForm').onsubmit = function (e) {
+          e.preventDefault();
+          var em = $('#linkEmail').value.trim(), sl = $('#linkSlug').value;
+          postJSON('/api/admin/link', { email: em, slug: sl }).then(function () {
+            loadAdmin();
+            setTimeout(function () {
+              msg(em + ' can now sign in as ' + sl + ' once the email is in the Peak policy in Cloudflare.');
+            }, 300);
+          }).catch(function (err) { msg(err.message); });
+        };
+      });
   }
 
   /* ── Calendar (month grid) ───────────────────────────────────────────── */
@@ -3777,6 +4004,24 @@
         '<span class="gate-go">\u2197</span></a>';
     }).join('') + '</div>', { flush: true, foot: 'Calculators on diamondpeak.uk.' });
 
+    if (state.me) {
+      var ps = pushState();
+      h += card('Notifications', '<div class="body-flush">' +
+        '<button type="button" class="pickrow" id="pushRow">' +
+        '<span class="gate-mark">🔔</span><span class="gate-row-t"><b>' +
+        ({ on: 'On', ask: 'Off', denied: 'Blocked', unsupported: 'Not available',
+           'ios-install': 'Needs Home Screen' }[ps] || 'Off') + '</b><span>' +
+        ({ on: 'tap to send a test notification', ask: 'tap to turn on',
+           denied: 'allow notifications for this site in your browser settings',
+           unsupported: 'this browser cannot receive notifications',
+           'ios-install': 'Share \u2192 Add to Home Screen, then open Peak from there' }[ps] || '') +
+        '</span></span><span class="gate-go">→</span></button></div>', { flush: true });
+      if (state.me.coach) {
+        h += card('Coaching', '<div id="adminBox"><div class="empty">Loading…</div></div>',
+          { foot: 'Telegram off: that athlete\u2019s coach messages come to Peak only, with a notification.' });
+      }
+    }
+
     h += card('Session', '<div class="body-flush">' +
       '<button type="button" class="pickrow" id="logout">' +
       '<span class="gate-mark">⏻</span>' +
@@ -3785,6 +4030,15 @@
 
     $('#v-set').innerHTML = h;
     fillAppVersion();
+    if (state.me && state.me.coach) loadAdmin();
+    var pr = $('#pushRow');
+    if (pr) pr.onclick = function () {
+      var ps = pushState();
+      if (ps === 'ask') enablePush().then(renderSettings).catch(function (e) { alertRow(pr, e.message); });
+      else if (ps === 'on') fetch('/api/push/test', { method: 'POST', headers: { 'X-Peak': '1' } })
+        .then(function (r) { return r.json(); })
+        .then(function (j) { alertRow(pr, j.sent ? 'Test sent' : 'No device is subscribed'); });
+    };
     // Scoped to the view, not to the first .body-flush: several cards use that class
     // now, and binding to the first one silently stops working when a card is added
     // above it.
@@ -3797,6 +4051,8 @@
     // actually missing: you could switch athlete but never get back to the front door.
     $('#logout').onclick = function () {
       try { localStorage.removeItem(KEY); } catch (e) { /* nothing to clear */ }
+      // On coach.diamondpeak.uk "log out" means signing out of Cloudflare Access.
+      if (state.me) { location.href = '/cdn-cgi/access/logout'; return; }
       openGate();
     };
 
@@ -4025,6 +4281,16 @@
       .then(function (r) { return r.ok ? r.json() : null; })
       .catch(function () { return null; })
       .then(function (me) {
+        if (me && !(me.athletes && me.athletes.length) && me.state) {
+          // Invited and still signing up (or waiting for approval): the app is just the
+          // chat, where the bot's own sign-up questions run.
+          state.me = me;
+          document.body.classList.add('signup');
+          closeGate();
+          wireChat();
+          show('chat');
+          return;
+        }
         if (me && me.athletes && me.athletes.length) {
           ATHLETES = me.athletes;
           state.me = me;

@@ -60,10 +60,22 @@ def test_the_batch_is_acked_before_it_is_walked(src, call, walk):
         "the ack pre-pass must run before any update in the batch is handled"
 
 
+def _dispatch_body(src: str) -> str:
+    """The callback chain, moved out of main() into dispatch_callback (29 Sep 2026) so
+    Peak's buttons run the same handlers. It ends at the next top-level def."""
+    body = src[src.index("def dispatch_callback("):]
+    return body[:body.index("\ndef ", 1)]
+
+
 def test_coach_bot_acks_before_any_handler_is_dispatched():
     body = _main_body(BOT_SRC)
-    assert body.index("ack_callbacks(token, updates)") < body.index("_handle_"), \
+    assert body.index("ack_callbacks(token, updates)") < body.index("dispatch_callback("), \
         "no callback handler may run before the batch has been acked"
+    assert "_handle_" not in body.split("dispatch_callback(", 1)[0].split("ack_callbacks(", 1)[0]
+
+
+def test_the_callback_chain_does_not_ack_either():
+    assert "answer_callback(" not in _dispatch_body(BOT_SRC)
 
 
 def test_nutrition_bot_acks_before_the_pending_commit():

@@ -64,7 +64,15 @@ def _pace_str(speed_ms: float) -> str:
 
 
 def _tg_send_keyboard(chat_id, text, keyboard):
-    """Send a Telegram message with inline keyboard. Returns message_id or None."""
+    """Send a Telegram message with inline keyboard. Returns message_id or None.
+    Also recorded for the web app, which shows the same buttons (lib/outbox.py)."""
+    try:
+        import outbox
+        outbox.record(chat_id, text, keyboard, source="activity-watcher", parse_mode="Markdown")
+        if not outbox.telegram_on(chat_id):
+            return None
+    except Exception:
+        pass
     try:
         cfg = json.loads(TG_CONFIG.read_text())
         token = cfg.get("bot_token", "")

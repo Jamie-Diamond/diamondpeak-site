@@ -1,0 +1,149 @@
+"""Every coach message sent to an athlete, recorded for the web app - and the switch
+that takes an athlete off Telegram.
+
+Peak (coach.diamondpeak.uk) shows the coach's scheduled messages - morning card,
+activity write-ups, weekly plan, check-ins, nudges - in its chat, with their buttons,
+and sends a phone notification for each. Every Telegram sender calls record() with
+what it is about to send; the web API (api/push.py) tails the file for notifications
+and merges it into the chat timeline.
+
+    athletes/<slug>/web-outbox.jsonl   one JSON object per line, append-only:
+        {"id", "ts", "text", "buttons", "photo", "source", "fmt"}
+
+telegram_on(chat_id) is the switch. It is False when:
+  - the athlete's athletes.json entry has "telegram": false (moved to the web), or
+  - the chat id is a web-only one ("web-..."), given to athletes who signed up in Peak.
+A sender that gets False records the message and skips Telegram entirely.
+
+Everything here is fail-soft: a recording failure must never stop a Telegram send.
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import secrets
+from datetime import datetime
+from pathlib import Path
+
+BASE = Path(__file__).resolve().parent.parent            # ClaudeCoach/
+ATHLETES_CONFIG = BASE / "config" / "athletes.json"
+OUTBOX_NAME = "web-outbox.jsonl"
+MEDIA_DIR = "web-media"
+KEEP_LINES = 400                                           # trimmed back to this at 2x
+
+
+_CACHE = {"mtime": None, "data": {}}
+
+
+def _athletes() -> dict:
+    try:
+        m = ATHLETES_CONFIG.stat().st_mtime
+        if m != _CACHE["mtime"]:
+            _CACHE["data"], _CACHE["mtime"] = json.loads(ATHLETES_CONFIG.read_text()), m
+        return _CACHE["data"]
+    except (OSError, ValueError):
+        return {}
+
+
+def slug_for_chat(chat_id) -> str | None:
+    cid = str(chat_id or "")
+    if not cid:
+        return None
+    for slug, a in _athletes().items():
+        if isinstance(a, dict) and str(a.get("chat_id") or "") == cid:
+            return slug
+    return None
+
+
+def telegram_on(chat_id) -> bool:
+    """Should this chat still get Telegram messages? Unknown chats (e.g. Jamie's admin
+    chat before it maps to an athlete) keep Telegram, so nothing goes quiet by accident."""
+    cid = str(chat_id or "")
+    if cid.startswith("web-"):
+        return False
+    slug = slug_for_chat(cid)
+    if not slug:
+        return True
+    return _athletes().get(slug, {}).get("telegram", True) is not False
+
+
+def _buttons(reply_markup) -> list:
+    """inline_keyboard rows, keeping only what the web can act on."""
+    rows = []
+    for row in (reply_markup or {}).get("inline_keyboard") or []:
+        out = []
+        for b in row or []:
+            if not isinstance(b, dict) or not b.get("text"):
+                continue
+            if b.get("callback_data"):
+                out.append({"text": b["text"], "data": str(b["callback_data"])})
+            elif b.get("url"):
+                out.append({"text": b["text"], "url": str(b["url"])})
+        if out:
+            rows.append(out)
+    return rows
+
+
+_HTML = [(re.compile(r"</?b>"), "*"), (re.compile(r"</?i>"), "_"), (re.compile(r"</?code>"), "`"),
+         (re.compile(r"<[^>]+>"), "")]
+
+
+def _from_html(text: str) -> str:
+    for pat, rep in _HTML:
+        text = pat.sub(rep, text)
+    return text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+
+
+def record(chat_id, text: str = "", reply_markup=None, photo: bytes | None = None,
+           source: str = "", parse_mode: str = "") -> str | None:
+    """Append one outbound message for the athlete behind chat_id. Returns its id, or
+    None if the chat is not an athlete's (or anything went wrong)."""
+    try:
+        slug = slug_for_chat(chat_id)
+        if not slug:
+            return None
+        adir = BASE / "athletes" / slug
+        adir.mkdir(parents=True, exist_ok=True)
+        mid = datetime.now().strftime("%Y%m%d%H%M%S") + "-" + secrets.token_hex(3)
+        photo_name = None
+        if photo:
+            (adir / MEDIA_DIR).mkdir(exist_ok=True)
+            photo_name = f"{mid}.png"
+            (adir / MEDIA_DIR / photo_name).write_bytes(photo)
+        if (parse_mode or "").upper() == "HTML":
+            text = _from_html(text or "")
+        entry = {"id": mid, "ts": datetime.now().isoformat(timespec="seconds"),
+                 "text": text or "", "buttons": _buttons(reply_markup),
+                 "photo": photo_name, "source": source or os.path.basename(
+                     os.environ.get("CC_OUTBOX_SOURCE", "") or "")}
+        f = adir / OUTBOX_NAME
+        with open(f, "a") as fh:
+            fh.write(json.dumps(entry) + "\n")
+        _trim(f)
+        return mid
+    except Exception:
+        return None
+
+
+def _trim(f: Path) -> None:
+    try:
+        lines = f.read_text().splitlines()
+        if len(lines) > 2 * KEEP_LINES:
+            f.write_text("\n".join(lines[-KEEP_LINES:]) + "\n")
+    except OSError:
+        pass
+
+
+def read(slug: str, limit: int = 60) -> list[dict]:
+    try:
+        lines = (BASE / "athletes" / slug / OUTBOX_NAME).read_text().splitlines()
+    except OSError:
+        return []
+    out = []
+    for line in lines[-limit:]:
+        try:
+            out.append(json.loads(line))
+        except ValueError:
+            continue
+    return out

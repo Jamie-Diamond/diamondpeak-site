@@ -710,8 +710,16 @@ def test_the_stop_tap_is_handled_inline_and_never_submitted():
     assert "_submit(" not in src
 
 
+def _dispatch_body():
+    """The callback chain lives in dispatch_callback since 29 Sep 2026 (shared with Peak)."""
+    body = BOT_SRC[BOT_SRC.index("def dispatch_callback("):]
+    return body[:body.index("\ndef ", 1)]
+
+
 def test_the_stop_branch_runs_before_every_other_callback_handler():
-    body = _main_body()
+    body = _dispatch_body()
+    assert body.index("_handle_stop(") < body.index("_handle_undo("), \
+        "the athlete is watching a wrong answer being built; nothing may queue in front"
     assert body.index("_handle_stop(") < body.index("_handle_bugfix("), \
         "the athlete is watching a wrong answer being built; nothing may queue in front"
 

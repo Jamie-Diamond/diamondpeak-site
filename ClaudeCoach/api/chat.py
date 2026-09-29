@@ -1,36 +1,40 @@
 """Web chat: the Telegram coach, unchanged, with Peak as the transport.
 
 The API process imports telegram/bot.py and runs a web message through the SAME
-entry point a Telegram message takes (_route_text): fast paths, captures, the chat
-allowance, model routing, the engine, and every post-reply check. Nothing about
-coaching is re-implemented here, so the two can never become two different coaches.
+entry point a Telegram message takes (_route_text): fast paths, captures, onboarding,
+the chat allowance, model routing, the engine, and every post-reply check. A button
+tap goes through the bot's own dispatch_callback. Nothing about coaching is
+re-implemented here, so the two can never become two different coaches.
 
 Only the transport is swapped, and only inside this process (the running Telegram
 bot is a separate process and is untouched):
 
   tg_post       calls addressed to a chat that has a web turn in flight are captured
                 instead of sent: the "…" placeholder and its live status edits become
-                `status` events, every other sendMessage becomes a `message` event.
-                Anything addressed to another chat (e.g. a notice to Jamie) still goes
-                to Telegram for real.
-  stream_claude teed so the reply's growing text is also emitted as `draft` events.
-                Telegram never shows the draft; the web does, then replaces it with
-                the checked reply (the `message`), which is what history keeps.
-  send_photo    charts still go to Telegram, and the web is told so.
-  send_voice    kept for web turns (voice mode's own audio) and played in Peak.
+                `status` events, every other sendMessage becomes a `message` event
+                (with its buttons). Anything addressed to another chat (e.g. a notice to
+                Jamie) goes on as normal - to Telegram, or to that athlete's web outbox
+                if they are web-only (see lib/outbox.py).
+  stream_claude teed so the reply's visible text (inside <telegram>, as Telegram's own
+                live view does) is also emitted as `draft` events; the checked reply
+                (`message`) replaces it and is what history keeps.
+  send_photo    a chart is shown inline (`photo`) and kept in the web outbox, not sent
+                to Telegram.
+  send_voice    voice mode's own audio is kept and played in Peak.
   download_tg_file  a "web:<n>" file id returns the photo Peak uploaded, so a web photo
                 goes through the bot's own image path (_image_reply_worker) unchanged.
   _submit       runs the reply worker on THIS thread (under the same per-chat lock)
                 so its events stream back to this request.
 
-One web turn per athlete at a time. A web turn and a Telegram turn for the same
-athlete at the same instant are NOT serialised against each other (two processes);
-both would complete, and the later history write wins.
+One web turn per chat at a time. A web turn and a Telegram turn for the same athlete
+at the same instant are NOT serialised against each other (two processes); both
+complete, and the later history write wins.
 """
 from __future__ import annotations
 
 import base64
 import itertools
+import json
 import os
 import queue
 import re
@@ -49,13 +53,17 @@ _bot_guard = threading.Lock()
 _UPLOADS: dict[str, bytes] = {}    # "web:<n>" -> photo bytes, for the length of one turn
 _upload_ids = itertools.count(1)
 
+# Set by server.py: called (chat_id, reply_text) when a reply finishes after the
+# athlete has left the app, so it can go out as a phone notification.
+on_reply_while_away = None
+
 
 class Busy(Exception):
     pass
 
 
 class Sink:
-    """Collects one web turn's output as (kind, text) events on a queue."""
+    """Collects one web turn's output as (kind, text, extra) events on a queue."""
 
     def __init__(self):
         self.q: queue.Queue = queue.Queue()
@@ -63,16 +71,22 @@ class Sink:
         self._next_id = 1_000_000
         self.last_message = ""
         self.voice_ogg = None
+        self.consumer_gone = False
 
-    def put(self, kind, text=""):
-        self.q.put((kind, text))
+    def put(self, kind, text="", **extra):
+        self.q.put((kind, text, extra))
 
     def _id(self):
         self._next_id += 1
         return self._next_id
 
+    def _message(self, text, payload):
+        self.last_message = text
+        self.put("message", text, buttons=_buttons(payload.get("reply_markup")))
+
     def handle(self, method, payload):
-        text = (payload or {}).get("text") or ""
+        payload = payload or {}
+        text = payload.get("text") or ""
         if method == "sendMessage":
             mid = self._id()
             if text == "…" and payload.get("disable_notification") and self.placeholder_id is None:
@@ -81,16 +95,22 @@ class Sink:
             elif text == "_On it..._":          # the photo path's holding line
                 self.put("status", "Looking at the photo…")
             elif text:
-                self.last_message = text
-                self.put("message", text)
+                self._message(text, payload)
             return {"ok": True, "result": {"message_id": mid}}
         if method == "editMessageText" and text:
             if payload.get("message_id") == self.placeholder_id:
                 self.put("status", text)
             else:
-                self.last_message = text
-                self.put("message", text)
+                self._message(text, payload)
         return {"ok": True, "result": {"message_id": payload.get("message_id") or self._id()}}
+
+
+def _buttons(reply_markup) -> list:
+    try:
+        import outbox
+        return outbox._buttons(reply_markup)
+    except Exception:
+        return []
 
 
 def _sink_for(chat_id):
@@ -98,8 +118,8 @@ def _sink_for(chat_id):
 
 
 def _patch(b):
-    orig_post, orig_photo, orig_voice = b.tg_post, b.send_photo, b.send_voice
-    orig_download = b.download_tg_file
+    orig_post, orig_voice = b.tg_post, b.send_voice
+    orig_photo, orig_download = b.send_photo, b.download_tg_file
     orig_stream = b.stream_claude
 
     def tg_post(token, method, payload):
@@ -108,9 +128,15 @@ def _patch(b):
 
     def send_photo(token, chat_id, photo_bytes, *a, **k):
         sink = _sink_for(chat_id)
-        if sink:
-            sink.put("message", "_Chart sent to Telegram._")
-        return orig_photo(token, chat_id, photo_bytes, *a, **k)
+        if not sink:
+            return orig_photo(token, chat_id, photo_bytes, *a, **k)
+        sink.put("photo", base64.b64encode(photo_bytes).decode())
+        try:
+            import outbox
+            outbox.record(chat_id, "", photo=photo_bytes, source="web-turn")
+        except Exception:
+            pass
+        return {"ok": True}
 
     def send_voice(token, chat_id, ogg_bytes, *a, **k):
         sink = _sink_for(chat_id)
@@ -128,7 +154,9 @@ def _patch(b):
         sink = _sink_for(getattr(_TURN, "chat_id", None))
         for ev in orig_stream(*a, **k):
             if sink and ev and ev[0] == "chunk" and ev[1]:
-                sink.put("draft", ev[1])
+                visible = b._telegram_visible(ev[1])
+                if visible.strip():
+                    sink.put("draft", visible)
             yield ev
 
     def _submit(worker, chat_id, *args):
@@ -161,13 +189,6 @@ def bot():
         return _bot
 
 
-def chat_id_for(slug: str) -> str | None:
-    for cid, a in bot().load_athletes().items():
-        if a.get("slug") == slug:
-            return str(cid)
-    return None
-
-
 _FOOTER_RE = re.compile(r"\n_[^\n]*_\s*$")
 
 
@@ -187,21 +208,20 @@ def _speech_mp3(b, sink) -> bytes | None:
     return r.stdout if r.returncode == 0 and r.stdout else None
 
 
-def start_turn(slug: str, text: str = "", audio: bytes | None = None,
-               image: bytes | None = None) -> Sink:
+def start_turn(chat_id: str, label: str = "", text: str = "", audio: bytes | None = None,
+               image: bytes | None = None, button: str | None = None) -> Sink:
     """Run one web message through the Telegram coach on a background thread: text, a
-    voice recording (transcribed first, and the reply spoken back), or a photo with
-    `text` as its caption. Returns the Sink its events arrive on; the last event is
-    always ('done', '')."""
+    voice recording (transcribed first, and the reply spoken back), a photo with `text`
+    as its caption, or a button tap (`button` = its callback data). `chat_id` is the
+    athlete's (or, mid-signup, their web chat id). Returns the Sink its events arrive
+    on; the last event is always ('done', '')."""
     b = bot()
-    athletes = b.load_athletes()
-    chat_id = next((str(cid) for cid, a in athletes.items() if a.get("slug") == slug), None)
-    if not chat_id:
-        raise LookupError(slug)
+    chat_id = str(chat_id)
+    label = label or chat_id
     sink = Sink()
     with _SINKS_GUARD:
         if chat_id in _SINKS:
-            raise Busy(slug)
+            raise Busy(label)
         _SINKS[chat_id] = sink
 
     def work():
@@ -210,6 +230,7 @@ def start_turn(slug: str, text: str = "", audio: bytes | None = None,
         try:
             config = b.load_config()
             token = config["bot_token"]
+            athletes = b.load_athletes()
             said = text
             if audio is not None:
                 said = b.transcribe_voice(audio) or ""
@@ -217,14 +238,21 @@ def start_turn(slug: str, text: str = "", audio: bytes | None = None,
                     sink.put("error", "Sorry, I couldn't make that out. Try again?")
                     return
                 sink.put("heard", said)
-            if image is not None:
+            if button is not None:
+                b.log(f"[{label}] Tap (web): {button[:60]}")
+                if not b.dispatch_callback(token, chat_id, button, None, athletes, config):
+                    b._route_text(token, chat_id, button, athletes, config)
+            elif image is not None:
+                if chat_id not in athletes:
+                    sink.put("error", "Photos work once your account is active.")
+                    return
                 upload_id = f"web:{next(_upload_ids)}"
                 _UPLOADS[upload_id] = image
-                b.log(f"[{slug}] In (web photo): {said[:80]}")
+                b.log(f"[{label}] In (web photo): {said[:80]}")
                 with b._chat_lock(chat_id):
                     b._image_reply_worker(token, chat_id, upload_id, said, athletes[chat_id], config)
             else:
-                b.log(f"[{slug}] In (web{' voice' if audio is not None else ''}): {said[:80]}")
+                b.log(f"[{label}] In (web{' voice' if audio is not None else ''}): {said[:80]}")
                 b._route_text(token, chat_id, said, athletes, config)
             if audio is not None and (sink.last_message or sink.voice_ogg):
                 sink.put("status", "Recording the reply…")
@@ -232,7 +260,7 @@ def start_turn(slug: str, text: str = "", audio: bytes | None = None,
                 if mp3:
                     sink.put("audio", base64.b64encode(mp3).decode())
         except Exception as e:
-            b.log(f"[{slug}] web turn error: {e}")
+            b.log(f"[{label}] web turn error: {e}")
             sink.put("error", "Sorry - I hit a snag answering that. Give it another go in a moment.")
         finally:
             if upload_id:
@@ -240,20 +268,55 @@ def start_turn(slug: str, text: str = "", audio: bytes | None = None,
             _TURN.chat_id = None
             with _SINKS_GUARD:
                 _SINKS.pop(chat_id, None)
+            if sink.consumer_gone and sink.last_message and on_reply_while_away:
+                try:
+                    on_reply_while_away(chat_id, sink.last_message)
+                except Exception:
+                    pass
             sink.put("done")
 
-    threading.Thread(target=work, name=f"web-chat-{slug}", daemon=True).start()
+    threading.Thread(target=work, name=f"web-chat-{label}", daemon=True).start()
     return sink
 
 
-def history(slug: str, pairs: int = 30) -> list[dict]:
-    """The shared Telegram/web conversation, oldest first."""
-    import json
-    f = CC / "athletes" / slug / "telegram" / "history.json"
-    try:
-        h = json.loads(f.read_text())
-    except (OSError, ValueError):
+def timeline(slug: str | None, limit: int = 80) -> list[dict]:
+    """The chat as Peak shows it, oldest first: the shared Telegram/web conversation
+    (history.json) merged with every scheduled coach message (web-outbox.jsonl, which
+    carries buttons and photos). A scheduled message is ALSO in history.json with no
+    user side; that copy is dropped when the outbox has the same text."""
+    if not slug:
         return []
-    return [{"user": e.get("user") or "", "assistant": e.get("assistant") or "",
-             "ts": e.get("ts"), "kind": e.get("kind", "text")}
-            for e in h[-pairs:] if isinstance(e, dict)]
+    adir = CC / "athletes" / slug
+    try:
+        hist = json.loads((adir / "telegram" / "history.json").read_text())
+    except (OSError, ValueError):
+        hist = []
+    out = []
+    try:
+        for line in (adir / "web-outbox.jsonl").read_text().splitlines()[-limit:]:
+            try:
+                out.append(json.loads(line))
+            except ValueError:
+                pass
+    except OSError:
+        pass
+    out_texts = {(o.get("text") or "").strip() for o in out if o.get("text")}
+
+    items, last_ts = [], ""
+    for e in hist if isinstance(hist, list) else []:
+        if not isinstance(e, dict):
+            continue
+        ts = e.get("ts") or last_ts        # older entries carry no time; keep their order
+        last_ts = ts
+        user, coach = e.get("user") or "", e.get("assistant") or ""
+        if user:
+            items.append({"who": "me", "text": ("📷 " if e.get("kind") == "image" else "") + user,
+                          "ts": ts})
+        if coach and (user or coach.strip() not in out_texts):
+            items.append({"who": "coach", "text": coach, "ts": ts})
+    for o in out:
+        items.append({"who": "coach", "text": o.get("text") or "", "ts": o.get("ts") or "",
+                      "buttons": o.get("buttons") or [], "photo": o.get("photo"),
+                      "id": o.get("id")})
+    items.sort(key=lambda i: i["ts"] or "")     # stable: equal times keep history order
+    return items[-limit:]

@@ -194,6 +194,8 @@ def synthesize_voice(text: str):
 
 def send_voice(token, chat_id, ogg_bytes, reply_markup=None):
     """Upload an OGG/Opus voice note via sendVoice (multipart, mirrors send_photo)."""
+    if _web_only(chat_id):
+        return {"ok": True}      # web-only: the text reply is what they get
     boundary = "CCvoice"
     parts = [
         f"--{boundary}\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n{chat_id}\r\n".encode(),
@@ -861,7 +863,28 @@ def _append_capture_history(chat_id, slug, user, assistant, kind="capture"):
 _STALE_CALLBACKS_LOGGED = set()
 
 
+# Athletes who have moved to the web app (lib/outbox.py): whatever the bot sends them is
+# recorded for Peak and never reaches Telegram. Everyone else is untouched.
+try:
+    import outbox as _outbox
+except Exception:
+    _outbox = None
+
+
+def _web_only(chat_id) -> bool:
+    try:
+        return bool(_outbox and chat_id) and not _outbox.telegram_on(chat_id)
+    except Exception:
+        return False
+
+
 def tg_post(token, method, payload):
+    _cid = (payload or {}).get("chat_id")
+    if _cid is not None and _web_only(_cid):
+        if method == "sendMessage":
+            _outbox.record(_cid, payload.get("text", ""), payload.get("reply_markup"),
+                           source="bot", parse_mode=payload.get("parse_mode", ""))
+        return {"ok": True, "result": {"message_id": 0}}
     url = f"https://api.telegram.org/bot{token}/{method}"
     data = json.dumps(payload).encode()
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
@@ -1056,6 +1079,9 @@ def transcribe_voice(audio_bytes):
 
 
 def send_photo(token, chat_id, photo_bytes):
+    if _web_only(chat_id):
+        _outbox.record(chat_id, "", photo=photo_bytes, source="bot")
+        return {"ok": True}
     boundary = "CCbound"
     body = (
         f"--{boundary}\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n{chat_id}\r\n"
@@ -6945,6 +6971,79 @@ def _voice_reply_worker(token, chat_id, file_id, athletes, config):
     _route_text(token, chat_id, text, athletes, config)
 
 
+def dispatch_callback(token, chat_id, text, msg_id, athletes, config):
+    """One inline-button tap - from Telegram's poll loop, or from Peak via
+    api/chat.py - through the same handlers in the same order. True when a handler
+    took it; False means route `text` like a typed message (command buttons such as
+    /load). Moved out of main() unchanged on 29 Sep 2026 so the web cannot drift."""
+    # ⏹ Stop: FIRST, and inline. The athlete is watching a reply they never
+    # meant to trigger being built (bug #30). Every other branch below is
+    # cheaper to be late for, and this one must not go through _submit at all -
+    # that takes the per-chat lock, which is held by the very reply the tap is
+    # meant to kill, so a queued cancel would only run once its target had
+    # finished. This branch is un-locked and, on the two live paths, does no
+    # network: it names a run id to the engine and returns.
+    if _handle_stop(token, chat_id, text, msg_id):
+        return True
+    # ↩️ Undo: putting back what the stopped turn had already written. This one
+    # DOES go through _submit (inside the handler) - the turn is over, so the
+    # lock is free, and calendar writes must be serialised with the next message.
+    if _handle_undo(token, chat_id, text, msg_id, athletes):
+        return True
+    # ✅ Keep it all: the other button on the scope card (bug #30 part (b),
+    # 18 Aug 2026). Handled INLINE and immediately after the undo branch - it
+    # writes nothing, and its whole job is to pop the parked diff before the
+    # auto-apply timer can reach it, so it must not queue behind a reply.
+    if _handle_scope_keep(token, chat_id, text, msg_id):
+        return True
+    # 🔊 Speak: re-render the last reply as a voice note on demand,
+    # regardless of voice mode (feature req 2026-06-21).
+    if text == "__SPEAK_LAST__":
+        _ath = athletes.get(chat_id)
+        if _ath:
+            _hist = load_history(athlete_files(_ath["slug"])["history"])
+            _last = next((h.get("assistant") for h in reversed(_hist)
+                          if (h.get("assistant") or "").strip()), "")
+            if _last:
+                tg_post(token, "sendChatAction", {"chat_id": chat_id, "action": "record_voice"})
+                _ogg = synthesize_voice(_clean_for_speech(_spoken_rewrite(_last)))
+                if _ogg:
+                    send_voice(token, chat_id, _ogg)
+                else:
+                    send(token, chat_id, "_Couldn't generate the voice note just now._")
+        return True
+    if text.startswith("bf:") and _handle_bugfix(token, chat_id, text, athletes, config):
+        return True
+    if _handle_quick_log(token, chat_id, text, msg_id, athletes):
+        return True
+    if _handle_test_confirm(token, chat_id, text, msg_id, athletes):
+        return True
+    if _handle_baseline_confirm(token, chat_id, text, msg_id, athletes):
+        return True
+    if _handle_replan_confirm(token, chat_id, text, msg_id, athletes):
+        return True
+    if _handle_hours_confirm(token, chat_id, text, msg_id, athletes):
+        return True
+    if _handle_action_confirm(token, chat_id, text, msg_id, athletes):
+        return True
+    if _handle_dayrule_confirm(token, chat_id, text, msg_id, athletes):
+        return True
+    if _handle_race_priority(token, chat_id, text, msg_id, athletes):
+        return True
+    if _handle_drill(token, chat_id, text, msg_id, athletes, config):
+        return True
+    # Debounce duplicate command callbacks (e.g. /load): a failed
+    # answerCallbackQuery leaves the button spinning, so users re-tap.
+    # Quick-log/drill taps above are exempt — repeat taps there are legit.
+    _cb_key = (chat_id, text)
+    _cb_now = time.time()
+    if _cb_now - _RECENT_CALLBACKS.get(_cb_key, 0) < 15:
+        log(f"debounced duplicate callback: {text}")
+        return True
+    _RECENT_CALLBACKS[_cb_key] = _cb_now
+    return False
+
+
 def get_updates(token, offset):
     return tg_get(token, "getUpdates", {"offset": offset, "timeout": 30})
 
@@ -7015,71 +7114,8 @@ def main():
                 # re-ack here: the second call is refused as an already-answered query and
                 # only stays quiet because tg_post string-matches Telegram's error text.
                 msg_id = cq.get("message", {}).get("message_id")
-                # ⏹ Stop: FIRST, and inline. The athlete is watching a reply they never
-                # meant to trigger being built (bug #30). Every other branch below is
-                # cheaper to be late for, and this one must not go through _submit at all -
-                # that takes the per-chat lock, which is held by the very reply the tap is
-                # meant to kill, so a queued cancel would only run once its target had
-                # finished. This branch is un-locked and, on the two live paths, does no
-                # network: it names a run id to the engine and returns.
-                if _handle_stop(token, chat_id, text, msg_id):
+                if dispatch_callback(token, chat_id, text, msg_id, athletes, config):
                     continue
-                # ↩️ Undo: putting back what the stopped turn had already written. This one
-                # DOES go through _submit (inside the handler) - the turn is over, so the
-                # lock is free, and calendar writes must be serialised with the next message.
-                if _handle_undo(token, chat_id, text, msg_id, athletes):
-                    continue
-                # ✅ Keep it all: the other button on the scope card (bug #30 part (b),
-                # 18 Aug 2026). Handled INLINE and immediately after the undo branch - it
-                # writes nothing, and its whole job is to pop the parked diff before the
-                # auto-apply timer can reach it, so it must not queue behind a reply.
-                if _handle_scope_keep(token, chat_id, text, msg_id):
-                    continue
-                # 🔊 Speak: re-render the last reply as a voice note on demand,
-                # regardless of voice mode (feature req 2026-06-21).
-                if text == "__SPEAK_LAST__":
-                    _ath = athletes.get(chat_id)
-                    if _ath:
-                        _hist = load_history(athlete_files(_ath["slug"])["history"])
-                        _last = next((h.get("assistant") for h in reversed(_hist)
-                                      if (h.get("assistant") or "").strip()), "")
-                        if _last:
-                            tg_post(token, "sendChatAction", {"chat_id": chat_id, "action": "record_voice"})
-                            _ogg = synthesize_voice(_clean_for_speech(_spoken_rewrite(_last)))
-                            if _ogg:
-                                send_voice(token, chat_id, _ogg)
-                            else:
-                                send(token, chat_id, "_Couldn't generate the voice note just now._")
-                    continue
-                if text.startswith("bf:") and _handle_bugfix(token, chat_id, text, athletes, config):
-                    continue
-                if _handle_quick_log(token, chat_id, text, msg_id, athletes):
-                    continue
-                if _handle_test_confirm(token, chat_id, text, msg_id, athletes):
-                    continue
-                if _handle_baseline_confirm(token, chat_id, text, msg_id, athletes):
-                    continue
-                if _handle_replan_confirm(token, chat_id, text, msg_id, athletes):
-                    continue
-                if _handle_hours_confirm(token, chat_id, text, msg_id, athletes):
-                    continue
-                if _handle_action_confirm(token, chat_id, text, msg_id, athletes):
-                    continue
-                if _handle_dayrule_confirm(token, chat_id, text, msg_id, athletes):
-                    continue
-                if _handle_race_priority(token, chat_id, text, msg_id, athletes):
-                    continue
-                if _handle_drill(token, chat_id, text, msg_id, athletes, config):
-                    continue
-                # Debounce duplicate command callbacks (e.g. /load): a failed
-                # answerCallbackQuery leaves the button spinning, so users re-tap.
-                # Quick-log/drill taps above are exempt — repeat taps there are legit.
-                _cb_key = (chat_id, text)
-                _cb_now = time.time()
-                if _cb_now - _RECENT_CALLBACKS.get(_cb_key, 0) < 15:
-                    log(f"debounced duplicate callback: {text}")
-                    continue
-                _RECENT_CALLBACKS[_cb_key] = _cb_now
             else:
                 msg = update.get("message", {})
                 chat_id = str(msg.get("chat", {}).get("id", ""))

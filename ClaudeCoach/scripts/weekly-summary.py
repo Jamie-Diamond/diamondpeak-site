@@ -39,6 +39,14 @@ def _load_client(slug: str):
 
 def _tg_send(chat_id: str, text: str):
     try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+        import outbox
+        outbox.record(chat_id, text, source="weekly-summary", parse_mode="Markdown")
+        if not outbox.telegram_on(chat_id):
+            return True
+    except Exception:
+        pass
+    try:
         cfg = json.loads(TG_CONFIG.read_text())
         token = cfg["bot_token"]
         cafile = "/etc/ssl/cert.pem" if Path("/etc/ssl/cert.pem").exists() else None

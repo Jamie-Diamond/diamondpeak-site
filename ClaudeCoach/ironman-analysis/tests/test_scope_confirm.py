@@ -638,7 +638,7 @@ def test_the_week_signal_is_the_modules_own_and_not_a_new_vocabulary():
 
 
 def test_the_keep_branch_sits_with_the_other_inline_callbacks():
-    body = BOT_SRC[BOT_SRC.index("def main():"):]
+    body = BOT_SRC[BOT_SRC.index("def dispatch_callback("):]   # the chain, since 29 Sep 2026
     assert body.index("_handle_undo(") < body.index("_handle_scope_keep(")
     assert body.index("_handle_scope_keep(") < body.index("__SPEAK_LAST__")
 

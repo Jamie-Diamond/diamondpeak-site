@@ -19,8 +19,8 @@
 // APP_VERSION is what the athlete sees in Settings; CACHE is the precache key.
 // Bump BOTH on every deploy that changes a precached file - the visible number
 // exists so Jamie can tell current from syncing from stale at a glance.
-const APP_VERSION = '2.46';
-const CACHE = 'peak-v47';
+const APP_VERSION = '2.47';
+const CACHE = 'peak-v48';
 
 // SHELL paths are relative to /coach/, where this worker actually lives - the app moved
 // out of /coach/app/ and these entries were left pointing at the old tree. addAll's
@@ -152,4 +152,33 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'version' && event.ports && event.ports[0]) {
     event.ports[0].postMessage({ cache: CACHE, version: APP_VERSION });
   }
+});
+
+
+// ── Notifications (29 Sep 2026) ──────────────────────────────────────────────
+// The backend (ClaudeCoach/api/push.py) sends {title, body, url} for each coach
+// message and for a chat reply that finished after the app was closed. Tapping one
+// opens (or focuses) Peak on the chat.
+self.addEventListener('push', (event) => {
+  let d = {};
+  try { d = event.data ? event.data.json() : {}; } catch (e) { d = { body: event.data && event.data.text() }; }
+  event.waitUntil(self.registration.showNotification(d.title || 'Coach', {
+    body: d.body || 'New message',
+    icon: './icons/icon-192.png',
+    badge: './icons/favicon-32.png',
+    data: { url: d.url || './app.html#chat' },
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = new URL((event.notification.data || {}).url || './app.html#chat', self.location.href).href;
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
+    for (const w of wins) {
+      if (w.url.startsWith(self.location.origin) && 'focus' in w) {
+        return w.focus().then((f) => (f && 'navigate' in f ? f.navigate(url) : f));
+      }
+    }
+    return self.clients.openWindow(url);
+  }));
 });

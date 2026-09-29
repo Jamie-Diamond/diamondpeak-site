@@ -21,10 +21,13 @@ def env(tmp_path, monkeypatch):
     app_dir.mkdir()
     (app_dir / "app.html").write_text("<html>peak</html>")
     (cc / "config" / "athletes.json").write_text(json.dumps({
-        "jamie": {"name": "Jamie Diamond", "active": True},
-        "kathryn": {"name": "Kathryn X", "active": True},
+        "jamie": {"name": "Jamie Diamond", "active": True, "chat_id": "111"},
+        "kathryn": {"name": "Kathryn X", "active": True, "chat_id": "222"},
         "old": {"name": "Old", "active": False},
     }))
+    (cc / "config" / "pending.json").write_text("[]")
+    monkeypatch.setattr(server, "PENDING_FILE", cc / "config" / "pending.json")
+    monkeypatch.setattr(server.push, "SUBS_FILE", tmp_path / "subs.json")
     access = cc / "config" / "web-access.json"
     access.write_text(json.dumps({"users": {
         "Coach@Example.com": {"slug": "jamie", "coach": True},
@@ -39,6 +42,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(server, "PUBLIC_DIR", cc / "public")
     monkeypatch.setattr(server, "ATHLETES_CONFIG", cc / "config" / "athletes.json")
     monkeypatch.setattr(server, "ACCESS_CONFIG", access)
+    monkeypatch.setenv("CC_PUSH_WATCH", "0")
     for k in ("CF_ACCESS_TEAM", "CF_ACCESS_AUD", "CC_API_DEV_EMAIL"):
         monkeypatch.delenv(k, raising=False)
     return TestClient(server.app, follow_redirects=False)
@@ -179,25 +183,33 @@ class FakeSink:
     def __init__(self, events):
         import queue
         self.q = queue.Queue()
+        self.consumer_gone = False
         for e in events:
-            self.q.put(e)
+            self.q.put(e if len(e) == 3 else (e[0], e[1], {}))
+
+
+def fake_turns(monkeypatch, events=(("done", ""),)):
+    seen = []
+    monkeypatch.setattr(server.chat, "start_turn",
+                        lambda cid, label="", **k: seen.append((cid, sorted(k), k.get("text") or k.get("button")))
+                        or FakeSink(list(events)))
+    return seen
 
 
 def test_chat_talks_as_yourself_even_when_coach(env, monkeypatch):
     dev(monkeypatch, "coach@example.com")
-    seen = []
-    monkeypatch.setattr(server.chat, "start_turn",
-                        lambda slug, text="", **k: seen.append((slug, text)) or FakeSink(
-                            [("status", "Thinking…"), ("draft", "Hel"), ("message", "Hello"), ("done", "")]))
+    seen = fake_turns(monkeypatch, [("status", "Thinking…"), ("draft", "Hel"),
+                                    ("message", "Hello", {"buttons": [[{"text": "OK", "data": "x"}]]}),
+                                    ("done", "")])
     r = env.post("/api/chat", json={"text": "hi"}, headers={"x-peak": "1"})
-    assert r.status_code == 200 and seen == [("jamie", "hi")]
+    assert r.status_code == 200 and seen == [("111", ["text"], "hi")]
     body = r.text
-    assert "event: status" in body and "event: draft" in body
+    assert "event: status" in body and "event: draft" in body and '"buttons"' in body
     assert body.index("event: message") < body.index("event: done")
 
 
 def test_chat_refuses_without_header_empty_text_or_unknown_user(env, monkeypatch):
-    monkeypatch.setattr(server.chat, "start_turn", lambda slug, **k: 1 / 0)
+    fake_turns(monkeypatch)
     dev(monkeypatch, "kat@example.com")
     assert env.post("/api/chat", json={"text": "hi"}).status_code == 400
     assert env.post("/api/chat", json={"text": "  "}, headers={"x-peak": "1"}).status_code == 400
@@ -207,20 +219,115 @@ def test_chat_refuses_without_header_empty_text_or_unknown_user(env, monkeypatch
 
 def test_chat_busy_is_a_409(env, monkeypatch):
     dev(monkeypatch, "kat@example.com")
-    def busy(slug, **k):
-        raise server.chat.Busy(slug)
+    def busy(cid, label="", **k):
+        raise server.chat.Busy(cid)
     monkeypatch.setattr(server.chat, "start_turn", busy)
     assert env.post("/api/chat", json={"text": "hi"}, headers={"x-peak": "1"}).status_code == 409
 
 
-def test_chat_history_is_your_own(env, monkeypatch):
+def test_voice_photo_and_buttons_reach_the_turn_as_yourself(env, monkeypatch):
+    dev(monkeypatch, "coach@example.com")
+    seen = fake_turns(monkeypatch)
+    audio = b"x" * 2000
+    h = {"x-peak": "1"}
+    assert env.post("/api/chat/voice", content=audio, headers=h).status_code == 200
+    assert env.post("/api/chat/photo?caption=lunch", content=audio, headers=h).status_code == 200
+    assert env.post("/api/chat/button", json={"data": "r:1:jamie:7"}, headers=h).status_code == 200
+    assert seen == [("111", ["audio"], None), ("111", ["image", "text"], "lunch"),
+                    ("111", ["button"], "r:1:jamie:7")]
+
+
+def test_uploads_are_checked(env, monkeypatch):
+    dev(monkeypatch, "kat@example.com")
+    fake_turns(monkeypatch)
+    assert env.post("/api/chat/voice", content=b"x" * 2000).status_code == 400      # no header
+    assert env.post("/api/chat/voice", content=b"x", headers={"x-peak": "1"}).status_code == 400
+    big = b"x" * (13 * 1024 * 1024)
+    assert env.post("/api/chat/photo", content=big, headers={"x-peak": "1"}).status_code == 413
+
+
+def test_timeline_merges_scheduled_messages_and_drops_their_history_copy(env, monkeypatch):
     dev(monkeypatch, "kat@example.com")
     monkeypatch.setattr(server.chat, "CC", server.CC)
-    h = server.CC / "athletes" / "kathryn" / "telegram"
-    h.mkdir(parents=True)
-    (h / "history.json").write_text('[{"user":"q","assistant":"a","ts":"2026-09-29T10:00:00"}]')
+    a = server.CC / "athletes" / "kathryn"
+    (a / "telegram").mkdir(parents=True)
+    (a / "telegram" / "history.json").write_text(json.dumps([
+        {"user": "q", "assistant": "a", "ts": "2026-09-29T10:00:00"},
+        {"user": "", "assistant": "Morning card"},
+        {"user": "q2", "assistant": "a2", "ts": "2026-09-29T12:00:00"}]))
+    (a / "web-outbox.jsonl").write_text(json.dumps(
+        {"id": "x1", "ts": "2026-09-29T11:00:00", "text": "Morning card",
+         "buttons": [[{"text": "RPE 7", "data": "r:1:kathryn:7"}]], "photo": None}) + "\n")
     r = env.get("/api/chat/history").json()
-    assert r["slug"] == "kathryn" and r["history"][0]["assistant"] == "a"
+    texts = [(m["who"], m["text"]) for m in r["history"]]
+    assert texts == [("me", "q"), ("coach", "a"), ("coach", "Morning card"), ("me", "q2"), ("coach", "a2")]
+    assert r["history"][2]["buttons"][0][0]["data"] == "r:1:kathryn:7"
+
+
+def test_invited_athlete_signs_up_through_chat_then_waits_for_approval(env, monkeypatch):
+    dev(monkeypatch, "coach@example.com")
+    h = {"x-peak": "1"}
+    r = env.post("/api/admin/invite", json={"email": "New@Example.com"}, headers=h)
+    assert r.status_code == 200
+    cid = r.json()["chat_id"]
+    assert cid.startswith("web-") and json.loads(server.PENDING_FILE.read_text()) == [cid]
+    assert env.post("/api/admin/invite", json={"email": "new@example.com"}, headers=h).status_code == 409
+
+    dev(monkeypatch, "new@example.com")
+    me = env.get("/api/me").json()
+    assert me["state"] == "onboarding" and me["athletes"] == []
+    seen = fake_turns(monkeypatch)
+    assert env.post("/api/chat", json={"text": "hi"}, headers=h).status_code == 200
+    assert seen == [(cid, ["text"], "hi")]
+    assert env.post("/api/chat/button", json={"data": "x"}, headers=h).status_code == 409
+
+    # the bot's onboarding finished: an inactive athlete with that chat id
+    ath = json.loads(server.ATHLETES_CONFIG.read_text())
+    ath["newbie"] = {"name": "New Person", "active": False, "chat_id": cid}
+    server.ATHLETES_CONFIG.write_text(json.dumps(ath))
+    assert env.get("/api/me").json()["state"] == "waiting"
+    assert env.post("/api/chat", json={"text": "hi"}, headers=h).status_code == 409
+
+    ath["newbie"]["active"] = True
+    server.ATHLETES_CONFIG.write_text(json.dumps(ath))
+    me = env.get("/api/me").json()
+    assert me["state"] == "active" and me["own"] == "newbie"
+    assert [a["slug"] for a in me["athletes"]] == ["newbie"]
+
+
+def test_admin_is_coach_only_and_switches_telegram(env, monkeypatch):
+    h = {"x-peak": "1"}
+    dev(monkeypatch, "kat@example.com")
+    assert env.get("/api/admin/athletes").status_code == 403
+    assert env.post("/api/admin/telegram", json={"slug": "kathryn", "on": False}, headers=h).status_code == 403
+    dev(monkeypatch, "coach@example.com")
+    assert env.post("/api/admin/telegram", json={"slug": "kathryn", "on": False}, headers=h).status_code == 200
+    assert json.loads(server.ATHLETES_CONFIG.read_text())["kathryn"]["telegram"] is False
+    rows = {a["slug"]: a for a in env.get("/api/admin/athletes").json()["athletes"]}
+    assert rows["kathryn"]["telegram"] is False and rows["kathryn"]["emails"] == ["kat@example.com"]
+    assert env.post("/api/admin/telegram", json={"slug": "kathryn", "on": True}, headers=h).status_code == 200
+    assert "telegram" not in json.loads(server.ATHLETES_CONFIG.read_text())["kathryn"]
+
+
+def test_admin_link_gives_an_existing_athlete_web_access(env, monkeypatch):
+    h = {"x-peak": "1"}
+    dev(monkeypatch, "coach@example.com")
+    assert env.post("/api/admin/link", json={"email": "k2@example.com", "slug": "kathryn"},
+                    headers=h).status_code == 200
+    dev(monkeypatch, "k2@example.com")
+    me = env.get("/api/me").json()
+    assert me["own"] == "kathryn" and me["state"] == "active" and not me["coach"]
+
+
+def test_media_is_your_own_only(env, monkeypatch):
+    m = server.CC / "athletes" / "kathryn" / "web-media"
+    m.mkdir(parents=True)
+    (m / "20260929-abc123.png").write_bytes(b"png")
+    dev(monkeypatch, "kat@example.com")
+    assert env.get("/api/media/20260929-abc123.png").content == b"png"
+    assert env.get("/api/media/..%2F..%2Fx.png").status_code == 404
+    dev(monkeypatch, "coach@example.com")                      # jamie's chat, not kathryn's
+    assert env.get("/api/media/20260929-abc123.png").status_code == 404
 
 
 def test_sink_turns_telegram_calls_into_events():
@@ -231,26 +338,5 @@ def test_sink_turns_telegram_calls_into_events():
     s.handle("sendChatAction", {"action": "typing"})
     s.handle("sendMessage", {"text": "Your reply"})
     got = [s.q.get_nowait() for _ in range(s.q.qsize())]
-    assert got == [("status", "Thinking…"), ("status", "Checking intervals.icu..."),
-                   ("message", "Your reply")]
-
-
-def test_voice_and_photo_reach_the_turn_as_yourself(env, monkeypatch):
-    dev(monkeypatch, "coach@example.com")
-    seen = []
-    monkeypatch.setattr(server.chat, "start_turn",
-                        lambda slug, **k: seen.append((slug, sorted(k))) or FakeSink([("done", "")]))
-    audio = b"x" * 2000
-    assert env.post("/api/chat/voice", content=audio, headers={"x-peak": "1"}).status_code == 200
-    assert env.post("/api/chat/photo?caption=lunch", content=audio,
-                    headers={"x-peak": "1"}).status_code == 200
-    assert seen == [("jamie", ["audio"]), ("jamie", ["image", "text"])]
-
-
-def test_uploads_are_checked(env, monkeypatch):
-    dev(monkeypatch, "kat@example.com")
-    monkeypatch.setattr(server.chat, "start_turn", lambda slug, **k: FakeSink([("done", "")]))
-    assert env.post("/api/chat/voice", content=b"x" * 2000).status_code == 400      # no header
-    assert env.post("/api/chat/voice", content=b"x", headers={"x-peak": "1"}).status_code == 400
-    big = b"x" * (13 * 1024 * 1024)
-    assert env.post("/api/chat/photo", content=big, headers={"x-peak": "1"}).status_code == 413
+    assert [(k, t) for k, t, _ in got] == [("status", "Thinking…"), ("status", "Checking intervals.icu..."),
+                                           ("message", "Your reply")]
