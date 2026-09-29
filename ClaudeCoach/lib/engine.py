@@ -50,6 +50,39 @@ except Exception:
     _hr_quality = _baseline = None
 
 try:
+    import chat_limits as _chat_limits
+except Exception:
+    _chat_limits = None
+
+# Per-reply cost metering (29 Sep 2026, lib/chat_limits.py). The CLI reports each run's
+# total_cost_usd in its JSON / stream-json result; a reply can take more than one run (a
+# dead resume, a capped model), so the runs are summed per thread and charged to the
+# athlete once the reply is finished. Thread-local because replies for different
+# athletes run concurrently.
+_COST = threading.local()
+
+
+def _cost_reset() -> None:
+    _COST.usd = 0.0
+
+
+def _cost_add(v) -> None:
+    try:
+        _COST.usd = getattr(_COST, "usd", 0.0) + float(v or 0)
+    except (TypeError, ValueError):
+        pass
+
+
+def _meter(sp_file) -> None:
+    """Charge this thread's accumulated reply cost to the athlete's chat allowance."""
+    if _chat_limits is None:
+        return
+    try:
+        _chat_limits.record(Path(sp_file).parent.name, getattr(_COST, "usd", 0.0))
+    except Exception as e:
+        log(f"chat cost not metered: {e}")
+
+try:
     from claude_call import is_limit_message as _is_limit_message
 except Exception:
     def _is_limit_message(text: str) -> bool:  # type: ignore[misc]
@@ -891,6 +924,7 @@ def _run_once(prompt, model, extra_args, cwd, timeout=300, env=None):
         d = json.loads(r.stdout or "")
         text = (d.get("result") or "").strip()
         session_id = d.get("session_id")
+        _cost_add(d.get("total_cost_usd"))
     except Exception:
         text = (r.stdout or "").strip()
     return text or (r.stderr or "").strip(), session_id, r.returncode
@@ -903,6 +937,7 @@ def call_claude(user_message, config, history, model=MODEL_OPUS,
                                             sp_file, athlete_name, context)
     env = scoped_env(sp_file)
     t0 = time.time()
+    _cost_reset()
     try:
         text, sid, rc = _run_once(prompt, model, extra, config["project_dir"], env=env)
         if (rc != 0 or not text) and mode == "resume":
@@ -928,6 +963,7 @@ def call_claude(user_message, config, history, model=MODEL_OPUS,
             _finish_session(sp_file, mode, st, sid)
         _log_timing("call", model, mode, t0, None, None,
                     turns=turn_idx, prompt_bytes=len(prompt or ""))
+        _meter(sp_file)
         return text or "(no response)"
     except subprocess.TimeoutExpired:
         return "Sorry, that took too long. Try a simpler question or break it into steps."
@@ -1037,6 +1073,7 @@ def _stream_once(prompt, model, extra_args, cwd, env=None, run=None):
             if ev_type == "result":
                 final = ev.get("result", "") or final
                 session_id = ev.get("session_id") or session_id
+                _cost_add(ev.get("total_cost_usd"))
                 continue
             elif ev_type == "assistant":
                 snapshot = ""
@@ -1113,6 +1150,7 @@ def stream_claude(user_message, config, history, model=MODEL_OPUS,
                                                 sp_file, athlete_name, context)
         env = scoped_env(sp_file)
         t0 = time.time()
+        _cost_reset()
         final, streamed, sid, rc, t_init, t_first = yield from _stream_once(
             prompt, model, extra, config["project_dir"], env=env, run=run)
 
@@ -1152,6 +1190,8 @@ def stream_claude(user_message, config, history, model=MODEL_OPUS,
             _finish_session(sp_file, mode, st, sid)
         _log_timing("stream", model, mode, t0, t_init, t_first,
                     turns=turn_idx, prompt_bytes=len(prompt or ""))
+        # Metered whether or not the athlete cancelled: the tokens were spent either way.
+        _meter(sp_file)
         if run.cancelled:
             log(f"[cancel] run {run.run_id} stopped, {len(text)} chars discarded")
             yield ("cancelled", text)
@@ -1204,16 +1244,25 @@ def call_claude_with_image(img_path, caption, config, history, model=MODEL_OPUS,
     parts.append(user_msg)
     full_prompt = "\n".join(parts)
     t0 = time.time()
+    _cost_reset()
     try:
         result = subprocess.run(
-            claude_cmd(model, ["--no-session-persistence"]),
+            claude_cmd(model, ["--no-session-persistence", "--output-format", "json"]),
             input=full_prompt,
             capture_output=True, text=True,
             cwd=config["project_dir"], timeout=300,
             env=scoped_env(sp_file),
         )
         _log_timing("image", model, "stateless", t0, None, None)
-        return result.stdout.strip() or result.stderr.strip() or "(no response)"
+        out = result.stdout.strip()
+        try:
+            d = json.loads(out)
+            out = (d.get("result") or "").strip()
+            _cost_add(d.get("total_cost_usd"))
+        except Exception:
+            pass
+        _meter(sp_file)
+        return out or result.stderr.strip() or "(no response)"
     except subprocess.TimeoutExpired:
         return "Sorry, that took too long. Try a simpler question or break it into steps."
     except Exception as e:

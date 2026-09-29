@@ -64,6 +64,7 @@ import rule_registry
 import coach_facts             # per-turn computed FACTS block (superlatives/records/thresholds)
 import write_verify            # verify-after-write for Strava / ICU calendar claims
 import baseline as baseline_lib   # new athletes' baseline block (onboarding, 27 Sep 2026)
+import chat_limits                # per-athlete monthly chat allowance (29 Sep 2026)
 from engine import call_claude, call_claude_with_image, stream_claude
 HEARTBEAT_FILE = BASE.parent / ".bot_heartbeat"  # touched each poll loop; watched by bot-watchdog.py
 try:
@@ -540,6 +541,14 @@ engine.log = lambda msg: log(f"[engine] {msg}")
 
 def load_config():
     return json.loads(CONFIG_FILE.read_text())
+
+
+def admin_chat_id(config: dict) -> str:
+    """Jamie's chat. config.json has never carried `admin_chat_id` on the VM (checked 29
+    Sep 2026), so every admin path that read only that key was silently off: /invite,
+    /approve, the new-athlete notice. Its `chat_id` IS Jamie's chat, which is what the
+    unregistered-message alert already fell back to; every admin path now does the same."""
+    return str((config or {}).get("admin_chat_id") or (config or {}).get("chat_id") or "")
 
 
 def load_athletes():
@@ -3068,12 +3077,16 @@ def _handle_drill(token, chat_id, data, message_id, athletes, config):
     history = load_history(files["history"])
     context = prefetch_context(slug)
     athlete_name = athlete.get("name", slug).split()[0]
-    response = call_claude(question, config, history, model=MODEL_OPUS,
+    if not _chat_allowance_ok(token, chat_id, athlete, config, slug, athlete_name,
+                              f"[{drill_type} analysis]"):
+        return True
+    drill_model = _allowance_model(athlete, config, slug, MODEL_OPUS)
+    response = call_claude(question, config, history, model=drill_model,
                            system_prompt_file=files["system_prompt"],
                            athlete_name=athlete_name, context=context)
     clean = process_charts(token, chat_id, response, slug=slug)
     if clean:
-        send(token, chat_id, clean + response_footer(MODEL_OPUS, slug=slug, athlete_cfg=athlete))
+        send(token, chat_id, clean + response_footer(drill_model, slug=slug, athlete_cfg=athlete))
     history.append(_hist_entry(question, clean))
     save_history(history, files["history"])
     return True
@@ -5016,7 +5029,7 @@ def handle_onboarding(token, chat_id, text):
          f"will be a short set of fitness tests, so your zones are built on real numbers.")
 
     config_data = load_config()
-    admin_id = str(config_data.get("admin_chat_id", ""))
+    admin_id = admin_chat_id(config_data)
     if admin_id:
         send(token, admin_id,
              f"*New athlete ready to activate:*\n"
@@ -5030,7 +5043,7 @@ def handle_onboarding(token, chat_id, text):
 
 def handle_admin_command(token, chat_id, text, config):
     """Handle /invite and /approve commands from the admin chat_id. Returns True if handled."""
-    admin_id = str(config.get("admin_chat_id", ""))
+    admin_id = admin_chat_id(config)
     if not admin_id or chat_id != admin_id:
         return False
 
@@ -5045,6 +5058,26 @@ def handle_admin_command(token, chat_id, text, config):
             send(token, chat_id, f"Added `{raw}` to pending list. They can now start onboarding.")
         else:
             send(token, chat_id, f"`{raw}` is already in the pending list.")
+        return True
+
+    if lower == "/limits" or lower.startswith("/limits "):
+        parts = text.split()
+        athletes_data = json.loads(ATHLETES_CONFIG.read_text()) if ATHLETES_CONFIG.exists() else {}
+        if len(parts) == 3:
+            who, amount = parts[1], parts[2].lstrip("$")
+            try:
+                usd = float(amount)
+            except ValueError:
+                send(token, chat_id, "Use: /limits <handle> <dollars>, e.g. _/limits kathryn 25_")
+                return True
+            if who not in athletes_data:
+                send(token, chat_id, f"No athlete with handle `{who}`.")
+                return True
+            athletes_data[who]["chat_allowance_usd"] = usd
+            ATHLETES_CONFIG.write_text(json.dumps(athletes_data, indent=2))
+            send(token, chat_id, f"`{who}` chat allowance set to ${usd:.0f} a month.")
+            return True
+        send(token, chat_id, chat_limits.report(athletes_data, admin_id))
         return True
 
     if lower.startswith("/approve "):
@@ -6279,7 +6312,7 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
         # athlete's files every turn and the ONLY sanctioned basis for a superlative, a
         # record, a threshold or an "N straight days" claim (13 Aug audit).
         context = _with_facts(context, slug)
-        model = select_model(text, history)
+        model = _allowance_model(athlete, config, slug, select_model(text, history))
         before_ts = time.time()
         before_rules_text = _snapshot_rules_text(slug)
         _seed_strava_baseline(slug, text)   # no-op unless the message mentions Strava
@@ -6536,10 +6569,14 @@ def _image_reply_worker(token, chat_id, file_id, caption, athlete_entry, config)
         # FACTS here too: a photo of a watch screen or a gel wrapper invites exactly the
         # same "that's your best ever" claim as a typed question does.
         context = _with_facts(prefetch_context(slug), slug)
+        if not _chat_allowance_ok(token, chat_id, athlete_entry, config, slug, athlete_name,
+                                  caption or "[photo]"):
+            return
         response = call_claude_with_image(
             img_path, caption, config, history,
             system_prompt_file=files["system_prompt"],
             athlete_name=athlete_name, context=context,
+            model=_allowance_model(athlete_entry, config, slug, MODEL_OPUS),
         )
         clean = process_charts(token, chat_id, response, slug=slug)
         clean = _strip_model_countdown(clean, athlete_entry)
@@ -6598,7 +6635,7 @@ def _route_text(token, chat_id, text, athletes, config):
         log(f"Unregistered message from chat_id {chat_id}: {text[:60]}")
         send(token, chat_id, "This account isn't registered with ClaudeCoach yet.")
         # Alert admin so missing chat_ids are caught immediately
-        admin_id = str(config.get("admin_chat_id") or config.get("chat_id", ""))
+        admin_id = admin_chat_id(config)
         if admin_id and admin_id != chat_id:
             send(token, admin_id,
                  f"⚠️ Unregistered message\nchat\\_id: `{chat_id}`\n_{text[:120]}_")
@@ -6845,11 +6882,51 @@ def _route_text(token, chat_id, text, athletes, config):
         _submit(_raceplan_worker, chat_id, token, chat_id, slug)
         return
 
+    # CHAT ALLOWANCE (lib/chat_limits.py, 29 Sep 2026). Checked just before the model
+    # would run, so fast paths and captures above stay free. A threshold notice (80% /
+    # 100%) goes to the athlete and Jamie once a month; past 100% there is a daily cap,
+    # and a capped message gets a plain reply instead of a model run.
+    if not _chat_allowance_ok(token, chat_id, athlete, config, slug, athlete_name, text):
+        return
+
     # Slow generation runs off the poll loop so one athlete's 15-40s reply
     # never blocks the others. The per-chat lock (in _submit) serialises
     # this athlete's own messages so history.json can't be corrupted.
     _submit(_chat_reply_worker, chat_id,
             token, chat_id, config, athlete, files, athlete_name, slug, text, capture)
+
+
+def _chat_allowance_ok(token, chat_id, athlete, config, slug, athlete_name, text=""):
+    """Send any pending allowance notice; return False if today's cap is reached."""
+    admin_id = admin_chat_id(config)
+    try:
+        g = chat_limits.gate(slug, athlete, athlete_name, admin_chat_id=admin_id)
+    except Exception as e:
+        log(f"[{slug}] chat allowance check failed (allowing): {e}")
+        return True
+    if g["athlete_notice"]:
+        send(token, chat_id, g["athlete_notice"])
+    if g["admin_notice"] and admin_id and admin_id != chat_id:
+        send(token, admin_id, g["admin_notice"])
+    if g["blocked"]:
+        send(token, chat_id, g["block_text"])
+        _append_capture_history(chat_id, slug, text, g["block_text"])
+        log(f"[{slug}] Out (limit): daily chat cap reached")
+        return False
+    return True
+
+
+def _allowance_model(athlete, config, slug, model):
+    """The model a reply actually runs on: one tier down once the athlete has used 80%
+    of the month's chat allowance (Jamie, 29 Sep 2026). Exempt athletes never step down."""
+    try:
+        if chat_limits.exempt(athlete, admin_chat_id(config)):
+            return model
+        if chat_limits.status(slug, athlete)["tier"] != "normal":
+            return chat_limits.step_down(model)
+    except Exception as e:
+        log(f"[{slug}] allowance step-down skipped: {e}")
+    return model
 
 
 def _voice_reply_worker(token, chat_id, file_id, athletes, config):
