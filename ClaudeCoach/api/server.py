@@ -25,6 +25,8 @@ Paths mirror the GitHub Pages layout so Peak runs unchanged:
   /ClaudeCoach/public/session-library.json
   /api/me                                     who you are, which athletes you may see
   POST /api/refresh/<slug>                    rebuild that athlete's data from Intervals.icu now
+  POST /api/chat                              talk to the coach as YOURSELF (see chat.py), SSE
+  GET  /api/chat/history                      your shared Telegram/web conversation
 Anything else (the site's other tools) redirects to https://diamondpeak.uk.
 
 Run: uvicorn server:app --host 127.0.0.1 --port 8787  (see system/claudecoach-api.service)
@@ -40,7 +42,9 @@ import time
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
+
+import chat
 
 # CC_HOME / CC_APP_DIR let a test copy run against the live data without being inside
 # the live checkout (which cc-gitpull owns).
@@ -132,6 +136,14 @@ def allowed_athletes(email: str) -> list[dict]:
     return [{"slug": s, "name": (v.get("name") or s).split()[0]} for s, v in active]
 
 
+def own_slug(email: str) -> str | None:
+    """The athlete this email IS - who a chat message is from. A coach can VIEW
+    everyone, but always talks to the coach as themself."""
+    users = {k.strip().lower(): v for k, v in (_load(ACCESS_CONFIG).get("users") or {}).items()}
+    slug = (users.get(email) or {}).get("slug")
+    return slug if slug in {a["slug"] for a in allowed_athletes(email)} else None
+
+
 def require_slug(request: Request, slug: str) -> None:
     if not SLUG_RE.match(slug):
         raise HTTPException(404)
@@ -210,6 +222,57 @@ def refresh(slug: str, request: Request):
     if code != 0:
         raise HTTPException(502, "refresh failed - the last data is still shown")
     return JSONResponse({"ok": True}, headers=NO_STORE)
+
+
+# ── chat ──
+
+def _sse(kind: str, text: str) -> str:
+    return f"event: {kind}\ndata: {json.dumps({'text': text})}\n\n"
+
+
+@app.post("/api/chat")
+async def chat_send(request: Request):
+    if request.headers.get("x-peak") != "1":
+        raise HTTPException(400, "missing app header")
+    slug = own_slug(request_email(request))
+    if not slug:
+        raise HTTPException(403, "this email has no athlete")
+    try:
+        body = await request.json()
+    except ValueError:
+        body = {}
+    text = str((body or {}).get("text") or "").strip()[:4000]
+    if not text:
+        raise HTTPException(400, "empty message")
+    try:
+        sink = chat.start_turn(slug, text)
+    except chat.Busy:
+        raise HTTPException(409, "the coach is still answering your last message")
+    except LookupError:
+        raise HTTPException(404, "no coaching chat set up for this athlete")
+
+    def events():
+        # Comments every 10s keep Cloudflare from closing a long, quiet turn.
+        while True:
+            try:
+                kind, text = sink.q.get(timeout=10)
+            except Exception:
+                yield ": ping\n\n"
+                continue
+            yield _sse(kind, text)
+            if kind == "done":
+                return
+
+    return StreamingResponse(events(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.get("/api/chat/history")
+def chat_history(request: Request):
+    slug = own_slug(request_email(request))
+    if not slug:
+        raise HTTPException(403, "this email has no athlete")
+    return JSONResponse({"slug": slug, "history": chat.history(slug)}, headers=NO_STORE)
 
 
 @app.get("/ClaudeCoach/public/session-library.json")

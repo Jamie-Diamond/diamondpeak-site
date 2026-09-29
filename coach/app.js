@@ -59,6 +59,9 @@
       icon: '<path d="M7 3.5v7a2.5 2.5 0 0 0 5 0v-7"/><path d="M9.5 10.5V20"/><path d="M17 3.5c1.6 1 2.4 2.6 2.4 4.6 0 1.7-.8 2.9-2.4 3.4V20"/>' },
     // Settings has no bar slot: it is entered from the masthead gear. It still needs a
     // TABS entry because show()/skeleton() drive every view from this list.
+    // Chat is private-host only (it needs the backend) and is entered from the corner
+    // button, so like Settings it has no bar slot.
+    { id: 'chat', label: 'Coach', offBar: true, icon: '' },
     { id: 'set', label: 'Settings', offBar: true,
       icon: '<path d="M10.3 3.2h3.4l.5 2.2 1.9.8 1.9-1.2 2.4 2.4-1.2 1.9.8 1.9 2.2.5v3.4l-2.2.5-.8 1.9 1.2 1.9-2.4 2.4-1.9-1.2-1.9.8-.5 2.2h-3.4l-.5-2.2-1.9-.8-1.9 1.2-2.4-2.4 1.2-1.9-.8-1.9-2.2-.5v-3.4l2.2-.5.8-1.9-1.2-1.9 2.4-2.41.9 1.2 1.9-.8z"/><circle cx="12" cy="12" r="3.1"/>' }
   ];
@@ -309,12 +312,15 @@
     // section comes out 0px wide and stays that way.
     if (tab === 'trends') drawTrend();
     if (tab === 'today') drawToday();
+    if (tab === 'chat') openChat();
+    document.body.classList.toggle('in-chat', tab === 'chat');
   }
 
   /* ── shared bits ─────────────────────────────────────────────────────── */
 
   function chatCTA(sub) {
-    return '<a class="chat" href="' + TELEGRAM + '" target="_blank" rel="noopener">' +
+    return (state.me ? '<a class="chat" href="#chat" data-chat="1">'
+                     : '<a class="chat" href="' + TELEGRAM + '" target="_blank" rel="noopener">') +
       '<svg viewBox="0 0 24 24"><path d="M21 4 3 11l5 2 2 5 3-4 5 3z"/></svg>' +
       '<span class="txt"><span class="t">Ask the coach</span>' +
       '<span class="s">' + esc(sub) + '</span></span>' +
@@ -703,6 +709,168 @@
       y0 = null;
       if (pulled > PULL) refreshNow(); else ptrHide();
     });
+  }
+
+  /* ── Chat (private host only, 29 Sep 2026) ───────────────────────────── */
+  /* The same coach as Telegram - the backend runs a message through the bot's own
+     code (ClaudeCoach/api/chat.py). Events: status (live "Checking…" line), draft
+     (the reply as it is written), message (the checked reply, which replaces the
+     draft), error, done. History is shared with Telegram. */
+
+  var chatState = { loaded: false, busy: false };
+
+  function wireChat() {
+    var fab = $('#chatFab');
+    if (fab) {
+      fab.removeAttribute('target');
+      fab.href = '#chat';
+      fab.onclick = function (e) { e.preventDefault(); show('chat'); };
+    }
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest('[data-chat]');
+      if (a) { e.preventDefault(); show('chat'); }
+    });
+    if (state.tab === 'chat') openChat();
+  }
+
+  function md(t) {
+    // Telegram-flavoured Markdown, as the coach writes it: *bold* _italic_ `code` [a](url)
+    var h = esc(t);
+    h = h.replace(/```([\s\S]*?)```/g, '<pre>$1</pre>')
+         .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+         .replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>')
+         .replace(/\*([^*\n]+)\*/g, '<b>$1</b>')
+         .replace(/(^|[\s(])_([^_\n]+)_(?=[\s).,!?:;]|$)/g, '$1<i>$2</i>')
+         .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    return h.replace(/\n/g, '<br>');
+  }
+
+  function bubble(who, text, cls) {
+    var d = document.createElement('div');
+    d.className = 'msg ' + who + (cls ? ' ' + cls : '');
+    d.innerHTML = who === 'me' ? esc(text).replace(/\n/g, '<br>') : md(text);
+    $('#chatLog').appendChild(d);
+    return d;
+  }
+
+  function chatScroll() { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }
+
+  function openChat() {
+    var v = $('#v-chat');
+    if (!state.me) {
+      v.innerHTML = '<div class="card"><div class="empty">Chat needs coach.diamondpeak.uk</div></div>' +
+        chatCTA('Use Telegram instead');
+      return;
+    }
+    if (!$('#chatLog')) {
+      v.innerHTML = '<p class="hint chat-k">Your chat with the coach · shared with Telegram</p>' +
+        '<div class="chat-log" id="chatLog"></div>' +
+        '<p class="chat-status" id="chatStatus"></p>' +
+        '<form class="composer" id="composer">' +
+          '<textarea id="chatIn" rows="1" placeholder="Message the coach" aria-label="Message"></textarea>' +
+          '<button type="submit" id="chatSend" aria-label="Send">' +
+            '<svg viewBox="0 0 24 24"><path d="M21 4 3 11l5 2 2 5 3-4 5 3z"/></svg></button>' +
+        '</form>';
+      var ta = $('#chatIn');
+      ta.addEventListener('input', function () {
+        ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px';
+      });
+      ta.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendChat(); }
+      });
+      $('#composer').onsubmit = function (e) { e.preventDefault(); sendChat(); };
+    }
+    if (!chatState.loaded) loadChatHistory();
+    else chatScroll();
+  }
+
+  function loadChatHistory() {
+    fetch('/api/chat/history', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : { history: [] }; })
+      .then(function (j) {
+        chatState.loaded = true;
+        $('#chatLog').innerHTML = '';
+        (j.history || []).forEach(function (e) {
+          if (e.user) bubble('me', e.kind === 'image' ? '📷 ' + e.user : e.user);
+          if (e.assistant) bubble('coach', e.assistant);
+        });
+        if (!(j.history || []).length) {
+          $('#chatLog').innerHTML = '<div class="empty">No messages yet</div>';
+        }
+        chatScroll();
+      })
+      .catch(function () { /* stays empty; sending still works */ });
+  }
+
+  function chatSetStatus(t) { var el = $('#chatStatus'); if (el) el.textContent = t || ''; }
+
+  function sendChat() {
+    var ta = $('#chatIn'), text = (ta.value || '').trim();
+    if (!text || chatState.busy) return;
+    chatState.busy = true;
+    $('#chatSend').disabled = true;
+    var empty = $('#chatLog .empty'); if (empty) empty.remove();
+    bubble('me', text);
+    ta.value = ''; ta.style.height = 'auto';
+    chatSetStatus('Sending…');
+    chatScroll();
+    var draft = null;
+
+    function onEvent(kind, text) {
+      if (kind === 'status') { chatSetStatus(text); return; }
+      if (kind === 'draft') {
+        if (!draft) draft = bubble('coach', '', 'draft');
+        draft.innerHTML = md(text);
+        chatScroll();
+        return;
+      }
+      if (kind === 'message' || kind === 'error') {
+        if (draft) { draft.remove(); draft = null; }
+        bubble('coach', text, kind === 'error' ? 'err' : '');
+        chatScroll();
+      }
+    }
+
+    fetch('/api/chat', { method: 'POST', cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', 'X-Peak': '1' },
+      body: JSON.stringify({ text: text }) })
+      .then(function (r) {
+        if (!r.ok) {
+          return r.json().catch(function () { return {}; }).then(function (j) {
+            throw new Error(j.detail || 'Could not send');
+          });
+        }
+        var reader = r.body.getReader(), dec = new TextDecoder(), buf = '';
+        function pump() {
+          return reader.read().then(function (res) {
+            if (res.done) return;
+            buf += dec.decode(res.value, { stream: true });
+            var parts = buf.split('\n\n'); buf = parts.pop();
+            parts.forEach(function (block) {
+              var kind = null, data = '';
+              block.split('\n').forEach(function (line) {
+                if (line.indexOf('event: ') === 0) kind = line.slice(7);
+                else if (line.indexOf('data: ') === 0) data += line.slice(6);
+              });
+              if (!kind) return;               // keep-alive comment
+              try { onEvent(kind, JSON.parse(data).text); } catch (e) { /* ignore a bad frame */ }
+            });
+            return pump();
+          });
+        }
+        return pump();
+      })
+      .catch(function (e) {
+        if (draft) { draft.classList.add('cut'); }
+        bubble('coach', e.message === 'Failed to fetch' || e.message === 'network error'
+          ? 'Connection lost. The coach keeps going - reopen chat in a minute to see the reply.'
+          : e.message, 'err');
+      })
+      .then(function () {
+        chatState.busy = false;
+        $('#chatSend').disabled = false;
+        chatSetStatus('');
+      });
   }
 
   /* ── Calendar (month grid) ───────────────────────────────────────────── */
@@ -3524,7 +3692,7 @@
   function skeleton() {
     var s = '<div class="card">' + '<div class="skel"></div>'.repeat(3) + '</div>';
     TABS.forEach(function (t) {
-      var v = t.href ? null : $('#v-' + t.id);
+      var v = (t.href || t.id === 'chat') ? null : $('#v-' + t.id);
       if (v) v.innerHTML = s;
     });
   }
@@ -3709,6 +3877,7 @@
           buildGate();
           var gf = document.querySelector('.gate-foot');
           if (gf) gf.textContent = 'Signed in as ' + me.email + '.';
+          wireChat();
           wirePullToRefresh();
         }
         // A remembered profile skips the gate entirely - being asked who you are on

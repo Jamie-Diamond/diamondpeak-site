@@ -3,16 +3,23 @@ Description=ClaudeCoach web API (Peak backend, coach.diamondpeak.uk)
 After=network-online.target
 
 [Service]
+# root with HOME set, like claudecoach-bot.service: web chat runs the same claude CLI.
+User=root
 WorkingDirectory=/Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/api
 # Identity mode lives here, not in the repo - see the docstring in server.py.
 # Private test mode:  CC_API_DEV_EMAIL=<email>
 # Production:         CF_ACCESS_TEAM=<team> and CF_ACCESS_AUD=<application AUD tag>
 #   Always:             CC_WEB_ACCESS=/etc/claudecoach/web-access.json (email -> athlete, outside the repo)
 EnvironmentFile=/etc/claudecoach-api.env
+# The same Claude credentials and PATH the Telegram bot runs with (its drop-in on the VM).
+Environment=HOME=/root
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=/root/.claude/cc.env
 ExecStart=/opt/claudecoach-api/venv/bin/uvicorn server:app --host 127.0.0.1 --port 8787 --workers 1 --proxy-headers
 Restart=on-failure
 RestartSec=5
-MemoryMax=300M
+# Web chat runs the claude CLI as a child process, which counts against this limit.
+MemoryMax=1G
 
 [Install]
 WantedBy=multi-user.target

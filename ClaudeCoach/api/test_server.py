@@ -171,3 +171,65 @@ def test_nutrition_is_served_from_the_private_file(env, monkeypatch):
     assert env.get("/ClaudeCoach/public/nutrition-jamie.json").status_code == 404
     (server.CC / "athletes" / "jamie" / "nutrition-app.json").write_text('{"n":1}')
     assert env.get("/ClaudeCoach/public/nutrition-jamie.json").json() == {"n": 1}
+
+
+# ── chat ──
+
+class FakeSink:
+    def __init__(self, events):
+        import queue
+        self.q = queue.Queue()
+        for e in events:
+            self.q.put(e)
+
+
+def test_chat_talks_as_yourself_even_when_coach(env, monkeypatch):
+    dev(monkeypatch, "coach@example.com")
+    seen = []
+    monkeypatch.setattr(server.chat, "start_turn",
+                        lambda slug, text: seen.append((slug, text)) or FakeSink(
+                            [("status", "Thinking…"), ("draft", "Hel"), ("message", "Hello"), ("done", "")]))
+    r = env.post("/api/chat", json={"text": "hi"}, headers={"x-peak": "1"})
+    assert r.status_code == 200 and seen == [("jamie", "hi")]
+    body = r.text
+    assert "event: status" in body and "event: draft" in body
+    assert body.index("event: message") < body.index("event: done")
+
+
+def test_chat_refuses_without_header_empty_text_or_unknown_user(env, monkeypatch):
+    monkeypatch.setattr(server.chat, "start_turn", lambda slug, text: 1 / 0)
+    dev(monkeypatch, "kat@example.com")
+    assert env.post("/api/chat", json={"text": "hi"}).status_code == 400
+    assert env.post("/api/chat", json={"text": "  "}, headers={"x-peak": "1"}).status_code == 400
+    dev(monkeypatch, "stranger@example.com")
+    assert env.post("/api/chat", json={"text": "hi"}, headers={"x-peak": "1"}).status_code == 403
+
+
+def test_chat_busy_is_a_409(env, monkeypatch):
+    dev(monkeypatch, "kat@example.com")
+    def busy(slug, text):
+        raise server.chat.Busy(slug)
+    monkeypatch.setattr(server.chat, "start_turn", busy)
+    assert env.post("/api/chat", json={"text": "hi"}, headers={"x-peak": "1"}).status_code == 409
+
+
+def test_chat_history_is_your_own(env, monkeypatch):
+    dev(monkeypatch, "kat@example.com")
+    monkeypatch.setattr(server.chat, "CC", server.CC)
+    h = server.CC / "athletes" / "kathryn" / "telegram"
+    h.mkdir(parents=True)
+    (h / "history.json").write_text('[{"user":"q","assistant":"a","ts":"2026-09-29T10:00:00"}]')
+    r = env.get("/api/chat/history").json()
+    assert r["slug"] == "kathryn" and r["history"][0]["assistant"] == "a"
+
+
+def test_sink_turns_telegram_calls_into_events():
+    import chat
+    s = chat.Sink()
+    ph = s.handle("sendMessage", {"text": "…", "disable_notification": True})["result"]["message_id"]
+    s.handle("editMessageText", {"message_id": ph, "text": "Checking intervals.icu..."})
+    s.handle("sendChatAction", {"action": "typing"})
+    s.handle("sendMessage", {"text": "Your reply"})
+    got = [s.q.get_nowait() for _ in range(s.q.qsize())]
+    assert got == [("status", "Thinking…"), ("status", "Checking intervals.icu..."),
+                   ("message", "Your reply")]

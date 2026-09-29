@@ -550,6 +550,33 @@ table.tbl tr.hl td{background:rgba(16,101,107,.05)}
 .linkish{background:none;border:0;padding:0;font:inherit;letter-spacing:inherit;
   text-transform:inherit;color:var(--accent);text-decoration:underline;cursor:pointer}
 
+/* ── chat (29 Sep 2026) ─────────────────────────────────────────────────── */
+body.in-chat .fab{display:none}
+body.in-chat main{padding-bottom:calc(var(--tab-h) + 86px + env(safe-area-inset-bottom,0px))}
+.chat-k{text-align:center;margin:0 0 12px}
+.chat-log{display:flex;flex-direction:column;gap:8px}
+.msg{max-width:86%;padding:9px 12px;border-radius:12px;font-size:14.5px;line-height:1.45;
+  overflow-wrap:anywhere;font-weight:400}
+.msg.me{align-self:flex-end;background:var(--ink);color:var(--paper);border-bottom-right-radius:3px}
+.msg.coach{align-self:flex-start;background:var(--paper);color:var(--ink);border:1px solid var(--rule);
+  border-bottom-left-radius:3px}
+.msg.draft{color:var(--muted)}
+.msg.err{border-color:var(--amber);color:var(--ink-2)}
+.msg pre,.msg code{font-family:'DM Mono',monospace;font-size:12px;white-space:pre-wrap}
+.msg a{color:var(--accent)}
+.chat-status{min-height:14px;margin:8px 2px 0;font-family:'DM Mono',monospace;font-size:9.5px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+.composer{position:fixed;left:0;right:0;z-index:70;
+  bottom:calc(var(--tab-h) + env(safe-area-inset-bottom,0px));
+  display:flex;gap:8px;align-items:flex-end;padding:10px max(12px,calc((100% - 680px)/2 + 12px));
+  background:rgba(236,239,242,.96);border-top:1px solid var(--rule)}
+.composer textarea{flex:1;resize:none;border:1px solid var(--rule);border-radius:18px;background:#fff;
+  padding:9px 14px;font:400 15px/1.35 'DM Sans',system-ui,sans-serif;color:var(--ink);max-height:140px}
+.composer button{flex:0 0 40px;height:40px;border-radius:50%;border:0;background:var(--accent);
+  color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.composer button:disabled{opacity:.4}
+.composer svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linejoin:round}
+
 /* ── private-only cards + pull-to-refresh (29 Sep 2026) ─────────────────── */
 .cs-row{display:flex;gap:12px;padding:7px 0;border-bottom:1px solid var(--rule-soft);font-size:13.5px;color:var(--ink-2)}
 .cs-row:last-child{border-bottom:0}
@@ -940,6 +967,7 @@ body.drawn{overflow:hidden}
   <!-- Opt-in per athlete: present in the DOM for everyone, but the tab that reaches it
        only exists when nutrition data was published for this athlete. -->
   <section class="view" id="v-food" role="tabpanel" aria-label="Food"></section>
+  <section class="view" id="v-chat" role="tabpanel" aria-label="Coach"></section>
   <section class="view" id="v-set" role="tabpanel" aria-label="Settings"></section>
 </main>
 
@@ -955,6 +983,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=40" defer></script>
+<script src="app.js?v=41" defer></script>
 </body>
 </html>
