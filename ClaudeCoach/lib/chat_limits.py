@@ -34,7 +34,7 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parent.parent   # ClaudeCoach/
 DEFAULT_ALLOWANCE_USD = 20.0
 STEP_DOWN_AT = 0.80
-DAILY_CAP_OVER = 10
+DAILY_CAP_OVER = 5            # Jamie, 29 Sep 2026
 LEDGER = "chat-usage.json"
 
 STEP_DOWN = {"opus": "sonnet", "sonnet": "haiku", "haiku": "haiku", "fable": "opus"}
