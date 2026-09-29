@@ -17,7 +17,9 @@ bot is a separate process and is untouched):
                 Telegram never shows the draft; the web does, then replaces it with
                 the checked reply (the `message`), which is what history keeps.
   send_photo    charts still go to Telegram, and the web is told so.
-  send_voice    dropped for web turns; the text reply still arrives.
+  send_voice    kept for web turns (voice mode's own audio) and played in Peak.
+  download_tg_file  a "web:<n>" file id returns the photo Peak uploaded, so a web photo
+                goes through the bot's own image path (_image_reply_worker) unchanged.
   _submit       runs the reply worker on THIS thread (under the same per-chat lock)
                 so its events stream back to this request.
 
@@ -27,8 +29,12 @@ both would complete, and the later history write wins.
 """
 from __future__ import annotations
 
+import base64
+import itertools
 import os
 import queue
+import re
+import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -40,6 +46,8 @@ _SINKS_GUARD = threading.Lock()
 _TURN = threading.local()          # .chat_id on the thread running a web turn
 _bot = None
 _bot_guard = threading.Lock()
+_UPLOADS: dict[str, bytes] = {}    # "web:<n>" -> photo bytes, for the length of one turn
+_upload_ids = itertools.count(1)
 
 
 class Busy(Exception):
@@ -53,6 +61,8 @@ class Sink:
         self.q: queue.Queue = queue.Queue()
         self.placeholder_id = None
         self._next_id = 1_000_000
+        self.last_message = ""
+        self.voice_ogg = None
 
     def put(self, kind, text=""):
         self.q.put((kind, text))
@@ -68,13 +78,17 @@ class Sink:
             if text == "…" and payload.get("disable_notification") and self.placeholder_id is None:
                 self.placeholder_id = mid       # the live status line
                 self.put("status", "Thinking…")
+            elif text == "_On it..._":          # the photo path's holding line
+                self.put("status", "Looking at the photo…")
             elif text:
+                self.last_message = text
                 self.put("message", text)
             return {"ok": True, "result": {"message_id": mid}}
         if method == "editMessageText" and text:
             if payload.get("message_id") == self.placeholder_id:
                 self.put("status", text)
             else:
+                self.last_message = text
                 self.put("message", text)
         return {"ok": True, "result": {"message_id": payload.get("message_id") or self._id()}}
 
@@ -85,6 +99,7 @@ def _sink_for(chat_id):
 
 def _patch(b):
     orig_post, orig_photo, orig_voice = b.tg_post, b.send_photo, b.send_voice
+    orig_download = b.download_tg_file
     orig_stream = b.stream_claude
 
     def tg_post(token, method, payload):
@@ -98,9 +113,16 @@ def _patch(b):
         return orig_photo(token, chat_id, photo_bytes, *a, **k)
 
     def send_voice(token, chat_id, ogg_bytes, *a, **k):
-        if _sink_for(chat_id):
+        sink = _sink_for(chat_id)
+        if sink:
+            sink.voice_ogg = ogg_bytes
             return None
         return orig_voice(token, chat_id, ogg_bytes, *a, **k)
+
+    def download_tg_file(token, file_id):
+        if str(file_id).startswith("web:"):
+            return _UPLOADS.get(file_id)
+        return orig_download(token, file_id)
 
     def stream_claude(*a, **k):
         sink = _sink_for(getattr(_TURN, "chat_id", None))
@@ -122,6 +144,7 @@ def _patch(b):
 
     orig_submit = b._submit
     b.tg_post, b.send_photo, b.send_voice = tg_post, send_photo, send_voice
+    b.download_tg_file = download_tg_file
     b.stream_claude, b._submit = stream_claude, _submit
 
 
@@ -145,9 +168,31 @@ def chat_id_for(slug: str) -> str | None:
     return None
 
 
-def start_turn(slug: str, text: str) -> Sink:
-    """Run one web message through the Telegram coach on a background thread.
-    Returns the Sink its events arrive on; the last event is always ('done', '')."""
+_FOOTER_RE = re.compile(r"\n_[^\n]*_\s*$")
+
+
+def _speech_mp3(b, sink) -> bytes | None:
+    """The reply as speech, the way Telegram voice mode makes it (a short spoken
+    rewrite, Piper voice), as MP3 so every phone browser can play it."""
+    ogg = sink.voice_ogg
+    if not ogg:
+        reply = _FOOTER_RE.sub("", sink.last_message or "").strip()
+        spoken = b._clean_for_speech(b._spoken_rewrite(reply)) if reply else ""
+        ogg = b.synthesize_voice(spoken) if spoken else None
+    if not ogg:
+        return None
+    r = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", "pipe:0", "-c:a", "libmp3lame",
+                        "-b:a", "48k", "-f", "mp3", "pipe:1"],
+                       input=ogg, capture_output=True, timeout=60)
+    return r.stdout if r.returncode == 0 and r.stdout else None
+
+
+def start_turn(slug: str, text: str = "", audio: bytes | None = None,
+               image: bytes | None = None) -> Sink:
+    """Run one web message through the Telegram coach on a background thread: text, a
+    voice recording (transcribed first, and the reply spoken back), or a photo with
+    `text` as its caption. Returns the Sink its events arrive on; the last event is
+    always ('done', '')."""
     b = bot()
     athletes = b.load_athletes()
     chat_id = next((str(cid) for cid, a in athletes.items() if a.get("slug") == slug), None)
@@ -161,14 +206,37 @@ def start_turn(slug: str, text: str) -> Sink:
 
     def work():
         _TURN.chat_id = chat_id
+        upload_id = None
         try:
             config = b.load_config()
-            b.log(f"[{slug}] In (web): {text[:80]}")
-            b._route_text(config["bot_token"], chat_id, text, athletes, config)
+            token = config["bot_token"]
+            said = text
+            if audio is not None:
+                said = b.transcribe_voice(audio) or ""
+                if not said:
+                    sink.put("error", "Sorry, I couldn't make that out. Try again?")
+                    return
+                sink.put("heard", said)
+            if image is not None:
+                upload_id = f"web:{next(_upload_ids)}"
+                _UPLOADS[upload_id] = image
+                b.log(f"[{slug}] In (web photo): {said[:80]}")
+                with b._chat_lock(chat_id):
+                    b._image_reply_worker(token, chat_id, upload_id, said, athletes[chat_id], config)
+            else:
+                b.log(f"[{slug}] In (web{' voice' if audio is not None else ''}): {said[:80]}")
+                b._route_text(token, chat_id, said, athletes, config)
+            if audio is not None and (sink.last_message or sink.voice_ogg):
+                sink.put("status", "Recording the reply…")
+                mp3 = _speech_mp3(b, sink)
+                if mp3:
+                    sink.put("audio", base64.b64encode(mp3).decode())
         except Exception as e:
             b.log(f"[{slug}] web turn error: {e}")
             sink.put("error", "Sorry - I hit a snag answering that. Give it another go in a moment.")
         finally:
+            if upload_id:
+                _UPLOADS.pop(upload_id, None)
             _TURN.chat_id = None
             with _SINKS_GUARD:
                 _SINKS.pop(chat_id, None)

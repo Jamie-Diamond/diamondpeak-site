@@ -26,6 +26,8 @@ Paths mirror the GitHub Pages layout so Peak runs unchanged:
   /api/me                                     who you are, which athletes you may see
   POST /api/refresh/<slug>                    rebuild that athlete's data from Intervals.icu now
   POST /api/chat                              talk to the coach as YOURSELF (see chat.py), SSE
+  POST /api/chat/voice                        a voice recording; transcribed, reply spoken back
+  POST /api/chat/photo?caption=               a photo, read by the bot's own image path
   GET  /api/chat/history                      your shared Telegram/web conversation
 Anything else (the site's other tools) redirects to https://diamondpeak.uk.
 
@@ -244,8 +246,42 @@ async def chat_send(request: Request):
     text = str((body or {}).get("text") or "").strip()[:4000]
     if not text:
         raise HTTPException(400, "empty message")
+    return _turn_stream(slug, text=text)
+
+
+def _chat_user(request: Request) -> str:
+    if request.headers.get("x-peak") != "1":
+        raise HTTPException(400, "missing app header")
+    slug = own_slug(request_email(request))
+    if not slug:
+        raise HTTPException(403, "this email has no athlete")
+    return slug
+
+
+async def _upload(request: Request, max_mb: int) -> bytes:
+    data = await request.body()
+    if len(data) < 500:
+        raise HTTPException(400, "nothing recorded")
+    if len(data) > max_mb * 1024 * 1024:
+        raise HTTPException(413, f"too large - {max_mb} MB at most")
+    return data
+
+
+@app.post("/api/chat/voice")
+async def chat_voice(request: Request):
+    slug = _chat_user(request)
+    return _turn_stream(slug, audio=await _upload(request, 15))
+
+
+@app.post("/api/chat/photo")
+async def chat_photo(request: Request, caption: str = ""):
+    slug = _chat_user(request)
+    return _turn_stream(slug, text=caption.strip()[:1000], image=await _upload(request, 12))
+
+
+def _turn_stream(slug: str, **turn) -> StreamingResponse:
     try:
-        sink = chat.start_turn(slug, text)
+        sink = chat.start_turn(slug, **turn)
     except chat.Busy:
         raise HTTPException(409, "the coach is still answering your last message")
     except LookupError:

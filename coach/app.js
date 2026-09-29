@@ -767,8 +767,14 @@
         '<div class="chat-log" id="chatLog"></div>' +
         '<p class="chat-status" id="chatStatus"></p>' +
         '<form class="composer" id="composer">' +
+          '<div class="thumb" id="chatThumb" hidden></div>' +
+          '<input type="file" id="chatFile" accept="image/*" hidden>' +
+          '<button type="button" class="cb" id="chatCam" aria-label="Send a photo">' +
+            '<svg viewBox="0 0 24 24"><path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z"/><circle cx="12" cy="13.2" r="3.4"/></svg></button>' +
           '<textarea id="chatIn" rows="1" placeholder="Message the coach" aria-label="Message"></textarea>' +
-          '<button type="submit" id="chatSend" aria-label="Send">' +
+          '<button type="button" class="cb go" id="chatMic" aria-label="Record a voice message">' +
+            '<svg viewBox="0 0 24 24"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/></svg></button>' +
+          '<button type="submit" class="cb go" id="chatSend" aria-label="Send" hidden>' +
             '<svg viewBox="0 0 24 24"><path d="M21 4 3 11l5 2 2 5 3-4 5 3z"/></svg></button>' +
         '</form>';
       var ta = $('#chatIn');
@@ -779,6 +785,10 @@
         if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendChat(); }
       });
       $('#composer').onsubmit = function (e) { e.preventDefault(); sendChat(); };
+      ta.addEventListener('input', composerMode);
+      $('#chatMic').onclick = toggleRecord;
+      $('#chatCam').onclick = function () { if (!chatState.busy) $('#chatFile').click(); };
+      $('#chatFile').onchange = function () { pickPhoto(this.files && this.files[0]); };
     }
     if (!chatState.loaded) loadChatHistory();
     else chatScroll();
@@ -804,20 +814,52 @@
 
   function chatSetStatus(t) { var el = $('#chatStatus'); if (el) el.textContent = t || ''; }
 
+  function chatBusy(on) {
+    chatState.busy = on;
+    ['#chatSend', '#chatMic', '#chatCam'].forEach(function (id) { var b = $(id); if (b) b.disabled = on; });
+    if (!on) chatSetStatus('');
+  }
+
+  // Composer: typed text shows Send; an empty box shows the mic. A chosen photo sits
+  // above the box as a thumbnail and the text becomes its caption.
+  function composerMode() {
+    var has = !!($('#chatIn').value.trim() || chatState.photo);
+    $('#chatSend').hidden = !has || chatState.rec != null;
+    $('#chatMic').hidden = has && chatState.rec == null;
+  }
+
   function sendChat() {
+    if (chatState.busy) return;
     var ta = $('#chatIn'), text = (ta.value || '').trim();
-    if (!text || chatState.busy) return;
-    chatState.busy = true;
-    $('#chatSend').disabled = true;
-    var empty = $('#chatLog .empty'); if (empty) empty.remove();
+    if (chatState.photo) {
+      var ph = chatState.photo;
+      clearPhoto();
+      ta.value = ''; ta.style.height = 'auto'; composerMode();
+      var b = bubble('me', text || '');
+      b.insertAdjacentHTML('afterbegin', '<img class="msg-img" src="' + ph.url + '" alt="">');
+      streamTurn('/api/chat/photo?caption=' + encodeURIComponent(text), ph.blob, 'image/jpeg');
+      return;
+    }
+    if (!text) return;
     bubble('me', text);
-    ta.value = ''; ta.style.height = 'auto';
+    ta.value = ''; ta.style.height = 'auto'; composerMode();
+    streamTurn('/api/chat', JSON.stringify({ text: text }), 'application/json');
+  }
+
+  function streamTurn(url, body, type) {
+    chatBusy(true);
+    var empty = $('#chatLog .empty'); if (empty) empty.remove();
     chatSetStatus('Sending…');
     chatScroll();
-    var draft = null;
+    var draft = null, lastCoach = null;
 
     function onEvent(kind, text) {
       if (kind === 'status') { chatSetStatus(text); return; }
+      if (kind === 'heard') {
+        var mine = $('#chatLog .msg.me.pending');
+        if (mine) { mine.classList.remove('pending'); mine.innerHTML = '🎙 ' + esc(text); }
+        return;
+      }
       if (kind === 'draft') {
         if (!draft) draft = bubble('coach', '', 'draft');
         draft.innerHTML = md(text);
@@ -826,14 +868,16 @@
       }
       if (kind === 'message' || kind === 'error') {
         if (draft) { draft.remove(); draft = null; }
-        bubble('coach', text, kind === 'error' ? 'err' : '');
+        lastCoach = bubble('coach', text, kind === 'error' ? 'err' : '');
+        if (kind === 'error') { var p = $('#chatLog .msg.me.pending'); if (p) p.remove(); }
         chatScroll();
+        return;
       }
+      if (kind === 'audio' && lastCoach) playReply(lastCoach, text);
     }
 
-    fetch('/api/chat', { method: 'POST', cache: 'no-store',
-      headers: { 'Content-Type': 'application/json', 'X-Peak': '1' },
-      body: JSON.stringify({ text: text }) })
+    fetch(url, { method: 'POST', cache: 'no-store',
+      headers: { 'Content-Type': type, 'X-Peak': '1' }, body: body })
       .then(function (r) {
         if (!r.ok) {
           return r.json().catch(function () { return {}; }).then(function (j) {
@@ -861,16 +905,126 @@
         return pump();
       })
       .catch(function (e) {
-        if (draft) { draft.classList.add('cut'); }
-        bubble('coach', e.message === 'Failed to fetch' || e.message === 'network error'
+        var p = $('#chatLog .msg.me.pending'); if (p) p.remove();
+        bubble('coach', e.message === 'Failed to fetch' || e.message === 'network error' ||
+                        e.message === 'Load failed'
           ? 'Connection lost. The coach keeps going - reopen chat in a minute to see the reply.'
           : e.message, 'err');
       })
-      .then(function () {
-        chatState.busy = false;
-        $('#chatSend').disabled = false;
+      .then(function () { chatBusy(false); });
+  }
+
+  /* ── voice ── */
+  // iPhone only lets audio play after a tap. The tap that stops a recording unlocks an
+  // AudioContext, which then plays the reply when it arrives. The reply also always
+  // keeps a play button, in case the phone refuses anyway.
+  var audioCtx = null, audioSrc = null;
+  function primeAudio() {
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      var s = audioCtx.createBufferSource();
+      s.buffer = audioCtx.createBuffer(1, 1, 22050);
+      s.connect(audioCtx.destination); s.start(0);
+    } catch (e) { audioCtx = null; }
+  }
+  function playReply(bubbleEl, b64) {
+    var src = 'data:audio/mpeg;base64,' + b64;
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'play'; btn.textContent = '▶ Play reply';
+    btn.onclick = function () { new Audio(src).play(); };
+    bubbleEl.appendChild(btn);
+    if (!audioCtx || audioCtx.state !== 'running') return;
+    try {
+      var bin = atob(b64), bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      audioCtx.decodeAudioData(bytes.buffer, function (buf) {
+        if (audioSrc) { try { audioSrc.stop(); } catch (e) { /* already ended */ } }
+        audioSrc = audioCtx.createBufferSource();
+        audioSrc.buffer = buf; audioSrc.connect(audioCtx.destination); audioSrc.start(0);
+      }, function () { /* the play button still works */ });
+    } catch (e) { /* the play button still works */ }
+  }
+
+  function toggleRecord() {
+    if (chatState.busy) return;
+    if (chatState.rec) { stopRecord(true); return; }
+    if (!navigator.mediaDevices || !window.MediaRecorder) {
+      bubble('coach', 'This browser can’t record audio.', 'err'); return;
+    }
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      var mime = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm'].filter(function (m) {
+        return MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m);
+      })[0];
+      var rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      var chunks = [], t0 = Date.now();
+      rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+      rec.onstop = function () {
+        stream.getTracks().forEach(function (t) { t.stop(); });
+        clearInterval(chatState.recTimer);
+        var send = chatState.recSend;
+        chatState.rec = null;
+        $('#chatMic').classList.remove('rec');
+        composerMode();
         chatSetStatus('');
-      });
+        if (!send) return;
+        var blob = new Blob(chunks, { type: rec.mimeType || mime || 'audio/webm' });
+        bubble('me', '🎙 …', 'pending');
+        streamTurn('/api/chat/voice', blob, blob.type);
+      };
+      chatState.rec = rec; chatState.recSend = false;
+      rec.start();
+      $('#chatMic').classList.add('rec');
+      composerMode();
+      var tick = function () {
+        var sec = Math.floor((Date.now() - t0) / 1000);
+        chatSetStatus('Recording ' + Math.floor(sec / 60) + ':' + ('0' + sec % 60).slice(-2) +
+                      ' · tap ■ to send');
+        if (sec >= 120) stopRecord(true);
+      };
+      tick(); chatState.recTimer = setInterval(tick, 500);
+    }).catch(function () {
+      bubble('coach', 'Microphone blocked. Allow it for coach.diamondpeak.uk in your browser settings.', 'err');
+    });
+  }
+  function stopRecord(send) {
+    if (!chatState.rec) return;
+    chatState.recSend = send;
+    if (send) primeAudio();
+    chatState.rec.stop();
+  }
+
+  /* ── photos ── */
+  // Shrunk on the phone to 1600px JPEG before upload: a phone photo is 3-12 MB, the
+  // coach needs a fraction of that, and a small upload is what makes it feel quick.
+  function pickPhoto(file) {
+    if (!file) return;
+    var img = new Image(), url = URL.createObjectURL(file);
+    img.onload = function () {
+      var k = Math.min(1, 1600 / Math.max(img.width, img.height));
+      var c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob(function (blob) {
+        if (!blob) return;
+        chatState.photo = { blob: blob, url: URL.createObjectURL(blob) };
+        $('#chatThumb').innerHTML = '<img src="' + chatState.photo.url + '" alt="">' +
+          '<button type="button" aria-label="Remove photo" id="chatThumbX">✕</button>';
+        $('#chatThumb').hidden = false;
+        $('#chatThumbX').onclick = function () { clearPhoto(); composerMode(); };
+        $('#chatIn').placeholder = 'Add a caption (optional)';
+        composerMode();
+      }, 'image/jpeg', 0.85);
+    };
+    img.onerror = function () { bubble('coach', 'That photo couldn’t be read. Try another?', 'err'); };
+    img.src = url;
+  }
+  function clearPhoto() {
+    chatState.photo = null;
+    var t = $('#chatThumb'); if (t) { t.hidden = true; t.innerHTML = ''; }
+    $('#chatIn').placeholder = 'Message the coach';
+    $('#chatFile').value = '';
   }
 
   /* ── Calendar (month grid) ───────────────────────────────────────────── */

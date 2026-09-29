@@ -187,7 +187,7 @@ def test_chat_talks_as_yourself_even_when_coach(env, monkeypatch):
     dev(monkeypatch, "coach@example.com")
     seen = []
     monkeypatch.setattr(server.chat, "start_turn",
-                        lambda slug, text: seen.append((slug, text)) or FakeSink(
+                        lambda slug, text="", **k: seen.append((slug, text)) or FakeSink(
                             [("status", "Thinking…"), ("draft", "Hel"), ("message", "Hello"), ("done", "")]))
     r = env.post("/api/chat", json={"text": "hi"}, headers={"x-peak": "1"})
     assert r.status_code == 200 and seen == [("jamie", "hi")]
@@ -197,7 +197,7 @@ def test_chat_talks_as_yourself_even_when_coach(env, monkeypatch):
 
 
 def test_chat_refuses_without_header_empty_text_or_unknown_user(env, monkeypatch):
-    monkeypatch.setattr(server.chat, "start_turn", lambda slug, text: 1 / 0)
+    monkeypatch.setattr(server.chat, "start_turn", lambda slug, **k: 1 / 0)
     dev(monkeypatch, "kat@example.com")
     assert env.post("/api/chat", json={"text": "hi"}).status_code == 400
     assert env.post("/api/chat", json={"text": "  "}, headers={"x-peak": "1"}).status_code == 400
@@ -207,7 +207,7 @@ def test_chat_refuses_without_header_empty_text_or_unknown_user(env, monkeypatch
 
 def test_chat_busy_is_a_409(env, monkeypatch):
     dev(monkeypatch, "kat@example.com")
-    def busy(slug, text):
+    def busy(slug, **k):
         raise server.chat.Busy(slug)
     monkeypatch.setattr(server.chat, "start_turn", busy)
     assert env.post("/api/chat", json={"text": "hi"}, headers={"x-peak": "1"}).status_code == 409
@@ -233,3 +233,24 @@ def test_sink_turns_telegram_calls_into_events():
     got = [s.q.get_nowait() for _ in range(s.q.qsize())]
     assert got == [("status", "Thinking…"), ("status", "Checking intervals.icu..."),
                    ("message", "Your reply")]
+
+
+def test_voice_and_photo_reach_the_turn_as_yourself(env, monkeypatch):
+    dev(monkeypatch, "coach@example.com")
+    seen = []
+    monkeypatch.setattr(server.chat, "start_turn",
+                        lambda slug, **k: seen.append((slug, sorted(k))) or FakeSink([("done", "")]))
+    audio = b"x" * 2000
+    assert env.post("/api/chat/voice", content=audio, headers={"x-peak": "1"}).status_code == 200
+    assert env.post("/api/chat/photo?caption=lunch", content=audio,
+                    headers={"x-peak": "1"}).status_code == 200
+    assert seen == [("jamie", ["audio"]), ("jamie", ["image", "text"])]
+
+
+def test_uploads_are_checked(env, monkeypatch):
+    dev(monkeypatch, "kat@example.com")
+    monkeypatch.setattr(server.chat, "start_turn", lambda slug, **k: FakeSink([("done", "")]))
+    assert env.post("/api/chat/voice", content=b"x" * 2000).status_code == 400      # no header
+    assert env.post("/api/chat/voice", content=b"x", headers={"x-peak": "1"}).status_code == 400
+    big = b"x" * (13 * 1024 * 1024)
+    assert env.post("/api/chat/photo", content=big, headers={"x-peak": "1"}).status_code == 413

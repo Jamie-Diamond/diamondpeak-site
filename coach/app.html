@@ -572,9 +572,22 @@ body.in-chat main{padding-bottom:calc(var(--tab-h) + 86px + env(safe-area-inset-
   background:rgba(236,239,242,.96);border-top:1px solid var(--rule)}
 .composer textarea{flex:1;resize:none;border:1px solid var(--rule);border-radius:18px;background:#fff;
   padding:9px 14px;font:400 15px/1.35 'DM Sans',system-ui,sans-serif;color:var(--ink);max-height:140px}
-.composer button{flex:0 0 40px;height:40px;border-radius:50%;border:0;background:var(--accent);
-  color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer}
-.composer button:disabled{opacity:.4}
+.composer{flex-wrap:wrap}
+.composer .cb{flex:0 0 40px;height:40px;border-radius:50%;border:0;background:none;
+  color:var(--ink-2);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.composer .cb.go{background:var(--accent);color:#fff}
+.composer .cb.rec{background:var(--red);animation:pulse 1.2s ease-in-out infinite}
+.composer .cb[hidden]{display:none}
+.composer .cb:disabled{opacity:.4}
+@keyframes pulse{50%{box-shadow:0 0 0 6px rgba(179,36,31,.18)}}
+.thumb{flex:0 0 100%;display:flex;align-items:flex-start;gap:6px}
+.thumb[hidden]{display:none}
+.thumb img{height:64px;border-radius:6px;border:1px solid var(--rule)}
+.thumb button{border:0;background:none;color:var(--muted);font-size:14px;cursor:pointer}
+.msg-img{display:block;max-width:100%;max-height:260px;border-radius:8px;margin:-3px -5px 6px}
+.msg.me.pending{opacity:.6}
+.msg .play{display:block;margin-top:8px;border:1px solid var(--rule);background:none;border-radius:14px;
+  padding:4px 10px;font:500 11px 'DM Mono',monospace;color:var(--accent);cursor:pointer}
 .composer svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linejoin:round}
 
 /* ── private-only cards + pull-to-refresh (29 Sep 2026) ─────────────────── */
@@ -983,6 +996,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=41" defer></script>
+<script src="app.js?v=42" defer></script>
 </body>
 </html>

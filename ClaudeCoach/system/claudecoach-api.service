@@ -19,7 +19,8 @@ ExecStart=/opt/claudecoach-api/venv/bin/uvicorn server:app --host 127.0.0.1 --po
 Restart=on-failure
 RestartSec=5
 # Web chat runs the claude CLI as a child process, which counts against this limit.
-MemoryMax=1G
+# Voice loads Whisper + Piper into this process too.
+MemoryMax=1500M
 
 [Install]
 WantedBy=multi-user.target
