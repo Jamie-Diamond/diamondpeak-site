@@ -378,11 +378,18 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
 
     # Easy days around B/C races: booked off-season attempts (default C) and races in
     # the registry. The validator blocks hard work on them (stage1 audit_built).
+    # Booked tests / PB attempts apply in any TRAINING week (off-season or a race block),
+    # never in the A-race taper, race week or post-race recovery. A B-race week is typed
+    # "taper" too (an easy week) but keeps its bookings: the B race is usually one.
+    _wt = req.get("week_type")
+    _training_week = (_wt not in ("taper", "race", "post_race", None)
+                      or (_wt == "taper" and bool(req.get("easy_week_reason"))))
+    week_books = (req["bookings"] if "bookings" in req
+                  else (pt.week_bookings(cfg, plan_start) if _training_week else []))
     _near = []
-    if offseason:
+    if _training_week:
         _near += [dict(b, priority=b.get("priority") or "C")
-                  for b in ((pt.offseason_cfg(cfg) or {}).get("bookings") or [])
-                  if isinstance(b, dict) and b.get("date")]
+                  for b in pt.all_bookings(cfg) if b.get("date")]
     _near += [r for r in (cfg.get("races") or [])
               if str(r.get("priority") or "").upper() in ("B", "C") and r.get("date")]
     booking_easy_dates = _rf.easy_dates(_near, plan_start) if _near else {}
@@ -579,7 +586,7 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         "dosing_note": dosing_note,
         # Tests and PB attempts booked into THIS week (offseason.bookings). Present only
         # when there are some: every non-underscore key reaches the prompt verbatim.
-        **({"booked_sessions": req["bookings"]} if req.get("bookings") else {}),
+        **({"booked_sessions": week_books} if week_books else {}),
         # Days that must carry no hard work: either side of a B/C race or PB attempt.
         **({"booking_easy_dates": booking_easy_dates} if booking_easy_dates else {}),
         # Run race: running and total Fitness, each against its own floor.

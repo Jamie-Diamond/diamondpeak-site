@@ -185,3 +185,28 @@ class TestBlueprintGenerator:
         assert "under this athlete's floor" in gb.fitness_check(
             "x", "Marathon", 50.0, phases, None, BLOCK)
         assert gb.fitness_check("x", "Marathon", 90.0, phases, None, BLOCK) is None
+
+
+class TestBookingsInAnyBlock:
+    """Jamie, 29 Sep 2026 (2a): the PB attempts and FTP/CSS tests carry on into the
+    Brighton marathon block, where the off-season branch no longer runs."""
+
+    CFG = dict(BLOCK, bookings=[
+        {"week_start": "2026-11-30", "sport": "Ride", "name": "FTP test", "match": "FTP test"},
+        {"date": "2027-03-07", "sport": "Run", "name": "Half PB", "match": "half",
+         "priority": "B"}])
+
+    def test_top_level_bookings_are_read_with_offseason_ones(self):
+        cfg = dict(self.CFG, offseason={"bookings": [
+            {"date": "2026-11-14", "sport": "Run", "name": "5k", "match": "5k"}]})
+        assert {b["name"] for b in pt.all_bookings(cfg)} == {"FTP test", "Half PB", "5k"}
+        assert [b["name"] for b in pt.week_bookings(cfg, date(2026, 12, 2))] == ["FTP test"]
+
+    def test_held_bookings_see_top_level_ones(self):
+        held = pt.held_bookings(self.CFG, date(2026, 9, 19), date(2026, 12, 7))
+        assert [b["name"] for b in held] == ["FTP test"]
+
+    def test_the_brief_books_them_in_a_normal_block_week(self):
+        src = (REPO / "lib" / "session_library.py").read_text()
+        assert "pt.week_bookings(cfg, plan_start) if _training_week" in src
+        assert '_wt == "taper" and bool(req.get("easy_week_reason"))' in src

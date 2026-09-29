@@ -799,17 +799,25 @@ def post_race_block_week(cfg: dict, race_d, weeks_since: int) -> int:
     return max(1, weeks_since - start + 1)
 
 
+def all_bookings(cfg: dict) -> list:
+    """Every booked session (tests, PB attempts): the top-level `bookings`, which apply in
+    any training block, plus the older `offseason.bookings`. Jamie, 29 Sep 2026: the
+    tests and PB attempts carry on into the Brighton marathon block."""
+    out = [b for b in (cfg.get("bookings") or []) if isinstance(b, dict)]
+    out += [b for b in ((offseason_cfg(cfg) or {}).get("bookings") or []) if isinstance(b, dict)]
+    return out
+
+
 def held_bookings(cfg: dict, race_d, until) -> list:
     """Off-season bookings dated inside a recovery hold (week 4 after the race up to, not
     including, the Monday the block starts). They were never planned, so they are
     surfaced to be re-dated rather than silently dropped."""
-    oc = offseason_cfg(cfg)
-    if not oc or not race_d:
+    if not race_d:
         return []
     until = until if isinstance(until, date) else date.fromisoformat(str(until)[:10])
     hold_from = race_d + timedelta(days=7 * max(_TRANSITION_FACTORS))
     out = []
-    for b in (oc.get("bookings") or []):
+    for b in all_bookings(cfg):
         if not isinstance(b, dict):
             continue
         try:
@@ -942,12 +950,11 @@ def offseason_bookings(cfg: dict, week_start) -> list:
     `week_start` (a test that may go on any legal day that week). Returned sorted, in
     the week's own dates, so the brief and the validator read the same list.
     """
-    oc = offseason_cfg(cfg) or {}
     ws = _monday(week_start if isinstance(week_start, date)
                  else date.fromisoformat(str(week_start)[:10]))
     we = ws + timedelta(days=6)
     out = []
-    for b in (oc.get("bookings") or []):
+    for b in all_bookings(cfg):
         if not isinstance(b, dict):
             continue
         try:
@@ -961,6 +968,10 @@ def offseason_bookings(cfg: dict, week_start) -> list:
         except ValueError:
             continue
     return sorted(out, key=lambda b: b.get("date") or b.get("week_start"))
+
+
+# Bookings are not off-season-only any more; this is the name new callers should use.
+week_bookings = offseason_bookings
 
 
 # Easy pace the engine uses to turn run minutes into km (stage1's audit and caps use the
