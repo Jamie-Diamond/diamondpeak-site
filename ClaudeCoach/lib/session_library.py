@@ -114,10 +114,19 @@ def _phase_distribution(bp, phase_name):
 
 
 def event_key(cfg: dict, profile: dict | None = None) -> str | None:
-    """Map an athlete's race to a library event key from race_distance/race_name."""
-    s = " ".join(str(x or "").lower() for x in (
-        cfg.get("race_distance"), cfg.get("race_name"),
-        (profile or {}).get("race_distance"), (profile or {}).get("race_name")))
+    """Map an athlete's race to a library event key from race_distance/race_name.
+
+    athletes.json first: it carries the CURRENT A-race (races.sync_legacy_fields), and a
+    profile.json left on the last race must not win. On 29 Sep 2026 Jamie's config said
+    "Brighton Marathon" while his profile still said "Full Ironman", and the joined
+    string matched "ironman" first. The profile is only a fallback."""
+    got = _event_key_from(cfg.get("race_distance"), cfg.get("race_name"))
+    return got or _event_key_from((profile or {}).get("race_distance"),
+                                  (profile or {}).get("race_name"))
+
+
+def _event_key_from(*fields) -> str | None:
+    s = " ".join(str(x or "").lower() for x in fields)
     if "70.3" in s or "half iron" in s or "half-iron" in s or "ironman 70" in s:
         return "70_3"
     if "ironman" in s or ("full" in s and "iron" in s) or s.strip().startswith("im "):
@@ -279,6 +288,14 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     # peak (everything unlocked) and let its own menu/forbid decide what is on offer.
     gate_phase = "peak" if offseason else phase_name
     sports = event.get("sports") or ["swim", "bike", "run"]
+    # A run race (marathon, half, 10k, 5k) is run-only in the library, but a triathlete
+    # training for one keeps swimming and cycling as cross-training (Jamie's Brighton
+    # block, 29 Sep 2026: "more fitness is ok, but running fitness is required"). Their
+    # day_rules say which: a sport with standing days stays on the menu.
+    if ekey in _rf.RUN_EVENTS:
+        _dr = cfg.get("day_rules") or {}
+        sports = list(sports) + [sp for sp, key in (("bike", "bike_days"), ("swim", "swim_days"))
+                                 if _dr.get(key) and sp not in sports]
     # `strength` and `multi` are cross-cutting groups, not event disciplines, so they are
     # never in event["sports"] and were therefore invisible to the planner. Added
     # 2026-08-03 with the library expansion: `strength` carries the ankle/mobility/core

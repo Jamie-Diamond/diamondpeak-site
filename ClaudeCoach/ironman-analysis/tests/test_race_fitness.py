@@ -210,3 +210,16 @@ class TestBookingsInAnyBlock:
         src = (REPO / "lib" / "session_library.py").read_text()
         assert "pt.week_bookings(cfg, plan_start) if _training_week" in src
         assert '_wt == "taper" and bool(req.get("easy_week_reason"))' in src
+
+
+def test_a_run_race_keeps_the_athletes_cross_training_sports():
+    src = (REPO / "lib" / "session_library.py").read_text()
+    assert "if ekey in _rf.RUN_EVENTS:" in src
+    assert '("bike", "bike_days"), ("swim", "swim_days")' in src
+
+
+def test_the_config_race_wins_over_a_stale_profile():
+    import session_library as sl
+    assert sl.event_key({"race_name": "Brighton Marathon"},
+                        {"race_distance": "Full Ironman", "race_name": "IM Italy"}) == "marathon"
+    assert sl.event_key({}, {"race_distance": "70.3"}) == "70_3"
