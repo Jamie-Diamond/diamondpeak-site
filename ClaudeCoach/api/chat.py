@@ -384,6 +384,11 @@ def start_turn(chat_id: str, label: str = "", text: str = "", audio: bytes | Non
 
     def work():
         _TURN.chat_id = chat_id
+        # Tables and peak: links render in Peak (lib/engine.py). Not for a voice
+        # turn: that reply is read aloud.
+        surface = getattr(getattr(b, "engine", None), "SURFACE", None)
+        if surface is not None:
+            surface.web = audio is None
         upload_id = None
         hist_before = _history_texts(chat_id)[0]
         try:
@@ -429,6 +434,8 @@ def start_turn(chat_id: str, label: str = "", text: str = "", audio: bytes | Non
             if upload_id:
                 _UPLOADS.pop(upload_id, None)
             _TURN.chat_id = None
+            if surface is not None:
+                surface.web = False
             with _SINKS_GUARD:
                 _SINKS.pop(chat_id, None)
             if sink.last_message and on_reply_while_away:

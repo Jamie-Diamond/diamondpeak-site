@@ -292,6 +292,7 @@
   }
 
   function show(tab) {
+    if (state.tab === 'chat' && tab !== 'chat' && state.me) markSeen(localIso());
     state.tab = tab;
     location.hash = tab;
     TABS.forEach(function (t) {
@@ -719,19 +720,63 @@
 
   var chatState = { loaded: false, busy: false };
 
+  /* ── unread coach messages: a count on the chat button (and the app icon) ──
+     "Seen" is the newest message time Peak has shown in Chat, kept on this device.
+     Times are the server's (history ts), except leaving Chat, which uses now. */
+  var SEEN_KEY = 'cc.chatSeen';
+  function localIso() {
+    var d = new Date(), z = function (n) { return (n < 10 ? '0' : '') + n; };
+    return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()) + 'T' +
+      z(d.getHours()) + ':' + z(d.getMinutes()) + ':' + z(d.getSeconds());
+  }
+  function seenTs() {
+    try { return localStorage.getItem(SEEN_KEY) || ''; } catch (e) { return ''; }
+  }
+  function setUnread(n) {
+    var fab = $('#chatFab');
+    if (fab) {
+      var b = fab.querySelector('.fab-n');
+      if (!b) { b = document.createElement('span'); b.className = 'fab-n'; fab.appendChild(b); }
+      b.textContent = n > 9 ? '9+' : String(n);
+      b.hidden = !n;
+    }
+    try {
+      if (n && navigator.setAppBadge) navigator.setAppBadge(n);
+      else if (!n && navigator.clearAppBadge) navigator.clearAppBadge();
+    } catch (e) { /* no icon badge on this device */ }
+  }
+  function markSeen(ts) {
+    try { if (ts && ts > seenTs()) localStorage.setItem(SEEN_KEY, ts); } catch (e) { /* ok */ }
+    setUnread(0);
+  }
+  function newestTs(items) {
+    return (items || []).reduce(function (m, i) { return i.ts && i.ts > m ? i.ts : m; }, '');
+  }
+  function checkUnread() {
+    if (!state.me || state.tab === 'chat') return;
+    fetch('/api/chat/history', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j || state.tab === 'chat') return;
+        var items = j.history || [], seen = seenTs();
+        if (!seen) { markSeen(newestTs(items) || localIso()); return; }   // first run: start clean
+        setUnread(items.filter(function (i) { return i.who === 'coach' && i.ts && i.ts > seen; }).length);
+      })
+      .catch(function () { /* offline: keep the last count */ });
+  }
+
   if (navigator.serviceWorker) {
     navigator.serviceWorker.addEventListener('message', function (e) {
-      if (e.data && e.data.type === 'coach-message' && state.tab === 'chat' && state.me &&
-          !chatState.busy && $('#chatLog')) {
-        loadChatHistory();
-      }
+      if (!(e.data && e.data.type === 'coach-message' && state.me)) return;
+      if (state.tab === 'chat' && !chatState.busy && $('#chatLog')) loadChatHistory();
+      else checkUnread();
     });
   }
 
   document.addEventListener('visibilitychange', function () {
-    if (!document.hidden && state.tab === 'chat' && state.me && !chatState.busy && $('#chatLog')) {
-      loadChatHistory();
-    }
+    if (document.hidden || !state.me) return;
+    if (state.tab === 'chat' && !chatState.busy && $('#chatLog')) loadChatHistory();
+    else checkUnread();
   });
 
   function wireChat() {
@@ -743,20 +788,56 @@
     }
     document.addEventListener('click', function (e) {
       var a = e.target.closest('[data-chat]');
-      if (a) { e.preventDefault(); show('chat'); }
+      if (a) { e.preventDefault(); show('chat'); return; }
+      var v = e.target.closest('a[data-view]');          // the coach's [label](peak:cal)
+      if (v) { e.preventDefault(); show(v.dataset.view); }
     });
     if (state.tab === 'chat') openChat();
+    checkUnread();
+  }
+
+  // Peak screens the coach may link to as [label](peak:view) (lib/engine.py _WEB_NOTE).
+  var LINK_VIEWS = { today: 1, cal: 1, trends: 1, goals: 1, chat: 1, set: 1 };
+
+  // Markdown tables (| a | b | over |---|---|) as real tables: Peak isn't Telegram.
+  function mdTables(h) {
+    var lines = h.split('\n'), out = [], i = 0;
+    var row = /^\s*\|.*\|\s*$/, sep = /^\s*\|?(\s*:?-{2,}:?\s*\|)+\s*(:?-{2,}:?\s*)?$/;
+    function cells(l) {
+      return l.trim().replace(/^\||\|$/g, '').split('|').map(function (c) { return c.trim(); });
+    }
+    while (i < lines.length) {
+      if (row.test(lines[i]) && i + 1 < lines.length && sep.test(lines[i + 1])) {
+        var t = '<div class="mdt-w"><table class="mdt"><thead><tr>' +
+          cells(lines[i]).map(function (c) { return '<th>' + c + '</th>'; }).join('') +
+          '</tr></thead><tbody>';
+        for (i += 2; i < lines.length && row.test(lines[i]); i++) {
+          t += '<tr>' + cells(lines[i]).map(function (c) { return '<td>' + c + '</td>'; }).join('') + '</tr>';
+        }
+        out.push(t + '</tbody></table></div>');
+        continue;
+      }
+      out.push(lines[i]);
+      i++;
+    }
+    return out.join('\n');
   }
 
   function md(t) {
-    // Telegram-flavoured Markdown, as the coach writes it: *bold* _italic_ `code` [a](url)
+    // Telegram-flavoured Markdown, as the coach writes it: *bold* _italic_ `code` [a](url),
+    // plus tables and [label](peak:cal) links to Peak's own screens.
     var h = esc(t);
-    h = h.replace(/```([\s\S]*?)```/g, '<pre>$1</pre>')
+    h = h.replace(/```([\s\S]*?)```/g, '<pre>$1</pre>');
+    h = mdTables(h)
          .replace(/`([^`\n]+)`/g, '<code>$1</code>')
          .replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>')
          .replace(/\*([^*\n]+)\*/g, '<b>$1</b>')
-         .replace(/(^|[\s(])_([^_\n]+)_(?=[\s).,!?:;]|$)/g, '$1<i>$2</i>')
+         .replace(/(^|[\s(>])_([^_\n<]+)_(?=[\s).,!?:;<]|$)/g, '$1<i>$2</i>')
+         .replace(/\[([^\]]+)\]\(peak:([a-z]+)\)/g, function (m, label, v) {
+           return LINK_VIEWS[v] ? '<a href="#' + v + '" data-view="' + v + '">' + label + '</a>' : label;
+         })
          .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    h = h.replace(/\n(<div class="mdt-w">)/g, '$1').replace(/(<\/table><\/div>)\n/g, '$1');
     return h.replace(/\n/g, '<br>');
   }
 
@@ -1008,6 +1089,7 @@
       .then(function (r) { return r.ok ? r.json() : { history: [] }; })
       .then(function (j) {
         chatState.loaded = true;
+        if (state.tab === 'chat') markSeen(newestTs(j.history));
         if (chatState.busy) return;          // don't wipe a turn in progress
         $('#chatLog').innerHTML = '';
         (j.history || []).forEach(function (m) {
@@ -4026,12 +4108,23 @@
     }, 1500);
   }
 
+  // Settings drawers: closed until tapped. Which are open survives a re-render (a
+  // focus-sport tap re-renders the whole page).
+  var DRAWERS = {};
+  function drawer(id, title, hint, inner) {
+    if (!inner) return '';
+    return '<details class="sdrawer" data-drawer="' + id + '"' + (DRAWERS[id] ? ' open' : '') + '>' +
+      '<summary><span class="gate-row-t"><b>' + esc(title) + '</b><span>' + esc(hint || '') +
+      '</span></span><span class="gate-go">›</span></summary><div class="drawer-b">' + inner +
+      '</div></details>';
+  }
+
   function renderSettings() {
     var d = state.data || {};
     var p = d.profile || {};
     var cur = state.slug;
 
-    var h = card('Athlete', '<div class="body-flush">' + ATHLETES.map(function (a) {
+    var athleteH = card('Athlete', '<div class="body-flush">' + ATHLETES.map(function (a) {
       return '<button type="button" class="pickrow' + (a.slug === cur ? ' on' : '') +
         '" data-slug="' + a.slug + '">' +
         '<span class="gate-mark">' + esc(a.name.charAt(0)) + '</span>' +
@@ -4045,7 +4138,7 @@
     // handler bound on the whole view.
     var fs = focusSports();
     var SPNAME = { swim: 'Swim', bike: 'Bike', run: 'Run' };
-    h += card('Focus sports', '<div class="body-flush" id="sportPick">' +
+    var sportsH = card('Focus sports', '<div class="body-flush" id="sportPick">' +
       FOCUS.map(function (s) {
         var on = fs.indexOf(s) >= 0;
         return '<button type="button" class="pickrow' + (on ? ' on' : '') +
@@ -4063,9 +4156,10 @@
 
     // Only offered when the data exists. A toggle that cannot reveal anything is
     // worse than no toggle: it implies the feature is broken rather than not published.
+    var foodH = '';
     if (state.nutr && state.nutr.nutrition_enabled) {
       var fon = nutritionOn();
-      h += card('Food tracking',
+      foodH += card('Food tracking',
         '<div class="body-flush" id="foodPick">' +
         '<button type="button" class="pickrow' + (fon ? ' on' : '') +
         '" data-food="1" aria-pressed="' + fon + '">' +
@@ -4080,7 +4174,7 @@
     }
 
     if (state.nutr && state.nutr.nutrition_enabled) {
-      h += card('About the food numbers',
+      foodH += card('About the food numbers',
         '<ul class="notelist about">' +
         '<li>A <b>ceiling</b> is a limit, so coming in under one is the point. A ' +
         '<b>floor</b> is a minimum, and going past it is not an event.</li>' +
@@ -4099,13 +4193,7 @@
         '<li>Meals are grouped by the clock, not by anything you told it.</li></ul>');
     }
 
-    h += card('Data', '<table class="tbl"><tbody>' +
-      // The version the RUNNING service worker answers with, not a constant in this
-      // file — a constant here can lie about what is actually installed, which is the
-      // one question this row exists to answer ("am I stale or just syncing?",
-      // Jamie, 13 Aug 2026). Filled in async below; "syncing…" means a new worker is
-      // installing and a reload will finish the swap.
-      '<tr><td class="lbl">App version</td><td class="t" id="appVersion">checking…</td></tr>' +
+    var dataH = card('Data', '<table class="tbl"><tbody>' +
       '<tr><td class="lbl">Last refreshed</td><td class="t">' +
       esc(d.generated || '—') + '</td></tr>' +
       (d.refreshCadence
@@ -4121,7 +4209,7 @@
       return /css|test/i.test(x.name || '');
     }).slice(-4).reverse();
 
-    h += card('Where the numbers come from', '<table class="tbl"><tbody>' +
+    dataH += card('Where the numbers come from', '<table class="tbl"><tbody>' +
       [['Fitness (CTL)', (d.kpi || {}).ctl, 'Intervals.icu wellness, as of ' + (d.generated || '?')],
        ['Threshold power', d.resolvedFtp ? d.resolvedFtp + 'w' : null,
         p.ftp_watts === d.resolvedFtp ? 'profile value, confirmed against season eFTP'
@@ -4144,7 +4232,7 @@
                           'looks wrong, this is the input to challenge.' });
 
     if (css.length) {
-      h += card('CSS test history', '<table class="tbl">' +
+      dataH += card('CSS test history', '<table class="tbl">' +
         '<thead><tr><th>Date</th><th>Session</th><th>Pace</th></tr></thead><tbody>' +
         css.map(function (x) {
           return '<tr><td class="lbl">' + esc(x.date) + '</td><td>' + esc(x.name || '—') +
@@ -4152,13 +4240,14 @@
         }).join('') + '</tbody></table>', { flush: true });
     }
 
-    h += card('App', '<table class="tbl"><tbody>' +
-      '<tr><td class="lbl">Coach chat</td><td>Telegram</td></tr>' +
+    var appH = card('App', '<table class="tbl"><tbody>' +
+      '<tr><td class="lbl">Coach chat</td><td>' + (state.me ? 'here in Peak' : 'Telegram') +
+      '</td></tr>' +
       '<tr><td class="lbl">Offline</td><td>' +
       (('serviceWorker' in navigator) ? 'cached for offline use' : 'not supported') +
       '</td></tr></tbody></table>', { flush: true });
 
-    h += libraryBlock();
+    var libH = libraryBlock();
 
     var TOOLS = [
       ['Fuelling calculator', '../cycling/fuelling-calculator.html', 'carbs, fluid and sodium per hour'],
@@ -4174,15 +4263,16 @@
       ['Wetsuit decision', '../cycling/cervia-wetsuit.html', 'water temperature call'],
       ['Gear ratios', '../cycling/gear-ratio-calculator.html', 'cadence and speed by gear']
     ];
-    h += card('Tools', '<div class="body-flush">' + TOOLS.map(function (x) {
+    var toolsH = card('Tools', '<div class="body-flush">' + TOOLS.map(function (x) {
       return '<a class="toolrow" href="' + x[1] + '">' +
         '<span class="gate-row-t"><b>' + esc(x[0]) + '</b><span>' + esc(x[2]) + '</span></span>' +
         '<span class="gate-go">\u2197</span></a>';
     }).join('') + '</div>', { flush: true, foot: 'Calculators on diamondpeak.uk.' });
 
+    var notifH = '', stravaH = '', coachH = '';
     if (state.me) {
       var ps = pushState();
-      h += card('Notifications', '<div class="body-flush">' +
+      notifH = card('Notifications', '<div class="body-flush">' +
         '<button type="button" class="pickrow" id="pushRow">' +
         '<span class="gate-mark">🔔</span><span class="gate-row-t"><b>' +
         ({ on: 'On', ask: 'Off', denied: 'Blocked', unsupported: 'Not available',
@@ -4195,7 +4285,7 @@
       // Strava (lib/strava_link.py): for watches with no direct Intervals.icu link.
       if (state.me.own) {
         var sv = state.me.strava;
-        h += card('Strava', '<div class="body-flush">' + (sv
+        stravaH = card('Strava', '<div class="body-flush">' + (sv
           ? '<div class="pickrow on"><span class="gate-mark">✓</span><span class="gate-row-t">' +
             '<b>Connected</b><span>' + (sv === 'copying' ? 'your Strava workouts are copied to your coach'
               : 'your coach reads your Strava') + '</span></span></div>'
@@ -4207,18 +4297,41 @@
             'so they don’t need this.' });
       }
       if (state.me.coach) {
-        h += card('Coaching', '<div id="adminBox"><div class="empty">Loading…</div></div>',
+        coachH = card('Coaching', '<div id="adminBox"><div class="empty">Loading…</div></div>',
           { foot: 'Telegram off: that athlete\u2019s coach messages come to Peak only, with a notification.' });
       }
     }
 
-    h += card('Session', '<div class="body-flush">' +
+    var sessionH = card('Session', '<div class="body-flush">' +
       '<button type="button" class="pickrow" id="logout">' +
       '<span class="gate-mark">⏻</span>' +
       '<span class="gate-row-t"><b>Log out</b><span>forget this device and choose again</span></span>' +
       '<span class="gate-go">→</span></button></div>', { flush: true });
 
+    // Short page (Jamie, 30 Sep 2026): version, notifications and Strava open at the
+    // top; everything else in drawers, closed until tapped.
+    var curName = (ATHLETES.filter(function (a) { return a.slug === cur; })[0] || {}).name || '';
+    // The version the RUNNING service worker answers with, not a constant in this
+    // file — a constant here can lie about what is actually installed, which is the
+    // one question this line exists to answer ("am I stale or just syncing?",
+    // Jamie, 13 Aug 2026). Filled in async by fillAppVersion().
+    var h = '<p class="set-ver">Peak <span id="appVersion">checking…</span></p>' +
+      notifH + stravaH +
+      '<div class="drawers">' +
+      (ATHLETES.length > 1 ? drawer('athlete', 'Athlete', 'showing ' + curName, athleteH) : '') +
+      drawer('sports', 'Focus sports', fs.map(function (x) { return SPNAME[x]; }).join(' · '), sportsH) +
+      drawer('food', 'Food', nutritionOn() ? 'tab showing' : 'tab hidden', foodH) +
+      drawer('coaching', 'Coaching', 'invites, approvals, Telegram', coachH) +
+      drawer('data', 'Data & sources', 'refreshed ' + (d.generated || '—'), dataH) +
+      drawer('library', 'Session library', 'every session type', libH) +
+      drawer('tools', 'Tools', 'calculators', toolsH) +
+      drawer('about', 'About Peak', 'offline use, coach chat', appH) +
+      '</div>' + sessionH;
+
     $('#v-set').innerHTML = h;
+    Array.prototype.forEach.call($('#v-set').querySelectorAll('details.sdrawer'), function (el) {
+      el.addEventListener('toggle', function () { DRAWERS[el.dataset.drawer] = el.open; });
+    });
     fillAppVersion();
     if (state.me && state.me.coach) loadAdmin();
     var pr = $('#pushRow');

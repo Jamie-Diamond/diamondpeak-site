@@ -167,3 +167,22 @@ class TestTurnIndexLogging:
     def test_garbage_turns_value_does_not_raise(self):
         for bad in ({"turns": "four"}, {"turns": None}, {"turns": []}):
             assert engine._turn_index(bad) == 1
+
+
+def test_peak_format_note_rides_on_the_message_and_keeps_the_session(athlete):
+    """A Peak turn (api/chat.py sets engine.SURFACE.web) tells the model tables and
+    peak: links render - on the message, so switching between Telegram and Peak never
+    rotates the resumed session."""
+    fp = engine._prompt_fingerprint(athlete)
+    _state(athlete, 3, fp)
+    engine.SURFACE.web = True
+    try:
+        _e, prompt, mode, _s = engine._plan_session(
+            "hello", {"session_max_turns": 12}, [], athlete, "Tester", "")
+        assert mode == "resume" and "shown in Peak" in prompt and "peak:cal" in prompt
+        assert engine._prompt_fingerprint(athlete) == fp
+    finally:
+        engine.SURFACE.web = False
+    _e, prompt, mode, _s = engine._plan_session(
+        "hello", {"session_max_turns": 12}, [], athlete, "Tester", "")
+    assert mode == "resume" and "shown in Peak" not in prompt

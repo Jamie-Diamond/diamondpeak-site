@@ -536,11 +536,27 @@ def _resume_prompt(user_message, history, athlete_name, context, last_seen):
     return "\n".join(parts)
 
 
+# Which app this reply is for. api/chat.py sets SURFACE.web for a Peak chat turn (in
+# that turn's thread). The note rides on the message, not the system prompt: a system
+# prompt change would rotate the athlete's resumed session every time they switched
+# between Telegram and Peak.
+SURFACE = threading.local()
+_WEB_NOTE = (
+    "[Format note from the app, not the athlete: this reply is shown in Peak, the web app, "
+    "not Telegram. Still wrap it in <telegram> tags as usual. Markdown tables render here "
+    "as real tables: use one when comparing 3 or more things (sessions, splits, options), "
+    "5 columns at most so it fits a phone. You can link to Peak's own screens with "
+    "[label](peak:today), peak:cal (the calendar), peak:trends, peak:goals or peak:set "
+    "(settings), e.g. [see Thursday in your calendar](peak:cal). Only those screens.]")
+
+
 def _plan_session(user_message, config, history, sp_file, athlete_name, context):
     """Decide how this call runs. Returns (extra_args, prompt, mode, state):
     mode 'stateless' — old behaviour, fresh throwaway session (config opt-out)
     mode 'resume'    — continue the athlete's persisted session
     mode 'new'       — start a persisted session with the full prompt"""
+    if getattr(SURFACE, "web", False):
+        user_message = f"{user_message}\n\n{_WEB_NOTE}"
     if not config.get("session_resume", True):
         return (["--no-session-persistence"],
                 _assemble(user_message, history, sp_file, athlete_name, context),

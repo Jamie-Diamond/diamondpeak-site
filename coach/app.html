@@ -122,6 +122,11 @@ body{
 .fab svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;
   stroke-linecap:round;stroke-linejoin:round;margin-left:-2px}
 .fab:active{transform:scale(.94)}
+/* unread coach messages (app.js checkUnread) */
+.fab-n{position:absolute;top:-3px;right:-3px;min-width:19px;height:19px;padding:0 5px;
+  border-radius:10px;background:#c0392b;color:#fff;font:600 11px/19px 'DM Sans',sans-serif;
+  text-align:center;box-shadow:0 0 0 2px var(--paper);pointer-events:none}
+.fab-n[hidden]{display:none}
 
 /* ── food page ───────────────────────────────────────────────────────────────
    The markup for this page was written before its CSS, so the log, the position
@@ -755,6 +760,28 @@ body.signup.in-chat main{padding-bottom:calc(86px + env(safe-area-inset-bottom,0
 }
 .pickrow:last-child{border-bottom:0}
 a.pickrow{text-decoration:none;color:inherit}
+/* settings: version line and drawers (app.js drawer(); .drawer is the bottom sheet) */
+.set-ver{margin:0 2px 12px;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--muted)}
+.drawers{background:var(--paper);border:1px solid var(--rule);border-radius:4px;margin:0 0 14px;overflow:hidden}
+.sdrawer{border-bottom:1px solid var(--rule-soft)}
+.sdrawer:last-child{border-bottom:0}
+.sdrawer>summary{list-style:none;display:flex;align-items:center;gap:13px;padding:12px 15px;cursor:pointer}
+.sdrawer>summary::-webkit-details-marker{display:none}
+.sdrawer>summary .gate-row-t b{font-size:16px}
+.sdrawer>summary .gate-go{font-size:20px}
+.sdrawer[open]>summary .gate-go{transform:rotate(90deg);color:var(--accent)}
+.drawer-b{padding:2px 10px 1px;background:rgba(20,24,29,.025);border-top:1px solid var(--rule-soft)}
+.drawer-b .card{margin:8px 0}
+.drawer-b > .card:only-child > .card-h{display:none}
+/* chat: the coach's Markdown tables (app.js mdTables) */
+.msg .mdt-w{overflow-x:auto;margin:6px 0}
+.msg table.mdt{border-collapse:collapse;font-size:13px;min-width:60%}
+.msg table.mdt th,.msg table.mdt td{border-bottom:1px solid var(--rule-soft);padding:5px 10px 5px 0;
+  text-align:left;vertical-align:top}
+.msg table.mdt th{font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted);font-weight:400}
+.msg table.mdt tr:last-child td{border-bottom:0}
 .pickrow .gate-mark{width:32px;height:32px;font-size:14px}
 .pickrow.on .gate-mark{background:var(--accent);border-color:var(--accent);color:var(--paper)}
 .pickrow.on .gate-go{color:var(--accent)}
@@ -1058,6 +1085,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=50" defer></script>
+<script src="app.js?v=51" defer></script>
 </body>
 </html>
