@@ -217,7 +217,7 @@ class TestRecoveryWeeksStayEasy:
 
     def test_no_brick_in_race_or_post_race_weeks(self):
         src = (REPO / "lib" / "session_library.py").read_text()
-        assert '"brick": None if (offseason or _no_key_sessions) else event.get("brick")' in src
+        assert '"brick": None if (offseason or _no_key_sessions or (' in src
 
 
 class TestMinimumRun:

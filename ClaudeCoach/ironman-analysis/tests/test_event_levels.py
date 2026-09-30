@@ -146,3 +146,11 @@ class TestBespoke:
                                        "race_date": "2027-04-04"}}))
         out = pt.race_level("x", path=p)
         assert out["level"] == 1 and out["fitness_kind"] == "running"
+
+
+def test_an_aquabike_is_a_swim_bike_blend_with_no_bricks():
+    ev = rf.bespoke_event("Aquabike", swim_km=3.8, bike_km=100)
+    assert ev["sports"] == ["swim", "bike"] and ev["blended_from"]["b"] == "70_3"
+    assert set(ev["distribution"]["peak"]) == {"Swim", "Bike"}
+    src = (REPO / "lib" / "session_library.py").read_text()
+    assert 'bespoke and "run" not in (bespoke.get("sports") or [])' in src
