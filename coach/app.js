@@ -719,6 +719,15 @@
 
   var chatState = { loaded: false, busy: false };
 
+  if (navigator.serviceWorker) {
+    navigator.serviceWorker.addEventListener('message', function (e) {
+      if (e.data && e.data.type === 'coach-message' && state.tab === 'chat' && state.me &&
+          !chatState.busy && $('#chatLog')) {
+        loadChatHistory();
+      }
+    });
+  }
+
   document.addEventListener('visibilitychange', function () {
     if (!document.hidden && state.tab === 'chat' && state.me && !chatState.busy && $('#chatLog')) {
       loadChatHistory();

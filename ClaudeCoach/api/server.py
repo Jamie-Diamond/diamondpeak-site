@@ -252,7 +252,7 @@ def _start_push():
 def _reply_while_away(chat_id, text):
     slug = _slug_for_chat(chat_id)
     if slug:
-        push.notify(slug, push.plain(text))
+        push.notify(slug, push.plain(text), kind="reply")
 
 
 chat.on_reply_while_away = _reply_while_away

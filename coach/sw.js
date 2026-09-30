@@ -19,8 +19,8 @@
 // APP_VERSION is what the athlete sees in Settings; CACHE is the precache key.
 // Bump BOTH on every deploy that changes a precached file - the visible number
 // exists so Jamie can tell current from syncing from stale at a glance.
-const APP_VERSION = '2.48';
-const CACHE = 'peak-v49';
+const APP_VERSION = '2.49';
+const CACHE = 'peak-v50';
 
 // SHELL paths are relative to /coach/, where this worker actually lives - the app moved
 // out of /coach/app/ and these entries were left pointing at the old tree. addAll's
@@ -159,14 +159,27 @@ self.addEventListener('message', (event) => {
 // The backend (ClaudeCoach/api/push.py) sends {title, body, url} for each coach
 // message and for a chat reply that finished after the app was closed. Tapping one
 // opens (or focuses) Peak on the chat.
+// A chat reply ("kind": "reply") while Peak is on screen is shown silently and closed
+// at once: phones require every push to show something, and the reply is already in
+// front of the athlete. Open windows are told to refresh the chat either way.
 self.addEventListener('push', (event) => {
   let d = {};
   try { d = event.data ? event.data.json() : {}; } catch (e) { d = { body: event.data && event.data.text() }; }
-  event.waitUntil(self.registration.showNotification(d.title || 'Coach', {
-    body: d.body || 'New message',
-    icon: './icons/icon-192.png',
-    badge: './icons/favicon-32.png',
-    data: { url: d.url || './app.html#chat' },
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
+    wins.forEach((w) => w.postMessage({ type: 'coach-message' }));
+    const onScreen = wins.some((w) => w.visibilityState === 'visible');
+    const opts = {
+      body: d.body || 'New message',
+      icon: './icons/icon-192.png',
+      badge: './icons/favicon-32.png',
+      data: { url: d.url || './app.html#chat' },
+    };
+    if (d.kind === 'reply' && onScreen) {
+      return self.registration.showNotification(d.title || 'Coach', Object.assign(opts, { silent: true, tag: 'peak-on-screen' }))
+        .then(() => self.registration.getNotifications({ tag: 'peak-on-screen' }))
+        .then((ns) => ns.forEach((n) => n.close()));
+    }
+    return self.registration.showNotification(d.title || 'Coach', opts);
   }));
 });
 

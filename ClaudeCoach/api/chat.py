@@ -53,8 +53,10 @@ _bot_guard = threading.Lock()
 _UPLOADS: dict[str, bytes] = {}    # "web:<n>" -> photo bytes, for the length of one turn
 _upload_ids = itertools.count(1)
 
-# Set by server.py: called (chat_id, reply_text) when a reply finishes after the
-# athlete has left the app, so it can go out as a phone notification.
+# Set by server.py: called (chat_id, reply_text) when every reply finishes, so it goes
+# out as a phone notification. Whether the athlete is still looking can't be told
+# reliably from here (Cloudflare holds the connection open after the app closes),
+# so the phone decides: the service worker hides it while Peak is on screen.
 on_reply_while_away = None
 
 
@@ -268,7 +270,7 @@ def start_turn(chat_id: str, label: str = "", text: str = "", audio: bytes | Non
             _TURN.chat_id = None
             with _SINKS_GUARD:
                 _SINKS.pop(chat_id, None)
-            if sink.consumer_gone and sink.last_message and on_reply_while_away:
+            if sink.last_message and on_reply_while_away:
                 try:
                     on_reply_while_away(chat_id, sink.last_message)
                 except Exception:

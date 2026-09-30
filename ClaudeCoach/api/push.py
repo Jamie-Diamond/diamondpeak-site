@@ -110,7 +110,8 @@ def plain(text: str, limit: int = 140) -> str:
 LAST_ERRORS: list[str] = []
 
 
-def notify(slug: str, body: str, title: str = "Coach", url: str = "/coach/app.html#chat") -> int:
+def notify(slug: str, body: str, title: str = "Coach", url: str = "/coach/app.html#chat",
+           kind: str = "message") -> int:
     """Send to every browser whose signed-in person IS this athlete. Returns the count.
     Every failure is logged with the push service's own answer (LAST_ERRORS keeps the
     latest for /api/push/test); only 410 Gone removes a subscription."""
@@ -124,7 +125,8 @@ def notify(slug: str, body: str, title: str = "Coach", url: str = "/coach/app.ht
         LAST_ERRORS.append(f"pywebpush unavailable: {e}")
         return 0
     from urllib.parse import urlparse
-    payload = json.dumps({"title": title, "body": body or "New message", "url": url})
+    # kind "reply": a chat answer - the phone hides it if Peak is on screen right now.
+    payload = json.dumps({"title": title, "body": body or "New message", "url": url, "kind": kind})
     sent, dead = 0, []
     for endpoint, rec in list(_load(SUBS_FILE, {}).items()):
         host = urlparse(endpoint).netloc
