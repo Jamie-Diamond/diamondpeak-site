@@ -672,7 +672,7 @@ def render_blueprint(slug: str, profile: dict, phases: list[dict],
     a_goal = profile.get("a_goal", "—")
     course_type = resolve_course_type(profile, slug)
     race_conditions = profile.get("race_conditions", "temperate")
-    injuries = profile.get("injuries", [])
+    injuries = [_i for _i in profile.get("injuries", []) if str(_i.get("status") or "").lower() not in ("cleared", "resolved")]   # cleared = not current
 
     try:
         race_dt = date.fromisoformat(race_date_str)

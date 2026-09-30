@@ -384,6 +384,7 @@ def _ankle_state(slug: str):
     injuries = []
     try:
         injuries = (json.loads((adir / "profile.json").read_text()) or {}).get("injuries") or []
+        injuries = [_i for _i in injuries if str(_i.get("status") or "").lower() not in ("cleared", "resolved")]   # cleared = not current
     except Exception:
         pass
     a = None

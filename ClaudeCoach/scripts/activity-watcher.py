@@ -1474,7 +1474,7 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
 
     ftp = _resolve_ftp(slug, profile, session_log_f)
     first_name = profile.get("name", slug).split()[0]
-    injuries = profile.get("injuries", [])
+    injuries = [_i for _i in profile.get("injuries", []) if str(_i.get("status") or "").lower() not in ("cleared", "resolved")]   # cleared = not current
     run_hr_cap       = int(athlete_cfg.get("run_hr_cap", 150))
     nutrition_target = int(athlete_cfg.get("nutrition_target_g_hr", 90))
 

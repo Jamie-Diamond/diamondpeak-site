@@ -1403,8 +1403,22 @@ def _plan(args):
                 except Exception:
                     pass
             if args.notify and cfg.get("chat_id"):
-                _notify(cfg["chat_id"], _week_message(brief, built, pins),
-                        athlete=args.athlete)
+                _sent = _notify(cfg["chat_id"], _week_message(brief, built, pins),
+                                athlete=args.athlete)
+                # A peak-phase reminder is asked ONCE: record it only when it was sent.
+                _peak = [q for q in (brief.get("_race_prompts") or [])
+                         if q.get("stage") == "peak_reminder"]
+                if _sent and _peak:
+                    try:
+                        import race_prompts as _rpm
+                        _pp = BASE / "athletes" / args.athlete / "profile.json"
+                        _prof = json.loads(_pp.read_text())
+                        for q in _peak:
+                            _prof = _rpm.mark_peak_reminded(_prof, q["topic"])
+                        _pp.write_text(json.dumps(_prof, indent=2, ensure_ascii=False) + "\n")
+                    except Exception as _e:
+                        print(f"[stage1-plan:{args.athlete}] could not record the peak "
+                              f"reminder ({_e!r})", file=sys.stderr)
             _beat(True, f"pushed week of {built['week_start']} ({built['total_tss']} TSS)")
     print(json.dumps(summary, indent=1, ensure_ascii=False))
     rc = exit_code_for(summary, bool(args.push))
@@ -1627,6 +1641,11 @@ def _week_message(brief: dict, built: dict, pins: dict | None = None) -> str:
     _surplus = _surplus_line(brief)
     if _surplus:
         lines.append(_surplus)
+    try:
+        import race_prompts as _rpm
+        lines += [_rpm.message_line(q) for q in (brief.get("_race_prompts") or [])]
+    except Exception:
+        pass
     for s in built["sessions"]:
         wd = _dt.date.fromisoformat(s["date"]).strftime("%a")
         dur = f" {s['duration_min']}min" if s["duration_min"] else ""

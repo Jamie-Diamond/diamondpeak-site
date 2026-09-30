@@ -373,7 +373,7 @@ def run_athlete(slug, athlete_cfg):
             pass
 
     first_name = profile.get("name", slug).split()[0]
-    injuries = profile.get("injuries", [])
+    injuries = [_i for _i in profile.get("injuries", []) if str(_i.get("status") or "").lower() not in ("cleared", "resolved")]   # cleared = not current
 
     pain_next_morning = 0
     state_f = adir / "current-state.json"

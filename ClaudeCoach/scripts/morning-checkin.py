@@ -479,7 +479,7 @@ def run_athlete(slug, athlete_cfg):
     first_name = profile.get("name", slug).split()[0]
     race_name = profile.get("race_name") or athlete_cfg.get("race_name", "your race")
     race_date_str = profile.get("race_date") or athlete_cfg.get("race_date", "")
-    injuries = profile.get("injuries", [])
+    injuries = [_i for _i in profile.get("injuries", []) if str(_i.get("status") or "").lower() not in ("cleared", "resolved")]   # cleared = not current
     # Morning heat nudges only once the formal race−4wk block has begun; before
     # that the watchdog's maintenance-dose check owns heat visibility.
     # "surface", not "in_protocol_window": profile heat_silent suppresses the

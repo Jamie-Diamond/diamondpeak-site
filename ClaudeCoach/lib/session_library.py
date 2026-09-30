@@ -354,7 +354,7 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     # run quality; the pain<5 gate + run caps protect them (stage1). bool(injuries) is
     # deliberately NOT used (an injury ENTRY can persist through recovery). Single-sport
     # athletes (Calum) always fall through to bike-only closure. NEVER a new global flag.
-    injuries = profile.get("injuries") or []
+    injuries = [_i for _i in (profile.get("injuries") or []) if str(_i.get("status") or "").lower() not in ("cleared", "resolved")]   # cleared = not current
     run_limited = (rp.get("quality_allowed") is False)
     single_sport = len(available) <= 1
     day_rules_effective, _decl_conflicts = _wa.merge_day_rules(
@@ -383,9 +383,13 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
                     "another sport's SAME zone (Z3->Z3, VO2->VO2), never easy->VO2. ")
     min_run_min = pt.min_run_minutes(cfg)
 
-    # RUN RACE FITNESS IS HYBRID (race_fitness): running Fitness against the race's range
-    # AND total Fitness against the athlete's own floor, each on its own. Only for a run
-    # race; RUNNING Fitness needs ~6 months of run history, so it is fetched only here.
+    _prompts = []
+    try:
+        import race_prompts as _rpm
+        _prompts = _rpm.due_for_week(slug, cfg, profile, phase_name, req.get("week_type"))
+    except Exception:
+        _prompts = []
+
     # EVENT LEVEL (config/event-levels.json, blueprint §4.5): the athlete's level for
     # their race, from their goal time, else their run threshold, else current Fitness.
     # It sizes the week (peak volume, longest session) so a 4-hour marathoner is not
@@ -648,6 +652,9 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         # The athlete's level for their race (blueprint §4.5): peak weekly volume, longest
         # session, Fitness to enter this phase. Size the week toward these, not beyond.
         **({"event_level": event_level} if event_level else {}),
+        # Fuelling / heat suggestions due this week (lib/race_prompts): shown on the
+        # Sunday plan message; the bot records the answer.
+        **({"_race_prompts": _prompts} if _prompts else {}),
         # Fitter than the goal (plan_tools.required_tss): the athlete decides.
         **({"fitness_surplus": req["fitness_surplus"]} if req.get("fitness_surplus") else {}),
         **({"needs_surplus_choice": True} if (req.get("needs_surplus_choice") or (

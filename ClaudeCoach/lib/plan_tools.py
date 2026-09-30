@@ -2387,6 +2387,36 @@ def cmd_race_level(args) -> dict:
     return race_level(args.athlete)
 
 
+# ── subcommand: race-prompt ────────────────────────────────────────────────────
+def set_race_prompt(slug: str, topic: str, answer: str, base=None) -> dict:
+    """Record the athlete's answer to the fuelling or heat suggestion (lib/race_prompts).
+    yes switches the feature on; no is asked once more when the peak phase starts."""
+    import shutil
+    import race_prompts as rpm
+    p = Path(base or BASE) / "athletes" / slug / "profile.json"
+    prof = json.loads(p.read_text())
+    try:
+        new = rpm.record(prof, topic, answer)
+    except ValueError as e:
+        raise SystemExit(_err(str(e)))
+    shutil.copy2(p, p.with_name(p.name + f".bak-race-prompt-{date.today().isoformat()}"))
+    p.write_text(json.dumps(new, indent=2, ensure_ascii=False) + "\n")
+    out = {"athlete": slug, "topic": topic, "answer": answer,
+           "fuelling_coaching": new.get("fuelling_coaching"),
+           "heat_protocol": new.get("heat_protocol"),
+           "race_conditions": new.get("race_conditions")}
+    if topic == "heat" and answer == "yes":
+        out["next"] = (f"arm the heat block: python3 ClaudeCoach/scripts/generate-blueprint.py "
+                       f"--athlete {slug} --skip-events")
+    if answer == "no":
+        out["next"] = "asked once more when the peak phase starts"
+    return out
+
+
+def cmd_race_prompt(args) -> dict:
+    return set_race_prompt(args.athlete, args.topic, args.answer)
+
+
 # Chat side of the choice: only the bot hears the athlete answer the Sunday question.
 _SURPLUS_PROMPT = (
     "FITTER THAN THE GOAL: when {name}'s Fitness is above what their goal needs, the "
@@ -2401,6 +2431,10 @@ _SURPLUS_PROMPT = (
     "a race that is not a standard distance (a 30k run, a 4 km swim + 10 km bike), FIRST run "
     "`plan_tools.py bespoke-event --athlete {slug} --name <race> --run-km/--bike-km/--swim-km "
     "<km>` and tell them what it was blended from (its `blend` line) and any `notes`."
+    "\nFUELLING / HEAT QUESTIONS: when they answer the plan message's *fuelling yes/no* "
+    "(carbs, salt and water after long sessions - NOT the Food tab) or *heat yes/no*, FIRST "
+    "run `plan_tools.py race-prompt --athlete {slug} --topic nutrition|heat --answer yes|no`, "
+    "then run any `next` command it returns."
 )
 
 
@@ -2607,6 +2641,11 @@ def main():
     pbe.add_argument("--run-km", type=float, default=0, dest="run_km")
     pbe.add_argument("--clear", action="store_true")
 
+    prp2 = sub.add_parser("race-prompt", help="record the athlete's answer to the fuelling / heat suggestion")
+    prp2.add_argument("--athlete", required=True)
+    prp2.add_argument("--topic", required=True, choices=["nutrition", "heat"])
+    prp2.add_argument("--answer", required=True, choices=["yes", "no"])
+
     prl = sub.add_parser("race-level", help="the athlete's level for their race and its numbers (blueprint §4.5)")
     prl.add_argument("--athlete", required=True)
 
@@ -2638,7 +2677,8 @@ def main():
                "windowed-np": cmd_windowed_np, "wbal": cmd_wbal,
                "post-race-ready": cmd_post_race_ready,
                "fitness-choice": cmd_fitness_choice,
-               "bespoke-event": cmd_bespoke_event, "race-level": cmd_race_level}[args.cmd]
+               "bespoke-event": cmd_bespoke_event, "race-level": cmd_race_level,
+               "race-prompt": cmd_race_prompt}[args.cmd]
     try:
         result = handler(args)
     except SystemExit:

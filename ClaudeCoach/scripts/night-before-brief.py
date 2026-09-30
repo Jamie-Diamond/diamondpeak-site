@@ -177,7 +177,7 @@ def run_athlete(slug, athlete_cfg):
     css = profile.get("swim_css_per_100m")
     run_threshold = profile.get("run_threshold_pace_per_km")
     race_name = profile.get("race_name") or athlete_cfg.get("race_name", "your race")
-    injuries = profile.get("injuries", [])
+    injuries = [_i for _i in profile.get("injuries", []) if str(_i.get("status") or "").lower() not in ("cleared", "resolved")]   # cleared = not current
 
     # Pre-compute tomorrow's long-run distance cap the same way morning-checkin
     # does, so a long run can't be quoted past the progression ceiling here either.
