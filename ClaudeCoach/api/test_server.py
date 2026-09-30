@@ -70,6 +70,10 @@ def test_unknown_email_sees_nothing(env, monkeypatch):
     dev(monkeypatch, "stranger@example.com")
     assert env.get("/api/me").status_code == 403
     assert env.get("/ClaudeCoach/public/training-data-jamie.json").status_code == 403
+    sub = {"endpoint": "https://push.example/x", "keys": {"p256dh": "a", "auth": "b"}}
+    assert env.post("/api/push/subscribe", json={"subscription": sub},
+                    headers={"x-peak": "1"}).status_code == 403
+    assert env.post("/api/chat", json={"text": "hi"}, headers={"x-peak": "1"}).status_code == 403
 
 
 # ── who sees what ──

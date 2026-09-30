@@ -506,6 +506,8 @@ async def push_subscribe(request: Request):
     if request.headers.get("x-peak") != "1":
         raise HTTPException(400, "missing app header")
     email = request_email(request)
+    if not allowed_athletes(email) and not own_chat(email)[2]:
+        raise HTTPException(403, "this email has no athlete")   # Access lets anyone sign in
     try:
         push.subscribe(email, (await request.json() or {}).get("subscription"))
     except (ValueError, AttributeError):
