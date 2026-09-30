@@ -90,6 +90,7 @@ class Sink:
     def _message(self, text, payload):
         self.last_message = text
         self.messages.append((text, payload.get("reply_markup")))
+        _keep_signup(self.chat_id, text, payload.get("reply_markup"))
         if self.drill:
             self.put("drill", text, item=self.drill[0], drill=self.drill[1])
         else:
@@ -129,6 +130,17 @@ class Sink:
             else:
                 self._message(text, payload)
         return {"ok": True, "result": {"message_id": payload.get("message_id") or self._id()}}
+
+
+def _keep_signup(chat_id, text, reply_markup):
+    """Someone signing up in Peak has no history.json yet: their questions are kept in
+    the outbox instead, so a reload (or switching apps to Intervals.icu) loses nothing."""
+    try:
+        import outbox
+        if outbox.signing_up(chat_id):
+            outbox.record(chat_id, text, reply_markup, source="web-turn")
+    except Exception:
+        pass
 
 
 def _buttons(reply_markup) -> list:
@@ -436,13 +448,13 @@ _DRILL_PREFIXES = ("Analyse the interval structure of activity", "Review the nut
                    "Analyse the heart rate data for activity", "Find the 3 most similar past sessions to activity")
 
 
-def timeline(slug: str | None, limit: int = 80) -> list[dict]:
+def timeline(slug: str | None, limit: int = 80, chat_id: str | None = None) -> list[dict]:
     """The chat as Peak shows it, oldest first: the shared Telegram/web conversation
     (history.json) merged with every scheduled coach message (web-outbox.jsonl, which
     carries buttons and photos). A scheduled message is ALSO in history.json with no
     user side; that copy is dropped when the outbox has the same text."""
     if not slug:
-        return []
+        return _signup_timeline(chat_id, limit) if chat_id else []
     adir = CC / "athletes" / slug
     try:
         hist = json.loads((adir / "telegram" / "history.json").read_text())
@@ -477,9 +489,21 @@ def timeline(slug: str | None, limit: int = 80) -> list[dict]:
         if coach and (user or e.get("kind") == "drill" or coach.strip() not in out_texts):
             items.append({"who": "coach", "text": coach, "ts": ts})
     for o in out:
-        items.append({"who": "coach", "text": o.get("text") or "", "ts": o.get("ts") or "",
+        items.append({"who": o.get("who") or "coach", "text": o.get("text") or "", "ts": o.get("ts") or "",
                       "buttons": o.get("buttons") or [], "photo": o.get("photo"),
                       "form": log_form(o), "logged": o.get("logged"), "drills": o.get("drills"),
                       "id": o.get("id")})
     items.sort(key=lambda i: i["ts"] or "")     # stable: equal times keep history order
     return items[-limit:]
+
+
+def _signup_timeline(chat_id: str, limit: int) -> list[dict]:
+    """The chat of someone still answering the sign-up questions (lib/outbox.py)."""
+    try:
+        import outbox
+        entries = outbox.read_chat(chat_id, limit)
+    except Exception:
+        return []
+    return [{"who": o.get("who") or "coach", "text": o.get("text") or "", "ts": o.get("ts") or "",
+             "buttons": o.get("buttons") or [], "photo": o.get("photo"), "id": o.get("id")}
+            for o in entries]

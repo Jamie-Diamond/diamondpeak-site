@@ -9,6 +9,7 @@ def setup(tmp_path, monkeypatch, athletes):
     cfg.write_text(json.dumps(athletes))
     monkeypatch.setattr(outbox, "BASE", tmp_path)
     monkeypatch.setattr(outbox, "ATHLETES_CONFIG", cfg)
+    monkeypatch.setattr(outbox, "SIGNUP_DIR", tmp_path / "config" / "web-signup")
     outbox._CACHE.update(mtime=None, data={})
     return cfg
 
@@ -66,3 +67,35 @@ def test_update_rewrites_one_message_and_keeps_the_original_text(tmp_path, monke
     assert rows[a]["buttons"] == [[{"text": "📊 Intervals", "data": "drill:intervals:1:jam"}]]
     assert rows[b]["text"] == "other"
     assert outbox.update("111", "nope", "x") is False
+
+
+def test_signup_chat_is_kept_then_moves_into_the_athlete_folder(tmp_path, monkeypatch):
+    cfg = setup(tmp_path, monkeypatch, {"jam": {"chat_id": "111", "active": True}})
+    cid = "web-0a1b2c3d4e"
+    kb = {"inline_keyboard": [[{"text": "Yes", "callback_data": "ob:icu_has:yes"}]]}
+    assert outbox.signing_up(cid) is True and outbox.signing_up("111") is False
+    q = outbox.record(cid, "Do you use Intervals.icu?", kb)
+    outbox.record(cid, "", photo=b"PNG")
+    outbox.record_answer(cid, "Yes, I use it")
+    outbox.clear_buttons(cid)
+    rows = outbox.read_chat(cid)
+    assert [r.get("who") for r in rows] == [None, None, "me"]
+    assert rows[0]["id"] == q and rows[0]["buttons"] == []
+    assert outbox.media_path(cid, rows[1]["photo"]).read_bytes() == b"PNG"
+    assert outbox.record_answer("111", "x") is None          # an athlete's answers live in history.json
+
+    # sign-up finished: the athlete exists (not active yet), the chat moves in
+    cfg.write_text(json.dumps({"jam": {"chat_id": "111"}, "sam": {"chat_id": cid, "active": False}}))
+    outbox._CACHE.update(mtime=None, data={})
+    outbox.adopt(cid, "sam")
+    moved = outbox.read("sam")
+    assert [r["text"] for r in moved] == ["Do you use Intervals.icu?", "", "Yes, I use it"]
+    assert (tmp_path / "athletes" / "sam" / "web-media" / moved[1]["photo"]).read_bytes() == b"PNG"
+    assert not (tmp_path / "config" / "web-signup" / cid).exists()
+    assert outbox.signing_up(cid) is True                     # waiting for approval
+
+
+def test_only_web_chat_ids_get_a_signup_folder(tmp_path, monkeypatch):
+    setup(tmp_path, monkeypatch, {})
+    assert outbox.record("web-../../etc", "x") is None
+    assert outbox.record("12345", "x") is None

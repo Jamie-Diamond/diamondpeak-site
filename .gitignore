@@ -15,6 +15,7 @@ ClaudeCoach/config/athletes.json
 ClaudeCoach/config/pending.json
 ClaudeCoach/config/onboarding_state.json
 ClaudeCoach/config/web-access.json
+ClaudeCoach/config/web-signup/
 # Runtime state, not config: consecutive-run counts for recurring soft plan_audit
 # advisories (validate_plan.escalate_repeats). Written on every audit run, so
 # committing it would produce a diff a day and would make one box's streaks

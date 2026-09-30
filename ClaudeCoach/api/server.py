@@ -363,12 +363,13 @@ async def chat_send(request: Request):
 
 @app.post("/api/chat/button")
 async def chat_button(request: Request):
-    cid, label = _chat_user(request, need_active=True)
     try:
         body = await request.json()
     except ValueError:
         body = {}
     data = str((body or {}).get("data") or "").strip()[:200]
+    # Sign-up question buttons ("ob:...") work before the account is active.
+    cid, label = _chat_user(request, need_active=not data.startswith("ob:"))
     if not data:
         raise HTTPException(400, "no button")
     item = str((body or {}).get("item") or "")
@@ -467,7 +468,7 @@ def chat_history(request: Request):
     cid, slug, state = own_chat(email)
     if not cid:
         raise HTTPException(403, "this email has no athlete")
-    return JSONResponse({"slug": slug, "state": state, "history": chat.timeline(slug)},
+    return JSONResponse({"slug": slug, "state": state, "history": chat.timeline(slug, chat_id=cid)},
                         headers=NO_STORE)
 
 
@@ -476,10 +477,17 @@ MEDIA_RE = re.compile(r"^[0-9a-f-]{8,40}\.png$")
 
 @app.get("/api/media/{name}")
 def media(name: str, request: Request):
-    slug = own_slug(request_email(request))
-    if not slug or not MEDIA_RE.match(name):
+    email = request_email(request)
+    if not MEDIA_RE.match(name):
         raise HTTPException(404)
-    path = CC / "athletes" / slug / "web-media" / name
+    slug = own_slug(email)
+    if slug:
+        path = CC / "athletes" / slug / "web-media" / name
+    else:                           # still signing up: the sign-up screenshots
+        cid, _, state = own_chat(email)
+        if not cid or state != "onboarding":
+            raise HTTPException(404)
+        path = CC / "config" / "web-signup" / cid / "web-media" / name
     if not path.is_file():
         raise HTTPException(404)
     return FileResponse(path, media_type="image/png", headers=NO_STORE)

@@ -282,6 +282,22 @@ def test_invited_athlete_signs_up_through_chat_then_waits_for_approval(env, monk
     assert env.post("/api/chat", json={"text": "hi"}, headers=h).status_code == 200
     assert seen == [(cid, ["text"], "hi")]
     assert env.post("/api/chat/button", json={"data": "x"}, headers=h).status_code == 409
+    # ...but the sign-up questions' own buttons work
+    assert env.post("/api/chat/button", json={"data": "ob:icu_has:no"}, headers=h).status_code == 200
+    assert seen[-1] == (cid, ["button", "item"], "ob:icu_has:no")
+
+    # the sign-up chat (kept by lib/outbox.py) survives a reload, screenshots included
+    import outbox
+    monkeypatch.setattr(outbox, "ATHLETES_CONFIG", server.ATHLETES_CONFIG)
+    monkeypatch.setattr(outbox, "SIGNUP_DIR", server.CC / "config" / "web-signup")
+    outbox._CACHE.update(mtime=None, data={})
+    outbox.record(cid, "Do you already use *Intervals.icu*?")
+    outbox.record(cid, "", photo=b"PNG")
+    outbox.record_answer(cid, "No, not yet")
+    hist = env.get("/api/chat/history").json()["history"]
+    assert [(i["who"], i["text"]) for i in hist] == [
+        ("coach", "Do you already use *Intervals.icu*?"), ("coach", ""), ("me", "No, not yet")]
+    assert env.get(f"/api/media/{hist[1]['photo']}").content == b"PNG"
 
     # the bot's onboarding finished: an inactive athlete with that chat id
     ath = json.loads(server.ATHLETES_CONFIG.read_text())

@@ -51,6 +51,13 @@ B.baseline_lib.BASE = tmp
 
 SENT = []
 B.send = lambda token, chat_id, text, **kw: SENT.append((str(chat_id), text, kw.get("reply_markup")))
+PHOTOS = []
+B.send_photo = lambda token, chat_id, data, *a, **k: PHOTOS.append((str(chat_id), len(data)))
+B._outbox = None
+ISSUES = []                        # what _icu_setup_issues reports, one list per call
+B._icu_id_for_key = lambda key: "i123"
+B._icu_setup_issues = lambda i, k: ISSUES.pop(0) if ISSUES else []
+KEY = "abcdefghij0123456789abcde"
 B._git_commit = lambda *a, **k: None
 B.load_config = lambda: {"admin_chat_id": "999"}
 B.log = lambda *a, **k: None
@@ -101,7 +108,7 @@ def onboard(chat, answers):
 
 # ── 1. a 70.3 athlete: wrist HR, rides with power, one tested swim number ──────
 fake_icu(ICU_TRI, TRI)
-asked = onboard("123", ["Sam Smith", "70.3 Test, 2027-06-01", "i123", "key",
+asked = onboard("123", ["Sam Smith", "70.3 Test, 2027-06-01", "yes", KEY,
                         "sub 5", "3 years, longest a marathon", "none", "10",
                         "7",             # invalid HR answer
                         "2",             # wrist
@@ -109,6 +116,7 @@ asked = onboard("123", ["Sam Smith", "70.3 Test, 2027-06-01", "i123", "key",
                         "0",             # FTP 250 was not a test
                         "no",            # run threshold: not tested
                         "1:45",          # swim CSS: tested in last 6 weeks
+                        "2",             # coaching level: mid
                         "sam"])
 blob = "\n".join(asked)
 check("asks what they wear for heart rate", "What do you wear for *heart rate*" in blob)
@@ -135,6 +143,10 @@ check("typed tested CSS = tested, no swim test, remembered as the athlete's numb
       and ss["swim"]["value_source"] == "athlete" and ss["swim"]["values"] == {"css": "1:45"}, ss["swim"])
 check("'no' is not written as a run threshold", prof.get("run_threshold_pace_per_km") in (None, ""),
       prof.get("run_threshold_pace_per_km"))
+check("level asked just before the handle", "How much *detail*" in asked[_setup - 2], asked[_setup - 3:_setup])
+check("coaching level saved", prof.get("coaching_level") == "mid", prof.get("coaching_level"))
+check("athlete ID comes from the key, never asked",
+      prof["icu_athlete_id"] == "i123" and "athlete ID" not in blob)
 check("athletes.json entry inactive until approved",
       json.loads(B.ATHLETES_CONFIG.read_text())["sam"]["active"] is False)
 
@@ -151,8 +163,8 @@ check("admin is told the baseline week was scheduled",
 fake_icu({"ftp_watts": None, "run_threshold_pace_per_km": "4:30", "swim_css_per_100m": None,
           "weight_kg": 60, "has_power": False},
          {"race_type": "Running Marathon", "run_km": 42.2})
-asked = onboard("124", ["Ali Run", "London Marathon, 2027-04-25", "i124", "key",
-                        "sub 3:30", "5 years", "none", "6", "1", "1", "ali"])
+asked = onboard("124", ["Ali Run", "London Marathon, 2027-04-25", "y", KEY,
+                        "sub 3:30", "5 years", "none", "6", "1", "1", "beginner", "ali"])
 blob = "\n".join(asked)
 check("runner: no power question", "ride with *power*" not in blob)
 check("runner: no FTP or CSS gap question", "FTP" not in blob and "CSS" not in blob, blob[-400:])
@@ -161,6 +173,50 @@ check("runner: run only", st["sports"] == ["run"], st["sports"])
 check("runner: stated recent test of the ICU pace = tested, no test",
       st["sports_state"]["run"]["confidence"] == "tested" and st["sports_state"]["run"]["test"] is None,
       st["sports_state"]["run"])
+
+# ── 3b. no Intervals.icu yet: set-up walk-through, taps, the set-up check ────
+fake_icu(ICU_TRI, TRI)
+PHOTOS.clear()
+ISSUES[:] = [["Planned workouts aren't set to go to your *Garmin*."], []]
+B.save_pending(["125"])
+B.handle_onboarding("t", "125", "hi")
+for a in ["Pat Lee", "70.3 Test, 2027-06-01"]:
+    B.handle_onboarding("t", "125", a)
+n = len(SENT)
+B.handle_onboarding("t", "125", "ob:icu_has:no")
+setup_msgs = [t for c, t, _ in SENT[n:] if c == "125"]
+check("'No' tap gives the set-up steps", any("Sign up free at intervals.icu" in t for t in setup_msgs), setup_msgs)
+check("set-up steps come with screenshots", len(PHOTOS) == 2, PHOTOS)
+check("set-up ends on an I've done it button",
+      SENT[-1][2] and SENT[-1][2]["inline_keyboard"][0][0]["callback_data"] == "ob:icu_setup:done", SENT[-1])
+n = len(SENT)
+B.handle_onboarding("t", "125", "ob:icu_has:yes")              # the old question's button
+check("a tap on an earlier question is ignored", len(SENT) == n)
+B.handle_onboarding("t", "125", "ob:icu_setup:done")
+check("then the API key steps, with their screenshots",
+      any("API key" in t for c, t, _ in SENT[n:]) and len(PHOTOS) == 4, (PHOTOS, SENT[n:]))
+n = len(SENT)
+B.handle_onboarding("t", "125", "not a key")
+check("a non-key is refused", any("doesn't look like an API key" in t for c, t, _ in SENT[n:]))
+n = len(SENT)
+B.handle_onboarding("t", "125", KEY)
+fix = [(t, m) for c, t, m in SENT[n:] if c == "125"]
+check("set-up problems are listed with Check again", any("workout upload" in t or "Garmin" in t for t, _ in fix)
+      and fix[-1][1] and fix[-1][1]["inline_keyboard"][0][0]["callback_data"] == "ob:icu_fix:again", fix)
+n = len(SENT)
+B.handle_onboarding("t", "125", "ob:icu_fix:again")
+check("Check again, now fixed, carries on", any("All connected" in t for c, t, _ in SENT[n:])
+      and any("A goal" in t for c, t, _ in SENT[n:]), SENT[n:])
+for a in ["sub 5", "2 years", "none", "8", "1", "yes", "0", "no", "no"]:
+    B.handle_onboarding("t", "125", a)
+n = len(SENT)
+B.handle_onboarding("t", "125", "ob:level:pro")
+check("level tap moves on to the handle", any("account handle" in t for c, t, _ in SENT[n:]), SENT[n:])
+B.handle_onboarding("t", "125", "pat")
+prof = json.loads((tmp / "athletes/pat/profile.json").read_text())
+check("tapped level saved", prof.get("coaching_level") == "pro", prof.get("coaching_level"))
+check("tap from a sign-up goes to onboarding, not athlete handlers",
+      B.dispatch_callback("t", "126", "ob:icu_has:yes", 1, {}, {}) is True)
 
 # ── 4. race sports from name when the lookup has no distances ────────────────
 check("gran fondo -> bike", B._race_sports({"race_type": "Cycling Gran Fondo"}, "") == ["bike"])

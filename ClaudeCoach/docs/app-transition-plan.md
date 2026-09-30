@@ -1,7 +1,7 @@
 # ClaudeCoach — Transition to Full Web App
 
 **Written:** 2026-05-27 · **Revised:** 2026-06-18
-**Status (30 Sep 2026):** Peak at `coach.diamondpeak.uk` is live behind Cloudflare Access (FastAPI `api/server.py`). Done: private data + pull-to-refresh (Phase 1), web chat with voice and photos (Phase 2, same brain: `api/chat.py` runs the bot's own code), buttons, phone notifications (`api/push.py`), every coach message mirrored to Peak (`lib/outbox.py`), web sign-up by invite, and a per-athlete Telegram switch in Settings → Coaching. **Nobody has been switched off Telegram yet** — that is the coach's call per athlete. Still on Telegram only: the separate nutrition bot. Not started: drag-and-drop calendar (Phase 3).
+**Status (30 Sep 2026):** Peak at `coach.diamondpeak.uk` is live behind Cloudflare Access (FastAPI `api/server.py`). Done: private data + pull-to-refresh (Phase 1), web chat with voice and photos (Phase 2, same brain: `api/chat.py` runs the bot's own code), buttons, phone notifications (`api/push.py`), every coach message mirrored to Peak (`lib/outbox.py`), web sign-up by invite (it asks whether they use Intervals.icu and walks them through setting it up with screenshots if not, checks their watch is sending activities, sleep/HRV and receiving workouts, and asks their coaching level), and a per-athlete Telegram switch in Settings → Coaching. **Nobody has been switched off Telegram yet** — that is the coach's call per athlete. Still on Telegram only: the separate nutrition bot. Not started: drag-and-drop calendar (Phase 3).
 
 > ### What changed in the 2026-06-18 revision (read first)
 > The 27 May v1 is superseded on four points, all decided/validated this session:

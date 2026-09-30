@@ -878,6 +878,23 @@ def _web_only(chat_id) -> bool:
         return False
 
 
+def _outbox_answer(chat_id, text):
+    """A Peak sign-up's own answer, kept with their questions (no-op on Telegram)."""
+    try:
+        if _outbox:
+            _outbox.record_answer(chat_id, text)
+    except Exception:
+        pass
+
+
+def _outbox_clear_buttons(chat_id):
+    try:
+        if _outbox:
+            _outbox.clear_buttons(chat_id)
+    except Exception:
+        pass
+
+
 def tg_post(token, method, payload):
     _cid = (payload or {}).get("chat_id")
     if _cid is not None and _web_only(_cid):
@@ -4472,13 +4489,53 @@ def prefetch_context(slug: str) -> str:
 PENDING_FILE    = BASE.parent / "config/pending.json"
 ONBOARDING_FILE = BASE.parent / "config/onboarding_state.json"  # gitignored
 
-# Phase 1: always asked, in order
+# Phase 1: always asked, in order. Intervals.icu (30 Sep 2026): asked whether they use
+# it; a "no" adds the set-up walk-through. The athlete ID is no longer asked - the API
+# key alone identifies the athlete. Screenshots are onboarding/img/ (Jamie's account,
+# key and personal details removed).
 _OB_PHASE1 = [
     ("name",    "Hi! I'm ClaudeCoach. Just a few questions to get you set up.\n\nWhat's your *full name*?"),
     ("race",    "What's your *target race* -- name and date? (e.g. _IM Frankfurt, 2027-06-29_)"),
-    ("icu_id",  "Your *Intervals.icu athlete ID* -- it looks like _i196362_.\n\nFind it at: intervals.icu → top-right menu → *Settings* → scroll to the bottom → *Developer settings*. Your athlete ID is shown there."),
-    ("icu_key", "Now your *Intervals.icu API key*.\n\nSame place: intervals.icu → *Settings* → scroll to the bottom → *Developer settings* → click *Show API key*. Copy and paste the full key here."),
+    ("icu_has", "Do you already use *Intervals.icu*? It's the free training log I read your sessions, sleep and fitness from, and where I put your plan."),
+    ("icu_key", "Now link me to it with your *API key*:\n\n"
+                "1. On intervals.icu, open *Settings* (in the ☰ menu)\n"
+                "2. Scroll down to *Developer Settings* and tap *(view)* next to API Key\n"
+                "3. Copy the key and paste it here\n\n"
+                "Don't tap *Clear* or *Generate* -- that changes the key and I lose access."),
 ]
+_OB_ICU_SETUP = ("icu_setup",
+    "No problem -- it takes about 5 minutes:\n\n"
+    "1. Sign up free at intervals.icu\n"
+    "2. Open *Settings* (in the ☰ menu), then *Connections*\n"
+    "3. Connect everything you use: your watch (Garmin, Coros, Suunto, Polar, Wahoo...), "
+    "Strava, Zwift. *Your watch must be connected directly* -- activities that only "
+    "come through Strava are hidden from me.\n"
+    "4. For your watch, turn on *wellness* (sleep, HRV, resting heart rate) and "
+    "*uploading planned workouts*, so my sessions appear on it.")
+_OB_LEVEL = ("level",
+    "How much *detail* do you want from me?\n\n"
+    "*Beginner* -- plain words: easy, steady, hard, plus heart rate. No jargon.\n"
+    "*Mid* -- plain words with the numbers behind them: pace, heart rate, power, zones.\n"
+    "*Pro* -- the technical terms too (CTL, TSS, NP), with the full numbers when you ask.")
+# (button text, value) rows per question; a tap arrives as "ob:<question>:<value>".
+_OB_BUTTONS = {
+    "icu_has":   [[("Yes, I use it", "yes"), ("No, not yet", "no")]],
+    "icu_setup": [[("I've done it", "done")]],
+    "icu_fix":   [[("Check again", "again"), ("Carry on for now", "skip")]],
+    "level":     [[("Beginner", "beginner"), ("Mid", "mid"), ("Pro", "pro")]],
+}
+_OB_IMAGES = {"icu_setup": ["icu-settings.png", "icu-connections.png"],
+              "icu_key":   ["icu-developer.png", "icu-key.png"]}
+_OB_AFTER = {"icu_setup": "Tap below once that's done.",
+             "icu_key":   "Paste your key here when you have it."}
+_OB_IMG_DIR = BASE.parent / "onboarding" / "img"
+_LEVEL_WORDS = {"1": "beginner", "beginner": "beginner", "2": "mid", "mid": "mid",
+                "middle": "mid", "3": "pro", "pro": "pro"}
+# Watch brands: (what their activities' `source` contains, Intervals.icu setting prefix, name)
+_ICU_DEVICES = (("GARMIN", "icu_garmin_", "Garmin"), ("COROS", "coros_", "Coros"),
+                ("SUUNTO", "suunto_", "Suunto"), ("POLAR", "polar_", "Polar"),
+                ("WAHOO", "wahoo_", "Wahoo"), ("HUAWEI", "huawei_", "Huawei"),
+                ("ZEPP", "zepp_", "Zepp"))
 
 # Always asked after ICU fetch, regardless of what ICU returned. The slug question is
 # held back and asked LAST (see _build_remaining_queue), after the HR / power / test
@@ -4561,6 +4618,19 @@ def _validate_ob_answer(key, answer):
     if key == "icu_id":
         if not re.match(r'^i\d+$', answer.strip()):
             return "That doesn't look right -- the athlete ID starts with 'i' followed by numbers (e.g. _i196362_). Check intervals.icu -> Profile."
+    if key == "icu_has":
+        if not re.match(r"^\s*(y|yes|yep|yeah|n|no|nope|not yet)\b", answer, re.I):
+            return "Just _yes_ or _no_ -- do you already use Intervals.icu?"
+    if key == "icu_key":
+        if not re.fullmatch(r"[A-Za-z0-9]{16,64}", answer.strip()):
+            return ("That doesn't look like an API key -- it's one long run of letters and "
+                    "numbers. Copy it again from *Settings* -> *Developer Settings* -> *(view)*.")
+    if key == "icu_fix":
+        if not re.match(r"^\s*(again|check|done|skip|carry on|later)", answer, re.I):
+            return "Tap *Check again* once it's switched on, or *Carry on for now*."
+    if key == "level":
+        if answer.strip().lower() not in _LEVEL_WORDS:
+            return "Tap one: *Beginner*, *Mid* or *Pro*."
     if key == "slug":
         if not re.match(r'^[a-z][a-z0-9_]{1,19}$', answer.strip()):
             return "Handle must be 2-20 lowercase letters, numbers, or underscores -- e.g. _sarah_ or _tom2_. Try again."
@@ -4702,7 +4772,7 @@ def _build_remaining_queue(answers, icu_data, sports=None):
         for icu_field, answer_key, fam, question in _OB_GAPS
         if not icu_data.get(icu_field) and (fam is None or fam in sports)
     ]
-    return qual + gaps + [_OB_SLUG], recent_map
+    return qual + gaps + [_OB_LEVEL, _OB_SLUG], recent_map
 
 
 def _baseline_inputs(answers, icu_data, sports, recent_map):
@@ -4840,6 +4910,7 @@ def _scaffold_athlete(chat_id, answers, icu_data, race_data=None, sports=None, r
         "icu_athlete_id": answers.get("icu_id", "").strip(),
         "experience": answers.get("experience", ""),
         "injuries": injuries,
+        "coaching_level": _LEVEL_WORDS.get((answers.get("level") or "").strip().lower(), "mid"),
     }
     sports = sports or _race_sports(rd, race_str)
     known, stated, hr_src, has_power = _baseline_inputs(answers, icu_data, sports, recent_map or [])
@@ -4917,8 +4988,133 @@ def _scaffold_athlete(chat_id, answers, icu_data, race_data=None, sports=None, r
     return slug
 
 
+def _ob_markup(key):
+    rows = _OB_BUTTONS.get(key)
+    if not rows:
+        return None
+    return {"inline_keyboard": [[{"text": t, "callback_data": f"ob:{key}:{v}"} for t, v in row]
+                                for row in rows]}
+
+
+def _ob_ask(token, chat_id, key, question, answers=None):
+    """Send one sign-up question: its text, then its screenshots and a closing line
+    carrying its buttons, or just the text with its buttons."""
+    images = list(_OB_IMAGES.get(key, []))
+    if key == "icu_key" and (answers or {}).get("icu_has") == "yes":
+        images.insert(0, "icu-settings.png")        # the "no" path showed it already
+    markup = _ob_markup(key)
+    if not images:
+        send(token, chat_id, question, reply_markup=markup)
+        return
+    send(token, chat_id, question)
+    for name in images:
+        try:
+            send_photo(token, chat_id, (_OB_IMG_DIR / name).read_bytes())
+        except OSError as e:
+            log(f"Onboarding screenshot {name} missing: {e}")
+    send(token, chat_id, _OB_AFTER.get(key, "👇"), reply_markup=markup)
+
+
+def _icu_id_for_key(icu_key):
+    """The athlete behind an API key: Intervals.icu answers athlete "0" as the key's own."""
+    import sys as _sys
+    _sys.path.insert(0, str(BASE.parent / "lib"))
+    from icu_api import IcuClient
+    athlete_id = str((IcuClient("0", icu_key.strip()).get_athlete_profile() or {}).get("id") or "")
+    if not athlete_id:
+        raise ValueError("no athlete for that key")
+    return athlete_id
+
+
+def _icu_setup_issues(icu_id, icu_key):
+    """What still needs switching on in Intervals.icu for coaching to work, in the
+    athlete's words; [] when nothing does. Read from what actually arrives: activity
+    sources over 60 days (a watch brand, or only Strava, which the API hides) and 14
+    days of wellness, plus the watch's own workout-upload setting."""
+    import sys as _sys
+    _sys.path.insert(0, str(BASE.parent / "lib"))
+    from icu_api import IcuClient
+    profile, acts, well = IcuClient(icu_id, icu_key.strip()).fetch_all(
+        "get_athlete_profile", ("get_training_history", 60), ("get_wellness", 14))
+    profile = profile if isinstance(profile, dict) else {}
+    acts = acts if isinstance(acts, list) else []
+    well = well if isinstance(well, list) else []
+    sources = {str(a.get("source") or "").upper() for a in acts if isinstance(a, dict)}
+    devices = [d for d in _ICU_DEVICES if any(d[0] in src for src in sources)]
+    if not devices:
+        if profile.get("strava_authorized"):
+            return ["Your activities only come in through *Strava*, and Strava hides them "
+                    "from me. Connect your watch (Garmin, Coros, Suunto...) directly as well."]
+        return ["I can't see any activities yet. Connect your watch (Garmin, Coros, "
+                "Suunto...). If you just did, give it a few minutes to bring your history in."]
+    issues = []
+    if not any(w.get("hrv") or w.get("sleepSecs") or w.get("restingHR")
+               for w in well if isinstance(w, dict)):
+        issues.append(f"I can't see your *sleep, HRV or resting heart rate*. Turn on "
+                      f"wellness for your {devices[0][2]}.")
+    for _src, prefix, name in devices:
+        if profile.get(prefix + "upload_workouts") is False:
+            issues.append(f"Planned workouts aren't set to go to your *{name}*. Turn on "
+                          f"workout upload, so my sessions appear on your watch.")
+    return issues
+
+
+def _icu_fix_question(issues, again=False):
+    head = ("Still not quite there:" if again else
+            "Connected ✓ -- a couple of things to switch on in Intervals.icu first, so "
+            "I can coach you properly:")
+    body = "\n\n".join("• " + i for i in issues)
+    return (f"{head}\n\n{body}\n\nThey're in *Settings* -> *Connections*, under your "
+            f"watch. Then tap *Check again*.")
+
+
+def _ob_after_icu(token, chat_id, ob_state, session):
+    """Intervals.icu is linked: say what it holds, look up the race, queue the rest."""
+    send(token, chat_id, session.get("icu_summary") or "")
+
+    # Look up race details in the background while we send the ICU summary
+    race_str = session["answers"].get("race", "")
+    race_date_m = re.search(r'(\d{4}-\d{2}-\d{2})', race_str)
+    race_date_str = race_date_m.group(1) if race_date_m else ""
+    send(token, chat_id, "_Looking up your race..._")
+    race_data = _lookup_race(race_str, race_date_str)
+    session["race_data"] = race_data
+
+    if race_data:
+        parts = []
+        if race_data.get("total_km") or race_data.get("bike_km"):
+            dist = []
+            if race_data.get("swim_km"):  dist.append(f"{race_data['swim_km']}km swim")
+            if race_data.get("bike_km"):  dist.append(f"{race_data['bike_km']}km bike")
+            if race_data.get("run_km"):   dist.append(f"{race_data['run_km']}km run")
+            if not dist and race_data.get("total_km"): dist.append(f"{race_data['total_km']}km")
+            if dist: parts.append(" / ".join(dist))
+        if race_data.get("elevation_m"): parts.append(f"{race_data['elevation_m']}m elevation")
+        mid = race_data.get("expected_hours_mid") or race_data.get("expected_hours_fast")
+        if mid: parts.append(f"~{mid}h typical finish")
+        if race_data.get("notes"): parts.append(race_data["notes"])
+        race_summary = f"*{race_data.get('race_type', race_str)}*"
+        if parts:
+            race_summary += "\n" + " · ".join(parts)
+        send(token, chat_id, race_summary)
+    else:
+        send(token, chat_id, "_Race details not found — I'll use what you've told me._")
+
+    sports = _race_sports(race_data, race_str)
+    remaining, recent_map = _build_remaining_queue(session["answers"], session["icu_data"], sports)
+    session["sports"] = sports
+    session["recent_map"] = recent_map
+    session["queue"] = [[k, q] for k, q in remaining]
+    next_key, next_q = session["queue"].pop(0)
+    session["current_key"] = next_key
+    save_onboarding_state(ob_state)
+    _ob_ask(token, chat_id, next_key, next_q, session["answers"])
+    return True
+
+
 def handle_onboarding(token, chat_id, text):
-    """Returns True if chat_id is pending and the message was handled."""
+    """Returns True if chat_id is pending and the message was handled. `text` is a
+    typed answer, or a sign-up button tap: "ob:<question>:<value>"."""
     pending = load_pending()
     if chat_id not in pending:
         return False
@@ -4927,6 +5123,8 @@ def handle_onboarding(token, chat_id, text):
 
     # First contact -- send Q0, initialise queue with remainder of phase 1
     if chat_id not in ob_state:
+        if text.startswith("ob:"):
+            return True
         ob_state[chat_id] = {
             "current_key": _OB_PHASE1[0][0],
             "queue": [[k, q] for k, q in _OB_PHASE1[1:]],
@@ -4939,78 +5137,83 @@ def handle_onboarding(token, chat_id, text):
 
     session = ob_state[chat_id]
     key     = session["current_key"]
-    answer  = text.strip()
+    if text.startswith("ob:"):
+        _, tkey, value = (text.split(":", 2) + ["", ""])[:3]
+        if tkey != key:
+            return True                 # a button on an earlier question
+        answer = value
+        shown = next((t for row in _OB_BUTTONS.get(key, []) for t, v in row if v == value), value)
+    else:
+        answer = text.strip()
+        shown = "🔑 API key sent" if key == "icu_key" else answer
+    _outbox_answer(chat_id, shown)
 
     err = _validate_ob_answer(key, answer)
     if err:
         send(token, chat_id, err)
         return True
+    _outbox_clear_buttons(chat_id)
 
+    if key == "icu_has":
+        answer = "no" if re.match(r"^\s*(n|no|nope|not yet)\b", answer, re.I) else "yes"
+        if answer == "no":
+            session["queue"].insert(0, list(_OB_ICU_SETUP))
+    elif key == "level":
+        answer = _LEVEL_WORDS[answer.strip().lower()]
+    elif key == "icu_key":
+        answer = answer.strip()
     session["answers"][key] = answer
 
-    # After ICU key: verify, fetch everything, build rest of queue
+    # After ICU key: verify, fetch everything, check the set-up, build rest of queue
     if key == "icu_key":
         save_onboarding_state(ob_state)
         send(token, chat_id, "_Connecting to Intervals.icu..._")
         try:
-            icu_data, summary = _fetch_icu_data(session["answers"]["icu_id"], answer)
+            icu_id = _icu_id_for_key(answer)
+            session["answers"]["icu_id"] = icu_id
+            icu_data, summary = _fetch_icu_data(icu_id, answer)
         except Exception as e:
             log(f"Onboarding ICU fetch failed for {chat_id}: {e}")
             send(token, chat_id,
-                 f"Couldn't connect to Intervals.icu -- please check your API key and try again.\n"
-                 f"_(Error: {e})_\n\n" + _OB_PHASE1[-1][1])
+                 "Couldn't connect with that key -- check you copied all of it, then paste it again.")
             session["answers"].pop("icu_key", None)
             save_onboarding_state(ob_state)
             return True
+        session["icu_data"], session["icu_summary"] = icu_data, summary
+        try:
+            issues = _icu_setup_issues(icu_id, answer)
+        except Exception as e:
+            log(f"Onboarding ICU set-up check failed for {chat_id}: {e}")
+            issues = []
+        if issues:
+            session["current_key"] = "icu_fix"
+            save_onboarding_state(ob_state)
+            _ob_ask(token, chat_id, "icu_fix", _icu_fix_question(issues))
+            return True
+        return _ob_after_icu(token, chat_id, ob_state, session)
 
-        session["icu_data"] = icu_data
-
-        # Look up race details in the background while we send the ICU summary
-        race_str = session["answers"].get("race", "")
-        race_date_m = re.search(r'(\d{4}-\d{2}-\d{2})', race_str)
-        race_date_str = race_date_m.group(1) if race_date_m else ""
-        send(token, chat_id, summary)
-        send(token, chat_id, "_Looking up your race..._")
-        race_data = _lookup_race(race_str, race_date_str)
-        session["race_data"] = race_data
-
-        if race_data:
-            parts = []
-            if race_data.get("total_km") or race_data.get("bike_km"):
-                dist = []
-                if race_data.get("swim_km"):  dist.append(f"{race_data['swim_km']}km swim")
-                if race_data.get("bike_km"):  dist.append(f"{race_data['bike_km']}km bike")
-                if race_data.get("run_km"):   dist.append(f"{race_data['run_km']}km run")
-                if not dist and race_data.get("total_km"): dist.append(f"{race_data['total_km']}km")
-                if dist: parts.append(" / ".join(dist))
-            if race_data.get("elevation_m"): parts.append(f"{race_data['elevation_m']}m elevation")
-            mid = race_data.get("expected_hours_mid") or race_data.get("expected_hours_fast")
-            if mid: parts.append(f"~{mid}h typical finish")
-            if race_data.get("notes"): parts.append(race_data["notes"])
-            race_summary = f"*{race_data.get('race_type', race_str)}*"
-            if parts:
-                race_summary += "\n" + " · ".join(parts)
-            send(token, chat_id, race_summary)
-        else:
-            send(token, chat_id, "_Race details not found — I'll use what you've told me._")
-
-        sports = _race_sports(race_data, race_str)
-        remaining, recent_map = _build_remaining_queue(session["answers"], icu_data, sports)
-        session["sports"] = sports
-        session["recent_map"] = recent_map
-        session["queue"] = [[k, q] for k, q in remaining]
-        next_key, next_q = session["queue"].pop(0)
-        session["current_key"] = next_key
-        save_onboarding_state(ob_state)
-        send(token, chat_id, next_q)
-        return True
+    if key == "icu_fix":
+        if re.match(r"^\s*(again|check|done)", answer, re.I):
+            icu_id, icu_key = session["answers"]["icu_id"], session["answers"]["icu_key"]
+            try:
+                session["icu_data"], session["icu_summary"] = _fetch_icu_data(icu_id, icu_key)
+                issues = _icu_setup_issues(icu_id, icu_key)
+            except Exception as e:
+                log(f"Onboarding ICU re-check failed for {chat_id}: {e}")
+                issues = []
+            if issues:
+                save_onboarding_state(ob_state)
+                _ob_ask(token, chat_id, "icu_fix", _icu_fix_question(issues, again=True))
+                return True
+            send(token, chat_id, "All connected ✓")
+        return _ob_after_icu(token, chat_id, ob_state, session)
 
     # Advance to next question
     if session["queue"]:
         next_key, next_q = session["queue"].pop(0)
         session["current_key"] = next_key
         save_onboarding_state(ob_state)
-        send(token, chat_id, next_q)
+        _ob_ask(token, chat_id, next_key, next_q, session["answers"])
         return True
 
     # Queue exhausted -- scaffold
@@ -5025,6 +5228,8 @@ def handle_onboarding(token, chat_id, text):
         return True
 
     log(f"Onboarding complete: {session['answers'].get('name', '?')} ({slug})")
+    if _outbox:
+        _outbox.adopt(chat_id, slug)    # a Peak sign-up's chat moves into their folder
 
     # Generate training blueprint and rules.md in background
     blueprint_script = BASE.parent / "scripts/generate-blueprint.py"
@@ -6984,6 +7189,11 @@ def dispatch_callback(token, chat_id, text, msg_id, athletes, config):
     # finished. This branch is un-locked and, on the two live paths, does no
     # network: it names a run id to the engine and returns.
     if _handle_stop(token, chat_id, text, msg_id):
+        return True
+    # Sign-up question buttons (Intervals.icu yes/no, coaching level...): the person
+    # tapping is not an athlete yet, so nothing below applies to them.
+    if text.startswith("ob:") and chat_id not in athletes:
+        handle_onboarding(token, chat_id, text)
         return True
     # ↩️ Undo: putting back what the stopped turn had already written. This one
     # DOES go through _submit (inside the handler) - the turn is over, so the
