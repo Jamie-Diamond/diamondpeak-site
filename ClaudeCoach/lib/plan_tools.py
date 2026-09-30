@@ -2417,6 +2417,140 @@ def cmd_race_prompt(args) -> dict:
     return set_race_prompt(args.athlete, args.topic, args.answer)
 
 
+# ── subcommand: race-setup ─────────────────────────────────────────────────────
+# NEXT-RACE SETUP (Jamie, 30 Sep 2026): "the coach bot can do this with the athlete as one
+# event finishes" - the block for the next A-race (phase weeks, Fitness targets, blueprint)
+# is set up in the conversation, not by hand in a dev session. Preview first; --apply only
+# on the athlete's OK. One function, so the numbers the athlete agreed are the numbers
+# written.
+_RUN_CROSS_TRAINING = 1.3      # total ~ running x 1.3 for a runner who keeps bike / swim
+
+
+def _block_weeks(weeks: int, taper_days, long_course: bool) -> dict:
+    """phase_tss end-weeks for a block of `weeks` (blueprint §1.1 shape): taper from the
+    event, peak 2, build up to 8, a 3-week specific phase for long-course events with
+    room for it, base gets the rest."""
+    taper = max(1, -(-int(taper_days[1]) // 7)) if taper_days else 2
+    rest = max(0, weeks - taper - 2)
+    build = min(8, round(rest * 0.45))
+    specific = 3 if long_course and rest >= 14 else 0
+    base = max(0, rest - build - specific)
+    out = {"base_end_week": base, "build_end_week": base + build}
+    if specific:
+        out["specific_end_week"] = base + build + specific
+    out["peak_end_week"] = base + build + specific + 2
+    return out
+
+
+def race_setup(slug: str, apply: bool = False, today=None, path=None) -> dict:
+    """Plan the block for the athlete's current A-race: level, phase weeks, total
+    Fitness targets (phase_ctl, race_min) and, with apply, write them and rebuild the
+    blueprint. Keeps an existing future plan_start (e.g. after a recovery hold)."""
+    import math
+    import shutil
+    today = today or date.today()
+    p = Path(path or ATHLETES_CONFIG)
+    athletes = json.loads(p.read_text())
+    if slug not in athletes:
+        raise SystemExit(_err(f"unknown athlete '{slug}'"))
+    cfg = athletes[slug]
+    try:
+        race_d = date.fromisoformat(str(cfg.get("race_date"))[:10])
+    except ValueError:
+        raise SystemExit(_err("no race_date - set the next race first"))
+    if race_d <= today:
+        raise SystemExit(_err(f"race_date {race_d} is not in the future - set the next race first"))
+    profile = {}
+    try:
+        profile = json.loads((BASE / "athletes" / slug / "profile.json").read_text())
+    except Exception:
+        pass
+    ev = rf.event_def(cfg, cfg.get("race_distance") or cfg.get("race_name"))
+    if not ev:
+        raise SystemExit(_err(f"no blueprint for '{cfg.get('race_name')}' - run bespoke-event first"))
+    lv = rf.athlete_level(cfg, profile, ev)
+
+    # Block start: keep a plan_start that is still ahead (a recovery hold or an agreed
+    # date), else the coming Monday.
+    ps = None
+    try:
+        ps = date.fromisoformat(str(cfg.get("plan_start"))[:10])
+    except ValueError:
+        pass
+    if not ps or ps <= today:
+        ps = today + timedelta(days=(7 - today.weekday()) % 7 or 7)
+    weeks = max(1, -(-((race_d - ps).days + 1) // 7))      # race week included
+    long_course = ev.get("kind") in ("run", "tri") and (
+        (ev.get("distance_km") or 0) >= 21 or rf.levels_key(ev.get("label")) in ("70_3", "ironman")
+        or (ev.get("est_minutes") or 0) >= 240)
+    phases = _block_weeks(weeks, ev.get("taper_days"), long_course)
+
+    # Total Fitness into the taper. Tri / bike: the level's range. Run race: the level's
+    # RUNNING range, x1.3 when they keep cycling / swimming days (Jamie's Brighton: sub-3
+    # running + cycling ~105). Never under the athlete's own total floor. Rounded to 5.
+    mid = sum(lv["fitness_at_taper"]) / 2
+    if ev.get("kind") == "run":
+        dr = cfg.get("day_rules") or {}
+        mid *= _RUN_CROSS_TRAINING if (dr.get("bike_days") or dr.get("swim_days")) else 1.0
+    floor = rf.total_floor(cfg) or 0
+    top = max(float(floor), 5 * round(mid / 5))
+    frac = rf.PHASE_FRACTION
+    phase_ctl = {"base": round(top * frac["build"]),
+                 "build": round(top * (frac["specific"] if "specific_end_week" in phases
+                                       else frac["peak"]))}
+    if "specific_end_week" in phases:
+        phase_ctl["specific"] = round(top * frac["peak"])
+    phase_ctl["peak"] = round(top)
+    taper_w = weeks - phases["peak_end_week"]
+    race_min = round(top * (1 - 0.035 * max(1, taper_w)))
+
+    def monday(w):
+        return (ps + timedelta(days=7 * w)).isoformat()
+    windows = {"base": [ps.isoformat(), monday(phases["base_end_week"])]}
+    prev = phases["base_end_week"]
+    for name in ("build", "specific", "peak"):
+        k = f"{name}_end_week"
+        if k in phases:
+            windows[name] = [monday(prev), monday(phases[k])]
+            prev = phases[k]
+    windows["taper"] = [monday(prev), race_d.isoformat()]
+
+    out = {"athlete": slug, "race": cfg.get("race_name"), "race_date": race_d.isoformat(),
+           "event": ev.get("label"), "level": lv["level"], "level_label": lv["label"],
+           "level_source": lv["source"], "plan_start": ps.isoformat(), "weeks": weeks,
+           "phase_tss": phases, "phase_windows": windows,
+           "fitness_targets": {"phase_ctl": phase_ctl, "race_min": race_min,
+                               "into_taper": round(top), "kind": "total"},
+           "weekly_volume": lv.get("run_km") or lv.get("hours"),
+           "volume_unit": "km/week running" if "run_km" in lv else "hours/week",
+           "long_session": {k: lv[k] for k in ("long_run_km", "long_ride_h") if k in lv},
+           "taper_days": ev.get("taper_days"), "applied": False}
+    if ev.get("kind") == "run":
+        out["running_into_taper"] = lv["fitness_at_taper"]
+    if not apply:
+        out["next"] = ("show the athlete level, block dates, weekly volume and Fitness targets; "
+                       f"on their OK run race-setup --athlete {slug} --apply")
+        return out
+    shutil.copy2(p, p.with_name(p.name + f".bak-race-setup-{date.today().isoformat()}"))
+    cfg["plan_start"] = ps.isoformat()
+    cfg["phase_tss"] = phases
+    ct = dict(cfg.get("ctl_targets") or {})
+    ct.update({"phase_ctl": phase_ctl, "race_min": race_min})
+    cfg["ctl_targets"] = ct
+    p.write_text(json.dumps(athletes, indent=2) + "\n")
+    out["applied"] = True
+    if path is None:                      # the real config: rebuild the blueprint to match
+        r = subprocess.run(["python3", str(BASE / "scripts" / "generate-blueprint.py"),
+                            "--athlete", slug, "--skip-events"], cwd=str(BASE.parent),
+                           capture_output=True, text=True, timeout=180)
+        out["blueprint"] = "rebuilt" if r.returncode == 0 else f"FAILED: {r.stderr[-300:]}"
+    return out
+
+
+def cmd_race_setup(args) -> dict:
+    return race_setup(args.athlete, apply=args.apply)
+
+
 # Chat side of the choice: only the bot hears the athlete answer the Sunday question.
 _SURPLUS_PROMPT = (
     "FITTER THAN THE GOAL: when {name}'s Fitness is above what their goal needs, the "
@@ -2435,6 +2569,12 @@ _SURPLUS_PROMPT = (
     "(carbs, salt and water after long sessions - NOT the Food tab) or *heat yes/no*, FIRST "
     "run `plan_tools.py race-prompt --athlete {slug} --topic nutrition|heat --answer yes|no`, "
     "then run any `next` command it returns."
+    "\nNEXT RACE SETUP: when a race is finished and {name} names the next A-race (or changes "
+    "race or goal time), set the race, then run `plan_tools.py race-setup --athlete {slug}` "
+    "(a PREVIEW), walk them through it in a few lines (level, block dates, peak weekly "
+    "volume, longest session, Fitness into the taper) and ONLY on their OK run it again "
+    "with `--apply`, which writes the block and rebuilds the blueprint. Never apply without "
+    "their OK."
 )
 
 
@@ -2646,6 +2786,10 @@ def main():
     prp2.add_argument("--topic", required=True, choices=["nutrition", "heat"])
     prp2.add_argument("--answer", required=True, choices=["yes", "no"])
 
+    prs = sub.add_parser("race-setup", help="plan the block for the next A-race (preview; --apply to write it)")
+    prs.add_argument("--athlete", required=True)
+    prs.add_argument("--apply", action="store_true")
+
     prl = sub.add_parser("race-level", help="the athlete's level for their race and its numbers (blueprint §4.5)")
     prl.add_argument("--athlete", required=True)
 
@@ -2678,7 +2822,7 @@ def main():
                "post-race-ready": cmd_post_race_ready,
                "fitness-choice": cmd_fitness_choice,
                "bespoke-event": cmd_bespoke_event, "race-level": cmd_race_level,
-               "race-prompt": cmd_race_prompt}[args.cmd]
+               "race-prompt": cmd_race_prompt, "race-setup": cmd_race_setup}[args.cmd]
     try:
         result = handler(args)
     except SystemExit:
