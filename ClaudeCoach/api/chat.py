@@ -78,6 +78,7 @@ class Sink:
         self.chat_id = None
         self.edit_msg_id = None      # the tapped message, as the bot sees it
         self.edit_item = None        # ... and as Peak knows it (web-outbox id)
+        self.drill = None            # (item, type): a drill answer goes inside its card
 
     def put(self, kind, text="", **extra):
         self.q.put((kind, text, extra))
@@ -89,7 +90,10 @@ class Sink:
     def _message(self, text, payload):
         self.last_message = text
         self.messages.append((text, payload.get("reply_markup")))
-        self.put("message", text, buttons=_buttons(payload.get("reply_markup")))
+        if self.drill:
+            self.put("drill", text, item=self.drill[0], drill=self.drill[1])
+        else:
+            self.put("message", text, buttons=_buttons(payload.get("reply_markup")))
 
     def _edit_tapped(self, text, payload):
         """The bot edited the message whose button was tapped: change it in place."""
@@ -262,6 +266,88 @@ def _keep_unsaved(chat_id, sink, hist_before) -> None:
         pass
 
 
+def _save_drill(chat_id, drill, text) -> None:
+    item, kind = drill
+    try:
+        import outbox
+        outbox.patch(chat_id, item, lambda e: e.setdefault("drills", {}).update({kind: text}))
+    except Exception:
+        pass
+
+
+# ── the Log it card ──
+
+_QUICK_LOG_RE = re.compile(r"^([rpc]):([^:]+):([^:]+):(\d+)$")
+LOG_LABEL = {"r": lambda v: f"RPE {v}", "p": lambda v: f"pain {v}/10", "c": lambda v: f"{v} g/hr carbs"}
+
+
+def log_form(entry: dict) -> dict | None:
+    """What a post-session message lets you log: from its saved form, or read off its
+    Telegram quick-log buttons (r = RPE, p = pain, c = carbs). RPE is always offered -
+    Telegram only had room for one row."""
+    if entry.get("form"):
+        return entry["form"]
+    form = None
+    for row in entry.get("buttons") or []:
+        for b in row:
+            m = _QUICK_LOG_RE.match(str(b.get("data") or ""))
+            if m:
+                form = form or {"activity": m.group(2), "slug": m.group(3), "fields": ["r"]}
+                if m.group(1) not in form["fields"]:
+                    form["fields"].append(m.group(1))
+    return form
+
+
+def _drill_markup(activity, slug) -> dict:
+    return {"inline_keyboard": [[
+        {"text": "📊 Intervals", "callback_data": f"drill:intervals:{activity}:{slug}"},
+        {"text": "🍌 Nutrition", "callback_data": f"drill:nutrition:{activity}:{slug}"},
+        {"text": "💓 HR", "callback_data": f"drill:hr:{activity}:{slug}"},
+        {"text": "↔️ Compare", "callback_data": f"drill:compare:{activity}:{slug}"}]]}
+
+
+def log_session(chat_id: str, item: str, values: dict) -> dict:
+    """Save a Log it card: each value through the bot's own quick-log handler (the same
+    code a Telegram tap runs), then the card becomes a one-line summary. Carbs go
+    first so an RPE on a long ride doesn't ask for carbs it is about to get."""
+    import outbox
+    b = bot()
+    chat_id = str(chat_id)
+    slug = outbox.slug_for_chat(chat_id)
+    entry = next((e for e in outbox.read(slug or "", limit=400) if e.get("id") == item), None)
+    if not entry:
+        raise LookupError("that message is no longer available")
+    form = log_form(entry)
+    if not form:
+        raise LookupError("there is nothing to log on that message")
+    sink = Sink()
+    sink.chat_id = chat_id
+    with _SINKS_GUARD:
+        if chat_id in _SINKS:
+            raise Busy(slug)
+        _SINKS[chat_id] = sink            # the handler's own confirmations stay here
+    done = {}
+    try:
+        config = b.load_config()
+        athletes = b.load_athletes()
+        for code in ("c", "p", "r"):
+            if code in values and code in form["fields"]:
+                data = f"{code}:{form['activity']}:{form['slug']}:{int(values[code])}"
+                if b._handle_quick_log(config["bot_token"], chat_id, data, None, athletes):
+                    done[code] = int(values[code])
+        b.log(f"[{slug}] Log it (web): {done}")
+    finally:
+        with _SINKS_GUARD:
+            _SINKS.pop(chat_id, None)
+    if not done:
+        raise LookupError("that session isn't in your log yet - try again in a minute")
+    logged = {**(entry.get("logged") or {}), **done}
+    summary = "✓ Logged: " + " · ".join(LOG_LABEL[k](logged[k]) for k in ("r", "p", "c") if k in logged)
+    markup = _drill_markup(form["activity"], form["slug"])
+    outbox.update(chat_id, item, summary, markup, form=form, logged=logged)
+    return {"text": summary, "buttons": outbox._buttons(markup), "form": form, "logged": logged}
+
+
 def start_turn(chat_id: str, label: str = "", text: str = "", audio: bytes | None = None,
                image: bytes | None = None, button: str | None = None,
                item: str | None = None) -> Sink:
@@ -277,6 +363,8 @@ def start_turn(chat_id: str, label: str = "", text: str = "", audio: bytes | Non
     sink.chat_id = chat_id
     if button is not None and item:
         sink.edit_msg_id, sink.edit_item = _TAPPED_MSG_ID, item
+        if button.startswith("drill:"):
+            sink.drill = (item, button.split(":")[1])
     with _SINKS_GUARD:
         if chat_id in _SINKS:
             raise Busy(label)
@@ -322,7 +410,10 @@ def start_turn(chat_id: str, label: str = "", text: str = "", audio: bytes | Non
             b.log(f"[{label}] web turn error: {e}")
             sink.put("error", "Sorry - I hit a snag answering that. Give it another go in a moment.")
         finally:
-            _keep_unsaved(chat_id, sink, hist_before)
+            if sink.drill and sink.last_message:
+                _save_drill(chat_id, sink.drill, sink.last_message)
+            else:
+                _keep_unsaved(chat_id, sink, hist_before)
             if upload_id:
                 _UPLOADS.pop(upload_id, None)
             _TURN.chat_id = None
@@ -367,6 +458,7 @@ def timeline(slug: str | None, limit: int = 80) -> list[dict]:
     except OSError:
         pass
     out_texts = {(o.get(k) or "").strip() for o in out for k in ("text", "orig_text") if o.get(k)}
+    in_cards = {_FOOTER_RE.sub("", t).strip() for o in out for t in (o.get("drills") or {}).values()}
 
     items, last_ts = [], ""
     for e in hist if isinstance(hist, list) else []:
@@ -377,6 +469,8 @@ def timeline(slug: str | None, limit: int = 80) -> list[dict]:
         user, coach = e.get("user") or "", e.get("assistant") or ""
         if e.get("kind") == "drill" or user.startswith(_DRILL_PREFIXES):
             user = ""                       # a button's own question, not something they wrote
+            if coach.strip() in in_cards:
+                continue                    # shown inside its Log it card instead
         if user:
             items.append({"who": "me", "text": ("📷 " if e.get("kind") == "image" else "") + user,
                           "ts": ts})
@@ -385,6 +479,7 @@ def timeline(slug: str | None, limit: int = 80) -> list[dict]:
     for o in out:
         items.append({"who": "coach", "text": o.get("text") or "", "ts": o.get("ts") or "",
                       "buttons": o.get("buttons") or [], "photo": o.get("photo"),
+                      "form": log_form(o), "logged": o.get("logged"), "drills": o.get("drills"),
                       "id": o.get("id")})
     items.sort(key=lambda i: i["ts"] or "")     # stable: equal times keep history order
     return items[-limit:]

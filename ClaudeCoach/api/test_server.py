@@ -376,3 +376,58 @@ def test_timeline_hides_a_buttons_own_question_and_edited_duplicates(env, monkey
          "orig_text": "Injury pain during (0-10)", "buttons": []}) + "\n")
     items = [(m["who"], m["text"]) for m in env.get("/api/chat/history").json()["history"]]
     assert items == [("coach", "✓ Pain 0/10 logged"), ("coach", "4x5 at 300W"), ("coach", "Faster than last week")]
+
+
+# ── Log it card ──
+
+def test_log_form_reads_the_quick_log_buttons_and_always_offers_rpe():
+    import chat
+    entry = {"buttons": [[{"text": str(i), "data": f"p:i9:kathryn:{i}"} for i in range(6)],
+                         [{"text": "60g/hr", "data": "c:i9:kathryn:60"}],
+                         [{"text": "📊 Intervals", "data": "drill:intervals:i9:kathryn"}]]}
+    assert chat.log_form(entry) == {"activity": "i9", "slug": "kathryn", "fields": ["r", "p", "c"]}
+    assert chat.log_form({"buttons": [[{"text": "x", "data": "drill:hr:i9:k"}]]}) is None
+    assert chat.log_form({"form": {"activity": "a"}}) == {"activity": "a"}
+
+
+def test_log_session_saves_through_the_bots_handler_carbs_first(tmp_path, monkeypatch):
+    import chat, outbox
+    cfg = tmp_path / "athletes.json"
+    cfg.write_text(json.dumps({"kathryn": {"chat_id": "222"}}))
+    monkeypatch.setattr(outbox, "BASE", tmp_path)
+    monkeypatch.setattr(outbox, "ATHLETES_CONFIG", cfg)
+    outbox._CACHE.update(mtime=None, data={})
+    kb = {"inline_keyboard": [[{"text": "RPE 7", "callback_data": "r:i9:kathryn:7"}],
+                              [{"text": "60", "callback_data": "c:i9:kathryn:60"}]]}
+    item = outbox.record("222", "Quick log — Ride:", kb)
+    calls = []
+
+    class FakeBot:
+        def load_config(self): return {"bot_token": "t"}
+        def load_athletes(self): return {"222": {"slug": "kathryn"}}
+        def log(self, m): pass
+        def _handle_quick_log(self, token, cid, data, mid, athletes):
+            calls.append(data)
+            return True
+
+    monkeypatch.setattr(chat, "bot", lambda: FakeBot())
+    res = chat.log_session("222", item, {"r": 8, "c": 70, "p": 3})
+    assert calls == ["c:i9:kathryn:70", "r:i9:kathryn:8"]            # p wasn't on the card
+    assert res["text"] == "✓ Logged: RPE 8 · 70 g/hr carbs"
+    saved = outbox.read("kathryn")[0]
+    assert saved["logged"] == {"c": 70, "r": 8} and saved["form"]["fields"] == ["r", "c"]
+    assert [b["data"].split(":")[1] for b in saved["buttons"][0]] == ["intervals", "nutrition", "hr", "compare"]
+    assert chat.log_form(saved) == saved["form"]                        # still editable after save
+
+
+def test_chat_log_endpoint_validates(env, monkeypatch):
+    dev(monkeypatch, "kat@example.com")
+    h = {"x-peak": "1"}
+    got = []
+    monkeypatch.setattr(server.chat, "log_session", lambda cid, item, v: got.append((cid, item, v)) or {"text": "ok"})
+    ok_item = "20260930073229-4e264d"
+    assert env.post("/api/chat/log", json={"item": "bad", "values": {"r": 5}}, headers=h).status_code == 400
+    assert env.post("/api/chat/log", json={"item": ok_item, "values": {"r": 11}}, headers=h).status_code == 400
+    assert env.post("/api/chat/log", json={"item": ok_item, "values": {}}, headers=h).status_code == 400
+    assert env.post("/api/chat/log", json={"item": ok_item, "values": {"r": 7, "x": 1}}, headers=h).status_code == 200
+    assert got == [("222", ok_item, {"r": 7})]

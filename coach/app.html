@@ -589,6 +589,29 @@ body.in-chat main{padding-bottom:calc(var(--tab-h) + 86px + env(safe-area-inset-
 .msg-img{display:block;max-width:100%;max-height:260px;border-radius:8px;margin:-3px -5px 6px}
 .msg.me.pending{opacity:.6}
 .msg-img{cursor:zoom-in}
+.msg.has-log{width:86%}
+.logcard{margin-top:10px;display:flex;flex-direction:column;gap:10px}
+.lc-row{display:flex;flex-direction:column;gap:4px}
+.lc-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.lc-top span{font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.lc-top b{font-weight:500;font-size:13px;color:var(--muted)}
+.lc-row[data-set] .lc-top b{color:var(--accent)}
+.lc-row input[type=range]{width:100%;accent-color:var(--accent);height:28px;margin:0}
+.lc-row[data-code="p"] input{accent-color:var(--amber)}
+.lc-actions{display:flex;gap:8px}
+.lc-save,.lc-cancel,.lc-change{border:0;border-radius:16px;padding:8px 18px;font:500 13px 'DM Sans',system-ui,sans-serif;cursor:pointer}
+.lc-save{background:var(--accent);color:#fff}
+.lc-save:disabled{opacity:.4;cursor:default}
+.lc-cancel,.lc-change{background:none;border:1px solid var(--rule);color:var(--ink-2)}
+.lc-change{align-self:flex-start;padding:5px 14px;font-size:12px}
+.lc-drills{display:flex;flex-wrap:wrap;gap:5px}
+.lc-drills button{flex:1 1 auto;border:1px solid var(--rule);border-radius:14px;background:#fff;padding:6px 8px;
+  font:500 11.5px 'DM Sans',system-ui,sans-serif;color:var(--accent);cursor:pointer}
+.lc-drills button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.lc-panel{padding:10px 12px;border-radius:8px;background:var(--paper-2);font-size:14px;line-height:1.45}
+.lc-wait{color:var(--muted);font-style:italic}
+.lc-msg{margin:0;font-size:12.5px;color:var(--amber)}
+.lc-msg:empty{display:none}
 .lightbox{position:fixed;inset:0;z-index:200;background:rgba(10,12,14,.92);display:flex;
   align-items:center;justify-content:center;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);cursor:zoom-out}
 .lightbox img{max-width:100%;max-height:100%;object-fit:contain}
@@ -1030,6 +1053,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=46" defer></script>
+<script src="app.js?v=48" defer></script>
 </body>
 </html>

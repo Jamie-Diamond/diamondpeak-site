@@ -372,8 +372,44 @@ async def chat_button(request: Request):
     if not data:
         raise HTTPException(400, "no button")
     item = str((body or {}).get("item") or "")
-    item = item if re.match(r"^[0-9]{14}-[0-9a-f]{6}$", item) else None
+    item = item if ITEM_RE.match(item) else None
     return _turn_stream(cid, label, button=data, item=item)
+
+
+ITEM_RE = re.compile(r"^[0-9]{14}-[0-9a-f]{6}$")
+LOG_RANGES = {"r": (1, 10), "p": (0, 10), "c": (0, 150)}
+
+
+@app.post("/api/chat/log")
+async def chat_log(request: Request):
+    """Save a Log it card (RPE / pain / carbs for one session) in one go."""
+    cid, label = _chat_user(request, need_active=True)
+    try:
+        body = await request.json() or {}
+    except ValueError:
+        body = {}
+    item = str(body.get("item") or "")
+    if not ITEM_RE.match(item):
+        raise HTTPException(400, "which session?")
+    values = {}
+    for k, v in (body.get("values") or {}).items():
+        if k in LOG_RANGES and v is not None:
+            try:
+                v = int(v)
+            except (TypeError, ValueError):
+                raise HTTPException(400, f"bad value for {k}")
+            lo, hi = LOG_RANGES[k]
+            if not lo <= v <= hi:
+                raise HTTPException(400, f"{k} must be {lo}-{hi}")
+            values[k] = v
+    if not values:
+        raise HTTPException(400, "nothing to save")
+    try:
+        return JSONResponse(chat.log_session(cid, item, values))
+    except chat.Busy:
+        raise HTTPException(409, "the coach is busy with your last message - try again in a moment")
+    except LookupError as e:
+        raise HTTPException(404, str(e))
 
 
 async def _upload(request: Request, max_mb: int) -> bytes:

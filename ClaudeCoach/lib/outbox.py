@@ -135,9 +135,8 @@ def _trim(f: Path) -> None:
         pass
 
 
-def update(chat_id, item_id: str, text: str | None = None, reply_markup=None) -> bool:
-    """Rewrite one recorded message in place, as Telegram's editMessageText does: a
-    tapped RPE/pain button becomes "✓ Pain 0/10 logged" with the follow-up buttons."""
+def patch(chat_id, item_id: str, change) -> bool:
+    """Apply change(entry) to one recorded message and save it."""
     try:
         slug = slug_for_chat(chat_id)
         if not slug or not item_id:
@@ -150,10 +149,7 @@ def update(chat_id, item_id: str, text: str | None = None, reply_markup=None) ->
             except ValueError:
                 continue
             if e.get("id") == item_id:
-                if text is not None:
-                    e.setdefault("orig_text", e.get("text") or "")   # history keeps the original
-                    e["text"] = text
-                e["buttons"] = _buttons(reply_markup)
+                change(e)
                 lines[i], hit = json.dumps(e), True
         if hit:
             tmp = f.with_suffix(".tmp")
@@ -162,6 +158,19 @@ def update(chat_id, item_id: str, text: str | None = None, reply_markup=None) ->
         return hit
     except Exception:
         return False
+
+
+def update(chat_id, item_id: str, text: str | None = None, reply_markup=None, **fields) -> bool:
+    """Rewrite one recorded message in place, as Telegram's editMessageText does: a
+    tapped RPE/pain button becomes "✓ Pain 0/10 logged" with the follow-up buttons.
+    Extra fields (the Log it card's form/logged/drills) are stored alongside."""
+    def change(e):
+        if text is not None:
+            e.setdefault("orig_text", e.get("text") or "")   # history keeps the original
+            e["text"] = text
+        e["buttons"] = _buttons(reply_markup)
+        e.update(fields)
+    return patch(chat_id, item_id, change)
 
 
 def read(slug: str, limit: int = 60) -> list[dict]:

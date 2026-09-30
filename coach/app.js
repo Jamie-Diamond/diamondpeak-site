@@ -837,12 +837,134 @@
     el.insertBefore(img, el.firstChild);
   }
 
-  function coachItem(text, buttons, photoSrc, cls, id) {
+  function coachItem(text, buttons, photoSrc, cls, id, extra) {
     var el = bubble('coach', text || '', cls);
     if (id) el.setAttribute('data-item', id);
     if (photoSrc) addPhoto(el, photoSrc);
-    addButtons(el, buttons);
+    var form = id && logForm(buttons, extra);
+    if (form) {
+      el.classList.add('has-log');
+      // Telegram's "Injury pain during (0–10) — Run:" becomes "Log it — Run".
+      if (!(extra && extra.logged)) {
+        var what = /—\s*(.+?):?\s*$/.exec((text || '').split('\n')[0]);
+        el.innerHTML = '<b>Log it</b>' + (what ? ' — ' + esc(what[1]) : '');
+      }
+      logCard(el, id, form, extra || {}, false);
+    } else addButtons(el, buttons);
     return el;
+  }
+
+  /* ── the Log it card (29-30 Sep 2026) ── */
+  /* Telegram gave a post-session message a row of number buttons per question. Here it
+     is one card: sliders for effort (always), pain (if the coach asked) and carbs (long
+     rides), one Save, then a one-line summary you can change. Intervals / Nutrition /
+     HR / Compare open inside the card. */
+  var QL = /^([rpc]):([^:]+):([^:]+):(\d+)$/;
+  var LOGDEF = {
+    r: { label: 'Effort (RPE)', min: 1, max: 10, step: 1, start: 6,
+         say: function (v) { return v + ' · ' + ['', 'very easy', 'very easy', 'easy', 'easy', 'moderate',
+           'moderate', 'hard', 'hard', 'very hard', 'max'][v]; } },
+    p: { label: 'Pain', min: 0, max: 10, step: 1, start: 0,
+         say: function (v) { return v + '/10 · ' + (v === 0 ? 'none' : v <= 3 ? 'mild' : v <= 6 ? 'moderate' : 'severe'); } },
+    c: { label: 'Carbs', min: 0, max: 120, step: 5, start: 60, say: function (v) { return v + ' g/hr'; } }
+  };
+  var DRILLS = [['intervals', '📊 Intervals'], ['nutrition', '🍌 Nutrition'], ['hr', '💓 HR'], ['compare', '↔️ Compare']];
+
+  function logForm(buttons, extra) {
+    if (extra && extra.form) return extra.form;
+    var f = null;
+    (buttons || []).forEach(function (row) {
+      row.forEach(function (b) {
+        var m = QL.exec(b.data || '');
+        if (!m) return;
+        f = f || { activity: m[2], slug: m[3], fields: ['r'] };
+        if (f.fields.indexOf(m[1]) < 0) f.fields.push(m[1]);
+      });
+    });
+    return f;
+  }
+
+  function logCard(el, id, form, extra, editing) {
+    var old = el.querySelector('.logcard'); if (old) old.remove();
+    var logged = extra.logged || null, drills = extra.drills || {};
+    var card = document.createElement('div');
+    card.className = 'logcard';
+    var h = '';
+    if (logged && !editing) {
+      h += '<button type="button" class="lc-change">Change</button>';
+    } else {
+      h += ['r', 'p', 'c'].filter(function (k) { return form.fields.indexOf(k) >= 0; }).map(function (k) {
+        var d = LOGDEF[k], v = logged && logged[k] != null ? logged[k] : d.start;
+        var set = logged && logged[k] != null;
+        return '<div class="lc-row" data-code="' + k + '"' + (set ? ' data-set="1"' : '') + '>' +
+          '<div class="lc-top"><span>' + esc(d.label) + '</span><b>' + (set ? esc(d.say(v)) : 'slide to set') + '</b></div>' +
+          '<input type="range" min="' + d.min + '" max="' + d.max + '" step="' + d.step + '" value="' + v + '"' +
+          ' aria-label="' + esc(d.label) + '"></div>';
+      }).join('') +
+        '<div class="lc-actions"><button type="button" class="lc-save"' + (logged ? '' : ' disabled') + '>Save</button>' +
+        (logged ? '<button type="button" class="lc-cancel">Cancel</button>' : '') + '</div>';
+    }
+    h += '<div class="lc-drills">' + DRILLS.map(function (d) {
+      return '<button type="button" data-drill="' + d[0] + '">' + d[1] + '</button>';
+    }).join('') + '</div><div class="lc-panel" hidden></div><p class="lc-msg"></p>';
+    card.innerHTML = h;
+    el.appendChild(card);
+
+    Array.prototype.forEach.call(card.querySelectorAll('.lc-row input'), function (inp) {
+      inp.addEventListener('input', function () {
+        var row = inp.closest('.lc-row'), k = row.getAttribute('data-code');
+        row.setAttribute('data-set', '1');
+        row.querySelector('b').textContent = LOGDEF[k].say(+inp.value);
+        card.querySelector('.lc-save').disabled = false;
+      });
+    });
+    var save = card.querySelector('.lc-save');
+    if (save) save.onclick = function () {
+      var values = {};
+      Array.prototype.forEach.call(card.querySelectorAll('.lc-row[data-set] input'), function (inp) {
+        values[inp.closest('.lc-row').getAttribute('data-code')] = +inp.value;
+      });
+      save.disabled = true; save.textContent = 'Saving…';
+      postJSON('/api/chat/log', { item: id, values: values }).then(function (res) {
+        el.innerHTML = md(res.text);
+        logCard(el, id, res.form, { logged: res.logged, drills: drills }, false);
+      }).catch(function (e) {
+        save.disabled = false; save.textContent = 'Save';
+        card.querySelector('.lc-msg').textContent = e.message;
+      });
+    };
+    var ch = card.querySelector('.lc-change');
+    if (ch) ch.onclick = function () { logCard(el, id, form, extra, true); };
+    var cancel = card.querySelector('.lc-cancel');
+    if (cancel) cancel.onclick = function () { logCard(el, id, form, extra, false); };
+
+    card.querySelector('.lc-drills').onclick = function (e) {
+      var b = e.target.closest('button[data-drill]');
+      if (!b) return;
+      var kind = b.getAttribute('data-drill'), panel = card.querySelector('.lc-panel');
+      var open = b.classList.contains('on');
+      Array.prototype.forEach.call(card.querySelectorAll('.lc-drills button'), function (x) { x.classList.remove('on'); });
+      if (open) { panel.hidden = true; return; }
+      b.classList.add('on');
+      panel.hidden = false;
+      if (drills[kind]) { panel.innerHTML = md(drills[kind]); return; }
+      if (chatState.busy) { panel.textContent = 'The coach is busy - try again in a moment.'; return; }
+      panel.innerHTML = '<span class="lc-wait">Looking at the session…</span>';
+      streamTurn('/api/chat/button', JSON.stringify({ data: 'drill:' + kind + ':' + form.activity + ':' + form.slug,
+        item: id }), 'application/json');
+    };
+    card._drills = drills;
+  }
+
+  // A drill answer streamed back for a card.
+  function fillDrill(obj, text) {
+    var el = obj && $('#chatLog .msg[data-item="' + obj.item + '"]');
+    var card = el && el.querySelector('.logcard');
+    if (!card) { coachItem(text); return; }
+    card._drills[obj.drill] = text;
+    var panel = card.querySelector('.lc-panel');
+    panel.hidden = false;
+    panel.innerHTML = md(text);
   }
 
   // The bot changed the message whose button was tapped (e.g. "✓ Pain 0/10 logged").
@@ -872,7 +994,8 @@
         $('#chatLog').innerHTML = '';
         (j.history || []).forEach(function (m) {
           if (m.who === 'me') bubble('me', m.text);
-          else coachItem(m.text, m.buttons, m.photo ? '/api/media/' + encodeURIComponent(m.photo) : null, '', m.id);
+          else coachItem(m.text, m.buttons, m.photo ? '/api/media/' + encodeURIComponent(m.photo) : null, '', m.id,
+                         { form: m.form, logged: m.logged, drills: m.drills });
         });
         if (!(j.history || []).length) {
           $('#chatLog').innerHTML = '<div class="empty">' + (state.me && state.me.state === 'onboarding'
@@ -1011,6 +1134,7 @@
       if (kind === 'status') { chatSetStatus(text); return; }
       if (kind === 'photo') { coachItem('', null, 'data:image/png;base64,' + text); chatScroll(); return; }
       if (kind === 'edit') { applyEdit(obj, text); return; }
+      if (kind === 'drill') { fillDrill(obj, text); return; }
       if (kind === 'heard') {
         var mine = $('#chatLog .msg.me.pending');
         if (mine) { mine.classList.remove('pending'); mine.innerHTML = '🎙 ' + esc(text); }
