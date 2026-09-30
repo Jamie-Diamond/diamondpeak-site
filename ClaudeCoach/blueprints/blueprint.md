@@ -104,16 +104,10 @@ A run race is judged on **two floors, each on its own**:
 A triathlete can be far above a 5k's needs on total and still under it on running (Jamie,
 29 Sep 2026: total 95, running 32), so neither number alone says whether they are ready.
 
-**Running Fitness on race day** (strong amateur; estimates):
+**How much running Fitness** depends on the athlete's level for that race: see §4.5
+(four levels per event, picked from the goal time).
 
-| Race | Running Fitness | A-race taper |
-|---|---|---|
-| 5k | 35–50 | 5–7 days |
-| 10k | 40–55 | 5–7 days |
-| Half Marathon | 45–60 | 7–10 days |
-| Marathon | 55–75 | 2–3 weeks |
-
-Phase entry = race-day range × Base 0.70 / Build 0.80 / Specific 0.90 / Peak 0.95 / Taper 1.00.
+Phase entry = the level's into-taper range × Base 0.70 / Build 0.80 / Specific 0.90 / Peak 0.95 / Taper 1.00.
 Running above the range is "fitter than the goal" (§2); below it, the block builds running.
 
 ---
@@ -187,6 +181,70 @@ number that catches a taper week with no easy work left in it.
 | Peak | 58% Z1–2 / 25% Z3–4 / 17% Z5 | 65% Z1–2 / 18% Z3 / 17% Z4–5 | 72% Z1–2 / 14% Z3 / 14% Z4–5 |
 | Taper | 58% Z1–2 / 25% Z3–4 / 17% Z5 | 65% Z1–2 / 18% Z3 / 17% Z4–5 | 72% Z1–2 / 14% Z3 / 14% Z4–5 |
 
+**Olympic, Sprint and run races** (added 30 Sep 2026). Shorter events carry more Z4–5; the run races are pyramidal, with the easy share growing with volume (Doherty et al. 2024: faster marathoners add Z1, not Z2–3).
+
+**Olympic:**
+
+| Phase | Swim | Bike | Run |
+|---|---|---|---|
+| Base | 70% Z1–2 / 20% Z3–4 / 10% Z5 | 77% Z1–2 / 13% Z3 / 10% Z4–5 | 82% Z1–2 / 10% Z3 / 8% Z4–5 |
+| Build | 65% Z1–2 / 23% Z3–4 / 12% Z5 | 72% Z1–2 / 15% Z3 / 13% Z4–5 | 78% Z1–2 / 10% Z3 / 12% Z4–5 |
+| Peak | 60% Z1–2 / 25% Z3–4 / 15% Z5 | 68% Z1–2 / 15% Z3 / 17% Z4–5 | 74% Z1–2 / 12% Z3 / 14% Z4–5 |
+| Taper | 60% Z1–2 / 25% Z3–4 / 15% Z5 | 68% Z1–2 / 15% Z3 / 17% Z4–5 | 74% Z1–2 / 12% Z3 / 14% Z4–5 |
+
+**Sprint:**
+
+| Phase | Swim | Bike | Run |
+|---|---|---|---|
+| Base | 70% Z1–2 / 20% Z3–4 / 10% Z5 | 75% Z1–2 / 12% Z3 / 13% Z4–5 | 80% Z1–2 / 10% Z3 / 10% Z4–5 |
+| Build | 65% Z1–2 / 22% Z3–4 / 13% Z5 | 70% Z1–2 / 13% Z3 / 17% Z4–5 | 75% Z1–2 / 10% Z3 / 15% Z4–5 |
+| Peak | 60% Z1–2 / 25% Z3–4 / 15% Z5 | 65% Z1–2 / 15% Z3 / 20% Z4–5 | 72% Z1–2 / 10% Z3 / 18% Z4–5 |
+| Taper | 60% Z1–2 / 25% Z3–4 / 15% Z5 | 65% Z1–2 / 15% Z3 / 20% Z4–5 | 72% Z1–2 / 10% Z3 / 18% Z4–5 |
+
+**Marathon:**
+
+Swim and bike are cross-training for a run race (easy aerobic, a little intensity) and apply only to athletes who keep them.
+
+| Phase | Swim | Bike | Run |
+|---|---|---|---|
+| Base | 85% Z1–2 / 10% Z3–4 / 5% Z5 | 90% Z1–2 / 7% Z3 / 3% Z4–5 | 85% Z1–2 / 10% Z3 / 5% Z4–5 |
+| Build | 85% Z1–2 / 10% Z3–4 / 5% Z5 | 90% Z1–2 / 7% Z3 / 3% Z4–5 | 80% Z1–2 / 12% Z3 / 8% Z4–5 |
+| Peak | 85% Z1–2 / 10% Z3–4 / 5% Z5 | 90% Z1–2 / 7% Z3 / 3% Z4–5 | 78% Z1–2 / 14% Z3 / 8% Z4–5 |
+| Taper | 85% Z1–2 / 10% Z3–4 / 5% Z5 | 90% Z1–2 / 7% Z3 / 3% Z4–5 | 78% Z1–2 / 14% Z3 / 8% Z4–5 |
+
+**Half Marathon:**
+
+Swim and bike are cross-training for a run race (easy aerobic, a little intensity) and apply only to athletes who keep them.
+
+| Phase | Swim | Bike | Run |
+|---|---|---|---|
+| Base | 85% Z1–2 / 10% Z3–4 / 5% Z5 | 90% Z1–2 / 7% Z3 / 3% Z4–5 | 82% Z1–2 / 10% Z3 / 8% Z4–5 |
+| Build | 85% Z1–2 / 10% Z3–4 / 5% Z5 | 90% Z1–2 / 7% Z3 / 3% Z4–5 | 78% Z1–2 / 12% Z3 / 10% Z4–5 |
+| Peak | 85% Z1–2 / 10% Z3–4 / 5% Z5 | 90% Z1–2 / 7% Z3 / 3% Z4–5 | 75% Z1–2 / 14% Z3 / 11% Z4–5 |
+| Taper | 85% Z1–2 / 10% Z3–4 / 5% Z5 | 90% Z1–2 / 7% Z3 / 3% Z4–5 | 75% Z1–2 / 14% Z3 / 11% Z4–5 |
+
+**10k:**
+
+Swim and bike are cross-training for a run race (easy aerobic, a little intensity) and apply only to athletes who keep them.
+
+| Phase | Swim | Bike | Run |
+|---|---|---|---|
+| Base | 85% Z1–2 / 10% Z3–4 / 5% Z5 | 90% Z1–2 / 7% Z3 / 3% Z4–5 | 82% Z1–2 / 8% Z3 / 10% Z4–5 |
+| Build | 85% Z1–2 / 10% Z3–4 / 5% Z5 | 90% Z1–2 / 7% Z3 / 3% Z4–5 | 78% Z1–2 / 10% Z3 / 12% Z4–5 |
+| Peak | 85% Z1–2 / 10% Z3–4 / 5% Z5 | 90% Z1–2 / 7% Z3 / 3% Z4–5 | 75% Z1–2 / 10% Z3 / 15% Z4–5 |
+| Taper | 85% Z1–2 / 10% Z3–4 / 5% Z5 | 90% Z1–2 / 7% Z3 / 3% Z4–5 | 75% Z1–2 / 10% Z3 / 15% Z4–5 |
+
+**5k:**
+
+Swim and bike are cross-training for a run race (easy aerobic, a little intensity) and apply only to athletes who keep them.
+
+| Phase | Swim | Bike | Run |
+|---|---|---|---|
+| Base | 85% Z1–2 / 10% Z3–4 / 5% Z5 | 90% Z1–2 / 7% Z3 / 3% Z4–5 | 82% Z1–2 / 8% Z3 / 10% Z4–5 |
+| Build | 85% Z1–2 / 10% Z3–4 / 5% Z5 | 90% Z1–2 / 7% Z3 / 3% Z4–5 | 77% Z1–2 / 8% Z3 / 15% Z4–5 |
+| Peak | 85% Z1–2 / 10% Z3–4 / 5% Z5 | 90% Z1–2 / 7% Z3 / 3% Z4–5 | 75% Z1–2 / 7% Z3 / 18% Z4–5 |
+| Taper | 85% Z1–2 / 10% Z3–4 / 5% Z5 | 90% Z1–2 / 7% Z3 / 3% Z4–5 | 75% Z1–2 / 7% Z3 / 18% Z4–5 |
+
 ---
 
 ## 4. Event Profiles
@@ -248,15 +306,17 @@ The following events share the mesocycle algorithm and ramp rules. Their phase-s
 
 | Event | Status | Key divergence from ironman methodology |
 |---|---|---|
-| Marathon | Fitness + taper defined (§2.1) | Run-dominant; bike and swim as cross-training only in base. Peak = 3×20 min race-pace sessions. Taper 2–3 weeks. |
-| Half Marathon | Fitness + taper defined (§2.1) | Higher Z4–5 run proportion in peak. Taper 7–10 days. |
-| 10k | Fitness + taper defined (§2.1) | Significant Z5–7 work in build/peak. Taper 5–7 days. |
-| 5k | Fitness + taper defined (§2.1) | Speed-dominant; Z5–7 forms 25% of weekly run volume in peak. Taper 5–7 days. |
+| Olympic | **Implemented** (§3.2, §4.5) | 1.5 km / 40 km / 10 km. More Z4–5 than long course; short, sharp bricks. Taper 7–10 days. |
+| Sprint | **Implemented** (§3.2, §4.5) | 750 m / 20 km / 5 km. The most Z4–5 of the triathlons. Taper 5–7 days. |
+| Marathon | **Implemented** (§3.2, §4.5) | Run-dominant; bike and swim as cross-training only in base. Peak = 3×20 min race-pace sessions. Taper 2–3 weeks. |
+| Half Marathon | **Implemented** (§3.2, §4.5) | Higher Z4–5 run proportion in peak. Taper 7–10 days. |
+| 10k | **Implemented** (§3.2, §4.5) | Significant Z5–7 work in build/peak. Taper 5–7 days. |
+| 5k | **Implemented** (§3.2, §4.5) | Speed-dominant; Z5–7 forms 25% of weekly run volume in peak. Taper 5–7 days. |
 | Ultramarathon | Stub | Volume-dominant; IF ceiling lower (0.60 base, 0.64 peak). Time-on-feet over pace. |
 | Duathlon | Stub | Brick-heavy from base (run–bike–run format). No swim block. |
 | Aquathlon | Stub | Swim–run format. Bike as cross-training. Transitions and pacing across disciplines key. |
 | Road Sportive / Gran Fondo | **Implemented** (`Sportive`) | Bike-only: bike distribution by phase (Base 80/12/8 → Build 70/18/12 → Peak 65/18/17 → Taper 65/18/17 Z1–2/Z3/Z4–5), FTP tests only (no LTHR/CSS), no bricks. Climbing-weighted via the course modifier on hilly routes. |
-| Gravel Race | **Implemented** (maps to `Sportive`) | Shares the Sportive bike-only profile; extended Z2–3 with power management. |
+| Gravel Race | **Implemented** (maps to `Sportive`; own levels §4.5) | Shares the Sportive bike-only profile; extended Z2–3 with power management. |
 | Endurance Swim | Stub | Swim-dominant. Run/bike as active recovery only. |
 
 ### 4.4 Race Priority — A / B / C
@@ -275,6 +335,134 @@ carries a priority. The planner applies it; constants in `lib/race_fitness.py`.
 B or C race carry across week boundaries, so a Saturday race's recovery lands in the next
 week's plan. A B race in the registry makes its week an easy week automatically; a
 hand-declared `manual_easy_weeks` entry for that week still wins.
+
+### 4.5 Event Levels — Volume and Fitness by Goal
+
+Every event has **four levels**, picked by the athlete's **goal time** (else the time their
+run threshold predicts, else their current Fitness; sportive and gravel riders say their
+level). A 4-hour marathoner is not asked for a sub-3 runner's 90 km a week. Numbers are the
+sustained peak weeks of the build and the Fitness to carry into the taper: **running**
+Fitness for run races (with the athlete's own total floor, §2.1), **total** Fitness for
+triathlons and bike events. Source: `config/event-levels.json`, via `lib/race_fitness.py`.
+
+Evidence: marathon volume by finish time from Doherty et al. 2024 (Sports Medicine,
+151,813 marathons by 119,452 runners); taper 2 weeks at −41–60% volume with intensity kept
+(Bosquet et al. 2007 meta-analysis), 3 weeks for the marathon; weekly run-distance jumps
+over 30% raise distance injuries (Nielsen et al. 2014). Half/10k/5k and triathlon levels are
+coaching estimates scaled from those anchors, and Fitness ≈ 0.9 × run km/week (running) or
+≈ 6 × hours/week (total), from this system's own athletes.
+
+<!-- event-levels:start -->
+
+**5k** (taper 5–7 days)
+
+| Level | Goal | Run km/week | Long run | Running Fitness into taper |
+|---|---|---|---|---|
+| 1 | sub 19:00 | 45–65 | 14–18 km | 40–58 |
+| 2 | 19–23 min | 30–45 | 11–14 km | 27–40 |
+| 3 | 23–27 min | 20–35 | 8–11 km | 18–32 |
+| 4 | 27 min+ | 12–25 | 6–9 km | 11–22 |
+
+**10k** (taper 5–7 days)
+
+| Level | Goal | Run km/week | Long run | Running Fitness into taper |
+|---|---|---|---|---|
+| 1 | sub 40 | 50–70 | 16–20 km | 45–63 |
+| 2 | 40–47 min | 35–50 | 13–16 km | 32–45 |
+| 3 | 47–55 min | 25–40 | 10–13 km | 22–36 |
+| 4 | 55 min+ | 15–30 | 8–11 km | 14–27 |
+
+**Half Marathon** (taper 7–10 days)
+
+| Level | Goal | Run km/week | Long run | Running Fitness into taper |
+|---|---|---|---|---|
+| 1 | sub 1:25 | 60–80 | 18–22 km | 55–72 |
+| 2 | 1:25–1:40 | 45–60 | 18–20 km | 40–55 |
+| 3 | 1:40–2:00 | 30–45 | 16–19 km | 27–40 |
+| 4 | 2:00+ | 20–35 | 14–18 km | 18–32 |
+
+**Marathon** (taper 14–21 days)
+
+| Level | Goal | Run km/week | Long run | Running Fitness into taper |
+|---|---|---|---|---|
+| 1 | sub 3:00 | 80–110 | 32–35 km | 70–95 |
+| 2 | 3:00–3:30 | 60–80 | 30–32 km | 55–72 |
+| 3 | 3:30–4:15 | 45–60 | 28–32 km | 40–55 |
+| 4 | 4:15+ | 30–45 | 26–30 km | 27–40 |
+
+**Sprint triathlon** (taper 5–7 days)
+
+| Level | Goal | Hours/week | Long ride | Long run | Total Fitness into taper |
+|---|---|---|---|---|---|
+| 1 | sub 1:10 | 8–11 | 2–2.5 h | 12–15 km | 50–65 |
+| 2 | 1:10–1:20 | 6–8 | 1.5–2 h | 10–12 km | 38–50 |
+| 3 | 1:20–1:35 | 4.5–6 | 1.25–1.5 h | 8–10 km | 28–38 |
+| 4 | 1:35+ | 3–4.5 | 1–1.25 h | 6–8 km | 18–28 |
+
+**Olympic triathlon** (taper 7–10 days)
+
+| Level | Goal | Hours/week | Long ride | Long run | Total Fitness into taper |
+|---|---|---|---|---|---|
+| 1 | sub 2:15 | 10–13 | 2.5–3 h | 15–18 km | 60–78 |
+| 2 | 2:15–2:35 | 8–10 | 2–2.5 h | 12–15 km | 48–60 |
+| 3 | 2:35–3:00 | 6–8 | 1.5–2 h | 10–12 km | 36–48 |
+| 4 | 3:00+ | 4–6 | 1.25–1.5 h | 8–10 km | 25–36 |
+
+**70.3 / Half Ironman** (taper 10–14 days)
+
+| Level | Goal | Hours/week | Long ride | Long run | Total Fitness into taper |
+|---|---|---|---|---|---|
+| 1 | sub 4:45 | 12–15 | 3.5–4 h | 18–21 km | 72–90 |
+| 2 | 4:45–5:30 | 10–12 | 3–3.5 h | 16–19 km | 60–72 |
+| 3 | 5:30–6:15 | 8–10 | 2.5–3 h | 14–16 km | 48–60 |
+| 4 | 6:15+ | 6–8 | 2–2.5 h | 12–14 km | 36–48 |
+
+**Ironman** (taper 14–21 days)
+
+| Level | Goal | Hours/week | Long ride | Long run | Total Fitness into taper |
+|---|---|---|---|---|---|
+| 1 | sub 10:00 | 15–20 | 5–6 h | 30–35 km | 95–120 |
+| 2 | 10:00–11:30 | 12–15 | 4.5–5.5 h | 28–32 km | 80–95 |
+| 3 | 11:30–13:00 | 10–12 | 4–5 h | 24–28 km | 65–80 |
+| 4 | 13:00+ | 8–10 | 3.5–4.5 h | 20–24 km | 50–65 |
+
+**Sportive / Gran Fondo** (taper 5–7 days)
+
+| Level | Goal | Hours/week | Long ride | Total Fitness into taper |
+|---|---|---|---|---|
+| 1 | Competitive | 10–14 | 4.5–5.5 h | 70–90 |
+| 2 | Strong | 8–10 | 4–4.5 h | 55–70 |
+| 3 | Steady | 6–8 | 3–4 h | 40–55 |
+| 4 | Finish | 4–6 | 2.5–3 h | 28–40 |
+
+**Gravel race** (taper 5–7 days)
+
+| Level | Goal | Hours/week | Long ride | Total Fitness into taper |
+|---|---|---|---|---|
+| 1 | Competitive | 10–14 | 5–6 h | 70–90 |
+| 2 | Strong | 8–10 | 4–5 h | 55–70 |
+| 3 | Steady | 6–8 | 3.5–4.5 h | 40–55 |
+| 4 | Finish | 4–6 | 3–3.5 h | 28–40 |
+
+<!-- event-levels:end -->
+
+### 4.6 Bespoke Events — Temporary Blueprints
+
+A race that is not a standard distance gets a **temporary blueprint blended from the two
+nearest standard events** (Jamie, 30 Sep 2026), no new table needed:
+
+- **Run race** (e.g. a 30k): blended by distance (log scale) between 5k / 10k / half /
+  marathon. A 30k is about half half-marathon, half marathon. Goal bands scale by distance.
+- **Multisport race** (e.g. a 4 km swim + 10 km bike): volume, Fitness and taper blended by
+  the race's estimated duration between sprint / Olympic / 70.3 / Ironman; each sport's
+  intensity split blended by that leg's distance against the same leg of the standard
+  races. Sports not in the race drop out; a long swim leg sets an overdistance long swim.
+- **Bike-only** uses the sportive levels. **Outside the tables** (an ultra, a sub-5k) the
+  nearest table is used and the blueprint says so. Swim-only races are not covered yet.
+
+Set with `plan_tools.py bespoke-event --athlete <slug> --name <race> --run-km/--bike-km/--swim-km`
+(the coach bot runs it when an athlete names a non-standard race). It is bound to that
+race and stops applying when another race is set. Code: `race_fitness.bespoke_event`.
 
 ---
 

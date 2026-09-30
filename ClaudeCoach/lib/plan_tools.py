@@ -2322,6 +2322,71 @@ def cmd_fitness_choice(args) -> dict:
     return set_fitness_choice(args.athlete, choice=args.choice, clear=args.clear)
 
 
+# ── subcommand: bespoke-event ──────────────────────────────────────────────────
+def set_bespoke_event(slug: str, name: str = None, swim_km=0, bike_km=0, run_km=0,
+                      clear: bool = False, path=None) -> dict:
+    """Store (or clear) a temporary blueprint for a non-standard race, blended from the
+    nearest standard events (race_fitness.bespoke_event). Bound to the athlete's current
+    race_name, so it stops applying the moment a different race is set."""
+    import shutil
+    p = Path(path or ATHLETES_CONFIG)
+    athletes = json.loads(p.read_text())
+    if slug not in athletes:
+        raise SystemExit(_err(f"unknown athlete '{slug}'"))
+    cfg = athletes[slug]
+    if clear:
+        cfg.pop("bespoke_event", None)
+        out = {"athlete": slug, "bespoke_event": None}
+    else:
+        try:
+            ev = rf.bespoke_event(name or cfg.get("race_name") or "Bespoke event",
+                                  swim_km=swim_km, bike_km=bike_km, run_km=run_km)
+        except ValueError as e:
+            raise SystemExit(_err(str(e)))
+        ev["race_name"] = cfg.get("race_name")
+        cfg["bespoke_event"] = ev
+        out = {"athlete": slug, "blend": rf.describe_blend(ev),
+               "levels": [(lv["level"], lv["label"]) for lv in ev["levels"]],
+               "taper_days": ev["taper_days"], "notes": ev.get("notes") or []}
+    shutil.copy2(p, p.with_name(p.name + f".bak-bespoke-event-{date.today().isoformat()}"))
+    p.write_text(json.dumps(athletes, indent=2) + "\n")
+    return out
+
+
+def cmd_bespoke_event(args) -> dict:
+    return set_bespoke_event(args.athlete, name=args.name, swim_km=args.swim_km,
+                             bike_km=args.bike_km, run_km=args.run_km, clear=args.clear)
+
+
+# ── subcommand: race-level ─────────────────────────────────────────────────────
+def race_level(slug: str, path=None) -> dict:
+    """The athlete's level for their current race (blueprint §4.5) and the numbers that
+    come with it. Read-only: the Sunday plan applies it; this is what the coach quotes."""
+    cfg = _load_cfg(slug) if path is None else json.loads(Path(path).read_text())[slug]
+    profile = {}
+    try:
+        profile = json.loads((BASE / "athletes" / slug / "profile.json").read_text())
+    except Exception:
+        pass
+    ev = rf.event_def(cfg, cfg.get("race_distance") or cfg.get("race_name"))
+    if not ev:
+        return {"athlete": slug, "error": f"no level table for '{cfg.get('race_name')}' - "
+                "use bespoke-event for a non-standard distance"}
+    lv = rf.athlete_level(cfg, profile, ev)
+    return {"athlete": slug, "race": cfg.get("race_name"), "event": ev.get("label"),
+            "level": lv["level"], "label": lv["label"], "source": lv["source"],
+            "numbers": {k: v for k, v in lv.items()
+                        if k in ("run_km", "hours", "long_run_km", "long_ride_h",
+                                 "fitness_at_taper")},
+            "fitness_kind": "running" if ev.get("kind") == "run" else "total",
+            "taper_days": ev.get("taper_days"),
+            **({"blend": rf.describe_blend(ev)} if ev.get("blended_from") else {})}
+
+
+def cmd_race_level(args) -> dict:
+    return race_level(args.athlete)
+
+
 # Chat side of the choice: only the bot hears the athlete answer the Sunday question.
 _SURPLUS_PROMPT = (
     "FITTER THAN THE GOAL: when {name}'s Fitness is above what their goal needs, the "
@@ -2330,6 +2395,12 @@ _SURPLUS_PROMPT = (
     "(the weekly message numbers them 1, 2, 3) 1 = hold_shift (hold total Fitness, shift the mix toward the goal sport, e.g. more "
     "running and let swimming fade), 2 = drift (let it drift down to their floor and put the "
     "freed time into speed) or 3 = raise_goal; `--clear` to undo. Never choose for them.{cur}"
+    "\nRACE LEVEL AND NON-STANDARD RACES: `plan_tools.py race-level --athlete {slug}` gives "
+    "their level for the race (from their goal time; blueprint §4.5) and its weekly volume, "
+    "longest session and Fitness targets - quote those, never a one-size number. If they name "
+    "a race that is not a standard distance (a 30k run, a 4 km swim + 10 km bike), FIRST run "
+    "`plan_tools.py bespoke-event --athlete {slug} --name <race> --run-km/--bike-km/--swim-km "
+    "<km>` and tell them what it was blended from (its `blend` line) and any `notes`."
 )
 
 
@@ -2527,6 +2598,18 @@ def main():
     pfc.add_argument("--choice", choices=sorted(rf.SURPLUS_CHOICES))
     pfc.add_argument("--clear", action="store_true", help="forget the answer (the plan holds and asks again)")
 
+    pbe = sub.add_parser("bespoke-event",
+                         help="temporary blueprint for a non-standard race, blended from the nearest standard events")
+    pbe.add_argument("--athlete", required=True)
+    pbe.add_argument("--name")
+    pbe.add_argument("--swim-km", type=float, default=0, dest="swim_km")
+    pbe.add_argument("--bike-km", type=float, default=0, dest="bike_km")
+    pbe.add_argument("--run-km", type=float, default=0, dest="run_km")
+    pbe.add_argument("--clear", action="store_true")
+
+    prl = sub.add_parser("race-level", help="the athlete's level for their race and its numbers (blueprint §4.5)")
+    prl.add_argument("--athlete", required=True)
+
     pnp = sub.add_parser("windowed-np", help="NP for one segment of a ride, reconciled against ICU's own recorded NP")
     pnp.add_argument("--athlete", required=True)
     pnp.add_argument("--activity-id", required=True, dest="activity_id")
@@ -2554,7 +2637,8 @@ def main():
                "sweat-rate": cmd_sweat_rate, "log-strength": cmd_log_strength,
                "windowed-np": cmd_windowed_np, "wbal": cmd_wbal,
                "post-race-ready": cmd_post_race_ready,
-               "fitness-choice": cmd_fitness_choice}[args.cmd]
+               "fitness-choice": cmd_fitness_choice,
+               "bespoke-event": cmd_bespoke_event, "race-level": cmd_race_level}[args.cmd]
     try:
         result = handler(args)
     except SystemExit:

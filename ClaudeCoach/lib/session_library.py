@@ -133,6 +133,8 @@ def _event_key_from(*fields) -> str | None:
         return "ironman"
     if "olympic" in s or "standard distance" in s:
         return "olympic"
+    if "sprint" in s:
+        return "sprint"
     if "half mara" in s or "half-mara" in s or "21.1" in s:
         return "half_marathon"
     if "marathon" in s:
@@ -143,8 +145,8 @@ def _event_key_from(*fields) -> str | None:
         return "swim_5k"
     if "5k" in s or "5 k" in s:
         return "5k"
-    if "sportive" in s or "gran fondo" in s or "granfondo" in s:
-        return "sportive"
+    if "sportive" in s or "gran fondo" in s or "granfondo" in s or "gravel" in s:
+        return "sportive"          # gravel races share the sportive content (blueprint §4.3)
     return None
 
 
@@ -208,7 +210,15 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
             pass
 
     ekey = event_key(cfg, profile)
-    event = lib["events"].get(ekey, {})
+    # BESPOKE EVENT (race_fitness.bespoke_event): a non-standard race is planned from the
+    # nearest standard event's session content, with its own sports, split and levels.
+    bespoke = _rf.event_def(cfg, None) if (cfg.get("bespoke_event") or {}).get("levels") else None
+    if bespoke:
+        ekey = {"70_3": "70_3", "gravel": "sportive"}.get(bespoke["library_event"],
+                                                          bespoke["library_event"])
+    event = dict(lib["events"].get(ekey, {}))
+    if bespoke:
+        event["sports"] = list(bespoke.get("sports") or event.get("sports") or [])
 
     bp = pt._load_blueprint(slug)
     ph = current_phase(bp, today) or {}
@@ -273,6 +283,8 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     # session menu, its own distribution, and progressions counted from the block's
     # first week rather than from race day.
     offseason = req.get("week_type") == "offseason"
+    if bespoke and not offseason and (bespoke.get("distribution") or {}).get(phase_name):
+        ph = dict(ph, distribution=bespoke["distribution"][phase_name])
     if offseason:
         phase_name = "offseason"
         week_in_phase = int(req.get("offseason_week") or 1)
@@ -292,7 +304,7 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     # training for one keeps swimming and cycling as cross-training (Jamie's Brighton
     # block, 29 Sep 2026: "more fitness is ok, but running fitness is required"). Their
     # day_rules say which: a sport with standing days stays on the menu.
-    if ekey in _rf.RUN_EVENTS:
+    if ekey in _rf.RUN_EVENTS and not bespoke:
         _dr = cfg.get("day_rules") or {}
         sports = list(sports) + [sp for sp, key in (("bike", "bike_days"), ("swim", "swim_days"))
                                  if _dr.get(key) and sp not in sports]
@@ -374,19 +386,44 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     # RUN RACE FITNESS IS HYBRID (race_fitness): running Fitness against the race's range
     # AND total Fitness against the athlete's own floor, each on its own. Only for a run
     # race; RUNNING Fitness needs ~6 months of run history, so it is fetched only here.
-    fitness_check = None
-    if ekey in _rf.RUN_EVENTS and ctl:
-        run_ctl = None
+    # EVENT LEVEL (config/event-levels.json, blueprint §4.5): the athlete's level for
+    # their race, from their goal time, else their run threshold, else current Fitness.
+    # It sizes the week (peak volume, longest session) so a 4-hour marathoner is not
+    # handed a sub-3 runner's mileage.
+    _ev_def = _rf.event_def(cfg, cfg.get("race_distance") or cfg.get("race_name") or ekey)
+    run_ctl = None
+    if _ev_def and _rf.event_kind(_ev_def) == "run" and ctl:
         try:
             from icu_api import IcuClient as _IC
             run_ctl = _rf.run_ctl(_IC(cfg["icu_athlete_id"], cfg["icu_api_key"])
                                   .get_training_history(days=180), today)
         except Exception:
             pass
+    event_level = None
+    if _ev_def and not offseason and req.get("week_type") != "post_race":
+        _lv = _rf.athlete_level(cfg, profile, _ev_def,
+                                fitness=run_ctl if _rf.event_kind(_ev_def) == "run" else ctl)
+        if _lv:
+            event_level = {k: v for k, v in _lv.items() if k != "goal_max_s"}
+            event_level.update({
+                "event": _ev_def.get("label"), "fitness_kind": (
+                    "running" if _rf.event_kind(_ev_def) == "run" else "total"),
+                "phase_entry_fitness": _rf.fitness_range(_ev_def, _lv["level"], phase_name),
+                "taper_days": list(_rf.taper_days(_ev_def) or []),
+                **({"blend": _rf.describe_blend(_ev_def)} if bespoke else {}),
+                **({"long_swim_m": _ev_def["long_swim_m"]} if _ev_def.get("long_swim_m") else {}),
+                **({"notes": _ev_def["notes"]} if _ev_def.get("notes") else {}),
+            })
+
+    # RUN RACE FITNESS IS HYBRID (race_fitness): running Fitness against the race's range
+    # AND total Fitness against the athlete's own floor, each on its own. Only for a run
+    # race; RUNNING Fitness needs ~6 months of run history, so it is fetched only here.
+    fitness_check = None
+    if _ev_def and _rf.event_kind(_ev_def) == "run" and ctl and event_level:
         tfloor = _rf.total_floor(cfg)
         fitness_check = {
-            "event": ekey,
-            "running": _rf.running_status(ekey, phase_name, run_ctl),
+            "event": _ev_def.get("label"),
+            "running": _rf.running_status(_ev_def, phase_name, run_ctl, event_level["level"]),
             "total": {"ctl": ctl, "floor": tfloor,
                       "status": (None if tfloor is None
                                  else ("under" if ctl < tfloor else "ok"))},
@@ -608,6 +645,9 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         **({"booking_easy_dates": booking_easy_dates} if booking_easy_dates else {}),
         # Run race: running and total Fitness, each against its own floor.
         **({"fitness_check": fitness_check} if fitness_check else {}),
+        # The athlete's level for their race (blueprint §4.5): peak weekly volume, longest
+        # session, Fitness to enter this phase. Size the week toward these, not beyond.
+        **({"event_level": event_level} if event_level else {}),
         # Fitter than the goal (plan_tools.required_tss): the athlete decides.
         **({"fitness_surplus": req["fitness_surplus"]} if req.get("fitness_surplus") else {}),
         **({"needs_surplus_choice": True} if (req.get("needs_surplus_choice") or (

@@ -889,6 +889,10 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
   the session name. Each is a max effort: warm-up, the effort, cool-down. Keep the day before
   it easy or rest, and count it as that sport's quality for the week. Every date in
   "booking_easy_dates" is an EASY day (no hard work) - the days either side of a B/C race.
+- EVENT LEVEL: if the brief has "event_level", size the week to the athlete's level for their
+  race (blueprint §4.5): run_km / hours are the PEAK weeks of the block (earlier phases sit
+  lower), long_run_km / long_ride_h the longest session at peak. Never go above the top of a
+  range. A 4-hour marathoner is not given a sub-3 runner's mileage.
 - OBEY hard_rules (the athlete's protocol) absolutely — they override anything else here.
 - Swim sets: express in minutes (not metres). Strength: omit segments.
 - SWIM ENDURANCE scales to the event: the weekly LONG swim is OVERDISTANCE — build toward

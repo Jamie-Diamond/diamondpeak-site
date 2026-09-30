@@ -45,8 +45,14 @@ VALID_FAMILIES = {"base", "build", "specific", "peak", "taper"}
 EVENT_SPORTS = {
     "Full Ironman": ["swim", "bike", "run"],
     "70.3":         ["swim", "bike", "run"],
+    "Olympic":      ["swim", "bike", "run"],
+    "Sprint":       ["swim", "bike", "run"],
     "Sportive":     ["bike"],
     "Gravel":       ["bike"],
+    "Marathon":      ["run"],
+    "Half Marathon": ["run"],
+    "10k":           ["run"],
+    "5k":            ["run"],
 }
 # Cycling events share one content profile keyed "Sportive".
 CYCLING_EVENTS = {"Sportive", "Gravel", "Gran Fondo", "Road Sportive"}
@@ -81,6 +87,13 @@ _TRI_NAME_PATTERNS = [
     ("Full Ironman",  re.compile(r"ironman|140\.6|\bim\b", re.I)),
     ("Olympic",       re.compile(r"olympic", re.I)),
     ("Sprint",        re.compile(r"sprint", re.I)),
+    # Cycling and run races by NAME (30 Sep 2026): "Gravel Race" and "Brighton Marathon"
+    # used to pass through unchanged and match no content table at all.
+    ("Sportive",      re.compile(r"gravel|sportive|gran\s*fondo|cyclosportive", re.I)),
+    ("Half Marathon", re.compile(r"half[\s-]*marathon|\b21\.1", re.I)),
+    ("Marathon",      re.compile(r"marathon", re.I)),
+    ("10k",           re.compile(r"\b10\s*k(m)?\b", re.I)),
+    ("5k",            re.compile(r"(?<!swim )\b5\s*k(m)?\b(?!\s*swim)", re.I)),
 ]
 
 

@@ -520,6 +520,11 @@ _RACE_PROFILE = {            # event key -> (typical hours, whole-race IF)
     "Sprint":       (1.2,  0.92),
     # Every cycling event normalises to "Sportive" via blueprint.event_key.
     "Sportive":     (6.0,  0.70),
+    # Run races (30 Sep 2026): a mid-level finish time and its whole-race IF.
+    "Marathon":      (3.6,  0.84),
+    "Half Marathon": (1.75, 0.90),
+    "10k":           (0.8,  0.97),
+    "5k":            (0.4,  1.02),
 }
 _RACE_PROFILE_DEFAULT = (5.0, 0.75)
 

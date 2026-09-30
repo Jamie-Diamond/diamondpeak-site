@@ -28,6 +28,8 @@ ClaudeCoach/config/backup.key
 # global ~/.gitignore_global with `*.json` in it silently swallowed it. A repo
 # .gitignore is read after the global one, so this negation wins.
 !ClaudeCoach/config/planning-paused.json
+# Event levels (blueprint §4.5): methodology data, public by design.
+!ClaudeCoach/config/event-levels.json
 
 # Athlete personal data — never commit to public repo
 # (current-state.md files were accidentally force-added 16 May–5 Jul 2026 and

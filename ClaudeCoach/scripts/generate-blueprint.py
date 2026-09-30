@@ -579,8 +579,18 @@ def _interpolate_row(a: str, b: str) -> str:
 
 DISTRIBUTION = _parse_distribution_doc()
 
+# A bespoke event's own split (lib/race_fitness.bespoke_event), set by main() for the
+# athlete being generated. None = the standard §3.2 table for the event.
+_BESPOKE: dict | None = None
+
+
+def _dist_for(event: str) -> dict:
+    if _BESPOKE and _BESPOKE.get("distribution"):
+        return _BESPOKE["distribution"]
+    return DISTRIBUTION.get(_event_key(event)) or {}
+
 def dist_table(event: str, phases: list[dict]) -> list[str]:
-    event_dist = DISTRIBUTION.get(_event_key(event))
+    event_dist = _dist_for(event)
     if not event_dist:
         return [f"  Intensity distribution not yet defined for event: {event}"]
     lines = []
@@ -617,6 +627,35 @@ def _ceiling_hours(max_hours, current_ctl):
         return max_hours
     basis = 2.0 * 7 * current_ctl if current_ctl else 1400.0   # generous weekly TSS at build
     return round(basis / (100 * IF_TARGETS["build"] ** 2), 1)
+
+
+def _level_section(cfg: dict, profile: dict, event: str) -> str:
+    """The athlete's level for the race (blueprint §4.5), or '' when there is no table."""
+    import race_fitness as _rf
+    ev = _rf.event_def(cfg, cfg.get("race_distance") or cfg.get("race_name") or event)
+    if not ev:
+        return ""
+    lv = _rf.athlete_level(cfg, profile, ev)
+    src = {"goal": f"your goal ({lv.get('goal')})", "stated": "the level you gave",
+           "threshold": "the time your run threshold predicts",
+           "current_fitness": "your current Fitness", "default": "a default (no goal set)"}
+    vol = (f"{lv['run_km'][0]}–{lv['run_km'][1]} km/week" if "run_km" in lv
+           else f"{lv['hours'][0]:g}–{lv['hours'][1]:g} h/week")
+    out = ["", "## Event Level", "",
+           f"- **{ev.get('label')}, level {lv['level']} ({lv['label']})**, from {src[lv['source']]}.",
+           f"- Peak weeks: {vol}."]
+    if "long_ride_h" in lv:
+        out.append(f"- Longest ride: {lv['long_ride_h'][0]:g}–{lv['long_ride_h'][1]:g} h.")
+    if "long_run_km" in lv:
+        out.append(f"- Longest run: {lv['long_run_km'][0]}–{lv['long_run_km'][1]} km.")
+    kind = "Running" if ev.get("kind") == "run" else "Total"
+    out.append(f"- {kind} Fitness into the taper: {lv['fitness_at_taper'][0]}–"
+               f"{lv['fitness_at_taper'][1]}. Taper {ev['taper_days'][0]}–{ev['taper_days'][1]} days.")
+    if ev.get("blended_from"):
+        out.append(f"- Temporary blueprint: {_rf.describe_blend(ev)}.")
+    for n in ev.get("notes") or []:
+        out.append(f"- Note: {n}")
+    return "\n".join(out) + "\n"
 
 
 def render_blueprint(slug: str, profile: dict, phases: list[dict],
@@ -792,8 +831,9 @@ def build_blueprint_data(slug: str, profile: dict, phases: list[dict],
         race_dt = None
         weeks_to_race = 0.0
 
-    event_dist = DISTRIBUTION.get(_event_key(event), {})
-    sports = event_sports(event)
+    event_dist = _dist_for(event)
+    sports = (list(_BESPOKE["sports"]) if _BESPOKE and _BESPOKE.get("sports")
+              else event_sports(event))
     bricks_apply = "bike" in sports and "run" in sports  # a brick is bike→run
 
     phase_objs: list[dict] = []
@@ -881,6 +921,24 @@ def main():
         sys.exit(1)
 
     profile = json.loads(profile_path.read_text())
+    # athletes.json carries the CURRENT race (races.sync_legacy_fields); a profile left on
+    # the last race must not decide the blueprint (29 Sep 2026: config Brighton Marathon,
+    # profile still Full Ironman). Overlay the config's race onto the profile.
+    _acfg0 = {}
+    if ATHLETES_CONFIG.exists():
+        try:
+            _acfg0 = json.loads(ATHLETES_CONFIG.read_text()).get(slug, {})
+        except Exception:
+            _acfg0 = {}
+    if _acfg0.get("race_date") and _acfg0.get("race_date") != profile.get("race_date"):
+        profile = dict(profile, race_date=_acfg0["race_date"],
+                       race_name=_acfg0.get("race_name") or profile.get("race_name"),
+                       race_distance=_event_key(_acfg0.get("race_distance")
+                                                or _acfg0.get("race_name") or ""))
+    global _BESPOKE
+    import race_fitness as _rf
+    _be = _rf.event_def(_acfg0, None) if (_acfg0.get("bespoke_event") or {}).get("levels") else None
+    _BESPOKE = _be if isinstance(_be, dict) and _be.get("blended_from") else None
 
     race_date_str = profile.get("race_date", "")
     if not race_date_str:
@@ -930,6 +988,7 @@ def main():
         fitness_note = fitness_check(slug, event, current_ctl, phases, choice, acfg)
 
     blueprint = render_blueprint(slug, profile, phases, current_ctl, fitness_note, choice)
+    blueprint += _level_section(acfg, profile, event)
 
     if fitness_note and "AWAITING_DECISION" in fitness_note:
         print(blueprint)

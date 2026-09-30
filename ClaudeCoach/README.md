@@ -286,6 +286,10 @@ ready" (Jamie, 27 Sep 2026). Weeks 1–3 are unchanged.
 - **A/B/C**: a registry B race makes its week an easy week (65%); B and C races and
   dated off-season bookings (`priority`, default C) put easy days either side
   (`booking_easy_dates`, enforced by stage 1 as `booking_not_fresh` / `booking_recovery`).
+- **Levels** (`config/event-levels.json`, blueprint §4.5): four per event for 5k/10k/half/
+  marathon, sprint/Olympic/70.3/Ironman, sportive and gravel, picked from the goal time
+  (`plan_tools.py race-level`). **Bespoke events** (§4.6) blend the nearest two
+  (`plan_tools.py bespoke-event`).
 - **Fitter than the goal** is the athlete's call: the week holds, the Sunday message asks,
   and the bot records the answer with `plan_tools.py fitness-choice` (`hold_shift`,
   `drift`, `raise_goal`), which `required_tss` then applies.

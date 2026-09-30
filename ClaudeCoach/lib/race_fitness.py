@@ -18,31 +18,70 @@ planner applies, kept here so the document and the code cannot drift:
    the goal needs, the coach asks and records one of SURPLUS_CHOICES; nothing is
    decided for them. Until they answer, the plan holds.
 
-Pure: no IO except `run_ctl`, which only walks the activity list it is given.
+4. EVERY EVENT HAS FOUR LEVELS (Jamie, 30 Sep 2026: "90k a week is a crazy target for
+   most people ... make sure we work for a range of fitnesses"). config/event-levels.json
+   holds, per event and level, the peak weekly volume, longest session, taper and the
+   Fitness to carry into the taper. The level comes from the athlete's goal time, else
+   the time their run threshold predicts, else their current Fitness (`athlete_level`).
+
+Pure except `_levels()` (reads config/event-levels.json once) and `run_ctl`, which only
+walks the activity list it is given.
 """
 from __future__ import annotations
 
+import json
+import re
 from datetime import date, timedelta
+from functools import lru_cache
+from pathlib import Path
+
+LEVELS_FILE = Path(__file__).resolve().parent.parent / "config" / "event-levels.json"
+DEFAULT_LEVEL = 3          # when nothing says otherwise: a steady, sustainable level
 
 # Session-library event keys that are single-sport run races.
 RUN_EVENTS = ("5k", "10k", "half_marathon", "marathon")
 
-# RUNNING Fitness on race day (taper entry) for a strong amateur. Estimates, not
-# physiology constants: 5k/10k are speed-limited, the marathon is volume-limited.
-RUN_FITNESS_RACE_DAY = {
-    "5k": (35, 50),
-    "10k": (40, 55),
-    "half_marathon": (45, 60),
-    "marathon": (55, 75),
-}
+# Race distances (km) for the threshold-based time prediction of run races.
+RUN_DISTANCE_KM = {"5k": 5.0, "10k": 10.0, "half_marathon": 21.0975, "marathon": 42.195}
 # Entry to each phase as a fraction of the race-day range (same shape as the Ironman
 # table in generate-blueprint CTL_TARGETS: each phase starts higher than the last).
 PHASE_FRACTION = {"base": 0.70, "build": 0.80, "specific": 0.90, "peak": 0.95,
                   "taper": 1.00}
 
-# A-race taper, in days, per event (run events; triathlon tapers live in §4.1/4.2).
-TAPER_DAYS = {"5k": (5, 7), "10k": (5, 7), "half_marathon": (7, 10),
-              "marathon": (14, 21)}
+
+
+@lru_cache(maxsize=1)
+def _levels() -> dict:
+    return json.loads(LEVELS_FILE.read_text())["events"]
+
+
+def events() -> list:
+    """Every event key the level tables cover."""
+    return list(_levels())
+
+
+def _ev(event):
+    """An event definition: a bespoke dict as-is, else the table entry for a key/name."""
+    if isinstance(event, dict):
+        return event
+    return _levels().get(levels_key(event) or "")
+
+
+def event_def(cfg: dict | None = None, event=None):
+    """The athlete's event: their BESPOKE event (a blended temporary blueprint for a
+    non-standard race, see `bespoke_event`) when one is set for the current race, else
+    the standard table entry for `event`."""
+    b = (cfg or {}).get("bespoke_event")
+    if isinstance(b, dict) and b.get("levels") and (
+            not b.get("race_name") or b["race_name"] == (cfg or {}).get("race_name")):
+        return b
+    return _ev(event)
+
+
+def taper_days(event):
+    """(min, max) A-race taper days for an event, or None."""
+    ev = _ev(event)
+    return tuple(ev["taper_days"]) if ev else None
 
 # Easy days AFTER an A-race, per event.
 A_RECOVERY_DAYS = {"ironman": 21, "70_3": 10, "marathon": 10, "half_marathon": 7,
@@ -81,13 +120,167 @@ def run_event_key(text: str):
     return None
 
 
-def run_fitness_range(event: str, phase: str = "taper"):
-    """(lo, hi) RUNNING Fitness to enter `phase` for a run race, or None."""
-    rng = RUN_FITNESS_RACE_DAY.get(event)
-    f = PHASE_FRACTION.get((phase or "taper").lower())
-    if not rng or f is None:
+def levels_key(event: str):
+    """Any event name or session-library key -> an event-levels key, or None.
+    'Brighton Marathon' -> marathon, '70.3 Emilia' -> 70_3, 'Gravel Race' -> gravel."""
+    s = str(event or "").strip().lower()
+    if s in _levels():
+        return s
+    if "70.3" in s or "70_3" in s or "half iron" in s or "half-iron" in s:
+        return "70_3"
+    if "ironman" in s or "140.6" in s or re.search(r"\bim\b", s) or ("full" in s and "iron" in s):
+        return "ironman"
+    if "olympic" in s or "standard distance" in s:
+        return "olympic"
+    if "sprint" in s:
+        return "sprint"
+    if "gravel" in s:
+        return "gravel"
+    if "sportive" in s or "fondo" in s or "cyclosportive" in s:
+        return "sportive"
+    return run_event_key(s)
+
+
+def level_table(event) -> list:
+    ev = _ev(event)
+    return list(ev["levels"]) if ev else []
+
+
+def event_kind(event):
+    """'run' | 'tri' | 'bike' — which Fitness the level's numbers are in."""
+    ev = _ev(event)
+    return ev["kind"] if ev else None
+
+
+def _race_km(event):
+    """Run race distance in km (standard or bespoke), or None."""
+    ev = _ev(event)
+    if ev and ev.get("distance_km"):
+        return float(ev["distance_km"])
+    return RUN_DISTANCE_KM.get(levels_key(event) or "") if not isinstance(event, dict) else None
+
+
+def parse_goal_s(text, event: str):
+    """A goal like 'Sub 3:15', '3:15:00', 'sub 3', 'sub 40' or '19:30' -> seconds, or None.
+
+    One bare number is HOURS for long events and MINUTES for a 5k/10k ('sub 40'). Two
+    colon parts are MM:SS for a 5k/10k and H:MM for everything else.
+    """
+    s = str(text or "").lower()
+    if not s or "finish" in s:
         return None
-    return (round(rng[0] * f), round(rng[1] * f))
+    m = re.search(r"(\d{1,2})(?::(\d{2}))?(?::(\d{2}))?", s)
+    if not m:
+        return None
+    a, b, c = m.group(1), m.group(2), m.group(3)
+    km = _race_km(event)
+    short = km is not None and km < 15          # a 5k/10k goal is in minutes
+    if c is not None:
+        return int(a) * 3600 + int(b) * 60 + int(c)
+    if b is not None:
+        return int(a) * 60 + int(b) if short else int(a) * 3600 + int(b) * 60
+    return int(a) * 60 if short else int(a) * 3600
+
+
+def predicted_run_time_s(event: str, threshold_pace):
+    """Race time a run threshold pace predicts (Riegel, exponent 1.06), or None.
+
+    Threshold pace ~ the pace held for an hour, so the hour's distance is the anchor."""
+    km = _race_km(event)
+    try:
+        mm, ss = str(threshold_pace).split(":")[:2]
+        pace_s = int(mm) * 60 + int(ss)
+    except (ValueError, AttributeError):
+        return None
+    if not km or pace_s <= 0:
+        return None
+    hour_km = 3600.0 / pace_s
+    return int(round(3600.0 * (km / hour_km) ** 1.06))
+
+
+def level_for_time(event: str, seconds):
+    """The level whose goal band contains `seconds`, or None."""
+    rows = level_table(event)
+    if seconds is None or not rows or all(r["goal_max_s"] is None for r in rows):
+        return None
+    for r in rows:
+        if r["goal_max_s"] is None or seconds <= r["goal_max_s"]:
+            return r
+    return rows[-1]
+
+
+def level_for_fitness(event: str, fitness):
+    """The level whose taper Fitness band sits closest to `fitness`, or None."""
+    rows = level_table(event)
+    if fitness is None or not rows:
+        return None
+    return min(rows, key=lambda r: abs((r["fitness_at_taper"][0] + r["fitness_at_taper"][1])
+                                       / 2 - float(fitness)))
+
+
+def athlete_goal(cfg: dict, profile: dict | None = None):
+    """The goal for the athlete's CURRENT race: athletes.json `race_goal`, else the
+    A-race registry entry's `goal`, else profile a_goal ONLY if the profile is about the
+    same race (a stale 'Sub 9:30' Ironman goal must not level a marathon)."""
+    cfg, profile = cfg or {}, profile or {}
+    if cfg.get("race_goal"):
+        return cfg["race_goal"]
+    a = next((r for r in (cfg.get("races") or [])
+              if str(r.get("priority") or "").upper() == "A"
+              and r.get("date") == cfg.get("race_date")), None)
+    if a and a.get("goal"):
+        return a["goal"]
+    same = (str(profile.get("race_name") or "").strip().lower()
+            == str(cfg.get("race_name") or "").strip().lower())
+    return profile.get("a_goal") if same else None
+
+
+def athlete_level(cfg: dict, profile: dict | None, event, fitness=None) -> dict | None:
+    """{level row..., "source"} for this athlete and event.
+
+    Goal time first; then an explicitly stated `event_level` (1-4, how sportive / gravel
+    riders say it); then the time their run threshold predicts (run races); then the
+    level nearest their current Fitness (running Fitness for run races, total otherwise);
+    else DEFAULT_LEVEL. `source` says which, so a guessed level is never presented as
+    the athlete's own."""
+    event = event_def(cfg, event)
+    rows = level_table(event)
+    if not rows:
+        return None
+    goal = athlete_goal(cfg, profile)
+    r = level_for_time(event, parse_goal_s(goal, event))
+    if r:
+        return dict(r, source="goal", goal=goal)
+    stated = (cfg or {}).get("event_level")
+    if stated in (1, 2, 3, 4):
+        return dict(rows[stated - 1], source="stated")
+    if event_kind(event) == "run":
+        t = predicted_run_time_s(event, (profile or {}).get("run_threshold_pace_per_km"))
+        r = level_for_time(event, t)
+        if r:
+            return dict(r, source="threshold", predicted_s=t)
+    r = level_for_fitness(event, fitness)
+    if r:
+        return dict(r, source="current_fitness")
+    return dict(rows[DEFAULT_LEVEL - 1], source="default")
+
+
+def fitness_range(event, level: int, phase: str = "taper"):
+    """(lo, hi) Fitness to ENTER `phase` at this level: running Fitness for a run race,
+    total for a triathlon or bike event (`event_kind`). None if unknown."""
+    rows = level_table(event)
+    f = PHASE_FRACTION.get((phase or "taper").lower())
+    if not rows or f is None or not (1 <= int(level) <= len(rows)):
+        return None
+    lo, hi = rows[int(level) - 1]["fitness_at_taper"]
+    return (round(lo * f), round(hi * f))
+
+
+def run_fitness_range(event, phase: str = "taper", level: int = 2):
+    """(lo, hi) RUNNING Fitness to enter `phase` for a run race at `level`, or None."""
+    if event_kind(event) != "run":
+        return None
+    return fitness_range(event, level, phase)
 
 
 def total_floor(cfg: dict):
@@ -116,9 +309,9 @@ def surplus_choice(cfg: dict):
     return c if c in SURPLUS_CHOICES else None
 
 
-def running_status(event: str, phase: str, run_ctl):
+def running_status(event, phase: str, run_ctl, level: int = 2):
     """{"ctl", "range", "status"} for a run race; status is under / in / over."""
-    rng = run_fitness_range(event, phase)
+    rng = run_fitness_range(event, phase, level)
     if rng is None or run_ctl is None:
         return None
     s = "under" if run_ctl < rng[0] else ("over" if run_ctl > rng[1] else "in")
@@ -170,3 +363,185 @@ def easy_dates(races, week_start: date) -> dict:
             if ws <= x <= we:
                 out.setdefault(x.isoformat(), f"{n} day(s) after {name}")
     return dict(sorted(out.items()))
+
+
+# ── BESPOKE EVENTS (Jamie, 30 Sep 2026) ──────────────────────────────────────────────
+# "If I say I have a 30k race you can just go: that's halfway between marathon and HM,
+# so I'll blend it. Or a triathlon with a 4k swim and a 10k bike: adapt and create a
+# temp blueprint." A bespoke event is built by BLENDING the two nearest standard events:
+#   - a run race by distance (log scale) between 5k / 10k / half / marathon;
+#   - a multisport race by its estimated duration between sprint / olympic / 70.3 /
+#     Ironman for volume, Fitness and taper, and each sport's intensity split by THAT
+#     leg's distance against the same leg of each standard triathlon.
+# Beyond the tables (an ultra, a sub-5k) the nearest table is used and the result says so.
+# The blend is stored per athlete as `bespoke_event` (plan_tools.py bespoke-event) and
+# read wherever the standard table would be (event_def).
+
+TRI_LEGS_KM = {"sprint": (0.75, 20.0, 5.0), "olympic": (1.5, 40.0, 10.0),
+               "70_3": (1.9, 90.0, 21.0975), "ironman": (3.8, 180.0, 42.195)}
+# Mid-level pace, used ONLY to size a multisport event against the standard ones.
+_REF_MIN_PER_KM = {"swim": 20.0, "bike": 2.0, "run": 5.5}
+_DIST_NAME = {"5k": "5k", "10k": "10k", "half_marathon": "Half Marathon",
+              "marathon": "Marathon", "sprint": "Sprint", "olympic": "Olympic",
+              "70_3": "70.3", "ironman": "Full Ironman", "sportive": "Sportive",
+              "gravel": "Sportive"}
+_BAND = re.compile(r"(\d+(?:\.\d+)?)\s*%\s*(Z\s*[1-7](?:\s*[-\u2010-\u2015]\s*[1-7])?)")
+
+
+@lru_cache(maxsize=1)
+def _distributions() -> dict:
+    """blueprint.md §3.2, parsed by generate-blueprint's own parser (one source)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "_gb_dist", Path(__file__).resolve().parent.parent / "scripts" / "generate-blueprint.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m.DISTRIBUTION
+
+
+def _neighbours(x: float, anchors: list):
+    """[(key, value)] sorted by value -> (key_a, key_b, w) on a log scale, clamped."""
+    anchors = sorted(anchors, key=lambda a: a[1])
+    if x <= anchors[0][1]:
+        return anchors[0][0], anchors[0][0], 0.0
+    if x >= anchors[-1][1]:
+        return anchors[-1][0], anchors[-1][0], 0.0
+    import math
+    for (ka, a), (kb, b) in zip(anchors, anchors[1:]):
+        if a <= x <= b:
+            return ka, kb, (math.log(x) - math.log(a)) / (math.log(b) - math.log(a))
+    return anchors[-1][0], anchors[-1][0], 0.0
+
+
+def _mix(a, b, w, nd=0):
+    v = a + (b - a) * w
+    return round(v, nd) if nd else int(round(v))
+
+
+def _mix_range(ra, rb, w, nd=0):
+    return [_mix(ra[0], rb[0], w, nd), _mix(ra[1], rb[1], w, nd)]
+
+
+def _mix_row(ra: str, rb: str, w: float) -> str:
+    """Weighted blend of two '62% Z1-2 / 15% Z3 / 23% Z4-5' rows (same band labels)."""
+    pa, pb = _BAND.findall(ra or ""), _BAND.findall(rb or "")
+    if not pa or len(pa) != len(pb):
+        return ra or rb
+    vals = [int(round(float(x[0]) + (float(y[0]) - float(x[0])) * w)) for x, y in zip(pa, pb)]
+    vals[vals.index(max(vals))] += 100 - sum(vals)
+    return " / ".join(f"{v}% {lbl}" for v, (_, lbl) in zip(vals, pa))
+
+
+def _fmt_s(sec: int) -> str:
+    h, m = divmod(int(round(sec / 60)), 60)
+    return f"{h}:{m:02d}" if h else f"{m} min"
+
+
+def _labels(goals: list) -> list:
+    out, prev = [], None
+    for g in goals:
+        out.append(f"sub {_fmt_s(g)}" if prev is None and g else
+                   (f"{_fmt_s(prev)}–{_fmt_s(g)}" if g else f"{_fmt_s(prev)}+"))
+        prev = g
+    return out
+
+
+def _blend_levels(ea: dict, eb: dict, w: float, goal_scale_a: float, goal_scale_b: float,
+                  keep: tuple) -> list:
+    rows = []
+    for la, lb in zip(ea["levels"], eb["levels"]):
+        g = None
+        if la["goal_max_s"] and lb["goal_max_s"]:
+            g = _mix(la["goal_max_s"] * goal_scale_a, lb["goal_max_s"] * goal_scale_b, w)
+        row = {"level": la["level"], "goal_max_s": g,
+               "fitness_at_taper": _mix_range(la["fitness_at_taper"], lb["fitness_at_taper"], w)}
+        for k in keep:
+            if k in la and k in lb:
+                row[k] = _mix_range(la[k], lb[k], w, nd=2 if k.endswith("_h") or k == "hours" else 0)
+        rows.append(row)
+    for row, lbl in zip(rows, _labels([r["goal_max_s"] for r in rows])):
+        row["label"] = lbl
+    return rows
+
+
+def _blend_distribution(pairs: dict) -> dict:
+    """{sport: (dist_key_a, dist_key_b, w)} -> {phase: {Sport: row}} from §3.2."""
+    d = _distributions()
+    out = {}
+    for sport, (ka, kb, w) in pairs.items():
+        da, db = d.get(_DIST_NAME[ka], {}), d.get(_DIST_NAME[kb], {})
+        for phase in ("base", "build", "specific", "peak", "taper"):
+            ra, rb = (da.get(phase) or {}).get(sport), (db.get(phase) or {}).get(sport)
+            if ra or rb:
+                out.setdefault(phase, {})[sport] = _mix_row(ra, rb, w) if ra and rb else (ra or rb)
+    return out
+
+
+def bespoke_event(name: str, swim_km: float = 0, bike_km: float = 0, run_km: float = 0) -> dict:
+    """A temporary blueprint for a non-standard race, blended from the nearest standard
+    events. Same shape as an event-levels entry, plus distribution, sports, provenance."""
+    swim_km, bike_km, run_km = float(swim_km or 0), float(bike_km or 0), float(run_km or 0)
+    legs = {k: v for k, v in (("swim", swim_km), ("bike", bike_km), ("run", run_km)) if v > 0}
+    if not legs:
+        raise ValueError("a bespoke event needs at least one leg distance")
+    L = _levels()
+    notes = []
+    if list(legs) == ["run"]:
+        ka, kb, w = _neighbours(run_km, [(k, RUN_DISTANCE_KM[k]) for k in RUN_EVENTS])
+        if ka == kb:
+            notes.append(f"{run_km:g} km is outside 5k-marathon: {L[ka]['label']} numbers used, "
+                         "goal bands scaled by distance. Check them with the athlete.")
+        sa = (run_km / RUN_DISTANCE_KM[ka]) ** 1.06
+        sb = (run_km / RUN_DISTANCE_KM[kb]) ** 1.06
+        ev = {"label": name, "kind": "run", "distance_km": run_km, "sports": ["run"],
+              "taper_days": _mix_range(L[ka]["taper_days"], L[kb]["taper_days"], w),
+              "levels": _blend_levels(L[ka], L[kb], w, sa, sb, ("run_km", "long_run_km")),
+              "distribution": _blend_distribution({"Run": (ka, kb, w), "Swim": (ka, kb, w),
+                                                   "Bike": (ka, kb, w)}),
+              "library_event": ka if w < 0.5 else kb}
+    elif list(legs) == ["bike"]:
+        base = L["sportive"]
+        notes.append("bike-only: the sportive levels apply as they are")
+        ka, kb, w = "sportive", "sportive", 0.0
+        ev = dict(base, label=name, sports=["bike"], distance_km=bike_km,
+                  distribution=_blend_distribution({"Bike": ("sportive", "sportive", 0.0)}),
+                  library_event="sportive")
+    elif list(legs) == ["swim"]:
+        raise ValueError("swim-only races are not covered yet")
+    else:
+        def minutes(sw, bk, rn):
+            return sw * _REF_MIN_PER_KM["swim"] + bk * _REF_MIN_PER_KM["bike"] + rn * _REF_MIN_PER_KM["run"]
+        t = minutes(swim_km, bike_km, run_km)
+        tt = {k: minutes(*v) for k, v in TRI_LEGS_KM.items()}
+        ka, kb, w = _neighbours(t, list(tt.items()))
+        if ka == kb:
+            notes.append(f"about {t / 60:.1f} h at a mid-level pace, outside sprint-Ironman: "
+                         f"{L[ka]['label']} numbers used. Check them with the athlete.")
+        idx = {"swim": 0, "bike": 1, "run": 2}
+        pairs = {}
+        for sport, km in legs.items():
+            pairs[sport.title()] = _neighbours(km, [(k, v[idx[sport]]) for k, v in TRI_LEGS_KM.items()])
+        keep = ("hours",) + (("long_ride_h",) if "bike" in legs else ()) + (
+            ("long_run_km",) if "run" in legs else ())
+        ev = {"label": name, "kind": "tri", "sports": list(legs),
+              "legs_km": {k: v for k, v in legs.items()}, "est_minutes": int(round(t)),
+              "taper_days": _mix_range(L[ka]["taper_days"], L[kb]["taper_days"], w),
+              "levels": _blend_levels(L[ka], L[kb], w, t / tt[ka], t / tt[kb], keep),
+              "distribution": _blend_distribution(pairs),
+              "library_event": ka if w < 0.5 else kb}
+        if "swim" in legs:
+            ev["long_swim_m"] = int(round(swim_km * 1150, -2))      # ~15% overdistance
+    ev["blended_from"] = {"a": ka, "b": kb, "weight_b": round(w, 2)}
+    ev["notes"] = notes
+    return ev
+
+
+def describe_blend(ev: dict) -> str:
+    """One line for the athlete: what the temporary blueprint was blended from."""
+    b = ev.get("blended_from") or {}
+    L = _levels()
+    if not b or b.get("a") == b.get("b"):
+        return f"{ev.get('label')}: based on {L.get(b.get('a'), {}).get('label', 'the nearest event')}"
+    pct = int(round((b.get("weight_b") or 0) * 100))
+    return (f"{ev.get('label')}: a blend of {L[b['a']]['label']} ({100 - pct}%) and "
+            f"{L[b['b']]['label']} ({pct}%)")

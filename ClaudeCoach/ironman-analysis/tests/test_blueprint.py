@@ -150,7 +150,8 @@ class TestBuildBlueprintData:
 
     def test_unknown_event_has_empty_distribution_but_still_valid(self, gb):
         # A genuinely-unsupported event (no DISTRIBUTION entry) → empty, valid shape.
-        prof = {**FIXTURE_PROFILE, "race_distance": "Marathon"}
+        # (Marathon was the example until 30 Sep 2026, when run races got their own rows.)
+        prof = {**FIXTURE_PROFILE, "race_distance": "Duathlon"}
         phases = self._phases(gb, date(2026, 5, 12))
         data = gb.build_blueprint_data("tester", prof, phases, 70.0, None)
         assert all(p["distribution"] == {} for p in data["phases"])
@@ -389,8 +390,9 @@ class TestEventSports:
     def test_unknown_event_defaults_to_triathlon(self):
         # Conservative default: an unrecognised event is treated as full
         # triathlon (don't silently drop swim/run from someone's plan).
-        assert event_sports("Marathon") == ["swim", "bike", "run"]
-        assert is_multisport("Marathon") is True
+        assert event_sports("Duathlon") == ["swim", "bike", "run"]
+        assert is_multisport("Duathlon") is True
+        assert event_sports("Marathon") == ["run"]          # a known run race since 30 Sep 2026
         assert is_multisport("") is True
 
     def test_cycling_set_is_self_consistent(self):

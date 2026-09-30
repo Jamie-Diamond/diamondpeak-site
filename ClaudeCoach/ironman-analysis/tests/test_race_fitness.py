@@ -41,8 +41,8 @@ IN_BASE = date(2026, 10, 19)
 
 class TestTables:
     def test_run_race_ranges(self):
-        assert rf.run_fitness_range("marathon") == (55, 75)
-        assert rf.run_fitness_range("5k", "base") == (24, 35)       # x0.70
+        assert rf.run_fitness_range("marathon") == (55, 72)          # level 2
+        assert rf.run_fitness_range("5k", "base") == (19, 28)       # level 2 x0.70
         assert rf.run_fitness_range("ironman") is None
 
     def test_run_event_key(self):
@@ -214,7 +214,7 @@ class TestBookingsInAnyBlock:
 
 def test_a_run_race_keeps_the_athletes_cross_training_sports():
     src = (REPO / "lib" / "session_library.py").read_text()
-    assert "if ekey in _rf.RUN_EVENTS:" in src
+    assert "if ekey in _rf.RUN_EVENTS and not bespoke:" in src
     assert '("bike", "bike_days"), ("swim", "swim_days")' in src
 
 
