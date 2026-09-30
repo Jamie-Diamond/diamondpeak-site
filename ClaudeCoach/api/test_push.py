@@ -63,6 +63,7 @@ def test_notify_goes_only_to_that_athletes_devices_and_drops_dead_ones(pdir, mon
     assert sorted(c[0] for c in calls) == [sub(1)["endpoint"], sub(2)["endpoint"]]
     assert calls[0][1]["body"] == "Morning card"
     assert push.subscribed("kat@x.com") == 1             # the 410 one is gone
+    assert push.LAST_ERRORS and "410" in push.LAST_ERRORS[0]
 
 
 def test_plain_strips_markdown_and_the_footer():

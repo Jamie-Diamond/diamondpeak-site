@@ -27,7 +27,10 @@ CLAIM_SUB = "https://coach.diamondpeak.uk"
 QUIET_SOURCES = {"web-turn"}        # recorded during a live chat; the athlete is looking
 
 _lock = threading.Lock()
-_log = print
+
+
+def _log(msg):
+    print(msg, flush=True)
 
 
 def _load(path: Path, default):
@@ -104,32 +107,46 @@ def plain(text: str, limit: int = 140) -> str:
     return t if len(t) <= limit else t[: limit - 1].rstrip() + "…"
 
 
+LAST_ERRORS: list[str] = []
+
+
 def notify(slug: str, body: str, title: str = "Coach", url: str = "/coach/app.html#chat") -> int:
-    """Send to every browser whose signed-in person IS this athlete. Returns the count."""
+    """Send to every browser whose signed-in person IS this athlete. Returns the count.
+    Every failure is logged with the push service's own answer (LAST_ERRORS keeps the
+    latest for /api/push/test); only 410 Gone removes a subscription."""
+    del LAST_ERRORS[:]
     if _own_slug is None:
         return 0
     try:
         from pywebpush import WebPushException, webpush
     except Exception as e:
         _log(f"[push] pywebpush unavailable: {e}")
+        LAST_ERRORS.append(f"pywebpush unavailable: {e}")
         return 0
+    from urllib.parse import urlparse
     payload = json.dumps({"title": title, "body": body or "New message", "url": url})
     sent, dead = 0, []
     for endpoint, rec in list(_load(SUBS_FILE, {}).items()):
+        host = urlparse(endpoint).netloc
         try:
             if _own_slug(rec.get("email", "")) != slug:
                 continue
             webpush(rec["sub"], payload, vapid_private_key=str(KEY_FILE),
                     vapid_claims={"sub": CLAIM_SUB}, ttl=6 * 3600)
             sent += 1
+            _log(f"[push] {slug}: sent via {host}")
         except WebPushException as e:
-            code = getattr(getattr(e, "response", None), "status_code", None)
-            if code in (404, 410):
+            resp = getattr(e, "response", None)
+            code = getattr(resp, "status_code", None)
+            text = (getattr(resp, "text", "") or "")[:300]
+            msg = f"{host} answered {code}: {text or e}"
+            _log(f"[push] {slug}: {msg}")
+            LAST_ERRORS.append(msg)
+            if code == 410:
                 dead.append(endpoint)
-            else:
-                _log(f"[push] {slug}: send failed ({code}): {e}")
         except Exception as e:
-            _log(f"[push] {slug}: send failed: {e}")
+            _log(f"[push] {slug}: send via {host} failed: {e}")
+            LAST_ERRORS.append(f"{host}: {e}")
     if dead:
         with _lock:
             subs = _load(SUBS_FILE, {})

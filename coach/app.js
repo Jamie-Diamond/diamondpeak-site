@@ -908,6 +908,8 @@
       if (!r.ok) throw new Error('Could not save the notification setting.');
       state.me.push = (state.me.push || 0) + 1;
       return fetch('/api/push/test', { method: 'POST', headers: { 'X-Peak': '1' } });
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j.sent) throw new Error('Test notification failed: ' + ((j.errors || []).join('; ') || 'no device'));
     });
   }
   function notifyBar() {
@@ -4037,7 +4039,9 @@
       if (ps === 'ask') enablePush().then(renderSettings).catch(function (e) { alertRow(pr, e.message); });
       else if (ps === 'on') fetch('/api/push/test', { method: 'POST', headers: { 'X-Peak': '1' } })
         .then(function (r) { return r.json(); })
-        .then(function (j) { alertRow(pr, j.sent ? 'Test sent' : 'No device is subscribed'); });
+        .then(function (j) {
+          alertRow(pr, j.sent ? 'Test sent' : ((j.errors || []).join('; ') || 'No device is subscribed'));
+        });
     };
     // Scoped to the view, not to the first .body-flush: several cards use that class
     // now, and binding to the first one silently stops working when a card is added

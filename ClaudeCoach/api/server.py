@@ -483,7 +483,8 @@ def push_test(request: Request):
     slug = own_slug(request_email(request))
     if not slug:
         raise HTTPException(409, "notifications work once your account is active")
-    return JSONResponse({"sent": push.notify(slug, "Notifications are working.")})
+    sent = push.notify(slug, "Notifications are working.")
+    return JSONResponse({"sent": sent, "errors": list(push.LAST_ERRORS)})
 
 
 # ── coach admin ──
