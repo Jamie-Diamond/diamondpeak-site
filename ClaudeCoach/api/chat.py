@@ -537,14 +537,42 @@ def history_key(e: dict) -> str:
     return "h:" + hashlib.sha1(raw.encode()).hexdigest()[:12]
 
 
-def delete_message(chat_id: str, slug: str | None, key: str) -> bool:
+DELETED_LOG = "deleted-messages.jsonl"
+
+
+def _log_deleted(chat_id: str, key: str, who: str, text: str, ts: str, by: str,
+                 photo: str | None = None) -> None:
+    """Every deleted message, kept for the record (Jamie, 30 Sep 2026): append-only,
+    beside the chat it came from, never trimmed. history.json and the outbox both roll
+    old lines off, so their own deleted/hidden flags are not a lasting record."""
+    try:
+        import outbox
+        d = outbox._chat_dir(chat_id)
+        if not d:
+            return
+        d.mkdir(parents=True, exist_ok=True)
+        with open(d / DELETED_LOG, "a") as fh:
+            fh.write(json.dumps({"deleted_at": datetime.now().isoformat(timespec="seconds"),
+                                 "by": by, "key": key, "who": who, "sent_at": ts,
+                                 "text": text, "photo": photo}) + "\n")
+    except Exception:
+        pass
+
+
+def delete_message(chat_id: str, slug: str | None, key: str, by: str = "") -> bool:
     """Delete one message from Peak's chat. An outbox message is marked deleted; a
     history.json one is hidden on its side (hide_user / hide_coach), which also takes
     it out of what the coach reads (lib/engine.py render_history), and the athlete's
-    resumed session is ended so the next reply starts from the trimmed history."""
+    resumed session is ended so the next reply starts from the trimmed history.
+    Either way the message is copied to deleted-messages.jsonl first."""
     import outbox
     if key.startswith("o:"):
-        return outbox.patch(chat_id, key[2:], lambda e: e.__setitem__("deleted", True))
+        def change(e):
+            if not e.get("deleted"):
+                _log_deleted(chat_id, key, e.get("who") or "coach", e.get("text") or "",
+                             e.get("ts") or "", by, e.get("photo"))
+            e["deleted"] = True
+        return outbox.patch(chat_id, key[2:], change)
     parts = key.split(":")
     if len(parts) != 3 or parts[0] != "h" or parts[2] not in ("u", "c") or not slug:
         return False
@@ -558,7 +586,12 @@ def delete_message(chat_id: str, slug: str | None, key: str) -> bool:
         hit = False
         for e in hist if isinstance(hist, list) else []:
             if isinstance(e, dict) and history_key(e) == "h:" + parts[1]:
-                e["hide_user" if parts[2] == "u" else "hide_coach"] = True
+                side = "hide_user" if parts[2] == "u" else "hide_coach"
+                if not e.get(side):
+                    _log_deleted(chat_id, key, "me" if parts[2] == "u" else "coach",
+                                 (e.get("user") if parts[2] == "u" else e.get("assistant")) or "",
+                                 e.get("ts") or "", by)
+                e[side] = True
                 hit = True
         if not hit:
             return False

@@ -658,6 +658,10 @@ def test_delete_a_message_and_the_coach_reads_an_athletes_chat(env, monkeypatch)
         assert env.post("/api/chat/delete", json={"key": keys[t]}, headers=h).status_code == 200
     left = [i["text"] for i in env.get("/api/chat/history").json()["history"]]
     assert left == ["how was my run?", "Solid."]
+    logged = [json.loads(l) for l in (adir / "deleted-messages.jsonl").read_text().splitlines()]
+    assert [(d["who"], d["text"]) for d in logged] == [
+        ("me", "Test"), ("coach", "Got it. Test received."), ("coach", "Morning card")]
+    assert all(d["by"] == "kat@example.com" and d["deleted_at"] for d in logged)
     assert not (adir / ".chat_session.json").exists()          # the coach restarts without them
     import engine
     lines = engine.render_history(json.loads((adir / "telegram" / "history.json").read_text()), "Kathryn")

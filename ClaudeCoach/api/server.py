@@ -498,7 +498,7 @@ async def chat_delete(request: Request):
     key = str((await request.json() or {}).get("key") or "")
     if not re.fullmatch(r"o:[0-9]{14}-[0-9a-f]{6}|h:[0-9a-f]{12}:[uc]", key):
         raise HTTPException(400, "which message?")
-    if not chat.delete_message(cid, slug, key):
+    if not chat.delete_message(cid, slug, key, by=email):
         raise HTTPException(404, "that message isn't there any more")
     return JSONResponse({"ok": True})
 
