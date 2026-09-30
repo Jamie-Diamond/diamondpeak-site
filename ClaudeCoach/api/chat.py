@@ -41,6 +41,7 @@ import re
 import subprocess
 import sys
 import threading
+from datetime import datetime
 from pathlib import Path
 
 CC = Path(os.environ.get("CC_HOME") or Path(__file__).resolve().parent.parent)  # ClaudeCoach/
@@ -482,7 +483,16 @@ def timeline(slug: str | None, limit: int = 80, chat_id: str | None = None) -> l
                 pass
     except OSError:
         pass
-    out_texts = {(o.get(k) or "").strip() for o in out for k in ("text", "orig_text") if o.get(k)}
+    # Outbox copies by text, footer stripped: a Telegram reply is kept in history.json
+    # without the italic footer line and in the outbox with it (30 Sep 2026: every
+    # Telegram reply showed twice in Peak).
+    out_texts, out_at = set(), {}
+    for o in out:
+        for k in ("text", "orig_text"):
+            core = _FOOTER_RE.sub("", o.get(k) or "").strip()
+            if core:
+                out_texts.add(core)
+                out_at.setdefault(core, []).append(o.get("ts") or "")
     in_cards = {_FOOTER_RE.sub("", t).strip() for o in out for t in (o.get("drills") or {}).values()}
 
     items, last_ts = [], ""
@@ -499,7 +509,9 @@ def timeline(slug: str | None, limit: int = 80, chat_id: str | None = None) -> l
         if user:
             items.append({"who": "me", "text": ("📷 " if e.get("kind") == "image" else "") + user,
                           "ts": ts})
-        if coach and (user or e.get("kind") == "drill" or coach.strip() not in out_texts):
+        if coach.startswith("[chart/photo sent]"):
+            coach = ""                      # notify.py's stand-in for a chart; the chart is in the outbox
+        if coach and (e.get("kind") == "drill" or not _in_outbox(coach, ts, user, out_texts, out_at)):
             items.append({"who": "coach", "text": coach, "ts": ts})
     for o in out:
         items.append({"who": o.get("who") or "coach", "text": o.get("text") or "", "ts": o.get("ts") or "",
@@ -508,6 +520,28 @@ def timeline(slug: str | None, limit: int = 80, chat_id: str | None = None) -> l
                       "id": o.get("id")})
     items.sort(key=lambda i: i["ts"] or "")     # stable: equal times keep history order
     return items[-limit:]
+
+
+def _in_outbox(coach: str, ts: str, user: str, out_texts: set, out_at: dict) -> bool:
+    """Is this history reply also in the outbox (so shown from there)? A reply to
+    something the athlete wrote only counts when the outbox copy is within ten minutes,
+    so a stock reply ("Logged") from another day never hides this one."""
+    core = _FOOTER_RE.sub("", coach).strip()
+    if core not in out_texts:
+        return False
+    if not user:
+        return True                      # a scheduled message: its history copy has no user side
+    try:
+        t = datetime.fromisoformat(str(ts)[:19])
+    except ValueError:
+        return False
+    for ots in out_at.get(core, []):
+        try:
+            if abs((datetime.fromisoformat(str(ots)[:19]) - t).total_seconds()) <= 600:
+                return True
+        except ValueError:
+            continue
+    return False
 
 
 def _signup_timeline(chat_id: str, limit: int) -> list[dict]:

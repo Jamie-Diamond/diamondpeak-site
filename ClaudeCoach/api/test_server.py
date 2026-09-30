@@ -599,3 +599,25 @@ def test_a_signup_chat_keeps_each_coach_message_once(env, monkeypatch):
     sink.handle("sendMessage", {"chat_id": sink.chat_id, "text": "What's your target race?"})
     server.chat._keep_unsaved(sink.chat_id, sink, [])
     assert kept == ["What's your target race?"]
+
+
+def test_a_telegram_reply_shows_once_in_peak(env, monkeypatch):
+    """history.json keeps a Telegram reply without its footer, the outbox with it: one
+    bubble. A same-text reply from another day is not hidden."""
+    adir = server.CC / "athletes" / "jamie"
+    (adir / "telegram").mkdir(parents=True, exist_ok=True)
+    (adir / "telegram" / "history.json").write_text(json.dumps([
+        {"user": "Logged it?", "assistant": "Logged.", "ts": "2026-09-28T08:00:00"},
+        {"user": "receipt", "assistant": "That's an M&S receipt.", "ts": "2026-09-30T21:32:30",
+         "kind": "image"},
+        {"user": "and today?", "assistant": "Logged.", "ts": "2026-09-30T21:40:00"}]))
+    (adir / "web-outbox.jsonl").write_text(
+        json.dumps({"id": "20260930213230-aaaaaa", "ts": "2026-09-30T21:32:30", "source": "bot",
+                    "text": "That's an M&S receipt.\n_45 days to 5k PB · O5.5_"}) + "\n" +
+        json.dumps({"id": "20260930214000-bbbbbb", "ts": "2026-09-30T21:40:01", "source": "bot",
+                    "text": "Logged.\n_45 days to 5k PB · O5.5_"}) + "\n")
+    monkeypatch.setattr(server.chat, "CC", server.CC)
+    coach = [i["text"] for i in server.chat.timeline("jamie") if i["who"] == "coach"]
+    assert coach.count("Logged.") == 1                   # the 28 Sep one, from history
+    assert sum("M&S" in t for t in coach) == 1
+    assert sum(t.startswith("Logged.\n_") for t in coach) == 1
