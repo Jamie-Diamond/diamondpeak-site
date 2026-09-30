@@ -176,10 +176,11 @@ def protocol_for(family: str, has_power: bool | None, hr_source: str | None) -> 
 
 
 def new_state(sports: list, hr_source: str | None, has_power: bool | None,
-              known: dict, stated_recent: set, today: date | None = None) -> dict:
+              known: dict, stated_recent: set, today: date | None = None,
+              expected: dict | None = None) -> dict:
     """known = {"bike": {"ftp": 250, "_source": "icu"}, "run": {"threshold_pace": "4:30"},
     "swim": {"css": "1:45"}}; stated_recent = families the athlete says they tested in
-    the last six weeks."""
+    the last six weeks; expected = {family: parse_estimate(...)}, their rough figures."""
     today = today or date.today()
     sports_state = {}
     for f in sports:
@@ -199,6 +200,8 @@ def new_state(sports: list, hr_source: str | None, has_power: bool | None,
             "confidence": conf, "source": src, "value_source": vsrc, "values": vals,
             "test": {"protocol": proto, "status": "unscheduled"} if proto else None,
         }
+        if proto and (expected or {}).get(f):
+            sports_state[f]["expected"] = expected[f]
     return {
         "version": 1, "status": "pending", "created": today.isoformat(),
         "sports": list(sports), "hr_source": hr_source, "has_power": has_power,
@@ -313,8 +316,9 @@ def schedule(st: dict, first_day: date, training_days: list | None = None,
             item = {"date": d.isoformat(), "family": f, "kind": "test",
                     "protocol": st["sports_state"][f]["test"]["protocol"]}
             if item["protocol"] == "bike_ramp":
+                ss = st["sports_state"][f]
                 item["ramp_start_w"] = ramp_start_watts(
-                    (st["sports_state"][f].get("values") or {}).get("ftp"))
+                    (ss.get("values") or {}).get("ftp") or expected_mid(ss.get("expected")))
             days.append(item)
         elif DAYS[d.weekday()] not in allowed or d in rest_days:
             days.append({"date": d.isoformat(), "kind": "rest"})
@@ -454,6 +458,111 @@ def workout_for(day: dict) -> dict | None:
                 "description": step.format(m=m), "description_raw": notes,
                 "duration_min": m, "load": round(m / 60 * 42)}
     return None
+
+
+# ── Rough figures (30 Sep 2026) ─────────────────────────────────────────────
+# For a sport the baseline week will test, sign-up asks the athlete for a rough figure
+# (a recent race, a guessed FTP, a steady swim time). It is NEVER a threshold: it gives
+# the test an expected range, so a result far outside it is questioned before it sets
+# zones, and a loose guide beside RPE for the by-feel week. Jamie, 30 Sep: "range is
+# worth teasing out before we do the tests".
+#   {"low", "high", "unit": "w" | "s_km" | "s_100m", "raw"}  low/high are the range in
+#   that unit (for paces, low is the FASTER end).
+
+_RACE_KM = ((r"half|21\.1|13\.1", 21.0975), (r"marathon|42\.2|26\.2", 42.195),
+            (r"10\s*k|10\s*km", 10.0), (r"\b5\s*k|5\s*km|parkrun", 5.0))
+_CLOCK = re.compile(r"(\d{1,2}):(\d{2})(?::(\d{2}))?")
+
+
+def _riegel(t_s: float, d_km: float, to_km: float) -> float:
+    return t_s * (to_km / d_km) ** 1.06
+
+
+def parse_estimate(family: str, text: str) -> dict | None:
+    """The athlete's rough figure as a range, or None ("don't know", unreadable)."""
+    raw = (text or "").strip()
+    low = raw.lower()
+    if not raw or re.match(r"^\s*(no|none|n/?a|not sure|unsure|don'?t know|dunno|idk)\b|^\s*\?", low):
+        return None
+    if family == "bike":
+        nums = [int(n) for n in re.findall(r"\d{2,3}", raw) if 60 <= int(n) <= 600]
+        if not nums:
+            return None
+        lo, hi = (min(nums[:2]), max(nums[:2])) if len(nums) >= 2 else (nums[0] * 0.92, nums[0] * 1.08)
+        return {"low": round(lo), "high": round(hi), "unit": "w", "raw": raw[:80]}
+    m = _CLOCK.search(raw)
+    if not m:
+        return None
+    a, b, c = int(m.group(1)), int(m.group(2)), m.group(3)
+    if family == "run":
+        km = next((k for pat, k in _RACE_KM if re.search(pat, low)), None)
+        if not km:
+            return None
+        secs = a * 3600 + b * 60 + int(c) if c else a * 60 + b
+        if not c and secs / km < 150:          # "1:52" for a half is h:mm, not mm:ss
+            secs = a * 3600 + b * 60
+        if not 150 <= secs / km <= 600:
+            return None
+        # Threshold sits between 10k and half-marathon race pace for most amateurs.
+        fast = _riegel(secs, km, 10.0) / 10.0 * 0.98
+        slow = _riegel(secs, km, 21.0975) / 21.0975 * 1.02
+        return {"low": round(fast), "high": round(slow), "unit": "s_km", "raw": raw[:80]}
+    if family == "swim":
+        secs = a * 60 + b
+        dist = 400 if re.search(r"400", low) or (not re.search(r"100", low) and secs >= 240) else 100
+        per100 = secs / (dist / 100)
+        if not 50 <= per100 <= 240:
+            return None
+        lo, hi = (per100 * 0.95, per100 * 1.05) if dist == 400 else (per100 * 0.97, per100 * 1.10)
+        return {"low": round(lo), "high": round(hi), "unit": "s_100m", "raw": raw[:80]}
+    return None
+
+
+def _clock(s: float) -> str:
+    m, sec = divmod(int(round(s)), 60)
+    return f"{m}:{sec:02d}"
+
+
+def _pace_s(v) -> float | None:
+    m = _CLOCK.match(str(v or ""))
+    return int(m.group(1)) * 60 + int(m.group(2)) if m else None
+
+
+def expected_mid(exp: dict | None) -> float | None:
+    return (exp["low"] + exp["high"]) / 2 if exp else None
+
+
+def expected_note(family: str, vals: dict, exp: dict | None) -> str:
+    """A line for the result message when a test lands well outside the athlete's own
+    rough figure (10% beyond either end); "" otherwise."""
+    if not exp:
+        return ""
+    if family == "bike" and vals.get("ftp"):
+        v, better_high = float(vals["ftp"]), True
+    elif family == "run" and vals.get("threshold_pace"):
+        v, better_high = _pace_s(vals["threshold_pace"]), False
+    elif family == "swim" and vals.get("css"):
+        v, better_high = _pace_s(vals["css"]), False
+    else:
+        return ""
+    if v is None or exp["low"] * 0.9 <= v <= exp["high"] * 1.1:
+        return ""
+    above = v > exp["high"] * 1.1
+    stronger = above if better_high else not above
+    return (f"\n\n⚠️ That's a lot {'stronger' if stronger else 'weaker'} than your rough figure "
+            f"(_{exp['raw']}_). If the test went wrong, tap *Test went wrong* and we'll redo it.")
+
+
+def rough_guide(family: str, exp: dict | None) -> str:
+    """Easy-effort guide from the rough figure, for the by-feel week: "" without one."""
+    if not exp:
+        return ""
+    mid = expected_mid(exp)
+    if exp["unit"] == "w":
+        return f"bike easy roughly {round(exp['low'] * 0.55)}-{round(exp['high'] * 0.70)} W (from '{exp['raw']}')"
+    if exp["unit"] == "s_km":
+        return f"run easy roughly {_clock(mid * 1.15)}-{_clock(mid * 1.30)}/km (from '{exp['raw']}')"
+    return f"swim easy roughly {_clock(mid + 5)}-{_clock(mid + 12)}/100m (from '{exp['raw']}')"
 
 
 # ── Result maths (pure) ─────────────────────────────────────────────────────
@@ -767,7 +876,8 @@ def capture(slug: str, activity: dict, streams: dict, hr_trusted: bool,
     t["status"] = "result_pending"
     t["pending"] = vals
     save(slug, st)
-    return {"text": result_text(fam, vals, prior), "keyboard": keyboard(slug, fam, vals)}
+    note = expected_note(fam, vals, st["sports_state"][fam].get("expected"))
+    return {"text": result_text(fam, vals, prior) + note, "keyboard": keyboard(slug, fam, vals)}
 
 
 def capture_swim_times(slug: str, text: str, st: dict | None = None) -> dict | None:
@@ -786,7 +896,8 @@ def capture_swim_times(slug: str, text: str, st: dict | None = None) -> dict | N
     t["pending"] = vals
     save(slug, st)
     prior = st["sports_state"]["swim"].get("values") or {}
-    return {"text": result_text("swim", vals, prior), "keyboard": keyboard(slug, "swim", vals)}
+    note = expected_note("swim", vals, st["sports_state"]["swim"].get("expected"))
+    return {"text": result_text("swim", vals, prior) + note, "keyboard": keyboard(slug, "swim", vals)}
 
 
 def confirm(slug: str, family: str, client, st: dict | None = None) -> str:
@@ -882,10 +993,18 @@ def prompt_block(slug: str, first_name: str = "", today: date | None = None) -> 
                 lines.append(f"  {f} test: {t['date']} ({t.get('status')})")
     rpe = rpe_only_families(slug, st)
     if rpe:
+        guides = [g for g in (rough_guide(f, (st["sports_state"].get(f) or {}).get("expected"))
+                              for f in sorted(rpe)) if g]
         lines.append(
-            "UNTESTED SPORTS (prescribe by RPE only, never quote a pace, power or zone for "
-            "these, and never treat an Intervals.icu estimate as the athlete's threshold): "
-            + ", ".join(sorted(rpe)) + ".")
+            "UNTESTED SPORTS (prescribe by RPE only, never quote "
+            + ("a zone" if guides else "a pace, power or zone")
+            + " for these, and never treat an Intervals.icu estimate as the athlete's "
+            "threshold): " + ", ".join(sorted(rpe)) + ".")
+        if guides:
+            lines.append(
+                "ROUGH GUIDE from the athlete's own rough figures (not tested, not zones): "
+                + "; ".join(guides) + ". You may give these beside RPE as a loose range, "
+                "labelled rough; RPE decides.")
     tested = [f for f, c in conf.items() if c == "tested"]
     if tested:
         lines.append("Tested thresholds (trust these): " + ", ".join(tested) + ".")

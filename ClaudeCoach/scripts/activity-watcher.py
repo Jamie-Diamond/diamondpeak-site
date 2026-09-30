@@ -579,13 +579,23 @@ def _hr_quality_pass(slug: str, chat_id: str) -> str:
 
 
 def _baseline_tick(slug: str, chat_id: str) -> None:
-    """Close a finished baseline block and tell the athlete, once."""
+    """Close a finished baseline block and tell the athlete, once. Then rebuild their
+    blueprint (Jamie, 30 Sep 2026): the one written at sign-up predates the tested
+    zones and any history that arrived since (Download old data, Strava copying)."""
     try:
         msg = baseline_lib.tick(slug)
         if msg and chat_id:
             _notify(msg, chat_id, slug=slug)
     except Exception as exc:
         print(f"[baseline:{slug}] tick failed: {exc}", file=sys.stderr)
+        return
+    if msg:
+        try:
+            subprocess.Popen(["python3", str(BASE / "scripts" / "generate-blueprint.py"),
+                              "--athlete", slug], cwd=str(BASE.parent))
+            print(f"[baseline:{slug}] block closed, blueprint rebuilding")
+        except Exception as exc:
+            print(f"[baseline:{slug}] blueprint rebuild failed to start: {exc}", file=sys.stderr)
 
 
 def _dedup_session_log(path: Path) -> None:

@@ -4562,6 +4562,18 @@ _OB_QUALITATIVE = [
     ("hr_source",  "What do you wear for *heart rate*?\n\n1 A chest or arm strap\n2 Just my watch (wrist)\n3 A mix of the two\n4 Nothing\n\nReply with the number."),
 ]
 _OB_SLUG = ("slug", "Last one: choose a short *account handle* for your profile. Lowercase letters and numbers only (e.g. _sarah_). Can't be changed later.")
+# Rough figures (30 Sep 2026): asked for each sport the baseline week will test, right
+# after the answer that settles it. A range for the test to be checked against and a
+# loose guide for the by-feel week (lib/baseline.py parse_estimate); never a threshold.
+_OB_ESTIMATE = {
+    "run":  ("est_run", "Roughly, what's a recent race or hard run? e.g. _5k 24:30 in August_ "
+                        "or _half 1:52 last spring_. Or _don't know_."),
+    "bike": ("est_bike", "Roughly what's your FTP? A guess or a range is fine, e.g. _about 230_ "
+                         "or _210-240_. Or _don't know_."),
+    "swim": ("est_swim", "How long does 100m or 400m take you at a steady effort? e.g. "
+                         "_100m 2:05_ or _400m 8:30_. Or _don't know_."),
+}
+_GAP_FAMILY = {"ftp": "bike", "run_threshold": "run", "swim_css": "swim"}
 _OB_POWER = ("power", "Do you ride with *power* (a power meter or a smart trainer)? _yes_ or _no_")
 _HR_SOURCE_BY_DIGIT = {"1": "strap", "2": "wrist", "3": "mixed", "4": "none"}
 _NO_WORDS = re.compile(r"^\s*(no|nope|n|0|none|not sure|unsure|don'?t know|dunno|idk|\?)\s*\.?\s*$", re.I)
@@ -4986,7 +4998,10 @@ def _scaffold_athlete(chat_id, answers, icu_data, race_data=None, sports=None, r
 
     # Baseline block (lib/baseline.py): pending until /approve schedules it. Its
     # presence is also what gates the weekly plan until the tests are done.
-    baseline_lib.save(slug, baseline_lib.new_state(sports, hr_src, has_power, known, stated))
+    expected = {f: baseline_lib.parse_estimate(f, answers.get(k) or "")
+                for f, (k, _q) in _OB_ESTIMATE.items() if answers.get(k)}
+    baseline_lib.save(slug, baseline_lib.new_state(sports, hr_src, has_power, known, stated,
+                                                   expected={f: e for f, e in expected.items() if e}))
 
     # Riskiest write last
     athletes_data = json.loads(ATHLETES_CONFIG.read_text()) if ATHLETES_CONFIG.exists() else {}
@@ -5183,6 +5198,17 @@ def _ob_after_icu(token, chat_id, ob_state, session):
     return True
 
 
+def _estimates_due(key, answer, session):
+    """Sports this answer settles as "the baseline week will test it": ICU numbers the
+    athlete didn't test (recent_tests), or a "no" to a gap question."""
+    if key == "recent_tests":
+        picked = {int(d) for d in re.findall(r"[1-3]", answer)}
+        return [f for i, f in enumerate(session.get("recent_map") or [], 1) if i not in picked]
+    if key in _GAP_FAMILY and _NO_WORDS.match(answer or ""):
+        return [_GAP_FAMILY[key]]
+    return []
+
+
 def handle_onboarding(token, chat_id, text):
     """Returns True if chat_id is pending and the message was handled. `text` is a
     typed answer, or a sign-up button tap: "ob:<question>:<value>"."""
@@ -5234,6 +5260,10 @@ def handle_onboarding(token, chat_id, text):
     elif key == "icu_key":
         answer = answer.strip()
     session["answers"][key] = answer
+    for fam in reversed(_estimates_due(key, answer, session)):
+        q = _OB_ESTIMATE[fam]
+        if q[0] not in session["answers"] and all(k != q[0] for k, _ in session["queue"]):
+            session["queue"].insert(0, list(q))
 
     # After ICU key: verify, fetch everything, check the set-up, build rest of queue
     if key == "icu_key":

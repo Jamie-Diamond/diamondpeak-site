@@ -115,7 +115,9 @@ asked = onboard("123", ["Sam Smith", "70.3 Test, 2027-06-01", "yes", KEY,
                         "2",             # wrist
                         "yes",           # power
                         "0",             # FTP 250 was not a test
+                        "about 230",     # rough FTP, since the bike gets tested
                         "no",            # run threshold: not tested
+                        "5k 24:30 in August",   # rough run figure
                         "1:45",          # swim CSS: tested in last 6 weeks
                         "2",             # coaching level: mid
                         "sam"])
@@ -148,6 +150,14 @@ check("level asked just before the handle", "How much *detail*" in asked[_setup 
 check("coaching level saved", prof.get("coaching_level") == "mid", prof.get("coaching_level"))
 check("athlete ID comes from the key, never asked",
       prof["icu_athlete_id"] == "i123" and "athlete ID" not in blob)
+check("rough figure asked right after each sport is settled as 'to test'",
+      "Roughly what's your FTP" in blob and "recent race or hard run" in blob
+      and "100m or 400m" not in blob, blob[-600:])
+check("rough figures saved as expected ranges, only for tested-in-week-one sports",
+      ss["bike"].get("expected", {}).get("unit") == "w" and ss["run"].get("expected", {}).get("unit") == "s_km"
+      and "expected" not in ss["swim"], {f: ss[f].get("expected") for f in ss})
+check("the ramp starts from the rough FTP when there is no tested one",
+      B.baseline_lib.expected_mid(ss["bike"]["expected"]) == 230)
 check("athletes.json entry inactive until approved",
       json.loads(B.ATHLETES_CONFIG.read_text())["sam"]["active"] is False)
 
@@ -210,7 +220,7 @@ n = len(SENT)
 B.handle_onboarding("t", "125", "ob:icu_fix:again")
 check("Check again, now fixed, carries on", any("All connected" in t for c, t, _ in SENT[n:])
       and any("A goal" in t for c, t, _ in SENT[n:]), SENT[n:])
-for a in ["sub 5", "2 years", "none", "8", "1", "yes", "0", "no", "no"]:
+for a in ["sub 5", "2 years", "none", "8", "1", "yes", "0", "dunno", "no", "10k 50:00", "no", "don't know"]:
     B.handle_onboarding("t", "125", a)
 n = len(SENT)
 B.handle_onboarding("t", "125", "ob:level:pro")
@@ -283,7 +293,8 @@ check("no watch data: the fix step offers Connect Strava",
 check("with Strava connected, nothing is left to fix",
       REAL_SETUP_ISSUES("i1", "k", WEB) == [])
 B.handle_onboarding("t", WEB, "ob:icu_fix:again")
-for a in ["sub 5", "2 years", "none", "8", "2", "yes", "0", "no", "no", "ob:level:beginner", "robin"]:
+for a in ["sub 5", "2 years", "none", "8", "2", "yes", "0", "220", "no", "half 1:52", "no", "400m 8:30",
+          "ob:level:beginner", "robin"]:
     B.handle_onboarding("t", WEB, a)
 ath = json.loads(B.ATHLETES_CONFIG.read_text()).get("robin", {})
 check("signed up through Strava: copying switched on and the tokens moved in",

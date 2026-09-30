@@ -247,6 +247,27 @@ with tempfile.TemporaryDirectory() as d:
     check("complete prompt offers to book the missing test", "baseline-week.py book" in
           bl.prompt_block("new", "Sam"))
 
+# ── rough figures (30 Sep 2026): a range to check the test against, never a threshold ──
+pe = bl.parse_estimate
+check("5k time -> a threshold range just slower than 5k pace",
+      pe("run", "5k 24:30 in August") == {"low": 300, "high": 327, "unit": "s_km", "raw": "5k 24:30 in August"})
+check("half written h:mm is read as hours", pe("run", "half 1:52")["low"] < 330)
+check("marathon h:mm read as hours", 250 < pe("run", "marathon 3:45")["low"] < 320)
+check("a run time with no distance is not guessed", pe("run", "24:30") is None)
+check("don't know / nov are told apart", pe("bike", "don't know") is None and pe("run", "nov 5k 24:30") is not None)
+check("FTP guess becomes +-8%", pe("bike", "about 230") == {"low": 212, "high": 248, "unit": "w", "raw": "about 230"})
+check("FTP range kept as given", (pe("bike", "240-210")["low"], pe("bike", "240-210")["high"]) == (210, 240))
+check("swim 400 time per 100", pe("swim", "400m 8:30")["unit"] == "s_100m" and 115 < pe("swim", "400m 8:30")["low"] < 125)
+ex = pe("bike", "about 230")
+check("a ramp result far below the guess is questioned", "weaker" in bl.expected_note("bike", {"ftp": 150}, ex))
+check("a ramp result near the guess is not", bl.expected_note("bike", {"ftp": 225}, ex) == "")
+check("a run pace far faster than the guess is questioned",
+      "stronger" in bl.expected_note("run", {"threshold_pace": "3:50"}, pe("run", "5k 24:30")))
+st = bl.new_state(["bike", "run"], "strap", True, {}, set(), expected={"bike": ex})
+check("expected range stored on the sport being tested", st["sports_state"]["bike"].get("expected") == ex
+      and "expected" not in st["sports_state"]["run"])
+check("rough guide reads as a loose easy range", bl.rough_guide("bike", ex).startswith("bike easy roughly 117-174 W"))
+
 print()
 print("ALL PASS" if not FAILS else f"{len(FAILS)} FAILED: {FAILS}")
 sys.exit(1 if FAILS else 0)
