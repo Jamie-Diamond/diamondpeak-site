@@ -841,10 +841,28 @@
     return h.replace(/\n/g, '<br>');
   }
 
+  // The bot ends a reply with an italic footer: "_O5.5_" (older ones "_45 days to X · O5.5_").
+  // Peak shows the model quietly under the message, and drops the countdown: it is in
+  // the header (Jamie, 30 Sep 2026).
+  var MODEL_NAMES = { O: 'Opus', S: 'Sonnet', H: 'Haiku' };
+  function splitMeta(t) {
+    var m = /\n_([^\n_]*)_\s*$/.exec(t || '');
+    if (!m) return { body: t || '', meta: '' };
+    var parts = m[1].split('\u00b7').map(function (x) { return x.trim(); });
+    var mm = /^([OSH])(\d+(?:\.\d+)?)$/.exec(parts[parts.length - 1]);
+    var countdown = parts.length === 1 && /^-?\d+ days? to /.test(parts[0]);
+    if (!mm && !countdown) return { body: t, meta: '' };
+    return { body: t.slice(0, m.index), meta: mm ? MODEL_NAMES[mm[1]] + ' ' + mm[2] : '' };
+  }
+
   function bubble(who, text, cls) {
     var d = document.createElement('div');
     d.className = 'msg ' + who + (cls ? ' ' + cls : '');
-    d.innerHTML = who === 'me' ? esc(text).replace(/\n/g, '<br>') : md(text);
+    if (who === 'me') d.innerHTML = esc(text).replace(/\n/g, '<br>');
+    else {
+      var sp = splitMeta(text);
+      d.innerHTML = md(sp.body) + (sp.meta ? '<div class="msg-meta">' + esc(sp.meta) + '</div>' : '');
+    }
     $('#chatLog').appendChild(d);
     return d;
   }
@@ -1067,10 +1085,34 @@
   }
 
   // The bot changed the message whose button was tapped (e.g. "✓ Pain 0/10 logged").
+  // Delete (Jamie, 30 Sep 2026): tap a message to show Delete under it; tap Delete.
+  // The coach forgets it too (api/chat.py delete_message).
+  function toggleDelete(msg) {
+    var open = msg.nextElementSibling && msg.nextElementSibling.classList.contains('msg-act');
+    Array.prototype.forEach.call($('#chatLog').querySelectorAll('.msg-act'), function (x) { x.remove(); });
+    if (open || chatState.readonly) return;
+    var bar = document.createElement('div');
+    bar.className = 'msg-act ' + (msg.classList.contains('me') ? 'me' : 'coach');
+    bar.innerHTML = '<button type="button" class="msg-del">Delete</button>';
+    msg.parentNode.insertBefore(bar, msg.nextSibling);
+  }
+  function deleteMessage(btn) {
+    var bar = btn.closest('.msg-act'), msg = bar && bar.previousElementSibling;
+    if (!msg || !msg.getAttribute('data-key')) return;
+    btn.disabled = true; btn.textContent = 'Deleting\u2026';
+    postJSON('/api/chat/delete', { key: msg.getAttribute('data-key') })
+      .then(function () {
+        msg.classList.add('gone'); bar.remove();
+        setTimeout(function () { msg.remove(); }, 250);
+      })
+      .catch(function (err) { btn.disabled = false; btn.textContent = err.message; });
+  }
+
   function applyEdit(obj, text) {
     var el = obj && obj.item && $('#chatLog .msg[data-item="' + obj.item + '"]');
     if (!el) { coachItem(text, obj && obj.buttons); return; }
-    if (text) el.innerHTML = md(text);
+    if (text) { var sp = splitMeta(text); el.innerHTML = md(sp.body) +
+      (sp.meta ? '<div class="msg-meta">' + esc(sp.meta) + '</div>' : ''); }
     else { var old = el.querySelector('.btns'); if (old) old.remove(); }
     addButtons(el, obj.buttons);
   }
@@ -1084,18 +1126,35 @@
     document.body.appendChild(lb);
   }
 
+  // The coach viewing another athlete sees THEIR chat, read only (Jamie, 30 Sep 2026).
+  function chatSlug() {
+    return state.me && state.me.coach && state.slug && state.slug !== state.me.own ? state.slug : '';
+  }
+
   function loadChatHistory() {
-    fetch('/api/chat/history', { cache: 'no-store' })
+    var other = chatSlug();
+    fetch('/api/chat/history' + (other ? '?slug=' + encodeURIComponent(other) : ''), { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : { history: [] }; })
       .then(function (j) {
         chatState.loaded = true;
-        if (state.tab === 'chat') markSeen(newestTs(j.history));
+        chatState.readonly = !!j.readonly;
+        if (state.tab === 'chat' && !j.readonly) markSeen(newestTs(j.history));
         if (chatState.busy) return;          // don't wipe a turn in progress
+        var who = (ATHLETES.filter(function (a) { return a.slug === other; })[0] || {}).name || '';
+        var k = $('#v-chat .chat-k');
+        if (k) k.textContent = j.readonly ? who + '\u2019s chat \u00b7 read only'
+          : (state.me.state === 'active' ? 'Your chat with the coach' : 'Setting up your coaching');
+        if ($('#composer') && state.me.state !== 'waiting') $('#composer').hidden = !!j.readonly;
+        var nb = $('#v-chat .notify-bar');
+        if (nb) nb.hidden = !!j.readonly;
+        var mq = other ? '?slug=' + encodeURIComponent(other) : '';
         $('#chatLog').innerHTML = '';
         (j.history || []).forEach(function (m) {
-          if (m.who === 'me') bubble('me', m.text);
-          else coachItem(m.text, m.buttons, m.photo ? '/api/media/' + encodeURIComponent(m.photo) : null, '', m.id,
-                         { form: m.form, logged: m.logged, drills: m.drills });
+          var el = m.who === 'me' ? bubble('me', m.text)
+            : coachItem(m.text, j.readonly ? [] : m.buttons,
+                        m.photo ? '/api/media/' + encodeURIComponent(m.photo) + mq : null, '', m.id,
+                        { form: j.readonly ? null : m.form, logged: m.logged, drills: m.drills });
+          if (m.key && !j.readonly) el.setAttribute('data-key', m.key);
         });
         if (!(j.history || []).length) {
           $('#chatLog').innerHTML = '<div class="empty">' + (state.me && state.me.state === 'onboarding'
@@ -1111,6 +1170,10 @@
   function onChatTap(e) {
     var img = e.target.closest('.msg-img');
     if (img) { openPhoto(img.src); return; }
+    var del = e.target.closest('.msg-del');
+    if (del) { deleteMessage(del); return; }
+    var msg = e.target.closest('.msg[data-key]');
+    if (msg && !e.target.closest('button, a, input, .logcard, .btns')) { toggleDelete(msg); return; }
     var b = e.target.closest('.btns button[data-cb]');
     if (!b || chatState.busy) return;
     Array.prototype.forEach.call(b.closest('.btns').querySelectorAll('button'), function (x) {
@@ -4514,9 +4577,16 @@
     var p = state.data.profile || {};
     // Set unconditionally: guarding on race_date left the PREVIOUS athlete's countdown
     // on screen after a switch.
-    if (p.race_date) {
+    // The NEXT race (refresh-site-data.py nextRace), not profile race_date: that is the
+    // A-race and counted on past it ("-11 days to IM Italy"). Old data falls back.
+    var nr = state.data.nextRace;
+    if (nr && nr.days != null) {
+      $('#cd').innerHTML = '<b>' + nr.days + '</b>days to ' + esc(nr.name || 'race');
+    } else if (p.race_date && daysBetween(todayISO(), p.race_date) >= 0) {
       $('#cd').innerHTML = '<b>' + daysBetween(todayISO(), p.race_date) + '</b>days to ' +
         esc((p.race_name || '').split(' ').slice(0, 2).join(' '));
+    } else if ('nextRace' in state.data) {
+      $('#cd').innerHTML = '<b>—</b>no race booked';
     } else {
       $('#cd').innerHTML = '<b>—</b>no race set';
     }
@@ -4598,7 +4668,9 @@
   }
 
   function load(slug) {
+    var switched = state.slug && slug !== state.slug;
     state.slug = slug;
+    if (switched && state.me && $('#chatLog') && !chatState.busy) setTimeout(loadChatHistory, 0);
     var a = ATHLETES.filter(function (x) { return x.slug === slug; })[0];
     $('#whoName').innerHTML = '<span>' + esc(a ? a.name : slug) + '</span>' +
       '<span class="chg">change</span>';

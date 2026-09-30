@@ -467,8 +467,15 @@ def _turn_stream(chat_id: str, label: str, **turn) -> StreamingResponse:
 
 
 @app.get("/api/chat/history")
-def chat_history(request: Request):
+def chat_history(request: Request, slug: str = ""):
     email = request_email(request)
+    if slug and slug != own_slug(email):
+        # The coach reading an athlete's chat (Jamie, 30 Sep 2026). Read only.
+        require_slug(request, slug)
+        if not is_coach(email):
+            raise HTTPException(403, "not your chat")
+        return JSONResponse({"slug": slug, "state": "active", "readonly": True,
+                             "history": chat.timeline(slug)}, headers=NO_STORE)
     cid, slug, state = own_chat(email)
     if not cid:
         raise HTTPException(403, "this email has no athlete")
@@ -479,11 +486,34 @@ def chat_history(request: Request):
 MEDIA_RE = re.compile(r"^[0-9a-f-]{8,40}\.png$")
 
 
+@app.post("/api/chat/delete")
+async def chat_delete(request: Request):
+    """Delete one of your own chat's messages (either side)."""
+    if request.headers.get("x-peak") != "1":
+        raise HTTPException(400, "missing app header")
+    email = request_email(request)
+    cid, slug, _ = own_chat(email)
+    if not cid:
+        raise HTTPException(403, "this email has no athlete")
+    key = str((await request.json() or {}).get("key") or "")
+    if not re.fullmatch(r"o:[0-9]{14}-[0-9a-f]{6}|h:[0-9a-f]{12}:[uc]", key):
+        raise HTTPException(400, "which message?")
+    if not chat.delete_message(cid, slug, key):
+        raise HTTPException(404, "that message isn't there any more")
+    return JSONResponse({"ok": True})
+
+
 @app.get("/api/media/{name}")
-def media(name: str, request: Request):
+def media(name: str, request: Request, slug: str = ""):
     email = request_email(request)
     if not MEDIA_RE.match(name):
         raise HTTPException(404)
+    if slug and slug != own_slug(email) and is_coach(email):
+        require_slug(request, slug)                     # the coach viewing an athlete's chat
+        path = CC / "athletes" / slug / "web-media" / name
+        if not path.is_file():
+            raise HTTPException(404)
+        return FileResponse(path, media_type="image/png", headers=NO_STORE)
     slug = own_slug(email)
     if slug:
         path = CC / "athletes" / slug / "web-media" / name

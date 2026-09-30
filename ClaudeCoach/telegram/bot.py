@@ -369,15 +369,9 @@ MODEL_HAIKU  = engine.MODEL_HAIKU  # retired from selection
 def response_footer(model: str, slug: str = "", athlete_cfg: dict | None = None) -> str:
     # The alias does not say which model answered; model_aliases reads what the
     # weekly update last resolved it to, so the footer still shows "O5.5".
-    label = model_aliases.label(model)
-    if athlete_cfg:
-        # NEXT race, not the legacy race_date: once the A-race is behind them that field
-        # still parses and the old arithmetic counted DOWNWARD past it, so every reply
-        # carried "-35 days to <race they already did>" (races_lib.countdown).
-        days, race_name = races_lib.countdown(slug, athlete_cfg)
-        if days is not None:
-            return f"\n_{days} days to {race_name} · {label}_"
-    return f"\n_{label}_"
+    # Model only (Jamie, 30 Sep 2026): the race countdown is in Peak's header, and Peak
+    # shows this label under the message rather than in it.
+    return f"\n_{model_aliases.label(model)}_"
 
 
 def _strip_model_countdown(text: str, athlete_cfg: dict | None) -> str:

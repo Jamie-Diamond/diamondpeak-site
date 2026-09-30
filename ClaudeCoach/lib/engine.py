@@ -171,8 +171,11 @@ def render_history(history, athlete_name):
                          else "[sent a photo, no caption]")
         else:
             user_line = h["user"]
-        lines.append(f"{stamp}{athlete_name}: {user_line}")
-        lines.append(f"ClaudeCoach: {h['assistant']}")
+        # Deleted in Peak (api/server.py /api/chat/delete, 30 Sep 2026): gone for the coach too.
+        if not h.get("hide_user"):
+            lines.append(f"{stamp}{athlete_name}: {user_line}")
+        if not h.get("hide_coach"):
+            lines.append(f"ClaudeCoach: {h['assistant']}")
     return lines
 
 

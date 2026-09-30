@@ -502,24 +502,71 @@ def timeline(slug: str | None, limit: int = 80, chat_id: str | None = None) -> l
         ts = e.get("ts") or last_ts        # older entries carry no time; keep their order
         last_ts = ts
         user, coach = e.get("user") or "", e.get("assistant") or ""
+        hk = history_key(e)
+        if e.get("hide_user"):
+            user = ""
+        if e.get("hide_coach"):
+            coach = ""
         if e.get("kind") == "drill" or user.startswith(_DRILL_PREFIXES):
             user = ""                       # a button's own question, not something they wrote
             if coach.strip() in in_cards:
                 continue                    # shown inside its Log it card instead
         if user:
             items.append({"who": "me", "text": ("📷 " if e.get("kind") == "image" else "") + user,
-                          "ts": ts})
+                          "ts": ts, "key": hk + ":u"})
         if coach.startswith("[chart/photo sent]"):
             coach = ""                      # notify.py's stand-in for a chart; the chart is in the outbox
         if coach and (e.get("kind") == "drill" or not _in_outbox(coach, ts, user, out_texts, out_at)):
-            items.append({"who": "coach", "text": coach, "ts": ts})
+            items.append({"who": "coach", "text": coach, "ts": ts, "key": hk + ":c"})
     for o in out:
+        if o.get("deleted"):
+            continue
         items.append({"who": o.get("who") or "coach", "text": o.get("text") or "", "ts": o.get("ts") or "",
+                      "key": "o:" + str(o.get("id") or ""),
                       "buttons": o.get("buttons") or [], "photo": o.get("photo"),
                       "form": log_form(o), "logged": o.get("logged"), "drills": o.get("drills"),
                       "id": o.get("id")})
     items.sort(key=lambda i: i["ts"] or "")     # stable: equal times keep history order
     return items[-limit:]
+
+
+def history_key(e: dict) -> str:
+    """A stable id for one history.json exchange, so Peak can delete it."""
+    import hashlib
+    raw = f"{e.get('ts') or ''}|{e.get('user') or ''}|{e.get('assistant') or ''}"
+    return "h:" + hashlib.sha1(raw.encode()).hexdigest()[:12]
+
+
+def delete_message(chat_id: str, slug: str | None, key: str) -> bool:
+    """Delete one message from Peak's chat. An outbox message is marked deleted; a
+    history.json one is hidden on its side (hide_user / hide_coach), which also takes
+    it out of what the coach reads (lib/engine.py render_history), and the athlete's
+    resumed session is ended so the next reply starts from the trimmed history."""
+    import outbox
+    if key.startswith("o:"):
+        return outbox.patch(chat_id, key[2:], lambda e: e.__setitem__("deleted", True))
+    parts = key.split(":")
+    if len(parts) != 3 or parts[0] != "h" or parts[2] not in ("u", "c") or not slug:
+        return False
+    hf = CC / "athletes" / slug / "telegram" / "history.json"
+    b = bot()
+    with b._chat_lock(chat_id):
+        try:
+            hist = json.loads(hf.read_text())
+        except (OSError, ValueError):
+            return False
+        hit = False
+        for e in hist if isinstance(hist, list) else []:
+            if isinstance(e, dict) and history_key(e) == "h:" + parts[1]:
+                e["hide_user" if parts[2] == "u" else "hide_coach"] = True
+                hit = True
+        if not hit:
+            return False
+        tmp = hf.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(hist, indent=2))
+        tmp.replace(hf)
+        (CC / "athletes" / slug / ".chat_session.json").unlink(missing_ok=True)
+    return True
 
 
 def _in_outbox(coach: str, ts: str, user: str, out_texts: set, out_at: dict) -> bool:
@@ -552,5 +599,6 @@ def _signup_timeline(chat_id: str, limit: int) -> list[dict]:
     except Exception:
         return []
     return [{"who": o.get("who") or "coach", "text": o.get("text") or "", "ts": o.get("ts") or "",
-             "buttons": o.get("buttons") or [], "photo": o.get("photo"), "id": o.get("id")}
-            for o in entries]
+             "buttons": o.get("buttons") or [], "photo": o.get("photo"), "id": o.get("id"),
+             "key": "o:" + str(o.get("id") or "")}
+            for o in entries if not o.get("deleted")]

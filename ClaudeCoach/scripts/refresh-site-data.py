@@ -1970,6 +1970,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
     except Exception as exc:
         log(f"[{slug}] ctlProjection skipped: {exc}")
 
+    data["nextRace"] = _next_race(slug)
     out = BASE / f"training-data-{slug}.json"
     out.write_text(json.dumps(data, separators=(",", ":")))
     log(f"[{slug}] training-data-{slug}.json: CTL {kpi.get('ctl')}, {len(recent)} activities")
@@ -2010,6 +2011,20 @@ def release_lock():
         pass
 
 
+def _next_race(slug: str) -> dict | None:
+    """The athlete's next UPCOMING race for Peak's header (lib/races.py). The header
+    used profile race_date, the A-race, which counts on past the race ("-11 days to IM
+    Italy"); the bot's reply footer already used this, and Peak now does too (30 Sep 2026)."""
+    try:
+        import races as races_lib
+        acfg = json.loads(ATHLETES_CONFIG.read_text()).get(slug) or {}
+        days, name = races_lib.countdown(slug, acfg)
+        return {"days": days, "name": name} if days is not None else None
+    except Exception as exc:
+        log(f"[{slug}] next race skipped: {exc}")
+        return None
+
+
 def refresh_one(slug):
     """Rebuild ONE athlete's private training data and nothing else - no library,
     no publish. The app's pull-to-refresh calls this through api/server.py."""
@@ -2025,6 +2040,7 @@ def refresh_one(slug):
             data = post_process(data)
         except Exception as e:
             log(f"Post-processing warning: {e} — continuing without extra fields")
+        data["nextRace"] = _next_race("jamie")
         OUT_FILE.write_text(json.dumps(data, separators=(",", ":")))
         log(f"[jamie] refreshed: CTL {data['kpi'].get('ctl')}")
     else:
@@ -2103,6 +2119,7 @@ def main():
             log("Post-processing: heat, decoupling, CTL projection added")
         except Exception as e:
             log(f"Post-processing warning: {e} — continuing without extra fields")
+        data["nextRace"] = _next_race("jamie")
         OUT_FILE.write_text(json.dumps(data, separators=(",", ":")))
 
         # Sanitised public variant for GitHub Pages. The old root-level

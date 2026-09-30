@@ -621,3 +621,46 @@ def test_a_telegram_reply_shows_once_in_peak(env, monkeypatch):
     assert coach.count("Logged.") == 1                   # the 28 Sep one, from history
     assert sum("M&S" in t for t in coach) == 1
     assert sum(t.startswith("Logged.\n_") for t in coach) == 1
+
+
+def test_delete_a_message_and_the_coach_reads_an_athletes_chat(env, monkeypatch):
+    import contextlib
+    import outbox
+    adir = server.CC / "athletes" / "kathryn"
+    (adir / "telegram").mkdir(parents=True, exist_ok=True)
+    (adir / "telegram" / "history.json").write_text(json.dumps([
+        {"user": "Test", "assistant": "Got it. Test received.", "ts": "2026-09-30T06:20:00"},
+        {"user": "how was my run?", "assistant": "Solid.", "ts": "2026-09-30T09:00:00"}]))
+    (adir / "web-outbox.jsonl").write_text(json.dumps(
+        {"id": "20260930070000-abcdef", "ts": "2026-09-30T07:00:00", "text": "Morning card"}) + "\n")
+    (adir / ".chat_session.json").write_text("{}")
+    monkeypatch.setattr(server.chat, "CC", server.CC)
+    monkeypatch.setattr(outbox, "BASE", server.CC)
+    monkeypatch.setattr(outbox, "ATHLETES_CONFIG", server.ATHLETES_CONFIG)
+    outbox._CACHE.update(mtime=None, data={})
+
+    class B:
+        @staticmethod
+        def _chat_lock(cid):
+            return contextlib.nullcontext()
+    monkeypatch.setattr(server.chat, "bot", lambda: B)
+    h = {"x-peak": "1"}
+
+    dev(monkeypatch, "coach@example.com")                     # Jamie viewing Kathryn: read only
+    r = env.get("/api/chat/history", params={"slug": "kathryn"}).json()
+    assert r["readonly"] is True and [i["text"] for i in r["history"]][:2] == ["Test", "Got it. Test received."]
+    dev(monkeypatch, "kat@example.com")
+    assert env.get("/api/chat/history", params={"slug": "jamie"}).status_code == 403
+
+    hist = env.get("/api/chat/history").json()["history"]
+    keys = {i["text"]: i["key"] for i in hist}
+    for t in ("Test", "Got it. Test received.", "Morning card"):
+        assert env.post("/api/chat/delete", json={"key": keys[t]}, headers=h).status_code == 200
+    left = [i["text"] for i in env.get("/api/chat/history").json()["history"]]
+    assert left == ["how was my run?", "Solid."]
+    assert not (adir / ".chat_session.json").exists()          # the coach restarts without them
+    import engine
+    lines = engine.render_history(json.loads((adir / "telegram" / "history.json").read_text()), "Kathryn")
+    assert not any("Test" in l for l in lines) and any("how was my run?" in l for l in lines)
+    assert env.post("/api/chat/delete", json={"key": "o:20260930070000-abcdef"}, headers=h).status_code == 200
+    assert env.post("/api/chat/delete", json={"key": "../x"}, headers=h).status_code == 400

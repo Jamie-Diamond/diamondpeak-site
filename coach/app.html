@@ -807,6 +807,15 @@ button.crow:hover,a.crow:hover{background:rgba(20,24,29,.03)}
   background:none;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;
   color:var(--muted);cursor:pointer}
 .crow-x.armed{border-color:#c0392b;color:#c0392b}
+/* chat: the model under a reply, and Delete (app.js splitMeta, toggleDelete) */
+.msg-meta{margin-top:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted);opacity:.8}
+.msg[data-key]{cursor:pointer}
+.msg.gone{opacity:0;transform:scale(.97);transition:opacity .25s,transform .25s}
+.msg-act{display:flex;margin:-4px 0 10px}
+.msg-act.me{justify-content:flex-end}
+.msg-del{padding:5px 12px;border:1px solid #c0392b;border-radius:14px;background:var(--paper);
+  color:#c0392b;font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
 /* chat: the coach's Markdown tables (app.js mdTables) */
 .msg .mdt-w{overflow-x:auto;margin:6px 0}
 .msg table.mdt{border-collapse:collapse;font-size:13px;min-width:60%}
@@ -1118,6 +1127,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=55" defer></script>
+<script src="app.js?v=56" defer></script>
 </body>
 </html>
