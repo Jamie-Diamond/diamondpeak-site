@@ -557,3 +557,30 @@ def test_settings_follow_the_athlete_on_screen(env, monkeypatch):
     assert env.get("/api/settings/jamie").status_code == 403
     assert env.post("/api/settings/kathryn", json={"heat": False}, headers=h).json()["prefs"]["heat"] is False
     assert env.post("/api/settings/kathryn", json={"tracking_only": False}, headers=h).status_code == 403
+
+
+def test_disconnect_strava_only_for_a_peak_link(env, monkeypatch):
+    import coaching_prefs
+    import planning_pause
+    import strava_link
+    monkeypatch.setattr(coaching_prefs, "BASE", server.CC)
+    monkeypatch.setattr(planning_pause, "BASE", server.CC)
+    monkeypatch.setattr(server, "_icu_check", lambda aid, key: "ok")
+    monkeypatch.setattr(strava_link, "BASE", server.CC)
+    revoked = []
+    monkeypatch.setattr(strava_link, "disconnect", lambda slug: revoked.append(slug) or
+                        (server.CC / "athletes" / slug / "strava_tokens.json").unlink() or True)
+    h = {"x-peak": "1"}
+    (server.CC / "athletes" / "kathryn").mkdir(parents=True, exist_ok=True)
+    (server.CC / "athletes" / "kathryn" / "strava_tokens.json").write_text("{}")
+    (server.CC / "athletes" / "jamie" / "strava_tokens.json").write_text("{}")
+    ath = json.loads(server.ATHLETES_CONFIG.read_text())
+    ath["kathryn"]["strava_bridge"] = True
+    server.ATHLETES_CONFIG.write_text(json.dumps(ath))
+
+    dev(monkeypatch, "coach@example.com")
+    assert env.post("/api/strava/disconnect/jamie", headers=h).status_code == 409   # his own link
+    dev(monkeypatch, "kat@example.com")
+    r = env.post("/api/strava/disconnect/kathryn", headers=h)
+    assert r.status_code == 200 and r.json()["strava"] is None and revoked == ["kathryn"]
+    assert "strava_bridge" not in json.loads(server.ATHLETES_CONFIG.read_text())["kathryn"]

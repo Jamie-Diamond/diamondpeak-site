@@ -668,6 +668,29 @@ def strava_callback(request: Request, code: str = "", state: str = "", scope: st
     return _page("✓ Strava connected", "You can close this and go back to Peak.")
 
 
+@app.post("/api/strava/disconnect/{slug}")
+def strava_disconnect(slug: str, request: Request):
+    """Settings -> Strava -> Disconnect: the athlete, or their coach. Only a link made
+    in Peak (copying); Jamie's own Strava link is not Peak's to remove."""
+    if request.headers.get("x-peak") != "1":
+        raise HTTPException(400, "missing app header")
+    require_slug(request, slug)
+    email = request_email(request)
+    if own_slug(email) != slug and not is_coach(email):
+        raise HTTPException(403, "not your Strava")
+    if _slug_strava(slug) != "copying":
+        raise HTTPException(409, "there's no Peak Strava link to remove")
+    import strava_link
+    revoked = strava_link.disconnect(slug)
+    athletes = _load(ATHLETES_CONFIG)
+    if isinstance(athletes.get(slug), dict):
+        athletes[slug].pop("strava_bridge", None)
+        _write_json(ATHLETES_CONFIG, athletes)
+    print(f"[strava] {slug} disconnected by {email} (Strava revoke {'ok' if revoked else 'failed'})",
+          flush=True)
+    return JSONResponse(_settings(slug), headers=NO_STORE)
+
+
 # ── notifications ──
 
 @app.get("/api/push/key")

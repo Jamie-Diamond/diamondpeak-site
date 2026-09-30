@@ -4316,7 +4316,10 @@
       var sv = as && as.strava;
       rows += sv
         ? '<div class="crow"><span class="crow-i">S</span><span class="crow-n">Strava</span>' +
-          '<span class="crow-s ok">' + (sv === 'copying' ? 'Connected · copying' : 'Connected') + ' ✓</span></div>'
+          '<span class="crow-s ok">' + (sv === 'copying' ? 'Copying ✓' : 'Connected ✓') + '</span>' +
+          // Only a link made in Peak can be removed here (Jamie's own feeds lap splits).
+          (sv === 'copying' ? '<button type="button" class="crow-x" id="stravaOff">Disconnect</button>' : '') +
+          '</div>'
         : mine
           ? '<a class="crow" href="/api/strava/connect" target="_blank" rel="noopener">' +
             '<span class="crow-i">S</span><span class="crow-n">Strava</span><span class="crow-s">Connect ↗</span></a>'
@@ -4376,6 +4379,22 @@
       el.addEventListener('toggle', function () { DRAWERS[el.dataset.drawer] = el.open; });
     });
     fillAppVersion();
+    // Disconnect Strava: two taps, no browser dialog (lib/strava_link.py disconnect).
+    var so = $('#stravaOff');
+    if (so) so.onclick = function () {
+      if (!so.classList.contains('armed')) {
+        so.classList.add('armed'); so.textContent = 'Tap again to disconnect';
+        setTimeout(function () {
+          if (so.isConnected && !so.disabled) { so.classList.remove('armed'); so.textContent = 'Disconnect'; }
+        }, 4000);
+        return;
+      }
+      var slug = state.slug;
+      so.disabled = true; so.textContent = 'Disconnecting…';
+      postJSON('/api/strava/disconnect/' + encodeURIComponent(slug), {})
+        .then(function (j) { j._t = Date.now(); ASET[slug] = j; renderSettings(); })
+        .catch(function (err) { so.disabled = false; so.classList.remove('armed'); so.textContent = err.message; });
+    };
     var pp = $('#prefPick');
     if (pp) pp.onclick = function (e) {
       var b = e.target.closest('.srow[data-pref]');

@@ -112,3 +112,27 @@ def connected_count() -> int:
     if outbox.SIGNUP_DIR.is_dir():
         n += len(list(outbox.SIGNUP_DIR.glob("*/" + TOKENS_NAME)))
     return n
+
+
+DEAUTH_URL = "https://www.strava.com/oauth/deauthorize"
+
+
+def disconnect(slug: str) -> bool:
+    """Peak's Disconnect: revoke our access on Strava, forget the tokens, stop the
+    copying. Only for a link made through Peak (strava_bridge): Jamie's own Strava link
+    feeds lap splits and description writes and is never touched here. Returns whether
+    Strava confirmed the revoke; the local tokens go either way, which frees the slot."""
+    f = BASE / "athletes" / slug / TOKENS_NAME
+    ok = False
+    if f.exists():
+        try:
+            from strava_client import StravaClient
+            token = StravaClient(slug).access_token()          # refreshed if it has expired
+            req = urllib.request.Request(DEAUTH_URL, data=urllib.parse.urlencode(
+                {"access_token": token}).encode(), method="POST")
+            with urllib.request.urlopen(req, timeout=20):
+                ok = True
+        except Exception:
+            ok = False
+        f.unlink(missing_ok=True)
+    return ok
