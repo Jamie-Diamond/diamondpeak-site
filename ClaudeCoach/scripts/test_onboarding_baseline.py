@@ -56,6 +56,7 @@ B.send_photo = lambda token, chat_id, data, *a, **k: PHOTOS.append((str(chat_id)
 B._outbox = None
 ISSUES = []                        # what _icu_setup_issues reports, one list per call
 B._icu_id_for_key = lambda key: "i123"
+REAL_SETUP_ISSUES = B._icu_setup_issues
 B._icu_setup_issues = lambda i, k: ISSUES.pop(0) if ISSUES else []
 KEY = "abcdefghij0123456789abcde"
 B._git_commit = lambda *a, **k: None
@@ -186,7 +187,9 @@ n = len(SENT)
 B.handle_onboarding("t", "125", "ob:icu_has:no")
 setup_msgs = [t for c, t, _ in SENT[n:] if c == "125"]
 check("'No' tap gives the set-up steps", any("Sign up free at intervals.icu" in t for t in setup_msgs), setup_msgs)
-check("set-up steps come with screenshots", len(PHOTOS) == 2, PHOTOS)
+check("set-up steps come with screenshots (settings, Garmin, Strava)", len(PHOTOS) == 3, PHOTOS)
+check("set-up asks for the history", any("Download old data" in t and "Import all Strava data" in t
+                                          for t in setup_msgs), setup_msgs)
 check("set-up ends on an I've done it button",
       SENT[-1][2] and SENT[-1][2]["inline_keyboard"][0][0]["callback_data"] == "ob:icu_setup:done", SENT[-1])
 n = len(SENT)
@@ -194,7 +197,7 @@ B.handle_onboarding("t", "125", "ob:icu_has:yes")              # the old questio
 check("a tap on an earlier question is ignored", len(SENT) == n)
 B.handle_onboarding("t", "125", "ob:icu_setup:done")
 check("then the API key steps, with their screenshots",
-      any("API key" in t for c, t, _ in SENT[n:]) and len(PHOTOS) == 4, (PHOTOS, SENT[n:]))
+      any("API key" in t for c, t, _ in SENT[n:]) and len(PHOTOS) == 5, (PHOTOS, SENT[n:]))
 n = len(SENT)
 B.handle_onboarding("t", "125", "not a key")
 check("a non-key is refused", any("doesn't look like an API key" in t for c, t, _ in SENT[n:]))
@@ -217,6 +220,47 @@ prof = json.loads((tmp / "athletes/pat/profile.json").read_text())
 check("tapped level saved", prof.get("coaching_level") == "pro", prof.get("coaching_level"))
 check("tap from a sign-up goes to onboarding, not athlete handlers",
       B.dispatch_callback("t", "126", "ob:icu_has:yes", 1, {}, {}) is True)
+
+# ── 3c. the set-up check itself, on made-up Intervals.icu accounts ──────────
+import types
+from datetime import date as _d, timedelta as _td
+
+
+def _ago(n):
+    return (_d.today() - _td(days=n)).isoformat() + "T07:00:00"
+
+
+def setup_check(profile, acts, well):
+    class FakeClient:
+        def __init__(self, *a):
+            pass
+
+        def fetch_all(self, *specs):
+            return [profile, acts, well]
+    sys.modules["icu_api"] = types.SimpleNamespace(IcuClient=FakeClient)
+    try:
+        return REAL_SETUP_ISSUES("i1", "k")
+    finally:
+        sys.modules.pop("icu_api", None)
+
+
+SLEPT = [{"hrv": 60, "sleepSecs": 25000}]
+LONG = [{"source": "GARMIN_CONNECT", "start_date_local": _ago(390)},
+        {"source": "GARMIN_CONNECT", "start_date_local": _ago(2)}]
+check("all set: nothing to fix",
+      setup_check({"icu_garmin_upload_workouts": True}, LONG, SLEPT) == [])
+got = setup_check({"strava_authorized": True}, [{"source": "STRAVA", "start_date_local": _ago(3)}], [])
+check("Strava only: told to connect the watch directly",
+      len(got) == 1 and "Strava" in got[0] and "Apple Watch" in got[0], got)
+got = " ".join(setup_check({"icu_garmin_upload_workouts": False},
+                           [{"source": "GARMIN_CONNECT", "start_date_local": _ago(20)}], []))
+check("Garmin: missing wellness, upload and history each named",
+      "Download wellness data" in got and "Upload planned workouts" in got
+      and "last *2 weeks*" in got and "Import all Garmin data" in got, got)
+check("Apple Watch via an app: no brand settings to nag about",
+      setup_check({}, [{"source": "OAUTH_CLIENT", "start_date_local": _ago(380)}], SLEPT) == [])
+got = " ".join(setup_check({}, [{"source": "ZWIFT", "start_date_local": _ago(380)}], SLEPT))
+check("Zwift only: asked for the watch too", "indoor sessions" in got, got)
 
 # ── 4. race sports from name when the lookup has no distances ────────────────
 check("gran fondo -> bike", B._race_sports({"race_type": "Cycling Gran Fondo"}, "") == ["bike"])

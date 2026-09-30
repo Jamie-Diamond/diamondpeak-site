@@ -4504,14 +4504,21 @@ _OB_PHASE1 = [
                 "Don't tap *Clear* or *Generate* -- that changes the key and I lose access."),
 ]
 _OB_ICU_SETUP = ("icu_setup",
-    "No problem -- it takes about 5 minutes:\n\n"
+    "No problem -- it takes about 10 minutes:\n\n"
     "1. Sign up free at intervals.icu\n"
     "2. Open *Settings* (in the ☰ menu), then *Connections*\n"
-    "3. Connect everything you use: your watch (Garmin, Coros, Suunto, Polar, Wahoo...), "
-    "Strava, Zwift. *Your watch must be connected directly* -- activities that only "
-    "come through Strava are hidden from me.\n"
-    "4. For your watch, turn on *wellness* (sleep, HRV, resting heart rate) and "
-    "*uploading planned workouts*, so my sessions appear on it.")
+    "3. Connect your watch (Garmin, Coros, Suunto, Polar...) and tick the three boxes "
+    "ringed in *yellow*: _Download activities_, _Download wellness data_, _Upload planned "
+    "workouts_. It must be connected directly -- activities that only come through "
+    "Strava are hidden from me.\n"
+    "Apple Watch has no direct link: install *Intervals.icu Companion* or *HealthFit* "
+    "on your iPhone -- they send your workouts, sleep and HRV across.\n"
+    "4. Connect Strava and Zwift too, if you use them\n\n"
+    "*Then bring in your history* -- the more I can see, the better I can coach you. "
+    "Tap the links ringed in *green*:\n"
+    "• _Download old data_, under activities and under wellness\n"
+    "• _Import all Garmin data_ for everything: Garmin emails you a link to paste in\n"
+    "• _Import all Strava data_ if you have years on Strava")
 _OB_LEVEL = ("level",
     "How much *detail* do you want from me?\n\n"
     "*Beginner* -- plain words: easy, steady, hard, plus heart rate. No jargon.\n"
@@ -4524,18 +4531,25 @@ _OB_BUTTONS = {
     "icu_fix":   [[("Check again", "again"), ("Carry on for now", "skip")]],
     "level":     [[("Beginner", "beginner"), ("Mid", "mid"), ("Pro", "pro")]],
 }
-_OB_IMAGES = {"icu_setup": ["icu-settings.png", "icu-connections.png"],
-              "icu_key":   ["icu-developer.png", "icu-key.png"]}
-_OB_AFTER = {"icu_setup": "Tap below once that's done.",
-             "icu_key":   "Paste your key here when you have it."}
+_OB_IMAGES = {"icu_setup": ["icu-settings.png", "icu-garmin.png", "icu-strava.png"],
+              "icu_key":   ["icu-developer.png", "icu-key.png"],
+              "icu_fix":   ["icu-garmin.png"]}
+_OB_AFTER = {"icu_setup": "Tap below once that's done. History can keep arriving for a while -- that's fine.",
+             "icu_key":   "Paste your key here when you have it.",
+             "icu_fix":   "Tap *Check again* once that's done."}
+_HISTORY_WANTED_DAYS = 335      # less than ~11 months visible: ask for the old data
 _OB_IMG_DIR = BASE.parent / "onboarding" / "img"
 _LEVEL_WORDS = {"1": "beginner", "beginner": "beginner", "2": "mid", "mid": "mid",
                 "middle": "mid", "3": "pro", "pro": "pro"}
-# Watch brands: (what their activities' `source` contains, Intervals.icu setting prefix, name)
+# Watch brands: (what their activities' `source` contains, Intervals.icu setting prefix,
+# name). Sources per the API spec: STRAVA, UPLOAD, MANUAL, GARMIN_CONNECT, OAUTH_CLIENT
+# (apps such as the Apple Watch ones), DROPBOX, POLAR, SUUNTO, COROS, WAHOO, ZWIFT,
+# ZEPP, CONCEPT2, HUAWEI.
 _ICU_DEVICES = (("GARMIN", "icu_garmin_", "Garmin"), ("COROS", "coros_", "Coros"),
                 ("SUUNTO", "suunto_", "Suunto"), ("POLAR", "polar_", "Polar"),
                 ("WAHOO", "wahoo_", "Wahoo"), ("HUAWEI", "huawei_", "Huawei"),
                 ("ZEPP", "zepp_", "Zepp"))
+_ICU_INDOOR_ONLY = {"ZWIFT", "CONCEPT2", "MANUAL"}
 
 # Always asked after ICU fetch, regardless of what ICU returned. The slug question is
 # held back and asked LAST (see _build_remaining_queue), after the HR / power / test
@@ -5029,43 +5043,66 @@ def _icu_id_for_key(icu_key):
 def _icu_setup_issues(icu_id, icu_key):
     """What still needs switching on in Intervals.icu for coaching to work, in the
     athlete's words; [] when nothing does. Read from what actually arrives: activity
-    sources over 60 days (a watch brand, or only Strava, which the API hides) and 14
-    days of wellness, plus the watch's own workout-upload setting."""
+    sources (a watch brand, or only Strava, which the API hides), 14 days of wellness,
+    the watch's own workout-upload setting, and how far back the history goes."""
     import sys as _sys
     _sys.path.insert(0, str(BASE.parent / "lib"))
     from icu_api import IcuClient
     profile, acts, well = IcuClient(icu_id, icu_key.strip()).fetch_all(
-        "get_athlete_profile", ("get_training_history", 60), ("get_wellness", 14))
+        "get_athlete_profile", ("get_training_history", 400), ("get_wellness", 14))
     profile = profile if isinstance(profile, dict) else {}
     acts = acts if isinstance(acts, list) else []
     well = well if isinstance(well, list) else []
-    sources = {str(a.get("source") or "").upper() for a in acts if isinstance(a, dict)}
+    acts = [a for a in acts if isinstance(a, dict)
+            and str(a.get("source") or "").upper() != "STRAVA"]      # hidden from the API
+    sources = {str(a.get("source") or "").upper() for a in acts}
     devices = [d for d in _ICU_DEVICES if any(d[0] in src for src in sources)]
-    if not devices:
+    watch = devices[0][2] if devices else "your watch"
+    apple = ("On an Apple Watch, the Intervals.icu Companion or HealthFit app on your "
+             "iPhone does this.")
+    if not acts:
         if profile.get("strava_authorized"):
             return ["Your activities only come in through *Strava*, and Strava hides them "
-                    "from me. Connect your watch (Garmin, Coros, Suunto...) directly as well."]
+                    "from me. Connect your watch (Garmin, Coros, Suunto...) directly as well. "
+                    + apple]
         return ["I can't see any activities yet. Connect your watch (Garmin, Coros, "
-                "Suunto...). If you just did, give it a few minutes to bring your history in."]
+                "Suunto...) -- if you just did, give it a few minutes. " + apple]
     issues = []
+    if sources <= _ICU_INDOOR_ONLY:
+        issues.append("I can only see your indoor sessions. Connect your watch too, so "
+                      "I see everything. " + apple)
     if not any(w.get("hrv") or w.get("sleepSecs") or w.get("restingHR")
                for w in well if isinstance(w, dict)):
-        issues.append(f"I can't see your *sleep, HRV or resting heart rate*. Turn on "
-                      f"wellness for your {devices[0][2]}.")
+        issues.append(f"I can't see your *sleep, HRV or resting heart rate*. Tick "
+                      f"_Download wellness data_ under {watch}."
+                      + ("" if devices else " " + apple))
     for _src, prefix, name in devices:
         if profile.get(prefix + "upload_workouts") is False:
-            issues.append(f"Planned workouts aren't set to go to your *{name}*. Turn on "
-                          f"workout upload, so my sessions appear on your watch.")
+            issues.append(f"Your planned sessions won't reach your watch. Tick _Upload "
+                          f"planned workouts_ under {name}.")
+    days = sorted(str(a.get("start_date_local") or "")[:10] for a in acts
+                  if isinstance(a, dict) and a.get("start_date_local"))
+    if days:
+        seen = (date.today() - date.fromisoformat(days[0])).days
+        if seen < _HISTORY_WANTED_DAYS:
+            weeks = max(1, seen // 7)
+            tip = (f"I can only see your last *{weeks} week{'s' if weeks != 1 else ''}* of "
+                   f"training -- the more history, the better I can coach you. Under "
+                   f"{watch}, tap _Download old data_ (activities and wellness)"
+                   + (f", or _Import all {watch} data_ for everything."
+                      if watch in ("Garmin", "Polar") else "."))
+            if profile.get("strava_authorized"):
+                tip += " Older sessions on Strava: tap _Import all Strava data_."
+            issues.append(tip)
     return issues
 
 
 def _icu_fix_question(issues, again=False):
     head = ("Still not quite there:" if again else
-            "Connected ✓ -- a couple of things to switch on in Intervals.icu first, so "
-            "I can coach you properly:")
+            "Connected ✓ -- a few things to sort in Intervals.icu first, so I can "
+            "coach you properly:")
     body = "\n\n".join("• " + i for i in issues)
-    return (f"{head}\n\n{body}\n\nThey're in *Settings* -> *Connections*, under your "
-            f"watch. Then tap *Check again*.")
+    return f"{head}\n\n{body}\n\nAll in *Settings* -> *Connections*."
 
 
 def _ob_after_icu(token, chat_id, ob_state, session):
