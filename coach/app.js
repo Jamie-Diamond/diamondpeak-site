@@ -4192,6 +4192,20 @@
            unsupported: 'this browser cannot receive notifications',
            'ios-install': 'Share \u2192 Add to Home Screen, then open Peak from there' }[ps] || '') +
         '</span></span><span class="gate-go">→</span></button></div>', { flush: true });
+      // Strava (lib/strava_link.py): for watches with no direct Intervals.icu link.
+      if (state.me.own) {
+        var sv = state.me.strava;
+        h += card('Strava', '<div class="body-flush">' + (sv
+          ? '<div class="pickrow on"><span class="gate-mark">✓</span><span class="gate-row-t">' +
+            '<b>Connected</b><span>' + (sv === 'copying' ? 'your Strava workouts are copied to your coach'
+              : 'your coach reads your Strava') + '</span></span></div>'
+          : '<a class="pickrow" href="/api/strava/connect" target="_blank" rel="noopener">' +
+            '<span class="gate-mark">S</span><span class="gate-row-t"><b>Connect Strava</b>' +
+            '<span>for a watch with no direct Intervals.icu link, like Apple Watch</span></span>' +
+            '<span class="gate-go">↗</span></a>') + '</div>',
+          { flush: true, foot: 'Garmin, Coros, Suunto and Polar connect straight to Intervals.icu, ' +
+            'so they don’t need this.' });
+      }
       if (state.me.coach) {
         h += card('Coaching', '<div id="adminBox"><div class="empty">Loading…</div></div>',
           { foot: 'Telegram off: that athlete\u2019s coach messages come to Peak only, with a notification.' });

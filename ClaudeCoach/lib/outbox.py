@@ -289,6 +289,8 @@ def adopt(chat_id, slug: str) -> None:
             (adir / MEDIA_DIR).mkdir(exist_ok=True)
             for p in (src / MEDIA_DIR).iterdir():
                 p.replace(adir / MEDIA_DIR / p.name)
+        if (src / "strava_tokens.json").exists():           # lib/strava_link.py
+            (src / "strava_tokens.json").replace(adir / "strava_tokens.json")
         shutil.rmtree(src, ignore_errors=True)
     except OSError:
         pass

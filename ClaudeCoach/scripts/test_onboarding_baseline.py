@@ -57,7 +57,7 @@ B._outbox = None
 ISSUES = []                        # what _icu_setup_issues reports, one list per call
 B._icu_id_for_key = lambda key: "i123"
 REAL_SETUP_ISSUES = B._icu_setup_issues
-B._icu_setup_issues = lambda i, k: ISSUES.pop(0) if ISSUES else []
+B._icu_setup_issues = lambda i, k, *a: ISSUES.pop(0) if ISSUES else []
 KEY = "abcdefghij0123456789abcde"
 B._git_commit = lambda *a, **k: None
 B.load_config = lambda: {"admin_chat_id": "999"}
@@ -261,6 +261,37 @@ check("Apple Watch via an app: no brand settings to nag about",
       setup_check({}, [{"source": "OAUTH_CLIENT", "start_date_local": _ago(380)}], SLEPT) == [])
 got = " ".join(setup_check({}, [{"source": "ZWIFT", "start_date_local": _ago(380)}], SLEPT))
 check("Zwift only: asked for the watch too", "indoor sessions" in got, got)
+
+# ── 3d. a Peak sign-up with no watch data: Connect Strava, then copying on ────
+import outbox as OB  # noqa: E402
+OB.BASE, OB.ATHLETES_CONFIG, OB.SIGNUP_DIR = tmp, B.ATHLETES_CONFIG, tmp / "config/web-signup"
+OB._CACHE.update(mtime=None, data={})
+B._outbox = OB
+WEB = "web-00aa11bb22"
+ISSUES[:] = [["Your activities only come in through *Strava*, and Strava hides them from me."], []]
+B.save_pending([WEB])
+for a in ["hi", "Robin Apple", "70.3 Test, 2027-06-01", "ob:icu_has:yes"]:
+    B.handle_onboarding("t", WEB, a)
+n = len(SENT)
+B.handle_onboarding("t", WEB, KEY)
+fix = [(t, m) for c, t, m in SENT[n:] if c == WEB]
+rows = (fix[-1][1] or {}).get("inline_keyboard", [[]])
+check("no watch data: the fix step offers Connect Strava",
+      rows[0][0].get("url", "").endswith("/api/strava/connect") and any("Connect Strava" in t for t, _ in fix), rows)
+(OB.SIGNUP_DIR / WEB).mkdir(parents=True, exist_ok=True)
+(OB.SIGNUP_DIR / WEB / "strava_tokens.json").write_text('{"refresh_token": "r"}')
+check("with Strava connected, nothing is left to fix",
+      REAL_SETUP_ISSUES("i1", "k", WEB) == [])
+B.handle_onboarding("t", WEB, "ob:icu_fix:again")
+for a in ["sub 5", "2 years", "none", "8", "2", "yes", "0", "no", "no", "ob:level:beginner", "robin"]:
+    B.handle_onboarding("t", WEB, a)
+ath = json.loads(B.ATHLETES_CONFIG.read_text()).get("robin", {})
+check("signed up through Strava: copying switched on and the tokens moved in",
+      ath.get("strava_bridge") is True and (tmp / "athletes/robin/strava_tokens.json").exists()
+      and not (OB.SIGNUP_DIR / WEB).exists(), ath)
+check("a Telegram sign-up is never offered the Peak-only Strava link",
+      B._strava_offer("555", ["Your activities only come in through *Strava*"]) is False)
+B._outbox = None
 
 # ── 4. race sports from name when the lookup has no distances ────────────────
 check("gran fondo -> bike", B._race_sports({"race_type": "Cycling Gran Fondo"}, "") == ["bike"])

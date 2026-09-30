@@ -4511,8 +4511,8 @@ _OB_ICU_SETUP = ("icu_setup",
     "ringed in *yellow*: _Download activities_, _Download wellness data_, _Upload planned "
     "workouts_. It must be connected directly -- activities that only come through "
     "Strava are hidden from me.\n"
-    "Apple Watch has no direct link: install *Intervals.icu Companion* or *HealthFit* "
-    "on your iPhone -- they send your workouts, sleep and HRV across.\n"
+    "Apple Watch has no direct link: I'll offer you Strava in a moment, or install "
+    "*Intervals.icu Companion* on your iPhone to send sleep and HRV too.\n"
     "4. Connect Strava and Zwift too, if you use them\n\n"
     "*Then bring in your history* -- the more I can see, the better I can coach you. "
     "Tap the links ringed in *green*:\n"
@@ -5010,13 +5010,21 @@ def _ob_markup(key):
                                 for row in rows]}
 
 
-def _ob_ask(token, chat_id, key, question, answers=None):
+def _ob_ask(token, chat_id, key, question, answers=None, strava=False):
     """Send one sign-up question: its text, then its screenshots and a closing line
-    carrying its buttons, or just the text with its buttons."""
+    carrying its buttons, or just the text with its buttons. strava: add the Connect
+    Strava link (lib/strava_link.py) above them."""
     images = list(_OB_IMAGES.get(key, []))
     if key == "icu_key" and (answers or {}).get("icu_has") == "yes":
         images.insert(0, "icu-settings.png")        # the "no" path showed it already
     markup = _ob_markup(key)
+    if strava and markup:
+        try:
+            import strava_link
+            markup["inline_keyboard"].insert(0, [{"text": "Connect Strava",
+                                                  "url": strava_link.CONNECT_URL}])
+        except Exception:
+            pass
     if not images:
         send(token, chat_id, question, reply_markup=markup)
         return
@@ -5040,11 +5048,28 @@ def _icu_id_for_key(icu_key):
     return athlete_id
 
 
-def _icu_setup_issues(icu_id, icu_key):
+# The "no watch data" findings: for a Peak sign-up, the fix step also offers Connect Strava.
+_NO_WATCH = ("Your activities only come in through *Strava*", "I can't see any activities yet",
+             "I can only see your indoor sessions")
+
+
+def _strava_linked(chat_id) -> bool:
+    """Connected Strava through Peak (lib/strava_link.py): the Strava copy covers it."""
+    try:
+        import strava_link
+        return bool(chat_id) and strava_link.connected(chat_id)
+    except Exception:
+        return False
+
+
+def _icu_setup_issues(icu_id, icu_key, chat_id=None):
     """What still needs switching on in Intervals.icu for coaching to work, in the
     athlete's words; [] when nothing does. Read from what actually arrives: activity
     sources (a watch brand, or only Strava, which the API hides), 14 days of wellness,
-    the watch's own workout-upload setting, and how far back the history goes."""
+    the watch's own workout-upload setting, and how far back the history goes. Nothing
+    to fix once they have connected Strava in Peak: scripts/strava-to-icu.py copies it."""
+    if _strava_linked(chat_id):
+        return []
     import sys as _sys
     _sys.path.insert(0, str(BASE.parent / "lib"))
     from icu_api import IcuClient
@@ -5097,12 +5122,21 @@ def _icu_setup_issues(icu_id, icu_key):
     return issues
 
 
-def _icu_fix_question(issues, again=False):
+def _strava_offer(chat_id, issues) -> bool:
+    return (str(chat_id).startswith("web-")
+            and any(i.startswith(_NO_WATCH) for i in issues))
+
+
+def _icu_fix_question(issues, again=False, strava=False):
     head = ("Still not quite there:" if again else
             "Connected ✓ -- a few things to sort in Intervals.icu first, so I can "
             "coach you properly:")
     body = "\n\n".join("• " + i for i in issues)
-    return f"{head}\n\n{body}\n\nAll in *Settings* -> *Connections*."
+    tail = "All in *Settings* -> *Connections*."
+    if strava:
+        tail += ("\n\nOr tap *Connect Strava* and I'll copy your workouts across from Strava "
+                 "myself -- no sleep or HRV that way.")
+    return f"{head}\n\n{body}\n\n{tail}"
 
 
 def _ob_after_icu(token, chat_id, ob_state, session):
@@ -5218,14 +5252,15 @@ def handle_onboarding(token, chat_id, text):
             return True
         session["icu_data"], session["icu_summary"] = icu_data, summary
         try:
-            issues = _icu_setup_issues(icu_id, answer)
+            issues = _icu_setup_issues(icu_id, answer, chat_id)
         except Exception as e:
             log(f"Onboarding ICU set-up check failed for {chat_id}: {e}")
             issues = []
         if issues:
             session["current_key"] = "icu_fix"
             save_onboarding_state(ob_state)
-            _ob_ask(token, chat_id, "icu_fix", _icu_fix_question(issues))
+            offer = _strava_offer(chat_id, issues)
+            _ob_ask(token, chat_id, "icu_fix", _icu_fix_question(issues, strava=offer), strava=offer)
             return True
         return _ob_after_icu(token, chat_id, ob_state, session)
 
@@ -5234,13 +5269,15 @@ def handle_onboarding(token, chat_id, text):
             icu_id, icu_key = session["answers"]["icu_id"], session["answers"]["icu_key"]
             try:
                 session["icu_data"], session["icu_summary"] = _fetch_icu_data(icu_id, icu_key)
-                issues = _icu_setup_issues(icu_id, icu_key)
+                issues = _icu_setup_issues(icu_id, icu_key, chat_id)
             except Exception as e:
                 log(f"Onboarding ICU re-check failed for {chat_id}: {e}")
                 issues = []
             if issues:
                 save_onboarding_state(ob_state)
-                _ob_ask(token, chat_id, "icu_fix", _icu_fix_question(issues, again=True))
+                offer = _strava_offer(chat_id, issues)
+                _ob_ask(token, chat_id, "icu_fix", _icu_fix_question(issues, again=True, strava=offer),
+                        strava=offer)
                 return True
             send(token, chat_id, "All connected ✓")
         return _ob_after_icu(token, chat_id, ob_state, session)
@@ -5265,8 +5302,13 @@ def handle_onboarding(token, chat_id, text):
         return True
 
     log(f"Onboarding complete: {session['answers'].get('name', '?')} ({slug})")
+    via_strava = bool(_outbox) and (_outbox.SIGNUP_DIR / str(chat_id) / "strava_tokens.json").exists()
     if _outbox:
-        _outbox.adopt(chat_id, slug)    # a Peak sign-up's chat moves into their folder
+        _outbox.adopt(chat_id, slug)    # a Peak sign-up's chat (and Strava link) moves in
+    if via_strava:                      # scripts/strava-to-icu.py copies their Strava
+        _ath = json.loads(ATHLETES_CONFIG.read_text())
+        _ath[slug]["strava_bridge"] = True
+        ATHLETES_CONFIG.write_text(json.dumps(_ath, indent=2))
 
     # Generate training blueprint and rules.md in background
     blueprint_script = BASE.parent / "scripts/generate-blueprint.py"

@@ -47,15 +47,18 @@ import json
 import os
 import re
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 
 import chat
 import push
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 
 # CC_HOME / CC_APP_DIR let a test copy run against the live data without being inside
 # the live checkout (which cc-gitpull owns).
@@ -266,7 +269,8 @@ def me(request: Request):
     if not athletes and not state:
         raise HTTPException(403, "this email has no athlete")
     return JSONResponse({"email": email, "athletes": athletes, "own": own, "state": state,
-                         "coach": is_coach(email), "push": push.subscribed(email)},
+                         "coach": is_coach(email), "push": push.subscribed(email),
+                         "strava": _strava_state(email)},
                         headers=NO_STORE)
 
 
@@ -491,6 +495,84 @@ def media(name: str, request: Request):
     if not path.is_file():
         raise HTTPException(404)
     return FileResponse(path, media_type="image/png", headers=NO_STORE)
+
+
+# ── Strava, for watches with no direct Intervals.icu link (lib/strava_link.py) ──
+
+def _strava_state(email: str) -> str | None:
+    """"copying": Peak copies their Strava into Intervals.icu; "linked": the coach
+    already reads their Strava another way (Jamie); None: not connected."""
+    try:
+        import strava_link
+        cid, slug, _ = own_chat(email)
+        if not cid or not strava_link.connected(cid):
+            return None
+        return "copying" if not slug or _load(ATHLETES_CONFIG).get(slug, {}).get("strava_bridge") else "linked"
+    except Exception:
+        return None
+
+
+def _page(title: str, body: str, status: int = 200) -> HTMLResponse:
+    return HTMLResponse(
+        '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">'
+        f'<title>{title} - Peak</title><body style="font-family:-apple-system,system-ui,sans-serif;'
+        'background:#f8f5ef;color:#18160f;padding:48px 24px;max-width:420px;margin:auto;line-height:1.5">'
+        f'<h2 style="font-family:Georgia,serif;font-weight:400">{title}</h2><p>{body}</p>'
+        '<p><a href="/coach/app.html" style="color:#1d6840">Back to Peak</a></p></body>',
+        status_code=status, headers=NO_STORE)
+
+
+@app.get("/api/strava/connect")
+def strava_connect(request: Request):
+    """Peak's Connect Strava button: off to Strava's approval page."""
+    import strava_link
+    email = request_email(request)
+    cid, slug, _ = own_chat(email)
+    if not cid:
+        raise HTTPException(403, "this email has no athlete")
+    if _strava_state(email) == "linked":        # never swap Jamie's write-scope token
+        return _page("Strava is already connected", "Your coach already reads your Strava.")
+    if not strava_link.connected(cid) and strava_link.connected_count() >= strava_link.CAPACITY:
+        return _page("Strava is full", "Peak can't connect any more Strava accounts just now. "
+                     "Ask your coach.")
+    return RedirectResponse(strava_link.authorize_url(cid))
+
+
+@app.get("/api/strava/callback")
+def strava_callback(request: Request, code: str = "", state: str = "", scope: str = "",
+                    error: str = ""):
+    """Strava sends the athlete back here after they approve (or don't)."""
+    import outbox
+    import strava_link
+    email = request_email(request)
+    cid, slug, st = own_chat(email)
+    if not cid or not strava_link.check_state(state, cid):
+        return _page("That link has expired", "Go back to Peak and tap <b>Connect Strava</b> again.", 400)
+    if error or not code:
+        return _page("Strava not connected", "No problem. You can connect it any time from Peak.")
+    if "activity:read" not in scope:
+        return _page("One more tick needed", "Strava needs permission to <b>view data about your "
+                     "activities</b>. <a href=\"/api/strava/connect\">Connect Strava</a> again and "
+                     "leave that box ticked.")
+    if _strava_state(email) == "linked":
+        return _page("Strava is already connected", "Your coach already reads your Strava.")
+    try:
+        tok = strava_link.exchange(code)
+        strava_link.save_tokens(cid, tok, scope)
+    except Exception as e:
+        print(f"[strava] connect failed for {cid}: {e}", flush=True)
+        return _page("That didn't work", "Strava didn't accept the connection. Try again from "
+                     "Peak in a minute.", 502)
+    if slug:
+        athletes = _load(ATHLETES_CONFIG)
+        if isinstance(athletes.get(slug), dict):
+            athletes[slug]["strava_bridge"] = True
+            _write_json(ATHLETES_CONFIG, athletes)
+    outbox.record(cid, "✓ *Strava connected.* I'll copy your workouts into Intervals.icu from now "
+                  "on, and your history too -- it can take a few hours to all arrive."
+                  + (" Tap *Check again* above to carry on." if st == "onboarding" else ""),
+                  source="strava-link")
+    return _page("✓ Strava connected", "You can close this and go back to Peak.")
 
 
 # ── notifications ──

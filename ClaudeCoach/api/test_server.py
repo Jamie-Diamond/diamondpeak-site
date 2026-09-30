@@ -451,3 +451,66 @@ def test_chat_log_endpoint_validates(env, monkeypatch):
     assert env.post("/api/chat/log", json={"item": ok_item, "values": {}}, headers=h).status_code == 400
     assert env.post("/api/chat/log", json={"item": ok_item, "values": {"r": 7, "x": 1}}, headers=h).status_code == 200
     assert got == [("222", ok_item, {"r": 7})]
+
+
+# ── Connect Strava (lib/strava_link.py) ──
+
+@pytest.fixture()
+def strava(env, monkeypatch):
+    import outbox
+    import strava_link
+    cc = server.CC
+    app_cfg = cc / "config" / "strava_app.json"
+    app_cfg.write_text(json.dumps({"client_id": 247758, "client_secret": "s3cret"}))
+    monkeypatch.setattr(outbox, "BASE", cc)
+    monkeypatch.setattr(outbox, "ATHLETES_CONFIG", server.ATHLETES_CONFIG)
+    monkeypatch.setattr(outbox, "SIGNUP_DIR", cc / "config" / "web-signup")
+    outbox._CACHE.update(mtime=None, data={})
+    monkeypatch.setattr(strava_link, "BASE", cc)
+    monkeypatch.setattr(strava_link, "APP_CONFIG", app_cfg)
+    got = []
+    monkeypatch.setattr(strava_link, "exchange", lambda code: got.append(code) or {
+        "access_token": "a", "refresh_token": "r", "expires_at": 9, "athlete": {"id": 5}})
+    return strava_link, outbox, got
+
+
+def test_connect_strava_signing_up_then_copying_on(env, strava, monkeypatch):
+    strava_link, outbox, got = strava
+    h = {"x-peak": "1"}
+    dev(monkeypatch, "coach@example.com")
+    cid = env.post("/api/admin/invite", json={"email": "robin@example.com"}, headers=h).json()["chat_id"]
+    dev(monkeypatch, "robin@example.com")
+    r = env.get("/api/strava/connect")
+    assert r.status_code in (302, 307) and r.headers["location"].startswith("https://www.strava.com/oauth/authorize")
+    state = r.headers["location"].split("state=")[1]
+    assert "activity%3Aread_all" in r.headers["location"]
+
+    assert env.get("/api/strava/callback", params={"state": "web-x.1.zz", "code": "c",
+                                                   "scope": "read,activity:read_all"}).status_code == 400
+    assert "One more tick" in env.get("/api/strava/callback", params={
+        "state": state.replace("%2E", "."), "code": "c", "scope": "read"}).text
+    r = env.get("/api/strava/callback", params={"state": state.replace("%2E", "."), "code": "c",
+                                                "scope": "read,activity:read_all"})
+    assert r.status_code == 200 and "Strava connected" in r.text and got == ["c"]
+    tok = json.loads((server.CC / "config" / "web-signup" / cid / "strava_tokens.json").read_text())
+    assert tok["refresh_token"] == "r" and tok["strava_athlete_id"] == 5
+    assert "Check again" in outbox.read_chat(cid)[-1]["text"]
+    assert env.get("/api/me").json()["strava"] == "copying"
+
+
+def test_connect_strava_never_replaces_jamies_own_link_and_respects_the_cap(env, strava, monkeypatch):
+    strava_link, outbox, got = strava
+    (server.CC / "athletes" / "jamie" / "strava_tokens.json").write_text("{}")
+    dev(monkeypatch, "coach@example.com")
+    assert env.get("/api/me").json()["strava"] == "linked"
+    assert "already connected" in env.get("/api/strava/connect").text
+
+    dev(monkeypatch, "kat@example.com")
+    monkeypatch.setattr(strava_link, "CAPACITY", 1)
+    assert "Strava is full" in env.get("/api/strava/connect").text
+    monkeypatch.setattr(strava_link, "CAPACITY", 10)
+    loc = env.get("/api/strava/connect").headers["location"]
+    state = loc.split("state=")[1].replace("%2E", ".")
+    env.get("/api/strava/callback", params={"state": state, "code": "k", "scope": "activity:read_all"})
+    assert json.loads(server.ATHLETES_CONFIG.read_text())["kathryn"]["strava_bridge"] is True
+    assert (server.CC / "athletes" / "kathryn" / "strava_tokens.json").exists()
