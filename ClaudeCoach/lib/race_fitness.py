@@ -309,13 +309,47 @@ def surplus_choice(cfg: dict):
     return c if c in SURPLUS_CHOICES else None
 
 
-def running_status(event, phase: str, run_ctl, level: int = 2):
-    """{"ctl", "range", "status"} for a run race; status is under / in / over."""
+# CYCLING COUNTS, A LITTLE (Jamie, 30 Sep 2026: "cycling is a great way to boost
+# fitness and reduce intensity and deserves some benefit"). Cycling builds the engine but
+# not running economy (cross-training studies: 70-90% of the aerobic effect, no economy
+# gain), so a third of cycling Fitness counts toward a run race's running Fitness, and at
+# least three quarters of the range's floor must come from running itself.
+BIKE_CREDIT = 1 / 3
+MIN_RUN_SHARE = 0.75
+
+
+def running_status(event, phase: str, run_ctl, level: int = 2, bike_ctl=None):
+    """{"ctl", "bike_credit", "effective", "min_running", "range", "status"} for a run
+    race. effective = running + BIKE_CREDIT x cycling Fitness; status is `under` when
+    effective is below the range OR running alone is under MIN_RUN_SHARE of its floor,
+    `over` above the range, else `in`."""
     rng = run_fitness_range(event, phase, level)
     if rng is None or run_ctl is None:
         return None
-    s = "under" if run_ctl < rng[0] else ("over" if run_ctl > rng[1] else "in")
-    return {"ctl": round(float(run_ctl), 1), "range": list(rng), "status": s}
+    credit = round(float(bike_ctl or 0) * BIKE_CREDIT, 1)
+    eff = round(float(run_ctl) + credit, 1)
+    min_run = round(rng[0] * MIN_RUN_SHARE, 1)
+    s = ("under" if eff < rng[0] or float(run_ctl) < min_run
+         else ("over" if eff > rng[1] else "in"))
+    return {"ctl": round(float(run_ctl), 1), "bike_credit": credit, "effective": eff,
+            "min_running": min_run, "range": list(rng), "status": s}
+
+
+def sport_ctl(activities, today: date, sport: str = "run", days: int = 180) -> float:
+    """One sport's Fitness: 42-day EWMA of that sport's load ('run' or 'ride' matched in
+    the activity type), the same form as the dashboard's per-sport series."""
+    daily = {}
+    for a in activities or []:
+        if sport not in str(a.get("type") or "").lower():
+            continue
+        d = str(a.get("start_date_local") or "")[:10]
+        if d:
+            daily[d] = daily.get(d, 0.0) + float(a.get("icu_training_load") or 0)
+    ctl, cur = 0.0, today - timedelta(days=days)
+    while cur <= today:
+        ctl += (daily.get(cur.isoformat(), 0.0) - ctl) / 42.0
+        cur += timedelta(days=1)
+    return round(ctl, 1)
 
 
 def run_ctl(activities, today: date, days: int = 180) -> float:

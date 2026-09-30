@@ -395,12 +395,13 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     # It sizes the week (peak volume, longest session) so a 4-hour marathoner is not
     # handed a sub-3 runner's mileage.
     _ev_def = _rf.event_def(cfg, cfg.get("race_distance") or cfg.get("race_name") or ekey)
-    run_ctl = None
+    run_ctl = bike_ctl = None
     if _ev_def and _rf.event_kind(_ev_def) == "run" and ctl:
         try:
             from icu_api import IcuClient as _IC
-            run_ctl = _rf.run_ctl(_IC(cfg["icu_athlete_id"], cfg["icu_api_key"])
-                                  .get_training_history(days=180), today)
+            _hist = _IC(cfg["icu_athlete_id"], cfg["icu_api_key"]).get_training_history(days=180)
+            run_ctl = _rf.sport_ctl(_hist, today, "run")
+            bike_ctl = _rf.sport_ctl(_hist, today, "ride")      # a third of it counts
         except Exception:
             pass
     event_level = None
@@ -427,7 +428,8 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         tfloor = _rf.total_floor(cfg)
         fitness_check = {
             "event": _ev_def.get("label"),
-            "running": _rf.running_status(_ev_def, phase_name, run_ctl, event_level["level"]),
+            "running": _rf.running_status(_ev_def, phase_name, run_ctl, event_level["level"],
+                                          bike_ctl=bike_ctl),
             "total": {"ctl": ctl, "floor": tfloor,
                       "status": (None if tfloor is None
                                  else ("under" if ctl < tfloor else "ok"))},

@@ -223,3 +223,27 @@ def test_the_config_race_wins_over_a_stale_profile():
     assert sl.event_key({"race_name": "Brighton Marathon"},
                         {"race_distance": "Full Ironman", "race_name": "IM Italy"}) == "marathon"
     assert sl.event_key({}, {"race_distance": "70.3"}) == "70_3"
+
+
+class TestCyclingCredit:
+    """Jamie, 30 Sep 2026 (option a): a third of cycling Fitness counts toward running
+    Fitness, and at least three quarters of the floor must be real running."""
+
+    def test_a_third_of_cycling_counts(self):
+        st = rf.running_status("marathon", "taper", 60, level=1, bike_ctl=30)
+        assert st["effective"] == 70 and st["bike_credit"] == 10
+        assert st["status"] == "in"                              # range 70-95
+
+    def test_running_must_carry_three_quarters_of_the_floor(self):
+        st = rf.running_status("marathon", "taper", 50, level=1, bike_ctl=90)
+        assert st["effective"] == 80 and st["min_running"] == 52.5
+        assert st["status"] == "under"                           # 50 < 52.5
+
+    def test_without_cycling_it_is_running_alone(self):
+        assert rf.running_status("marathon", "taper", 60, level=1)["status"] == "under"
+
+    def test_sport_ctl_matches_ride_types(self):
+        from datetime import date
+        acts = [{"type": t, "start_date_local": "2026-09-01", "icu_training_load": 100}
+                for t in ("Ride", "VirtualRide", "Run")]
+        assert rf.sport_ctl(acts, date(2026, 9, 1), "ride") > rf.sport_ctl(acts, date(2026, 9, 1), "run")
