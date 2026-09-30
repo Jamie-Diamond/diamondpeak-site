@@ -592,10 +592,14 @@ body.in-chat main{padding-bottom:calc(var(--tab-h) + 86px + env(safe-area-inset-
 .msg.has-log{width:86%}
 .logcard{margin-top:10px;display:flex;flex-direction:column;gap:10px}
 .lc-row{display:flex;flex-direction:column;gap:4px}
-.lc-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.lc-top{display:flex;align-items:baseline;gap:8px}
+.lc-top span{flex:1}
 .lc-top span{font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 .lc-top b{font-weight:500;font-size:13px;color:var(--muted)}
 .lc-row[data-set] .lc-top b{color:var(--accent)}
+.lc-row:not([data-set]) input{opacity:.3;filter:grayscale(1)}
+.lc-clear{border:0;background:none;color:var(--muted);font-size:15px;line-height:1;padding:0 2px;cursor:pointer;visibility:hidden}
+.lc-row[data-set]:not([data-was]) .lc-clear{visibility:visible}
 .lc-row input[type=range]{width:100%;accent-color:var(--accent);height:28px;margin:0}
 .lc-row[data-code="p"] input{accent-color:var(--amber)}
 .lc-actions{display:flex;gap:8px}
@@ -1053,6 +1057,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=48" defer></script>
+<script src="app.js?v=49" defer></script>
 </body>
 </html>

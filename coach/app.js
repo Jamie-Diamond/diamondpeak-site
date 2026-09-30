@@ -896,8 +896,11 @@
       h += ['r', 'p', 'c'].filter(function (k) { return form.fields.indexOf(k) >= 0; }).map(function (k) {
         var d = LOGDEF[k], v = logged && logged[k] != null ? logged[k] : d.start;
         var set = logged && logged[k] != null;
-        return '<div class="lc-row" data-code="' + k + '"' + (set ? ' data-set="1"' : '') + '>' +
-          '<div class="lc-top"><span>' + esc(d.label) + '</span><b>' + (set ? esc(d.say(v)) : 'slide to set') + '</b></div>' +
+        // Unset is its own state, never a value: an untouched slider is not sent, so a
+        // missing RPE stays missing rather than reading as 0 (Jamie, 30 Sep 2026).
+        return '<div class="lc-row" data-code="' + k + '"' + (set ? ' data-set="1" data-was="1"' : '') + '>' +
+          '<div class="lc-top"><span>' + esc(d.label) + '</span><b>' + (set ? esc(d.say(v)) : 'not set') + '</b>' +
+          '<button type="button" class="lc-clear" aria-label="Clear">×</button></div>' +
           '<input type="range" min="' + d.min + '" max="' + d.max + '" step="' + d.step + '" value="' + v + '"' +
           ' aria-label="' + esc(d.label) + '"></div>';
       }).join('') +
@@ -910,13 +913,28 @@
     card.innerHTML = h;
     el.appendChild(card);
 
+    function saveState() {
+      var s = card.querySelector('.lc-save');
+      if (s) s.disabled = !card.querySelector('.lc-row[data-set]');
+    }
     Array.prototype.forEach.call(card.querySelectorAll('.lc-row input'), function (inp) {
-      inp.addEventListener('input', function () {
-        var row = inp.closest('.lc-row'), k = row.getAttribute('data-code');
+      var row = inp.closest('.lc-row'), k = row.getAttribute('data-code');
+      // Any touch sets it - including a tap that leaves it where it sits (e.g. pain 0),
+      // which fires no input event.
+      var mark = function () {
         row.setAttribute('data-set', '1');
         row.querySelector('b').textContent = LOGDEF[k].say(+inp.value);
-        card.querySelector('.lc-save').disabled = false;
-      });
+        saveState();
+      };
+      ['input', 'change', 'pointerup', 'keyup'].forEach(function (ev) { inp.addEventListener(ev, mark); });
+    });
+    Array.prototype.forEach.call(card.querySelectorAll('.lc-clear'), function (x) {
+      x.onclick = function () {
+        var row = x.closest('.lc-row');
+        row.removeAttribute('data-set');
+        row.querySelector('b').textContent = 'not set';
+        saveState();
+      };
     });
     var save = card.querySelector('.lc-save');
     if (save) save.onclick = function () {
