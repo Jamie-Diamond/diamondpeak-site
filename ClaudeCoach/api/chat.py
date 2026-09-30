@@ -265,6 +265,12 @@ def _keep_unsaved(chat_id, sink, hist_before) -> None:
     still there when the chat reloads. Recorded quietly: the athlete is looking."""
     if not sink.messages:
         return
+    try:
+        import outbox
+        if outbox.signing_up(chat_id):
+            return          # already kept as it was sent (_keep_signup); twice was the bug
+    except Exception:
+        pass
     _, after = _history_texts(chat_id)
     saved = {(e.get("assistant") or "").strip() for e in after[-6:] if isinstance(e, dict)}
     try:

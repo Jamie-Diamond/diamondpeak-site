@@ -584,3 +584,18 @@ def test_disconnect_strava_only_for_a_peak_link(env, monkeypatch):
     r = env.post("/api/strava/disconnect/kathryn", headers=h)
     assert r.status_code == 200 and r.json()["strava"] is None and revoked == ["kathryn"]
     assert "strava_bridge" not in json.loads(server.ATHLETES_CONFIG.read_text())["kathryn"]
+
+
+def test_a_signup_chat_keeps_each_coach_message_once(env, monkeypatch):
+    """Sign-up messages are kept as they are sent (chat._keep_signup); the end-of-turn
+    keeper must not add them again (30 Sep 2026: every sign-up text showed twice)."""
+    import outbox
+    kept = []
+    monkeypatch.setattr(outbox, "signing_up", lambda cid: True)
+    monkeypatch.setattr(outbox, "record", lambda cid, text, *a, **k: kept.append(text))
+    monkeypatch.setattr(server.chat, "_history_texts", lambda cid: ([], []))
+    sink = server.chat.Sink()
+    sink.chat_id = "web-0a1b2c3d4e"
+    sink.handle("sendMessage", {"chat_id": sink.chat_id, "text": "What's your target race?"})
+    server.chat._keep_unsaved(sink.chat_id, sink, [])
+    assert kept == ["What's your target race?"]
