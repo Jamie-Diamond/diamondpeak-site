@@ -514,3 +514,21 @@ def test_connect_strava_never_replaces_jamies_own_link_and_respects_the_cap(env,
     env.get("/api/strava/callback", params={"state": state, "code": "k", "scope": "activity:read_all"})
     assert json.loads(server.ATHLETES_CONFIG.read_text())["kathryn"]["strava_bridge"] is True
     assert (server.CC / "athletes" / "kathryn" / "strava_tokens.json").exists()
+
+
+def test_intervals_status_is_checked_and_cached(env, monkeypatch):
+    ath = json.loads(server.ATHLETES_CONFIG.read_text())
+    ath["kathryn"].update(icu_api_key="k1", icu_athlete_id="i22")
+    server.ATHLETES_CONFIG.write_text(json.dumps(ath))
+    server._ICU_STATUS.clear()
+    calls = []
+    monkeypatch.setattr(server, "_icu_check", lambda aid, key: calls.append(key) or
+                        ("ok" if key == "k1" else "rejected"))
+    dev(monkeypatch, "kat@example.com")
+    assert env.get("/api/icu/status").json() == {"state": "ok"}
+    assert env.get("/api/icu/status").json() == {"state": "ok"} and calls == ["k1"]   # cached
+    ath["kathryn"]["icu_api_key"] = "k2"                 # key changed: checked again at once
+    server.ATHLETES_CONFIG.write_text(json.dumps(ath))
+    assert env.get("/api/icu/status").json() == {"state": "rejected"} and calls == ["k1", "k2"]
+    dev(monkeypatch, "coach@example.com")                # jamie has no key in this fixture
+    assert env.get("/api/icu/status").json() == {"state": "missing"}

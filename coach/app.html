@@ -766,14 +766,29 @@ a.pickrow{text-decoration:none;color:inherit}
 .drawers{background:var(--paper);border:1px solid var(--rule);border-radius:4px;margin:0 0 14px;overflow:hidden}
 .sdrawer{border-bottom:1px solid var(--rule-soft)}
 .sdrawer:last-child{border-bottom:0}
-.sdrawer>summary{list-style:none;display:flex;align-items:center;gap:13px;padding:12px 15px;cursor:pointer}
+.sdrawer>summary{list-style:none;display:flex;align-items:center;gap:13px;padding:9px 15px;cursor:pointer}
 .sdrawer>summary::-webkit-details-marker{display:none}
-.sdrawer>summary .gate-row-t b{font-size:16px}
-.sdrawer>summary .gate-go{font-size:20px}
+.sdrawer>summary .gate-row-t b{font-size:15px}
+.sdrawer>summary .gate-row-t span{margin-top:1px}
+.sdrawer>summary .gate-go{font-size:17px}
 .sdrawer[open]>summary .gate-go{transform:rotate(90deg);color:var(--accent)}
 .drawer-b{padding:2px 10px 1px;background:rgba(20,24,29,.025);border-top:1px solid var(--rule-soft)}
 .drawer-b .card{margin:8px 0}
 .drawer-b > .card:only-child > .card-h{display:none}
+/* settings: compact rows (Connections, Log out) */
+.crow{width:100%;display:flex;align-items:center;gap:11px;padding:9px 15px;border:0;
+  border-bottom:1px solid var(--rule-soft);background:none;text-align:left;text-decoration:none;
+  color:inherit;font:inherit}
+button.crow,a.crow{cursor:pointer}
+button.crow:hover,a.crow:hover{background:rgba(20,24,29,.03)}
+.crow:last-child{border-bottom:0}
+.crow-i{flex:0 0 auto;width:26px;height:26px;border-radius:50%;border:1px solid var(--rule);
+  display:grid;place-items:center;font-family:'Libre Baskerville',serif;font-size:12px;color:var(--ink-2)}
+.crow-n{flex:1 1 auto;min-width:0;font-family:'Libre Baskerville',serif;font-size:15px;color:var(--ink)}
+.crow-s{flex:0 1 auto;max-width:58%;text-align:right;font-family:'DM Mono',monospace;font-size:9.5px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.crow-s.ok{color:var(--accent)}
+.crow-s.bad{color:#c0392b}
 /* chat: the coach's Markdown tables (app.js mdTables) */
 .msg .mdt-w{overflow-x:auto;margin:6px 0}
 .msg table.mdt{border-collapse:collapse;font-size:13px;min-width:60%}
@@ -1085,6 +1100,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=51" defer></script>
+<script src="app.js?v=52" defer></script>
 </body>
 </html>

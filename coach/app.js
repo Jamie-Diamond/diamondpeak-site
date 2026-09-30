@@ -1410,7 +1410,7 @@
   /* ── coach admin (Settings, coach only) ──────────────────────────────── */
 
   function alertRow(el, text) {
-    var s = el.querySelector('.gate-row-t span');
+    var s = el.querySelector('.gate-row-t span') || el.querySelector('.crow-s');
     if (s) s.textContent = text;
   }
 
@@ -4119,6 +4119,23 @@
       '</div></details>';
   }
 
+  // Is the coach's Intervals.icu link working? Asked live (api/server.py caches it), so
+  // a changed or cleared key shows here instead of as missing data.
+  function fillIcuRow() {
+    var row = $('#icuRow');
+    if (!row) return;
+    fetch('/api/icu/status', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : {}; })
+      .catch(function () { return {}; })
+      .then(function (j) {
+        var s = row.querySelector('.crow-s');
+        var t = { ok: ['Connected ✓', 'ok'], rejected: ['Key not working · tell your coach', 'bad'],
+                  missing: ['Not set up', 'bad'] }[j.state] || ['Couldn’t check', ''];
+        s.textContent = t[0];
+        s.className = 'crow-s' + (t[1] ? ' ' + t[1] : '');
+      });
+  }
+
   function renderSettings() {
     var d = state.data || {};
     var p = d.profile || {};
@@ -4269,54 +4286,50 @@
         '<span class="gate-go">\u2197</span></a>';
     }).join('') + '</div>', { flush: true, foot: 'Calculators on diamondpeak.uk.' });
 
-    var notifH = '', stravaH = '', coachH = '';
+    var notifH = '', coachH = '';
     if (state.me) {
       var ps = pushState();
-      notifH = card('Notifications', '<div class="body-flush">' +
-        '<button type="button" class="pickrow" id="pushRow">' +
-        '<span class="gate-mark">🔔</span><span class="gate-row-t"><b>' +
-        ({ on: 'On', ask: 'Off', denied: 'Blocked', unsupported: 'Not available',
-           'ios-install': 'Needs Home Screen' }[ps] || 'Off') + '</b><span>' +
-        ({ on: 'tap to send a test notification', ask: 'tap to turn on',
-           denied: 'allow notifications for this site in your browser settings',
-           unsupported: 'this browser cannot receive notifications',
-           'ios-install': 'Share \u2192 Add to Home Screen, then open Peak from there' }[ps] || '') +
-        '</span></span><span class="gate-go">→</span></button></div>', { flush: true });
-      // Strava (lib/strava_link.py): for watches with no direct Intervals.icu link.
+      // One compact Connections card (Jamie, 30 Sep 2026): notifications, Intervals.icu
+      // (checked live, filled in by fillIcuRow) and Strava (lib/strava_link.py).
+      var sv = state.me.strava;
+      var rows = '<button type="button" class="crow" id="pushRow"><span class="crow-i">🔔</span>' +
+        '<span class="crow-n">Notifications</span><span class="crow-s' + (ps === 'on' ? ' ok' : '') + '">' +
+        ({ on: 'On · tap to test', ask: 'Off · tap to turn on', denied: 'Blocked in browser',
+           unsupported: 'Not available', 'ios-install': 'Add to Home Screen first' }[ps] || 'Off') +
+        '</span></button>';
       if (state.me.own) {
-        var sv = state.me.strava;
-        stravaH = card('Strava', '<div class="body-flush">' + (sv
-          ? '<div class="pickrow on"><span class="gate-mark">✓</span><span class="gate-row-t">' +
-            '<b>Connected</b><span>' + (sv === 'copying' ? 'your Strava workouts are copied to your coach'
-              : 'your coach reads your Strava') + '</span></span></div>'
-          : '<a class="pickrow" href="/api/strava/connect" target="_blank" rel="noopener">' +
-            '<span class="gate-mark">S</span><span class="gate-row-t"><b>Connect Strava</b>' +
-            '<span>for a watch with no direct Intervals.icu link, like Apple Watch</span></span>' +
-            '<span class="gate-go">↗</span></a>') + '</div>',
-          { flush: true, foot: 'Garmin, Coros, Suunto and Polar connect straight to Intervals.icu, ' +
-            'so they don’t need this.' });
+        rows += '<div class="crow" id="icuRow"><span class="crow-i">i</span>' +
+          '<span class="crow-n">Intervals.icu</span><span class="crow-s">checking…</span></div>';
+        rows += sv
+          ? '<div class="crow"><span class="crow-i">S</span><span class="crow-n">Strava</span>' +
+            '<span class="crow-s ok">' + (sv === 'copying' ? 'Connected · copying' : 'Connected') +
+            ' ✓</span></div>'
+          : '<a class="crow" href="/api/strava/connect" target="_blank" rel="noopener">' +
+            '<span class="crow-i">S</span><span class="crow-n">Strava</span>' +
+            '<span class="crow-s">Connect ↗</span></a>';
       }
+      notifH = card('Connections', '<div class="body-flush">' + rows + '</div>',
+        { flush: true, foot: state.me.own && !sv
+          ? 'Strava is only for a watch with no direct Intervals.icu link, like Apple Watch.' : '' });
       if (state.me.coach) {
         coachH = card('Coaching', '<div id="adminBox"><div class="empty">Loading…</div></div>',
           { foot: 'Telegram off: that athlete\u2019s coach messages come to Peak only, with a notification.' });
       }
     }
 
-    var sessionH = card('Session', '<div class="body-flush">' +
-      '<button type="button" class="pickrow" id="logout">' +
-      '<span class="gate-mark">⏻</span>' +
-      '<span class="gate-row-t"><b>Log out</b><span>forget this device and choose again</span></span>' +
-      '<span class="gate-go">→</span></button></div>', { flush: true });
+    var sessionH = '<div class="drawers"><button type="button" class="crow" id="logout">' +
+      '<span class="crow-i">⏻</span><span class="crow-n">Log out</span>' +
+      '<span class="crow-s">' + (state.me ? 'sign out of Peak' : 'choose again') + '</span></button></div>';
 
-    // Short page (Jamie, 30 Sep 2026): version, notifications and Strava open at the
-    // top; everything else in drawers, closed until tapped.
+    // Short page (Jamie, 30 Sep 2026): version and Connections open at the top;
+    // everything else in drawers, closed until tapped.
     var curName = (ATHLETES.filter(function (a) { return a.slug === cur; })[0] || {}).name || '';
     // The version the RUNNING service worker answers with, not a constant in this
     // file — a constant here can lie about what is actually installed, which is the
     // one question this line exists to answer ("am I stale or just syncing?",
     // Jamie, 13 Aug 2026). Filled in async by fillAppVersion().
     var h = '<p class="set-ver">Peak <span id="appVersion">checking…</span></p>' +
-      notifH + stravaH +
+      notifH +
       '<div class="drawers">' +
       (ATHLETES.length > 1 ? drawer('athlete', 'Athlete', 'showing ' + curName, athleteH) : '') +
       drawer('sports', 'Focus sports', fs.map(function (x) { return SPNAME[x]; }).join(' · '), sportsH) +
@@ -4333,6 +4346,7 @@
       el.addEventListener('toggle', function () { DRAWERS[el.dataset.drawer] = el.open; });
     });
     fillAppVersion();
+    fillIcuRow();
     if (state.me && state.me.coach) loadAdmin();
     var pr = $('#pushRow');
     if (pr) pr.onclick = function () {

@@ -497,6 +497,47 @@ def media(name: str, request: Request):
     return FileResponse(path, media_type="image/png", headers=NO_STORE)
 
 
+# ── Intervals.icu link, for Settings → Connections ──
+
+_ICU_STATUS: dict = {}          # slug -> (checked at, key tail, state)
+
+
+def _icu_check(athlete_id: str, key: str) -> str:
+    """"ok" when the key opens this athlete's Intervals.icu, "rejected" when it doesn't
+    (changed, cleared, or someone else's), "unknown" when Intervals.icu didn't answer."""
+    import base64
+    import urllib.error
+    import urllib.request
+    req = urllib.request.Request(
+        "https://intervals.icu/api/v1/athlete/0",
+        headers={"Authorization": "Basic " + base64.b64encode(f"API_KEY:{key}".encode()).decode(),
+                 "User-Agent": "ClaudeCoach"})
+    try:
+        with urllib.request.urlopen(req, timeout=8) as r:
+            got = str(json.loads(r.read()).get("id") or "")
+        return "ok" if got == str(athlete_id) else "rejected"
+    except urllib.error.HTTPError as e:
+        return "rejected" if e.code in (401, 403) else "unknown"
+    except Exception:
+        return "unknown"
+
+
+@app.get("/api/icu/status")
+def icu_status(request: Request):
+    slug = own_slug(request_email(request))
+    a = _load(ATHLETES_CONFIG).get(slug or "") or {}
+    key, aid = str(a.get("icu_api_key") or ""), str(a.get("icu_athlete_id") or "")
+    if not slug or not key or not aid:
+        return JSONResponse({"state": "missing"}, headers=NO_STORE)
+    hit = _ICU_STATUS.get(slug)
+    if hit and hit[1] == key[-4:] and time.time() - hit[0] < (600 if hit[2] == "ok" else 60):
+        state = hit[2]
+    else:
+        state = _icu_check(aid, key)
+        _ICU_STATUS[slug] = (time.time(), key[-4:], state)
+    return JSONResponse({"state": state}, headers=NO_STORE)
+
+
 # ── Strava, for watches with no direct Intervals.icu link (lib/strava_link.py) ──
 
 def _strava_state(email: str) -> str | None:
