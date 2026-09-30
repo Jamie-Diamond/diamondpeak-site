@@ -1287,6 +1287,23 @@
    "swim_m": 1500,
    "long_swim_m": 2500
   },
+  "sprint": {
+   "sports": [
+    "swim",
+    "bike",
+    "run"
+   ],
+   "emphasis": [
+    "vo2",
+    "threshold",
+    "css",
+    "brick"
+   ],
+   "brick": "weekly_short_sharp",
+   "long_ride_factor": 1.6,
+   "swim_m": 750,
+   "long_swim_m": 1500
+  },
   "marathon": {
    "sports": [
     "run"
