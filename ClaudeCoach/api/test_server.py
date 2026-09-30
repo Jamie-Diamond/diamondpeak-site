@@ -532,3 +532,28 @@ def test_intervals_status_is_checked_and_cached(env, monkeypatch):
     assert env.get("/api/icu/status").json() == {"state": "rejected"} and calls == ["k1", "k2"]
     dev(monkeypatch, "coach@example.com")                # jamie has no key in this fixture
     assert env.get("/api/icu/status").json() == {"state": "missing"}
+
+
+def test_settings_follow_the_athlete_on_screen(env, monkeypatch):
+    import coaching_prefs
+    import planning_pause
+    monkeypatch.setattr(coaching_prefs, "BASE", server.CC)
+    monkeypatch.setattr(planning_pause, "BASE", server.CC)
+    monkeypatch.setattr(server, "_icu_check", lambda aid, key: "ok")
+    (server.CC / "athletes" / "kathryn").mkdir(parents=True, exist_ok=True)
+    (server.CC / "athletes" / "kathryn" / "profile.json").write_text("{}")
+    (server.CC / "athletes" / "jamie" / "strava_tokens.json").write_text("{}")
+    h = {"x-peak": "1"}
+    dev(monkeypatch, "coach@example.com")
+    kat = env.get("/api/settings/kathryn").json()
+    assert kat["strava"] is None and kat["prefs"] == {"heat": True, "fuelling": True}
+    assert env.get("/api/settings/jamie").json()["strava"] == "linked"
+    r = env.post("/api/settings/kathryn", json={"fuelling": False, "tracking_only": True}, headers=h).json()
+    assert r["prefs"]["fuelling"] is False and r["tracking_only"] is True
+    assert json.loads((server.CC / "athletes" / "kathryn" / "profile.json").read_text())["fuelling_coaching"] is False
+    assert json.loads(server.ATHLETES_CONFIG.read_text())["kathryn"]["planning_paused"] is True
+
+    dev(monkeypatch, "kat@example.com")
+    assert env.get("/api/settings/jamie").status_code == 403
+    assert env.post("/api/settings/kathryn", json={"heat": False}, headers=h).json()["prefs"]["heat"] is False
+    assert env.post("/api/settings/kathryn", json={"tracking_only": False}, headers=h).status_code == 403

@@ -14,6 +14,7 @@ LOCK_FILE       = BASE / ".morning_checkin.lock"  # prevents overlapping cron ru
 LOG_DIR         = Path.home() / "Library/Logs/ClaudeCoach"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(BASE / "lib"))
+import coaching_prefs  # noqa: E402  heat / fuelling switches
 sys.path.insert(0, str(BASE / "telegram"))
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 import claude_call
@@ -777,6 +778,7 @@ def run_athlete(slug, athlete_cfg):
                            wellness_finalized=wellness_finalized,
                            prescription_note=prescription_note,
                            post_race_recovery=_post_race_recovery(athlete_cfg))
+    prompt += coaching_prefs.prompt_note(slug)
 
     with open(log_file, "a") as lf:
         result = claude_call.run_claude(

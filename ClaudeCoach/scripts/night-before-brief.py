@@ -12,6 +12,7 @@ ATHLETES_CONFIG = BASE / "config/athletes.json"
 LOG_DIR         = Path.home() / "Library/Logs/ClaudeCoach"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(BASE / "lib"))
+import coaching_prefs  # noqa: E402  heat / fuelling switches
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 import claude_call
 import ops_log
@@ -219,6 +220,7 @@ def run_athlete(slug, athlete_cfg):
 
     prompt = _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries,
                            long_run_cap_km=long_run_cap)
+    prompt += coaching_prefs.prompt_note(slug)
 
     with open(log_file, "a") as lf:
         result = claude_call.run_claude(

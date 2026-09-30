@@ -522,20 +522,72 @@ def _icu_check(athlete_id: str, key: str) -> str:
         return "unknown"
 
 
-@app.get("/api/icu/status")
-def icu_status(request: Request):
-    slug = own_slug(request_email(request))
+def _icu_state(slug: str | None) -> str:
     a = _load(ATHLETES_CONFIG).get(slug or "") or {}
     key, aid = str(a.get("icu_api_key") or ""), str(a.get("icu_athlete_id") or "")
     if not slug or not key or not aid:
-        return JSONResponse({"state": "missing"}, headers=NO_STORE)
+        return "missing"
     hit = _ICU_STATUS.get(slug)
     if hit and hit[1] == key[-4:] and time.time() - hit[0] < (600 if hit[2] == "ok" else 60):
-        state = hit[2]
-    else:
-        state = _icu_check(aid, key)
-        _ICU_STATUS[slug] = (time.time(), key[-4:], state)
-    return JSONResponse({"state": state}, headers=NO_STORE)
+        return hit[2]
+    state = _icu_check(aid, key)
+    _ICU_STATUS[slug] = (time.time(), key[-4:], state)
+    return state
+
+
+@app.get("/api/icu/status")
+def icu_status(request: Request):
+    return JSONResponse({"state": _icu_state(own_slug(request_email(request)))}, headers=NO_STORE)
+
+
+# ── Settings for the athlete on screen (Jamie, 30 Sep 2026: the coach viewing Kathryn
+#    must see HER connections and switches, not his own) ──
+
+def _slug_strava(slug: str) -> str | None:
+    """"copying" (Peak copies their Strava), "linked" (read another way: Jamie), None."""
+    if not (CC / "athletes" / slug / "strava_tokens.json").exists():
+        return None
+    return "copying" if (_load(ATHLETES_CONFIG).get(slug) or {}).get("strava_bridge") else "linked"
+
+
+def _settings(slug: str) -> dict:
+    import coaching_prefs
+    import planning_pause
+    return {"slug": slug, "icu": _icu_state(slug), "strava": _slug_strava(slug),
+            "prefs": coaching_prefs.prefs(slug),
+            "tracking_only": planning_pause.is_paused(slug)}
+
+
+@app.get("/api/settings/{slug}")
+def athlete_settings(slug: str, request: Request):
+    require_slug(request, slug)
+    return JSONResponse(_settings(slug), headers=NO_STORE)
+
+
+@app.post("/api/settings/{slug}")
+async def athlete_settings_set(slug: str, request: Request):
+    """Heat / fuelling switches: the athlete, or the coach. Tracking only: coach only."""
+    if request.headers.get("x-peak") != "1":
+        raise HTTPException(400, "missing app header")
+    require_slug(request, slug)
+    body = await request.json() or {}
+    email = request_email(request)
+    import coaching_prefs
+    heat, fuel = body.get("heat"), body.get("fuelling")
+    if heat is not None or fuel is not None:
+        coaching_prefs.set_prefs(slug, heat=None if heat is None else bool(heat),
+                                 fuelling=None if fuel is None else bool(fuel))
+    if "tracking_only" in body:
+        if not is_coach(email):
+            raise HTTPException(403, "only your coach can change that")
+        athletes = _load(ATHLETES_CONFIG)
+        if not isinstance(athletes.get(slug), dict):
+            raise HTTPException(404, "no such athlete")
+        athletes[slug]["planning_paused"] = bool(body["tracking_only"])
+        if body["tracking_only"]:
+            athletes[slug]["planning_paused_reason"] = f"coach-set in Peak on {time.strftime('%Y-%m-%d')}: tracking only"
+        _write_json(ATHLETES_CONFIG, athletes)
+    return JSONResponse(_settings(slug), headers=NO_STORE)
 
 
 # ── Strava, for watches with no direct Intervals.icu link (lib/strava_link.py) ──

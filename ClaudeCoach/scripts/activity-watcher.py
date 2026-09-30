@@ -45,6 +45,7 @@ import planning_pause          # tracking-only: describe the ride, never chase a
 import illness as illness_lib   # structured illness/compromised flag (surfacing gate)
 import acknowledgement as ack_lib   # §8.3 milestone triggers, evaluated in Python
 import ask_gate                    # asked-and-answered + one-question-per-message gate
+import coaching_prefs              # heat / fuelling switches (profile.json)
 import ops_log
 import write_verify            # read-back verdicts for the Strava writes below
 import heat as heat_lib
@@ -111,15 +112,16 @@ def _quick_log_keyboard(activity_id, slug, sport, has_injury, duration_min):
     else:
         rows.append([{"text": f"RPE {i}", "callback_data": cb("r", i)} for i in range(5, 11)])
 
-    if sport == "Ride" and (duration_min or 0) >= 90:
+    fuel_on = coaching_prefs.fuelling_on(slug)     # the athlete can switch fuelling off
+    if fuel_on and sport == "Ride" and (duration_min or 0) >= 90:
         rows.append([{"text": f"{g}g/hr", "callback_data": cb("c", g)} for g in (40, 50, 60, 70, 80, 90)])
 
-    rows.append([
+    rows.append([b for b in (
         {"text": "📊 Intervals", "callback_data": f"drill:intervals:{aid}:{slug}"},
-        {"text": "🍌 Nutrition",  "callback_data": f"drill:nutrition:{aid}:{slug}"},
+        {"text": "🍌 Nutrition",  "callback_data": f"drill:nutrition:{aid}:{slug}"} if fuel_on else None,
         {"text": "💓 HR",         "callback_data": f"drill:hr:{aid}:{slug}"},
         {"text": "↔️ Compare",    "callback_data": f"drill:compare:{aid}:{slug}"},
-    ])
+    ) if b])
 
     return {"inline_keyboard": rows}
 
@@ -991,7 +993,8 @@ def _send_followup_nudge(state, session_log_f, chat_id, injuries=None, state_fil
             if sport == "Run" and has_injury:
                 wanted.append(ask_gate.ANKLE)
             wanted.append(ask_gate.RPE)
-            if (e.get("duration_min") or 0) >= ask_gate.LONG_SESSION_MIN:
+            if (e.get("duration_min") or 0) >= ask_gate.LONG_SESSION_MIN \
+                    and coaching_prefs.fuelling_on(slug):
                 wanted.append(ask_gate.NUTRITION)
             wanted = [k for k in wanted
                       if not ask_gate.already_answered(e, k, history=_hist, since=_since)]
@@ -1528,6 +1531,7 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     prompt = _build_prompt(slug, first_name, ftp, injuries, profile,
                            run_hr_cap=run_hr_cap, nutrition_target=nutrition_target,
                            recent_chat=recent_chat, hr_note=hr_note)
+    prompt += coaching_prefs.prompt_note(slug)
 
     t_start = time.time()
     # Sonnet -> Haiku fallback: keeps activity analysis alive when the Sonnet
@@ -1797,7 +1801,7 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     _kb_kinds = [ask_gate.ANKLE if new_entry and new_entry.get("sport") == "Run" and injuries
                  else ask_gate.RPE]
     if new_entry and (new_entry.get("duration_min") or 0) >= ask_gate.LONG_SESSION_MIN \
-            and new_entry.get("sport") == "Ride":
+            and new_entry.get("sport") == "Ride" and coaching_prefs.fuelling_on(slug):
         _kb_kinds.append(ask_gate.NUTRITION)     # matches _quick_log_keyboard's carb row
     _kb_known = bool(new_entry) and all(
         ask_gate.already_answered(new_entry, _k, history=_load_history(slug),

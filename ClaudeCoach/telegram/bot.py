@@ -4519,6 +4519,15 @@ _OB_ICU_SETUP = ("icu_setup",
     "• _Download old data_, under activities and under wellness\n"
     "• _Import all Garmin data_ for everything: Garmin emails you a link to paste in\n"
     "• _Import all Strava data_ if you have years on Strava")
+# Coaching extras (30 Sep 2026, lib/coaching_prefs.py): opt in or out at sign-up,
+# switchable later in Peak -> Settings -> Coaching extras.
+_OB_HEAT = ("heat",
+    "Do you want *heat training*? Short heat sessions (sauna, hot bath, or overdressed on "
+    "the trainer) that prepare you to race in hot weather. You can change this later in "
+    "Settings.")
+_OB_FUEL = ("fuel",
+    "Do you want *fuelling coaching*: carbs, salt and fluid targets for your longer "
+    "sessions, and a quick carbs check after them? You can change this later in Settings.")
 _OB_LEVEL = ("level",
     "How much *detail* do you want from me?\n\n"
     "*Beginner* -- plain words: easy, steady, hard, plus heart rate. No jargon.\n"
@@ -4530,6 +4539,8 @@ _OB_BUTTONS = {
     "icu_setup": [[("I've done it", "done")]],
     "icu_fix":   [[("Check again", "again"), ("Carry on for now", "skip")]],
     "level":     [[("Beginner", "beginner"), ("Mid", "mid"), ("Pro", "pro")]],
+    "heat":      [[("Yes", "yes"), ("No", "no")]],
+    "fuel":      [[("Yes", "yes"), ("No", "no")]],
 }
 _OB_IMAGES = {"icu_setup": ["icu-settings.png", "icu-garmin.png", "icu-strava.png"],
               "icu_key":   ["icu-developer.png", "icu-key.png"],
@@ -4654,6 +4665,9 @@ def _validate_ob_answer(key, answer):
     if key == "icu_fix":
         if not re.match(r"^\s*(again|check|done|skip|carry on|later)", answer, re.I):
             return "Tap *Check again* once it's switched on, or *Carry on for now*."
+    if key in ("heat", "fuel"):
+        if not re.match(r"^\s*(y|yes|yep|yeah|n|no|nope)\b", answer, re.I):
+            return "Tap *Yes* or *No*."
     if key == "level":
         if answer.strip().lower() not in _LEVEL_WORDS:
             return "Tap one: *Beginner*, *Mid* or *Pro*."
@@ -4798,7 +4812,7 @@ def _build_remaining_queue(answers, icu_data, sports=None):
         for icu_field, answer_key, fam, question in _OB_GAPS
         if not icu_data.get(icu_field) and (fam is None or fam in sports)
     ]
-    return qual + gaps + [_OB_LEVEL, _OB_SLUG], recent_map
+    return qual + gaps + [_OB_HEAT, _OB_FUEL, _OB_LEVEL, _OB_SLUG], recent_map
 
 
 def _baseline_inputs(answers, icu_data, sports, recent_map):
@@ -4938,6 +4952,11 @@ def _scaffold_athlete(chat_id, answers, icu_data, race_data=None, sports=None, r
         "injuries": injuries,
         "coaching_level": _LEVEL_WORDS.get((answers.get("level") or "").strip().lower(), "mid"),
     }
+    # Coaching extras (lib/coaching_prefs.py). Unanswered (an older sign-up) = unchanged.
+    if answers.get("heat"):
+        profile["heat_protocol"] = answers["heat"] == "yes"
+    if answers.get("fuel"):
+        profile["fuelling_coaching"] = answers["fuel"] == "yes"
     sports = sports or _race_sports(rd, race_str)
     known, stated, hr_src, has_power = _baseline_inputs(answers, icu_data, sports, recent_map or [])
     profile.update({"sports": sports, "hr_source": hr_src, "has_power": has_power})
@@ -5257,6 +5276,8 @@ def handle_onboarding(token, chat_id, text):
             session["queue"].insert(0, list(_OB_ICU_SETUP))
     elif key == "level":
         answer = _LEVEL_WORDS[answer.strip().lower()]
+    elif key in ("heat", "fuel"):
+        answer = "no" if re.match(r"^\s*(n|no|nope)\b", answer, re.I) else "yes"
     elif key == "icu_key":
         answer = answer.strip()
     session["answers"][key] = answer

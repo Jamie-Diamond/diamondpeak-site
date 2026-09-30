@@ -11,6 +11,7 @@ from pathlib import Path
 
 BASE = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE / "lib"))
+import coaching_prefs  # noqa: E402  heat / fuelling switches
 
 import claude_call
 import offplan_log
@@ -836,6 +837,7 @@ Wrap your entire output in <telegram> and </telegram> tags. Output nothing outsi
     # timeout 900s: a measured Sunday-window run for the largest athlete took
     # 448s against the old 600s ceiling, and the prompt grows every week as
     # history accumulates. A timeout returns no card at all, so keep headroom.
+    prompt += coaching_prefs.prompt_note(slug)
     result = claude_call.run_claude(
         prompt, model=claude_call.SONNET, allowed_tools=TOOLS,
         cwd=PROJECT_DIR, timeout=900, label=slug,

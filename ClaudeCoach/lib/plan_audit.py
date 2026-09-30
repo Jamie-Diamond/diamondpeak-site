@@ -41,6 +41,7 @@ sys.path.insert(0, str(BASE / "lib"))
 
 from primitives.validate_plan import validate_week, escalate_repeats  # noqa: E402
 from primitives.blueprint import current_phase                # noqa: E402
+import coaching_prefs  # noqa: E402
 from primitives.nutrition import fuel_target, recent_avg_g_hr  # noqa: E402
 from primitives.planned_tss import name_intensity_mismatch     # noqa: E402
 import planning_pause                                          # noqa: E402
@@ -225,7 +226,7 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
                 f"{nm} ({sport}) — name claims {mm['claim']} but hardest step is "
                 f"{mm['found']}%, short of {mm['required']}%")
             hard_ids.append(f"STRUCTURE:{day}:name_intensity_mismatch:{nm}")
-        if sport in _FUEL_SPORTS and dur >= 90:
+        if sport in _FUEL_SPORTS and dur >= 90 and coaching_prefs.fuelling_on(slug):
             g = re.findall(r"(\d+)\s*g\s*(?:CHO\s*)?/?\s*hr", desc, re.I)
             if not g:
                 fails["FUELLING"].append(f"{nm} — no fuelling stated (expect {fuel} g/hr)")

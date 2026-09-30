@@ -297,7 +297,10 @@ def _bike_section(profile, rp, f_ctl, ctl_target) -> str:
         bands_rows += f"| km {start}–{end} | {band_if:.0%} FTP | {band_w} W |\n"
 
     nutrition = ""
-    if bike_km >= 90:
+    if bike_km >= 90 and profile.get("fuelling_coaching") is False:    # lib/coaching_prefs.py
+        nutrition = ("\n### Nutrition\n\nFuelling coaching is switched off. Turn it on in Peak "
+                     "-> Settings -> Coaching extras for a race-day fuelling plan.\n")
+    elif bike_km >= 90:
         nutrition = (
             "\n### Nutrition\n\n"
             "| Segment | Carbs | Fluid |\n|---------|-------|-------|\n"

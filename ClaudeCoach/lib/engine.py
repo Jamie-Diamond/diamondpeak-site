@@ -248,6 +248,11 @@ def system_prompt_with_level(sp_file) -> str:
         except Exception as e:
             log(f"hr/baseline block skipped: {e}")
     text = text + "\n\n" + _ACCURACY_BLOCK
+    try:
+        import coaching_prefs as _cp
+        text = text + _cp.prompt_note(slug)
+    except Exception as e:
+        log(f"coaching-prefs note skipped: {e}")
     if _planning_pause is not None:
         try:
             pause = _planning_pause.prompt_block(slug, first_name)

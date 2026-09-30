@@ -67,15 +67,29 @@ def entry(slug: str, path=None) -> dict:
     return {}
 
 
+def _athlete_cfg(slug: str) -> dict:
+    try:
+        return json.loads((BASE / "config" / "athletes.json").read_text()).get(slug) or {}
+    except Exception:
+        return {}
+
+
 def is_paused(slug: str, cfg: dict | None = None, path=None) -> bool:
     """True when planning/adherence is paused for this athlete.
 
     `cfg` is the athlete's config/athletes.json block when the caller already
-    has it (every scheduled script does) — passing it avoids a second read and
-    lets the VM-side `planning_paused` flag work.
+    has it (every scheduled script does) — passing it avoids a second read. Without
+    it, athletes.json is read here, so the chat prompt sees the flag too.
+
+    athletes.json `planning_paused`, when SET (true or false), wins over the tracked
+    file: it is the Tracking only switch in Peak -> Settings (api/server.py, 30 Sep
+    2026), so switching someone back to coaching there works even when the tracked
+    file paused them.
     """
-    if cfg is not None and cfg.get("planning_paused"):
-        return True
+    if cfg is None:
+        cfg = _athlete_cfg(slug)
+    if "planning_paused" in cfg:
+        return bool(cfg["planning_paused"])
     return bool(entry(slug, path))
 
 

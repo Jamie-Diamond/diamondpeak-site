@@ -4119,21 +4119,29 @@
       '</div></details>';
   }
 
-  // Is the coach's Intervals.icu link working? Asked live (api/server.py caches it), so
-  // a changed or cleared key shows here instead of as missing data.
-  function fillIcuRow() {
-    var row = $('#icuRow');
-    if (!row) return;
-    fetch('/api/icu/status', { cache: 'no-store' })
-      .then(function (r) { return r.ok ? r.json() : {}; })
-      .catch(function () { return {}; })
-      .then(function (j) {
-        var s = row.querySelector('.crow-s');
-        var t = { ok: ['Connected ✓', 'ok'], rejected: ['Key not working · tell your coach', 'bad'],
-                  missing: ['Not set up', 'bad'] }[j.state] || ['Couldn’t check', ''];
-        s.textContent = t[0];
-        s.className = 'crow-s' + (t[1] ? ' ' + t[1] : '');
-      });
+  // Settings for the athlete on screen (api/server.py /api/settings/<slug>): their
+  // connections and coaching options. Fetched once a minute at most; Settings
+  // re-renders when it arrives.
+  var ASET = {};
+  function athleteSettings(slug) {
+    if (!state.me || !slug) return null;
+    var got = ASET[slug];
+    if (!got || Date.now() - got._t > 60000) {
+      if (!(got && got._loading)) {
+        ASET[slug] = got = got || {};
+        got._loading = true;
+        fetch('/api/settings/' + encodeURIComponent(slug), { cache: 'no-store' })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .catch(function () { return null; })
+          .then(function (j) {
+            if (!j) { ASET[slug]._loading = false; return; }
+            j._t = Date.now();
+            ASET[slug] = j;
+            if (state.tab === 'set' && state.slug === slug) renderSettings();
+          });
+      }
+    }
+    return got && got._t ? got : null;
   }
 
   function renderSettings() {
@@ -4264,7 +4272,6 @@
       (('serviceWorker' in navigator) ? 'cached for offline use' : 'not supported') +
       '</td></tr></tbody></table>', { flush: true });
 
-    var libH = libraryBlock();
 
     var TOOLS = [
       ['Fuelling calculator', '../cycling/fuelling-calculator.html', 'carbs, fluid and sodium per hour'],
@@ -4286,33 +4293,59 @@
         '<span class="gate-go">\u2197</span></a>';
     }).join('') + '</div>', { flush: true, foot: 'Calculators on diamondpeak.uk.' });
 
-    var notifH = '', coachH = '';
+    var notifH = '', coachH = '', optsH = '', optsHint = '';
     if (state.me) {
       var ps = pushState();
-      // One compact Connections card (Jamie, 30 Sep 2026): notifications, Intervals.icu
-      // (checked live, filled in by fillIcuRow) and Strava (lib/strava_link.py).
-      var sv = state.me.strava;
-      var rows = '<button type="button" class="crow" id="pushRow"><span class="crow-i">🔔</span>' +
-        '<span class="crow-n">Notifications</span><span class="crow-s' + (ps === 'on' ? ' ok' : '') + '">' +
-        ({ on: 'On · tap to test', ask: 'Off · tap to turn on', denied: 'Blocked in browser',
-           unsupported: 'Not available', 'ios-install': 'Add to Home Screen first' }[ps] || 'Off') +
-        '</span></button>';
-      if (state.me.own) {
-        rows += '<div class="crow" id="icuRow"><span class="crow-i">i</span>' +
-          '<span class="crow-n">Intervals.icu</span><span class="crow-s">checking…</span></div>';
-        rows += sv
-          ? '<div class="crow"><span class="crow-i">S</span><span class="crow-n">Strava</span>' +
-            '<span class="crow-s ok">' + (sv === 'copying' ? 'Connected · copying' : 'Connected') +
-            ' ✓</span></div>'
-          : '<a class="crow" href="/api/strava/connect" target="_blank" rel="noopener">' +
-            '<span class="crow-i">S</span><span class="crow-n">Strava</span>' +
-            '<span class="crow-s">Connect ↗</span></a>';
+      // Connections and coaching options are for the athlete ON SCREEN (Jamie, 30 Sep
+      // 2026: viewing Kathryn showed his own Strava). Filled from /api/settings/<slug>;
+      // notifications belong to this device, so they show on your own profile only.
+      var mine = state.slug === state.me.own;
+      var as = athleteSettings(state.slug);
+      var who = (ATHLETES.filter(function (a) { return a.slug === state.slug; })[0] || {}).name || '';
+      var rows = '';
+      if (mine) {
+        rows += '<button type="button" class="crow" id="pushRow"><span class="crow-i">🔔</span>' +
+          '<span class="crow-n">Notifications</span><span class="crow-s' + (ps === 'on' ? ' ok' : '') + '">' +
+          ({ on: 'On · tap to test', ask: 'Off · tap to turn on', denied: 'Blocked in browser',
+             unsupported: 'Not available', 'ios-install': 'Add to Home Screen first' }[ps] || 'Off') +
+          '</span></button>';
       }
-      notifH = card('Connections', '<div class="body-flush">' + rows + '</div>',
-        { flush: true, foot: state.me.own && !sv
+      var icu = as ? ({ ok: ['Connected ✓', 'ok'], rejected: ['Key not working', 'bad'],
+                        missing: ['Not set up', 'bad'] }[as.icu] || ['Couldn\u2019t check', ''])
+                   : ['checking…', ''];
+      rows += '<div class="crow"><span class="crow-i">i</span><span class="crow-n">Intervals.icu</span>' +
+        '<span class="crow-s ' + icu[1] + '">' + icu[0] + '</span></div>';
+      var sv = as && as.strava;
+      rows += sv
+        ? '<div class="crow"><span class="crow-i">S</span><span class="crow-n">Strava</span>' +
+          '<span class="crow-s ok">' + (sv === 'copying' ? 'Connected · copying' : 'Connected') + ' ✓</span></div>'
+        : mine
+          ? '<a class="crow" href="/api/strava/connect" target="_blank" rel="noopener">' +
+            '<span class="crow-i">S</span><span class="crow-n">Strava</span><span class="crow-s">Connect ↗</span></a>'
+          : '<div class="crow"><span class="crow-i">S</span><span class="crow-n">Strava</span>' +
+            '<span class="crow-s">' + (as ? 'Not connected' : 'checking…') + '</span></div>';
+      notifH = card(mine ? 'Connections' : who + '\u2019s connections', '<div class="body-flush">' + rows + '</div>',
+        { flush: true, foot: mine && as && !sv
           ? 'Strava is only for a watch with no direct Intervals.icu link, like Apple Watch.' : '' });
+      if (as) {
+        var pr = as.prefs || {};
+        var opt = function (key, on, title, onTxt, offTxt) {
+          return '<button type="button" class="pickrow' + (on ? ' on' : '') + '" data-pref="' + key +
+            '" aria-pressed="' + on + '"><span class="gate-mark">' + (on ? '✓' : '') + '</span>' +
+            '<span class="gate-row-t"><b>' + title + '</b><span>' + (on ? onTxt : offTxt) +
+            '</span></span><span class="gate-go">' + (on ? 'On' : 'Off') + '</span></button>';
+        };
+        optsH = card('Coaching options', '<div class="body-flush" id="prefPick">' +
+          opt('heat', pr.heat, 'Heat training', 'heat sessions before hot races', 'no heat sessions') +
+          opt('fuelling', pr.fuelling, 'Fuelling coaching', 'carbs, salt and fluid targets', 'no fuelling targets or questions') +
+          (state.me.coach ? opt('tracking_only', as.tracking_only, 'Tracking only',
+            'no plan: logs, write-ups and chat only', 'coached: plan, daily card, check-ins') : '') +
+          '</div>', { flush: true });
+        optsHint = as.tracking_only ? 'tracking only' :
+          'heat ' + (pr.heat ? 'on' : 'off') + ' · fuelling ' + (pr.fuelling ? 'on' : 'off');
+      }
       if (state.me.coach) {
-        coachH = card('Coaching', '<div id="adminBox"><div class="empty">Loading…</div></div>',
+        coachH = card('Coach tools', '<div id="adminBox"><div class="empty">Loading…</div></div>',
           { foot: 'Telegram off: that athlete\u2019s coach messages come to Peak only, with a notification.' });
       }
     }
@@ -4334,9 +4367,9 @@
       (ATHLETES.length > 1 ? drawer('athlete', 'Athlete', 'showing ' + curName, athleteH) : '') +
       drawer('sports', 'Focus sports', fs.map(function (x) { return SPNAME[x]; }).join(' · '), sportsH) +
       drawer('food', 'Food', nutritionOn() ? 'tab showing' : 'tab hidden', foodH) +
-      drawer('coaching', 'Coaching', 'invites, approvals, Telegram', coachH) +
+      drawer('options', 'Coaching options', optsHint, optsH) +
+      drawer('coaching', 'Coach tools', 'invites and approvals · all athletes', coachH) +
       drawer('data', 'Data & sources', 'refreshed ' + (d.generated || '—'), dataH) +
-      drawer('library', 'Session library', 'every session type', libH) +
       drawer('tools', 'Tools', 'calculators', toolsH) +
       drawer('about', 'About Peak', 'offline use, coach chat', appH) +
       '</div>' + sessionH;
@@ -4346,7 +4379,17 @@
       el.addEventListener('toggle', function () { DRAWERS[el.dataset.drawer] = el.open; });
     });
     fillAppVersion();
-    fillIcuRow();
+    var pp = $('#prefPick');
+    if (pp) pp.onclick = function (e) {
+      var b = e.target.closest('.pickrow[data-pref]');
+      if (!b || b.disabled) return;
+      var body = {}, slug = state.slug;
+      body[b.dataset.pref] = b.getAttribute('aria-pressed') !== 'true';
+      b.disabled = true;
+      postJSON('/api/settings/' + encodeURIComponent(slug), body)
+        .then(function (j) { j._t = Date.now(); ASET[slug] = j; renderSettings(); })
+        .catch(function (err) { b.disabled = false; alertRow(b, err.message); });
+    };
     if (state.me && state.me.coach) loadAdmin();
     var pr = $('#pushRow');
     if (pr) pr.onclick = function () {

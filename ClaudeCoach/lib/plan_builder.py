@@ -38,6 +38,7 @@ sys.path.insert(0, str(BASE / "ironman-analysis"))
 sys.path.insert(0, str(BASE / "lib"))
 
 from primitives.planned_tss import render_workout, planned_session_tss  # noqa: E402
+import coaching_prefs  # noqa: E402
 from primitives.nutrition import (fuel_target, last_ride_g_hr,           # noqa: E402
                                   last_run_g_hr, recent_avg_g_hr,
                                   recent_run_avg_g_hr, run_fuel_target,
@@ -200,6 +201,7 @@ def build_sessions(slug: str, proposal: dict) -> dict:
     for reading athlete config/session-log; never pushes."""
     cfg = _cfg(slug)
     fuel, run_fuel = _fuel_for(slug, cfg)
+    fuel_on = coaching_prefs.fuelling_on(slug)       # the athlete can switch fuelling off
     built, events = [], []
     # A new athlete's raced sport with no TESTED threshold is prescribed by RPE, never
     # by a % of a guessed threshold (lib/baseline.py, 27 Sep 2026). Empty set for an
@@ -246,7 +248,7 @@ def build_sessions(slug: str, proposal: dict) -> dict:
                 dur = int(s.get("minutes") or s.get("duration_min") or dur or 0)
         # fuel note for long rides. Skipped for a pinned session: it is never pushed, so
         # the note would reach nobody, and it must not appear to change an agreed session.
-        if pinned:
+        if pinned or not fuel_on:
             pass
         elif sport in _LONG_FUEL_SPORTS and dur >= 90:
             notes = (notes + f"\nFuel {fuel} g CHO/hr (progress toward "

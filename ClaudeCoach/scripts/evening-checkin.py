@@ -32,6 +32,7 @@ ATHLETES_CONFIG = BASE / "config/athletes.json"
 LOG_DIR         = Path.home() / "Library/Logs/ClaudeCoach"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(BASE / "lib"))
+import coaching_prefs  # noqa: E402  heat / fuelling switches
 from coaching_levels import level_block as _level_block
 import illness as illness_lib   # structured illness/compromised flag (surfacing gate)
 import ops_log
@@ -398,6 +399,7 @@ def run_athlete(slug, athlete_cfg):
     prompt = _build_prompt(slug, first_name, injuries, pain_next_morning,
                            coaching_level=coaching_level, queued_ask=queued_ask,
                            reminded_ids=reminded_ids)
+    prompt += coaching_prefs.prompt_note(slug)
 
     with open(log_file, "a") as lf:
         result = subprocess.run(
