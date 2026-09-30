@@ -837,11 +837,30 @@
     el.insertBefore(img, el.firstChild);
   }
 
-  function coachItem(text, buttons, photoSrc, cls) {
+  function coachItem(text, buttons, photoSrc, cls, id) {
     var el = bubble('coach', text || '', cls);
+    if (id) el.setAttribute('data-item', id);
     if (photoSrc) addPhoto(el, photoSrc);
     addButtons(el, buttons);
     return el;
+  }
+
+  // The bot changed the message whose button was tapped (e.g. "✓ Pain 0/10 logged").
+  function applyEdit(obj, text) {
+    var el = obj && obj.item && $('#chatLog .msg[data-item="' + obj.item + '"]');
+    if (!el) { coachItem(text, obj && obj.buttons); return; }
+    if (text) el.innerHTML = md(text);
+    else { var old = el.querySelector('.btns'); if (old) old.remove(); }
+    addButtons(el, obj.buttons);
+  }
+
+  // Tap a photo in the chat to see it full screen; tap again to close.
+  function openPhoto(src) {
+    var lb = document.createElement('div');
+    lb.className = 'lightbox';
+    lb.innerHTML = '<img alt="" src="' + src + '">';
+    lb.onclick = function () { lb.remove(); };
+    document.body.appendChild(lb);
   }
 
   function loadChatHistory() {
@@ -853,7 +872,7 @@
         $('#chatLog').innerHTML = '';
         (j.history || []).forEach(function (m) {
           if (m.who === 'me') bubble('me', m.text);
-          else coachItem(m.text, m.buttons, m.photo ? '/api/media/' + encodeURIComponent(m.photo) : null);
+          else coachItem(m.text, m.buttons, m.photo ? '/api/media/' + encodeURIComponent(m.photo) : null, '', m.id);
         });
         if (!(j.history || []).length) {
           $('#chatLog').innerHTML = '<div class="empty">' + (state.me && state.me.state === 'onboarding'
@@ -867,14 +886,17 @@
 
   // Tapping a button on any coach message runs it through the bot's own button handlers.
   function onChatTap(e) {
+    var img = e.target.closest('.msg-img');
+    if (img) { openPhoto(img.src); return; }
     var b = e.target.closest('.btns button[data-cb]');
     if (!b || chatState.busy) return;
     Array.prototype.forEach.call(b.closest('.btns').querySelectorAll('button'), function (x) {
       x.disabled = true;
     });
     b.classList.add('picked');
-    bubble('me', b.textContent, 'tap');
-    streamTurn('/api/chat/button', JSON.stringify({ data: b.getAttribute('data-cb') }), 'application/json');
+    var msg = b.closest('.msg');
+    streamTurn('/api/chat/button', JSON.stringify({ data: b.getAttribute('data-cb'),
+      item: msg && msg.getAttribute('data-item') }), 'application/json');
   }
 
   /* ── notifications ── */
@@ -988,6 +1010,7 @@
     function onEvent(kind, text, obj) {
       if (kind === 'status') { chatSetStatus(text); return; }
       if (kind === 'photo') { coachItem('', null, 'data:image/png;base64,' + text); chatScroll(); return; }
+      if (kind === 'edit') { applyEdit(obj, text); return; }
       if (kind === 'heard') {
         var mine = $('#chatLog .msg.me.pending');
         if (mine) { mine.classList.remove('pending'); mine.innerHTML = '🎙 ' + esc(text); }

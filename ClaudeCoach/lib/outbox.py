@@ -135,6 +135,35 @@ def _trim(f: Path) -> None:
         pass
 
 
+def update(chat_id, item_id: str, text: str | None = None, reply_markup=None) -> bool:
+    """Rewrite one recorded message in place, as Telegram's editMessageText does: a
+    tapped RPE/pain button becomes "✓ Pain 0/10 logged" with the follow-up buttons."""
+    try:
+        slug = slug_for_chat(chat_id)
+        if not slug or not item_id:
+            return False
+        f = BASE / "athletes" / slug / OUTBOX_NAME
+        lines, hit = f.read_text().splitlines(), False
+        for i, line in enumerate(lines):
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            if e.get("id") == item_id:
+                if text is not None:
+                    e.setdefault("orig_text", e.get("text") or "")   # history keeps the original
+                    e["text"] = text
+                e["buttons"] = _buttons(reply_markup)
+                lines[i], hit = json.dumps(e), True
+        if hit:
+            tmp = f.with_suffix(".tmp")
+            tmp.write_text("\n".join(lines) + "\n")
+            tmp.replace(f)
+        return hit
+    except Exception:
+        return False
+
+
 def read(slug: str, limit: int = 60) -> list[dict]:
     try:
         lines = (BASE / "athletes" / slug / OUTBOX_NAME).read_text().splitlines()

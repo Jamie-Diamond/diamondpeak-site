@@ -3113,7 +3113,7 @@ def _handle_drill(token, chat_id, data, message_id, athletes, config):
     clean = process_charts(token, chat_id, response, slug=slug)
     if clean:
         send(token, chat_id, clean + response_footer(drill_model, slug=slug, athlete_cfg=athlete))
-    history.append(_hist_entry(question, clean))
+    history.append(_hist_entry(question, clean, kind="drill"))   # Peak hides the question
     save_history(history, files["history"])
     return True
 

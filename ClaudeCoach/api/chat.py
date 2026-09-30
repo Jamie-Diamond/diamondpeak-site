@@ -74,6 +74,10 @@ class Sink:
         self.last_message = ""
         self.voice_ogg = None
         self.consumer_gone = False
+        self.messages: list[tuple[str, object]] = []   # (text, reply_markup) sent this turn
+        self.chat_id = None
+        self.edit_msg_id = None      # the tapped message, as the bot sees it
+        self.edit_item = None        # ... and as Peak knows it (web-outbox id)
 
     def put(self, kind, text="", **extra):
         self.q.put((kind, text, extra))
@@ -84,7 +88,18 @@ class Sink:
 
     def _message(self, text, payload):
         self.last_message = text
+        self.messages.append((text, payload.get("reply_markup")))
         self.put("message", text, buttons=_buttons(payload.get("reply_markup")))
+
+    def _edit_tapped(self, text, payload):
+        """The bot edited the message whose button was tapped: change it in place."""
+        markup = payload.get("reply_markup")
+        try:
+            import outbox
+            outbox.update(self.chat_id, self.edit_item, text, markup)
+        except Exception:
+            pass
+        self.put("edit", text or "", item=self.edit_item, buttons=_buttons(markup))
 
     def handle(self, method, payload):
         payload = payload or {}
@@ -99,9 +114,14 @@ class Sink:
             elif text:
                 self._message(text, payload)
             return {"ok": True, "result": {"message_id": mid}}
+        tapped = self.edit_msg_id is not None and payload.get("message_id") == self.edit_msg_id
+        if method == "editMessageReplyMarkup" and tapped:
+            self._edit_tapped(None, payload)
         if method == "editMessageText" and text:
             if payload.get("message_id") == self.placeholder_id:
                 self.put("status", text)
+            elif tapped:
+                self._edit_tapped(text, payload)
             else:
                 self._message(text, payload)
         return {"ok": True, "result": {"message_id": payload.get("message_id") or self._id()}}
@@ -210,8 +230,41 @@ def _speech_mp3(b, sink) -> bytes | None:
     return r.stdout if r.returncode == 0 and r.stdout else None
 
 
+_TAPPED_MSG_ID = 900_000_001      # what the bot sees as the tapped message's id
+
+
+def _history_texts(chat_id) -> tuple[int, list]:
+    try:
+        import outbox
+        slug = outbox.slug_for_chat(chat_id)
+        h = json.loads((CC / "athletes" / slug / "telegram" / "history.json").read_text())
+        return len(h), h
+    except Exception:
+        return 0, []
+
+
+def _keep_unsaved(chat_id, sink, hist_before) -> None:
+    """Anything the coach said this turn that history.json didn't keep (a logged-it
+    confirmation, a follow-up question with buttons) goes to the web outbox, so it is
+    still there when the chat reloads. Recorded quietly: the athlete is looking."""
+    if not sink.messages:
+        return
+    _, after = _history_texts(chat_id)
+    saved = {(e.get("assistant") or "").strip() for e in after[-6:] if isinstance(e, dict)}
+    try:
+        import outbox
+        for text, markup in sink.messages:
+            core = _FOOTER_RE.sub("", text).strip()
+            if core and not any(core == s or core.startswith(s) or s.startswith(core)
+                                for s in saved if s):
+                outbox.record(chat_id, text, markup, source="web-turn")
+    except Exception:
+        pass
+
+
 def start_turn(chat_id: str, label: str = "", text: str = "", audio: bytes | None = None,
-               image: bytes | None = None, button: str | None = None) -> Sink:
+               image: bytes | None = None, button: str | None = None,
+               item: str | None = None) -> Sink:
     """Run one web message through the Telegram coach on a background thread: text, a
     voice recording (transcribed first, and the reply spoken back), a photo with `text`
     as its caption, or a button tap (`button` = its callback data). `chat_id` is the
@@ -221,6 +274,9 @@ def start_turn(chat_id: str, label: str = "", text: str = "", audio: bytes | Non
     chat_id = str(chat_id)
     label = label or chat_id
     sink = Sink()
+    sink.chat_id = chat_id
+    if button is not None and item:
+        sink.edit_msg_id, sink.edit_item = _TAPPED_MSG_ID, item
     with _SINKS_GUARD:
         if chat_id in _SINKS:
             raise Busy(label)
@@ -229,6 +285,7 @@ def start_turn(chat_id: str, label: str = "", text: str = "", audio: bytes | Non
     def work():
         _TURN.chat_id = chat_id
         upload_id = None
+        hist_before = _history_texts(chat_id)[0]
         try:
             config = b.load_config()
             token = config["bot_token"]
@@ -242,7 +299,7 @@ def start_turn(chat_id: str, label: str = "", text: str = "", audio: bytes | Non
                 sink.put("heard", said)
             if button is not None:
                 b.log(f"[{label}] Tap (web): {button[:60]}")
-                if not b.dispatch_callback(token, chat_id, button, None, athletes, config):
+                if not b.dispatch_callback(token, chat_id, button, sink.edit_msg_id, athletes, config):
                     b._route_text(token, chat_id, button, athletes, config)
             elif image is not None:
                 if chat_id not in athletes:
@@ -265,6 +322,7 @@ def start_turn(chat_id: str, label: str = "", text: str = "", audio: bytes | Non
             b.log(f"[{label}] web turn error: {e}")
             sink.put("error", "Sorry - I hit a snag answering that. Give it another go in a moment.")
         finally:
+            _keep_unsaved(chat_id, sink, hist_before)
             if upload_id:
                 _UPLOADS.pop(upload_id, None)
             _TURN.chat_id = None
@@ -279,6 +337,12 @@ def start_turn(chat_id: str, label: str = "", text: str = "", audio: bytes | Non
 
     threading.Thread(target=work, name=f"web-chat-{label}", daemon=True).start()
     return sink
+
+
+# The questions bot._handle_drill asks on the athlete's behalf (older entries predate
+# kind="drill", so they are recognised by their opening words).
+_DRILL_PREFIXES = ("Analyse the interval structure of activity", "Review the nutrition for activity",
+                   "Analyse the heart rate data for activity", "Find the 3 most similar past sessions to activity")
 
 
 def timeline(slug: str | None, limit: int = 80) -> list[dict]:
@@ -302,7 +366,7 @@ def timeline(slug: str | None, limit: int = 80) -> list[dict]:
                 pass
     except OSError:
         pass
-    out_texts = {(o.get("text") or "").strip() for o in out if o.get("text")}
+    out_texts = {(o.get(k) or "").strip() for o in out for k in ("text", "orig_text") if o.get(k)}
 
     items, last_ts = [], ""
     for e in hist if isinstance(hist, list) else []:
@@ -311,10 +375,12 @@ def timeline(slug: str | None, limit: int = 80) -> list[dict]:
         ts = e.get("ts") or last_ts        # older entries carry no time; keep their order
         last_ts = ts
         user, coach = e.get("user") or "", e.get("assistant") or ""
+        if e.get("kind") == "drill" or user.startswith(_DRILL_PREFIXES):
+            user = ""                       # a button's own question, not something they wrote
         if user:
             items.append({"who": "me", "text": ("📷 " if e.get("kind") == "image" else "") + user,
                           "ts": ts})
-        if coach and (user or coach.strip() not in out_texts):
+        if coach and (user or e.get("kind") == "drill" or coach.strip() not in out_texts):
             items.append({"who": "coach", "text": coach, "ts": ts})
     for o in out:
         items.append({"who": "coach", "text": o.get("text") or "", "ts": o.get("ts") or "",

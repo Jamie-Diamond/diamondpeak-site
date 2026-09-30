@@ -232,9 +232,11 @@ def test_voice_photo_and_buttons_reach_the_turn_as_yourself(env, monkeypatch):
     h = {"x-peak": "1"}
     assert env.post("/api/chat/voice", content=audio, headers=h).status_code == 200
     assert env.post("/api/chat/photo?caption=lunch", content=audio, headers=h).status_code == 200
-    assert env.post("/api/chat/button", json={"data": "r:1:jamie:7"}, headers=h).status_code == 200
+    assert env.post("/api/chat/button", json={"data": "r:1:jamie:7", "item": "20260930073200-abc123"},
+                    headers=h).status_code == 200
+    assert env.post("/api/chat/button", json={"data": "x", "item": "../../etc"}, headers=h).status_code == 200
     assert seen == [("111", ["audio"], None), ("111", ["image", "text"], "lunch"),
-                    ("111", ["button"], "r:1:jamie:7")]
+                    ("111", ["button", "item"], "r:1:jamie:7"), ("111", ["button", "item"], "x")]
 
 
 def test_uploads_are_checked(env, monkeypatch):
@@ -340,3 +342,37 @@ def test_sink_turns_telegram_calls_into_events():
     got = [s.q.get_nowait() for _ in range(s.q.qsize())]
     assert [(k, t) for k, t, _ in got] == [("status", "Thinking…"), ("status", "Checking intervals.icu..."),
                                            ("message", "Your reply")]
+
+
+def test_a_tapped_message_is_edited_in_place_and_saved(tmp_path, monkeypatch):
+    import chat
+    s = chat.Sink()
+    s.chat_id, s.edit_msg_id, s.edit_item = "111", chat._TAPPED_MSG_ID, "20260930073200-abc123"
+    saved = []
+    import outbox
+    monkeypatch.setattr(outbox, "update", lambda *a: saved.append(a) or True)
+    kb = {"inline_keyboard": [[{"text": "📊 Intervals", "callback_data": "drill:intervals:1:jamie"}]]}
+    s.handle("editMessageText", {"message_id": chat._TAPPED_MSG_ID, "text": "✓ Pain 0/10 logged",
+                                 "reply_markup": kb})
+    kind, text, extra = s.q.get_nowait()
+    assert (kind, text, extra["item"]) == ("edit", "✓ Pain 0/10 logged", "20260930073200-abc123")
+    assert extra["buttons"][0][0]["data"] == "drill:intervals:1:jamie"
+    assert saved and saved[0][2] == "✓ Pain 0/10 logged"
+
+
+def test_timeline_hides_a_buttons_own_question_and_edited_duplicates(env, monkeypatch):
+    dev(monkeypatch, "kat@example.com")
+    monkeypatch.setattr(server.chat, "CC", server.CC)
+    a = server.CC / "athletes" / "kathryn"
+    (a / "telegram").mkdir(parents=True)
+    (a / "telegram" / "history.json").write_text(json.dumps([
+        {"user": "", "assistant": "Injury pain during (0-10)", "ts": "2026-09-30T07:00:00"},
+        {"user": "Analyse the interval structure of activity i1. Fetch...", "assistant": "4x5 at 300W",
+         "ts": "2026-09-30T07:33:00"},
+        {"user": "Find the 3 most similar past sessions to activity i1", "assistant": "Faster than last week",
+         "ts": "2026-09-30T07:34:00", "kind": "drill"}]))
+    (a / "web-outbox.jsonl").write_text(json.dumps(
+        {"id": "20260930070000-aaaaaa", "ts": "2026-09-30T07:00:00", "text": "✓ Pain 0/10 logged",
+         "orig_text": "Injury pain during (0-10)", "buttons": []}) + "\n")
+    items = [(m["who"], m["text"]) for m in env.get("/api/chat/history").json()["history"]]
+    assert items == [("coach", "✓ Pain 0/10 logged"), ("coach", "4x5 at 300W"), ("coach", "Faster than last week")]

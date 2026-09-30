@@ -52,3 +52,17 @@ def test_trim(tmp_path, monkeypatch):
     for i in range(7):
         outbox.record("111", f"m{i}")
     assert [r["text"] for r in outbox.read("jam")] == ["m4", "m5", "m6"]
+
+
+def test_update_rewrites_one_message_and_keeps_the_original_text(tmp_path, monkeypatch):
+    setup(tmp_path, monkeypatch, {"jam": {"chat_id": "111"}})
+    kb = {"inline_keyboard": [[{"text": "0", "callback_data": "p:1:jam:0"}]]}
+    a = outbox.record("111", "Injury pain during (0-10)", kb)
+    b = outbox.record("111", "other")
+    drill = {"inline_keyboard": [[{"text": "📊 Intervals", "callback_data": "drill:intervals:1:jam"}]]}
+    assert outbox.update("111", a, "✓ Pain 0/10 logged", drill) is True
+    rows = {r["id"]: r for r in outbox.read("jam")}
+    assert rows[a]["text"] == "✓ Pain 0/10 logged" and rows[a]["orig_text"] == "Injury pain during (0-10)"
+    assert rows[a]["buttons"] == [[{"text": "📊 Intervals", "data": "drill:intervals:1:jam"}]]
+    assert rows[b]["text"] == "other"
+    assert outbox.update("111", "nope", "x") is False

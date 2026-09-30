@@ -371,7 +371,9 @@ async def chat_button(request: Request):
     data = str((body or {}).get("data") or "").strip()[:200]
     if not data:
         raise HTTPException(400, "no button")
-    return _turn_stream(cid, label, button=data)
+    item = str((body or {}).get("item") or "")
+    item = item if re.match(r"^[0-9]{14}-[0-9a-f]{6}$", item) else None
+    return _turn_stream(cid, label, button=data, item=item)
 
 
 async def _upload(request: Request, max_mb: int) -> bytes:
