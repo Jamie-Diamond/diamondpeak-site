@@ -789,6 +789,20 @@ button.crow:hover,a.crow:hover{background:rgba(20,24,29,.03)}
   letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .crow-s.ok{color:var(--accent)}
 .crow-s.bad{color:#c0392b}
+/* settings: switch rows (Coaching options, Food tab) */
+.srow{width:100%;display:flex;align-items:center;gap:14px;padding:11px 15px;border:0;
+  border-bottom:1px solid var(--rule-soft);background:none;text-align:left;color:inherit;
+  font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.srow:last-child{border-bottom:0}
+.srow .gate-row-t b{font-size:15px}
+.srow .gate-row-t span{margin-top:2px}
+.sw{flex:0 0 auto;position:relative;width:46px;height:28px;border-radius:14px;
+  background:var(--rule);box-shadow:inset 0 0 0 1px rgba(20,24,29,.06);transition:background .22s}
+.sw-k{position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;
+  box-shadow:0 1px 3px rgba(20,24,29,.28);transition:transform .22s cubic-bezier(.3,.7,.3,1)}
+.srow[aria-checked="true"] .sw{background:var(--accent)}
+.srow[aria-checked="true"] .sw-k{transform:translateX(18px)}
+.srow:disabled{cursor:progress}
 /* chat: the coach's Markdown tables (app.js mdTables) */
 .msg .mdt-w{overflow-x:auto;margin:6px 0}
 .msg table.mdt{border-collapse:collapse;font-size:13px;min-width:60%}
@@ -1100,6 +1114,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=53" defer></script>
+<script src="app.js?v=54" defer></script>
 </body>
 </html>

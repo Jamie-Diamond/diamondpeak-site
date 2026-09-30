@@ -4111,6 +4111,7 @@
   // Settings drawers: closed until tapped. Which are open survives a re-render (a
   // focus-sport tap re-renders the whole page).
   var DRAWERS = {};
+  var SWITCH = '<span class="sw" aria-hidden="true"><span class="sw-k"></span></span>';
   function drawer(id, title, hint, inner) {
     if (!inner) return '';
     return '<details class="sdrawer" data-drawer="' + id + '"' + (DRAWERS[id] ? ' open' : '') + '>' +
@@ -4186,12 +4187,9 @@
       var fon = nutritionOn();
       foodH += card('Food tracking',
         '<div class="body-flush" id="foodPick">' +
-        '<button type="button" class="pickrow' + (fon ? ' on' : '') +
-        '" data-food="1" aria-pressed="' + fon + '">' +
-        '<span class="gate-mark">F</span>' +
+        '<button type="button" class="srow" role="switch" data-food="1" aria-checked="' + fon + '">' +
         '<span class="gate-row-t"><b>Food tab</b><span>' +
-        (fon ? 'showing in the bar' : 'hidden') + '</span></span>' +
-        '<span class="gate-go">' + (fon ? '✓' : '+') + '</span></button></div>',
+        (fon ? 'showing in the bar' : 'hidden') + '</span></span>' + SWITCH + '</button></div>',
         { flush: true,
           foot: 'Hides or shows the Food tab on this device. It is opt-in per athlete ' +
                 'and off unless nutrition data is published for them, so turning it ' +
@@ -4330,10 +4328,9 @@
       if (as) {
         var pr = as.prefs || {};
         var opt = function (key, on, title, onTxt, offTxt) {
-          return '<button type="button" class="pickrow' + (on ? ' on' : '') + '" data-pref="' + key +
-            '" aria-pressed="' + on + '"><span class="gate-mark">' + (on ? '✓' : '') + '</span>' +
-            '<span class="gate-row-t"><b>' + title + '</b><span>' + (on ? onTxt : offTxt) +
-            '</span></span><span class="gate-go">' + (on ? 'On' : 'Off') + '</span></button>';
+          return '<button type="button" class="srow" role="switch" data-pref="' + key +
+            '" aria-checked="' + !!on + '"><span class="gate-row-t"><b>' + title + '</b><span>' +
+            (on ? onTxt : offTxt) + '</span></span>' + SWITCH + '</button>';
         };
         optsH = card('Coaching options', '<div class="body-flush" id="prefPick">' +
           opt('heat', pr.heat, 'Heat training', 'heat sessions before hot races', 'no heat sessions') +
@@ -4381,14 +4378,20 @@
     fillAppVersion();
     var pp = $('#prefPick');
     if (pp) pp.onclick = function (e) {
-      var b = e.target.closest('.pickrow[data-pref]');
+      var b = e.target.closest('.srow[data-pref]');
       if (!b || b.disabled) return;
-      var body = {}, slug = state.slug;
-      body[b.dataset.pref] = b.getAttribute('aria-pressed') !== 'true';
+      var body = {}, slug = state.slug, was = b.getAttribute('aria-checked') === 'true';
+      body[b.dataset.pref] = !was;
+      b.setAttribute('aria-checked', String(!was));      // the switch moves at once
       b.disabled = true;
       postJSON('/api/settings/' + encodeURIComponent(slug), body)
-        .then(function (j) { j._t = Date.now(); ASET[slug] = j; renderSettings(); })
-        .catch(function (err) { b.disabled = false; alertRow(b, err.message); });
+        .then(function (j) {
+          j._t = Date.now(); ASET[slug] = j;
+          setTimeout(renderSettings, 220);                // let the slide finish
+        })
+        .catch(function (err) {
+          b.setAttribute('aria-checked', String(was)); b.disabled = false; alertRow(b, err.message);
+        });
     };
     if (state.me && state.me.coach) loadAdmin();
     var pr = $('#pushRow');
@@ -4440,7 +4443,7 @@
 
     var fp = $('#foodPick');
     if (fp) fp.onclick = function (e) {
-      if (!e.target.closest('.pickrow[data-food]')) return;
+      if (!e.target.closest('.srow[data-food]')) return;
       var next = nutritionOn() ? '0' : '1';
       try { localStorage.setItem('cc.food.' + state.slug, next); }
       catch (err) { /* choice just won't persist */ }
