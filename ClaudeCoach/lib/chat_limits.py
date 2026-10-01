@@ -91,6 +91,84 @@ def allowance(cfg: dict | None) -> float:
         return DEFAULT_ALLOWANCE_USD
 
 
+# ── one run's own cost ─────────────────────────────────────────────────────────
+# The CLI's total_cost_usd is the SESSION's running total whenever it restores a resumed
+# session's cost state (verified on the VM, 1 Oct 2026: three resumed Haiku replies
+# reported 0.016, 0.019, 0.021 while each cost 0.016, 0.002, 0.002). Charging it per
+# reply counted every earlier reply again: Jamie's 12 chat replies on 1 Oct metered
+# $48.90 against $8.90 priced from the transcripts. The result's `usage` is this run's
+# own tokens (summed over its turns) and `modelUsage` the restored running totals, so a
+# run whose modelUsage exceeds its usage carried an earlier total in. Its own cost is then
+# the total less the last total seen for that session, or, with none on record, the
+# total scaled by its share of the (price-weighted) tokens.
+_TOKEN_WEIGHTS = {"input": 1.0, "cache_creation": 1.25, "cache_read": 0.1, "output": 5.0}
+SESSIONS_KEY = "_sessions"         # ledger: last total_cost_usd seen per CLI session
+_SESSIONS_KEPT = 40
+
+
+def _run_tokens(run: dict) -> dict | None:
+    u = run.get("usage")
+    if not isinstance(u, dict):
+        return None
+    return {"input": u.get("input_tokens") or 0,
+            "cache_creation": u.get("cache_creation_input_tokens") or 0,
+            "cache_read": u.get("cache_read_input_tokens") or 0,
+            "output": u.get("output_tokens") or 0}
+
+
+def _session_tokens(run: dict) -> dict | None:
+    mu = run.get("modelUsage")
+    if not isinstance(mu, dict) or not mu:
+        return None
+    out = dict.fromkeys(_TOKEN_WEIGHTS, 0)
+    for v in mu.values():
+        if isinstance(v, dict):
+            out["input"] += v.get("inputTokens") or 0
+            out["cache_creation"] += v.get("cacheCreationInputTokens") or 0
+            out["cache_read"] += v.get("cacheReadInputTokens") or 0
+            out["output"] += v.get("outputTokens") or 0
+    return out
+
+
+def _weighted(t: dict) -> float:
+    return sum(t[k] * w for k, w in _TOKEN_WEIGHTS.items())
+
+
+def run_cost(slug: str, run, today: date | None = None) -> float:
+    """This CLI run's own cost in USD, from its result (json / stream-json `result`).
+    A plain number is taken as it is. Remembers the session's total for the next run."""
+    if not isinstance(run, dict):
+        try:
+            return max(0.0, float(run or 0))
+        except (TypeError, ValueError):
+            return 0.0
+    try:
+        total = float(run.get("total_cost_usd") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    sid = str(run.get("session_id") or "")
+    mine, sess_t = _run_tokens(run), _session_tokens(run)
+    restored = bool(mine and sess_t and sum(sess_t.values()) > sum(mine.values()) * 1.01 + 10)
+    with _lock:
+        d = _load(slug)
+        sessions = d.get(SESSIONS_KEY) if isinstance(d.get(SESSIONS_KEY), dict) else {}
+        prev = sessions.get(sid) if sid else None
+        if not restored:
+            cost = total
+        elif prev is not None and total >= float(prev):
+            cost = total - float(prev)
+        else:
+            cost = total * min(1.0, _weighted(mine) / max(1e-9, _weighted(sess_t)))
+        if sid and slug:
+            sessions.pop(sid, None)
+            sessions[sid] = total
+            while len(sessions) > _SESSIONS_KEPT:
+                sessions.pop(next(iter(sessions)))
+            d[SESSIONS_KEY] = sessions
+            _save(slug, d)
+    return max(0.0, round(cost, 6))
+
+
 def record(slug: str, usd: float | None, today: date | None = None) -> None:
     """Add one reply's cost. Called by the engine after every athlete chat run."""
     if not slug or usd is None:

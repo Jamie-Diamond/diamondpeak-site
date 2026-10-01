@@ -99,6 +99,30 @@ engine._meter(sp)
 st = cl.status("calum", {}, date.today())
 check("engine meters a reply's summed runs into the ledger", abs(st["spent"] - 0.75) < 1e-9, st)
 
+# a resumed session's carried-over total is not charged again (1 Oct 2026). The three
+# results are the real CLI output of three resumed Haiku replies on the VM.
+def _res(total, sid, u, mu):
+    k = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens")
+    return {"total_cost_usd": total, "session_id": sid, "usage": dict(zip(k, u)),
+            "modelUsage": {"claude-haiku-4-5": dict(zip(("inputTokens", "cacheCreationInputTokens",
+                                                          "cacheReadInputTokens", "outputTokens"), mu))}}
+R1 = _res(0.0161643, "s1", (10, 7177, 13803, 84), (10, 7177, 13803, 84))
+R2 = _res(0.0186843, "s1", (10, 126, 20980, 32), (20, 7303, 34783, 116))
+R3 = _res(0.0211000, "s1", (10, 104, 21084, 30), (30, 7407, 55867, 146))
+c1, c2, c3 = (cl.run_cost("kathryn", r) for r in (R1, R2, R3))
+check("first run: its whole total", abs(c1 - 0.0161643) < 1e-6, c1)
+check("resumed run: only what it added", abs(c2 - 0.00252) < 1e-5 and abs(c3 - 0.0024157) < 1e-5, (c2, c3))
+cl._save("kathryn", {})                                  # session totals lost (new ledger)
+c2b = cl.run_cost("kathryn", R2)
+check("resumed run with no total on record: its token share, far under the total",
+      0.001 < c2b < 0.006, c2b)
+check("a multi-step run that was NOT resumed keeps its whole total",
+      cl.run_cost("kathryn", _res(0.0217, "s2", (26, 7485, 55965, 222), (26, 7485, 55965, 222))) == 0.0217)
+engine._cost_reset()
+engine._cost_add(R1); engine._cost_add(None)
+engine._meter(tmp / "athletes" / "kathryn" / "system_prompt.txt")
+check("engine meters a result dict's own cost", abs(cl.status("kathryn", {}, date.today())["spent"] - 0.02) < 0.005)
+
 # the bot's admin fallback
 import bot as B  # noqa: E402
 check("admin chat falls back to config chat_id", B.admin_chat_id({"chat_id": 11}) == "11")

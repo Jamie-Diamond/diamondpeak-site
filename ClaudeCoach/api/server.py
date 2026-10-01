@@ -34,6 +34,7 @@ Paths mirror the GitHub Pages layout so Peak runs unchanged:
   POST /api/chat/photo?caption=               a photo, read by the bot's own image path
   POST /api/chat/button                       a tapped button (its callback data)
   GET  /api/chat/history                      your chat: conversation + scheduled messages
+  GET  /api/admin/usage                       coach: every person's stage, chat and API cost
   GET  /api/media/<name>                      a photo/chart from your chat
   GET  /api/push/key, POST /api/push/(un)subscribe, POST /api/push/test
   /api/admin/...                              coach only: athletes, Telegram switch, invites
@@ -959,6 +960,31 @@ async def admin_telegram(request: Request):
         athletes[slug]["telegram"] = False
     _write_json(ATHLETES_CONFIG, athletes)
     return JSONResponse({"slug": slug, "telegram": on})
+
+
+@app.get("/api/admin/usage")
+def admin_usage(request: Request):
+    """The coach's Athletes & usage page (lib/admin_view.py): every person's sign-up
+    stage, last message, chat this month and API-equivalent cost (lib/usage_ledger.py)."""
+    email = _require_coach(request)
+    import admin_view
+    import usage_ledger
+    athletes, users = _load(ATHLETES_CONFIG), _users()
+    onboarding = _load(CC / "config" / "onboarding_state.json")
+    try:
+        summ = usage_ledger.summary(athletes)
+    except Exception as e:                        # a cost read must not hide the stages
+        summ = {"athletes": {}, "error": f"{type(e).__name__}: {e}"}
+    costs = summ.get("athletes") or {}
+    coach_slug = _slug_of(users.get(email) or {}, athletes)
+    admin_cid = str((athletes.get(coach_slug) or {}).get("chat_id") or "")
+    out = admin_view.rows(users, athletes, _load_list(PENDING_FILE), onboarding,
+                          {k: v for k, v in costs.items() if k != "system"},
+                          admin_chat_id=admin_cid)
+    return JSONResponse({"rows": out, "shared": costs.get("system"),
+                         "total": admin_view.totals(costs), "since": summ.get("since"),
+                         "rateDays": summ.get("rate_days"), "generated": summ.get("generated"),
+                         "error": summ.get("error")}, headers=NO_STORE)
 
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")

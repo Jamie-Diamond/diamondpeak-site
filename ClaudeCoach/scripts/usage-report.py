@@ -35,8 +35,11 @@ BASE = Path(__file__).resolve().parent.parent
 PROJECTS = Path("/root/.claude/projects")
 # Only ClaudeCoach's own projects: the repo (bot + scheduled jobs) and the
 # bug-fixer / smoke-test temp dirs. The expense bot on the same VM is excluded.
-PROJECT_GLOBS = ("-Users-diamondpeakconsulting-diamondpeak-site", "-tmp-cc-*", "-tmp-cca",
-                 "-tmp-cctest")
+# Peak's API runs some jobs from ClaudeCoach/api (spoken replies, food logging), and the
+# rule-prune jobs from their own temp dirs (-tmp-cc-prune-*, matched by -tmp-cc-*).
+PROJECT_GLOBS = ("-Users-diamondpeakconsulting-diamondpeak-site",
+                 "-Users-diamondpeakconsulting-diamondpeak-site-ClaudeCoach-api",
+                 "-tmp-cc-*", "-tmp-cca", "-tmp-cctest")
 
 # $ per million tokens: (input, output, cache_read). Writes derive from input.
 PRICES = {

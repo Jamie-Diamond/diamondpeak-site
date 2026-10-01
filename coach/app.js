@@ -1573,6 +1573,57 @@
     });
   }
 
+  /* Athletes & usage (Jamie, 1 Oct 2026: "an admin page so I don't need to ask you every
+     time"): every person's sign-up stage and last message, chat this month against the
+     allowance, and API-equivalent cost (api/server.py /api/admin/usage). */
+  function money(v) {
+    if (v == null) return '\u2014';
+    return '$' + (v < 10 ? Number(v).toFixed(2) : Math.round(v));
+  }
+  function whenShort(iso) {
+    if (!iso) return '';
+    var d = new Date(iso.length > 10 ? iso : iso + 'T12:00:00');
+    if (isNaN(d)) return '';
+    var t = todayISO() === iso.slice(0, 10) ? 'today' :
+      d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    return iso.length > 10 ? t + ' ' + iso.slice(11, 16) : t;
+  }
+  function loadUsage() {
+    fetch('/api/admin/usage', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        var box = $('#usageBox');
+        if (!box) return;
+        if (!j) { box.innerHTML = '<div class="empty">Couldn\u2019t load usage just now.</div>'; return; }
+        var body = (j.rows || []).map(function (r) {
+          var c = r.chat, k = r.cost;
+          var chat = c ? (c.replies + ' msg' + (c.replies === 1 ? '' : 's') + '<br><small>' + money(c.usd) +
+            (c.exempt ? ' \u00b7 exempt' : ' of ' + money(c.allowance)) + '</small>') : '\u2014';
+          var last = r.last_message ? 'last message ' + whenShort(r.last_message) : '';
+          return '<tr><td class="lbl"><b>' + esc(r.name) + '</b><small><span class="ust ust-' +
+            esc(r.stage_kind) + '">' + esc(r.stage) + '</span></small>' +
+            (last ? '<small>' + esc(last) + '</small>' : '') + '</td>' +
+            '<td>' + chat + '</td><td class="t">' + (k ? money(k.rate_month) : '\u2014') + '</td>' +
+            '<td>' + (k ? money(k.total) : '\u2014') + '</td></tr>';
+        }).join('');
+        var sh = j.shared, tot = j.total || {};
+        body += (sh ? '<tr class="usub"><td class="lbl"><b>Shared jobs</b><small>bug fixer, rule tidy-ups</small></td>' +
+          '<td></td><td class="t">' + money(sh.rate_month) + '</td><td>' + money(sh.total) + '</td></tr>' : '') +
+          '<tr class="utot"><td class="lbl"><b>Total</b></td><td></td><td class="t">' +
+          money(tot.rate_month) + '</td><td>' + money(tot.total) + '</td></tr>';
+        box.innerHTML = '<table class="tbl utbl"><thead><tr><th>Athlete</th><th>Chat this month</th>' +
+          '<th>API / month</th><th>Since ' + whenShort(j.since) + '</th></tr></thead><tbody>' + body +
+          '</tbody></table><p class="card-f">API list prices, as if Peak ran on a pay-per-use key. ' +
+          'Per month: the last ' + (j.rateDays || '?') + ' days scaled to 30. Logging began ' +
+          whenShort(j.since) + '. Chat: this month\u2019s messages and cost against the allowance.' +
+          (j.error ? ' Costs unavailable: ' + esc(j.error) : '') + '</p>';
+      })
+      .catch(function () {
+        var box = $('#usageBox');
+        if (box) box.innerHTML = '<div class="empty">Couldn\u2019t load usage just now.</div>';
+      });
+  }
+
   function loadAdmin() {
     fetch('/api/admin/athletes', { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : null; })
@@ -4910,7 +4961,7 @@
         '<span class="gate-go">\u2197</span></a>';
     }).join('') + '</div>', { flush: true, foot: 'Calculators on diamondpeak.uk.' });
 
-    var notifH = '', coachH = '', optsH = '', optsHint = '';
+    var notifH = '', coachH = '', usageH = '', optsH = '', optsHint = '';
     if (state.me) {
       var ps = pushState();
       // Connections and coaching options are for the athlete ON SCREEN (Jamie, 30 Sep
@@ -4970,6 +5021,7 @@
       }
       if (state.me.coach) {
         coachH = card('Coach tools', '<div id="adminBox"><div class="empty">Loading…</div></div>');
+        usageH = '<div id="usageBox"><div class="empty">Loading…</div></div>';
       }
     }
 
@@ -4992,6 +5044,7 @@
       drawer('food', 'Food', nutritionOn() ? 'tab showing' : 'tab hidden', foodH) +
       drawer('options', 'Coaching options', optsHint, optsH) +
       drawer('coaching', 'Coach tools', 'invites and approvals · all athletes', coachH) +
+      drawer('usage', 'Athletes & usage', 'sign-up stage · chat · API cost', usageH) +
       drawer('data', 'Data & sources', 'refreshed ' + (d.generated || '—'), dataH) +
       drawer('tools', 'Tools', 'calculators', toolsH) +
       drawer('about', 'About Peak', 'offline use, coach chat', appH) +
@@ -5036,7 +5089,7 @@
           b.setAttribute('aria-checked', String(was)); b.disabled = false; alertRow(b, err.message);
         });
     };
-    if (state.me && state.me.coach) loadAdmin();
+    if (state.me && state.me.coach) { loadAdmin(); loadUsage(); }
     var pr = $('#pushRow');
     if (pr) pr.onclick = function () {
       var ps = pushState();

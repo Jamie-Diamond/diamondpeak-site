@@ -63,22 +63,29 @@ _COST = threading.local()
 
 
 def _cost_reset() -> None:
-    _COST.usd = 0.0
+    _COST.runs = []
 
 
 def _cost_add(v) -> None:
-    try:
-        _COST.usd = getattr(_COST, "usd", 0.0) + float(v or 0)
-    except (TypeError, ValueError):
-        pass
+    """One CLI run toward this reply: its whole result dict (json / stream-json
+    `result`), so chat_limits.run_cost can take out a resumed session's carried-over
+    total; a plain number is a cost already known."""
+    if v is None:
+        return
+    if not hasattr(_COST, "runs"):
+        _COST.runs = []
+    _COST.runs.append(v)
 
 
 def _meter(sp_file) -> None:
-    """Charge this thread's accumulated reply cost to the athlete's chat allowance."""
+    """Charge this thread's reply cost (the sum of its runs' own costs) to the athlete's
+    chat allowance."""
     if _chat_limits is None:
         return
     try:
-        _chat_limits.record(Path(sp_file).parent.name, getattr(_COST, "usd", 0.0))
+        slug = Path(sp_file).parent.name
+        usd = sum(_chat_limits.run_cost(slug, r) for r in getattr(_COST, "runs", []))
+        _chat_limits.record(slug, usd)
     except Exception as e:
         log(f"chat cost not metered: {e}")
 
@@ -960,7 +967,7 @@ def _run_once(prompt, model, extra_args, cwd, timeout=300, env=None):
         d = json.loads(r.stdout or "")
         text = (d.get("result") or "").strip()
         session_id = d.get("session_id")
-        _cost_add(d.get("total_cost_usd"))
+        _cost_add(d)
     except Exception:
         text = (r.stdout or "").strip()
     return text or (r.stderr or "").strip(), session_id, r.returncode
@@ -1109,7 +1116,7 @@ def _stream_once(prompt, model, extra_args, cwd, env=None, run=None):
             if ev_type == "result":
                 final = ev.get("result", "") or final
                 session_id = ev.get("session_id") or session_id
-                _cost_add(ev.get("total_cost_usd"))
+                _cost_add(ev)
                 continue
             elif ev_type == "assistant":
                 snapshot = ""
@@ -1294,7 +1301,7 @@ def call_claude_with_image(img_path, caption, config, history, model=MODEL_OPUS,
         try:
             d = json.loads(out)
             out = (d.get("result") or "").strip()
-            _cost_add(d.get("total_cost_usd"))
+            _cost_add(d)
         except Exception:
             pass
         _meter(sp_file)
