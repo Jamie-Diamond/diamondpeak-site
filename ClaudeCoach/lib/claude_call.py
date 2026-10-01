@@ -248,6 +248,7 @@ def run_claude(prompt, model=SONNET, *, fallback=None, allowed_tools=None,
             # A timeout is not a limit — surface it immediately, don't burn the chain.
             print(f"[{label or '?'}] {m} timed out at {time.monotonic() - _t0:.0f}s (limit {timeout}s)",
                   file=sys.stderr, flush=True)
+            _health(False, label, "timed out")
             return ClaudeResult("", "timeout", -1, m, i > 0, False)
         except Exception as exc:
             last = ClaudeResult("", str(exc), 1, m, i > 0, False)
@@ -263,7 +264,8 @@ def run_claude(prompt, model=SONNET, *, fallback=None, allowed_tools=None,
         # depends on WHY - see _report_auth_failure / auth_failure_kind.
         if is_auth_failure(out) or is_auth_failure(err):
             res.auth_failed = True
-            _report_auth_failure(m, label)
+            if _report_auth_failure(m, label) == "token-expired":
+                _health(False, label, "access expired")
             return res
 
         if limited and i < len(chain) - 1:
@@ -283,6 +285,21 @@ def run_claude(prompt, model=SONNET, *, fallback=None, allowed_tools=None,
                                f"all models capped: {chain}", athlete=label)
             except Exception:
                 pass
+        if limited:
+            _health(False, label, "usage limit reached")
+        elif rc == 0 and out.strip():
+            _health(True, label)
+        elif rc != 0:
+            _health(False, label, f"error (rc={rc})")
         return res
 
     return last
+
+
+def _health(ok: bool, where: str, detail: str = "") -> None:
+    """Peak's Claude status row (lib/claude_health.py). Never raises."""
+    try:
+        import claude_health
+        claude_health.record(ok, where, detail)
+    except Exception:
+        pass

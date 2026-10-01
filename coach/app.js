@@ -4666,6 +4666,43 @@
     return got && got._t ? got : null;
   }
 
+  function ago(iso) {
+    var m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if (isNaN(m)) return '';
+    if (m < 1) return 'just now';
+    if (m < 60) return m + ' min ago';
+    var h = Math.round(m / 60);
+    return h < 48 ? h + ' h ago' : Math.round(h / 24) + ' days ago';
+  }
+  function fillClaudeRow() {
+    var row = $('#claudeRow');
+    if (!row) return;
+    fetch('/api/claude/status', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; })
+      .then(function (j) {
+        var s = row.querySelector('.crow-s');
+        if (!j) { s.textContent = 'Couldn\u2019t check'; return; }
+        var o = j.ours || {}, c = j.claude;
+        if (o.state === 'failing') {
+          s.textContent = 'Not working since ' + new Date(o.last_fail).toLocaleTimeString('en-GB',
+            { hour: '2-digit', minute: '2-digit' }) + (o.last_fail_detail ? ' \u00b7 ' + o.last_fail_detail : '');
+          s.className = 'crow-s bad';
+        } else if (o.state === 'ok') {
+          s.textContent = 'Working \u2713 \u00b7 last reply ' + ago(o.last_ok);
+          s.className = 'crow-s ok';
+        } else {
+          s.textContent = 'No replies recorded yet';
+        }
+        if (c && c.indicator && c.indicator !== 'none') {
+          var n = document.createElement('div');
+          n.className = 'crow-sub';
+          n.textContent = 'Claude itself: ' + (c.description || c.indicator);
+          row.parentNode.insertBefore(n, row.nextSibling);
+        }
+      });
+  }
+
   function renderSettings() {
     var d = state.data || {};
     var p = d.profile || {};
@@ -4829,6 +4866,11 @@
              unsupported: 'Not available', 'ios-install': 'Add to Home Screen first' }[ps] || 'Off') +
           '</span></button>';
       }
+      // Claude, for the coach (lib/claude_health.py): plain code, filled by fillClaudeRow.
+      if (mine && state.me.coach) {
+        rows += '<div class="crow" id="claudeRow"><span class="crow-i">C</span><span class="crow-n">Claude</span>' +
+          '<span class="crow-s">checking\u2026</span></div>';
+      }
       var icu = as ? ({ ok: ['Connected ✓', 'ok'], rejected: ['Key not working', 'bad'],
                         missing: ['Not set up', 'bad'] }[as.icu] || ['Couldn\u2019t check', ''])
                    : ['checking…', ''];
@@ -4900,6 +4942,7 @@
       el.addEventListener('toggle', function () { DRAWERS[el.dataset.drawer] = el.open; });
     });
     fillAppVersion();
+    fillClaudeRow();
     // Disconnect Strava: two taps, no browser dialog (lib/strava_link.py disconnect).
     var so = $('#stravaOff');
     if (so) so.onclick = function () {

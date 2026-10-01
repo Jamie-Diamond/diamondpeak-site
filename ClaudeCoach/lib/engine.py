@@ -626,6 +626,11 @@ def _log_timing(path, model, mode, t0, t_init, t_first,
         extra += f" prompt_bytes={prompt_bytes}"
     log(f"[timing] {path} model={model} session={mode} "
         f"boot={boot}s first_text={first}s total={t_end - t0:.1f}s{extra}")
+    try:                                     # a reply was written: Peak's Claude status row
+        import claude_health
+        claude_health.record(True, f"chat {path}")
+    except Exception:
+        pass
 
 
 def _turn_index(st) -> int:

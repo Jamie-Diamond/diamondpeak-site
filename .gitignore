@@ -96,3 +96,7 @@ ClaudeCoach/athletes/*/strava_tokens.json
 # committed deliberately and is unaffected - it is encrypted.
 ClaudeCoach/config/*.backup-*
 ClaudeCoach/config/athletes.json.bak-*
+
+# Peak Settings Claude status (lib/claude_health.py), written on every Claude call
+ClaudeCoach/.claude_health.json
+ClaudeCoach/.claude_health.json.*.tmp

@@ -99,3 +99,19 @@ def test_only_web_chat_ids_get_a_signup_folder(tmp_path, monkeypatch):
     setup(tmp_path, monkeypatch, {})
     assert outbox.record("web-../../etc", "x") is None
     assert outbox.record("12345", "x") is None
+
+
+def test_claude_health_records_and_reads(tmp_path, monkeypatch):
+    import claude_health
+    monkeypatch.setattr(claude_health, "PATH", tmp_path / "h.json")
+    assert claude_health.state()["state"] == "unknown"
+    claude_health.record(True, "morning-checkin")
+    assert claude_health.state()["state"] == "ok"
+    import time
+    time.sleep(1.1)
+    claude_health.record(False, "chat", "access expired")
+    s = claude_health.state()
+    assert s["state"] == "failing" and s["last_fail_detail"] == "access expired"
+    time.sleep(1.1)
+    claude_health.record(True, "chat")
+    assert claude_health.state()["state"] == "ok"

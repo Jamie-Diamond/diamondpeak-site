@@ -836,6 +836,37 @@ async def food_voice(request: Request):
     return _food_stream(slug, audio=await _upload(request, 15))
 
 
+# ── Claude status, for Settings (lib/claude_health.py; plain code, no model) ──
+
+_CLAUDE_STATUS = {"t": 0.0, "v": None}
+
+
+def _anthropic_status() -> dict | None:
+    """Claude's public status page, cached five minutes."""
+    if time.time() - _CLAUDE_STATUS["t"] < 300:
+        return _CLAUDE_STATUS["v"]
+    import urllib.request
+    v = None
+    try:
+        req = urllib.request.Request("https://status.claude.com/api/v2/status.json",
+                                     headers={"User-Agent": "ClaudeCoach"})
+        with urllib.request.urlopen(req, timeout=6) as r:
+            s = (json.loads(r.read()).get("status") or {})
+        v = {"indicator": s.get("indicator"), "description": s.get("description")}
+    except Exception:
+        v = None
+    _CLAUDE_STATUS.update(t=time.time(), v=v)
+    return v
+
+
+@app.get("/api/claude/status")
+def claude_status(request: Request):
+    _require_coach(request)
+    import claude_health
+    return JSONResponse({"ours": claude_health.state(), "claude": _anthropic_status()},
+                        headers=NO_STORE)
+
+
 # ── notifications ──
 
 @app.get("/api/push/key")
