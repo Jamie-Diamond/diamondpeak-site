@@ -19,8 +19,8 @@
 // APP_VERSION is what the athlete sees in Settings; CACHE is the precache key.
 // Bump BOTH on every deploy that changes a precached file - the visible number
 // exists so Jamie can tell current from syncing from stale at a glance.
-const APP_VERSION = '3.11';
-const CACHE = 'peak-v71';
+const APP_VERSION = '3.12';
+const CACHE = 'peak-v72';
 
 // SHELL paths are relative to /coach/, where this worker actually lives - the app moved
 // out of /coach/app/ and these entries were left pointing at the old tree. addAll's

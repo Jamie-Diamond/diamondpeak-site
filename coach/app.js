@@ -287,8 +287,21 @@
     });
     $('#scrim').onclick = closeDetail;
 
-    function net() { $('#off').classList.toggle('on', !navigator.onLine); }
-    addEventListener('online', net); addEventListener('offline', net); net();
+    // "Offline" only when a real request fails (1 Oct 2026: the banner stuck on while
+    // online - the phone's own online flag goes stale across Wi-Fi/mobile switches and
+    // backgrounding). Any HTTP answer, even a sign-in redirect, means the network works.
+    function setOff(on) { $('#off').classList.toggle('on', !!on); }
+    function probe() {
+      var ctl = window.AbortController ? new AbortController() : null;
+      var t = setTimeout(function () { if (ctl) ctl.abort(); }, 6000);
+      fetch('/api/me?ping=' + Date.now(), { cache: 'no-store', redirect: 'manual', signal: ctl && ctl.signal })
+        .then(function () { clearTimeout(t); setOff(false); })
+        .catch(function () { clearTimeout(t); setOff(true); });
+    }
+    function net() { if (navigator.onLine) setOff(false); probe(); }
+    addEventListener('online', net); addEventListener('offline', net);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) net(); });
+    if (!navigator.onLine) probe();
   }
 
   function show(tab) {
