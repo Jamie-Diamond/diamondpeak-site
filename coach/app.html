@@ -475,11 +475,11 @@ table.tbl tr.hl td{background:rgba(16,101,107,.05)}
 .gt .hl b{color:var(--accent)}
 .gv{margin:12px 0 0;text-align:center;font-size:13px;color:var(--accent)}
 .gv.warn{color:#b3541e}
-.tl{position:relative;padding-top:22px}
+.tl{position:relative;padding:22px 9px 0}
 .tl-bar{position:relative;height:16px;border-radius:8px;background:var(--rule-soft);overflow:hidden}
 .tl-bar i{position:absolute;top:0;bottom:0}
 .tl-bar .now{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink);border-radius:1px}
-.tl-dots{position:absolute;top:0;left:0;right:0;height:18px}
+.tl-dots{position:absolute;top:0;left:9px;right:9px;height:18px}
 .tl-dots em{position:absolute;transform:translateX(-50%);width:18px;height:18px;border-radius:50%;
   font:600 9px/18px 'DM Mono',monospace;font-style:normal;text-align:center;color:#fff;background:var(--muted)}
 .p-a{background:var(--accent)!important}.p-b{background:#2c6e9b!important}.p-c{background:#8a8f96!important}
@@ -1153,6 +1153,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=59" defer></script>
+<script src="app.js?v=60" defer></script>
 </body>
 </html>
