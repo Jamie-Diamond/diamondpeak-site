@@ -707,12 +707,23 @@
   }
   function ptrHide() { var el = $('#ptr'); if (el) el.className = 'ptr'; }
 
-  // Pull down from the top of Today to refresh. Standalone PWAs have no browser
-  // pull-to-refresh, so this is the only way to get it on an installed app.
+  // Pull down from the top of any tab to refresh (Fred, 1 Oct 2026: it only worked on
+  // Today, so a stale calendar looked broken). Not on the coach chat, where pulling down
+  // scrolls back through the conversation, and not from inside a panel or list that is
+  // itself scrolled. Standalone PWAs have no browser pull-to-refresh, so this is the only
+  // way to get it on an installed app.
+  var NO_PULL_TABS = { chat: true };
+  function scrolledInside(el) {
+    for (; el && el !== document.body && el !== document.documentElement; el = el.parentElement) {
+      if (el.scrollTop > 0) return true;
+    }
+    return false;
+  }
   function wirePullToRefresh() {
     var y0 = null, pulled = 0, PULL = 80;
     window.addEventListener('touchstart', function (e) {
-      y0 = (state.me && state.tab === 'today' && window.scrollY <= 0 && !state.refreshing)
+      y0 = (state.me && !NO_PULL_TABS[state.tab] && window.scrollY <= 0 && !state.refreshing &&
+            !scrolledInside(e.target) && !document.querySelector('#drawer.on'))
         ? e.touches[0].clientY : null;
       pulled = 0;
     }, { passive: true });

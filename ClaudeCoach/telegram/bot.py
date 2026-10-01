@@ -4509,12 +4509,12 @@ _OB_ICU_SETUP = ("icu_setup",
     "Strava are hidden from me.\n"
     "Apple Watch has no direct link: I'll offer you Strava in a moment, or install "
     "*Intervals.icu Companion* on your iPhone to send sleep and HRV too.\n"
-    "4. Connect Strava and Zwift too, if you use them\n\n"
+    "4. *Strava isn't needed* -- skip it (Intervals.icu hides Strava activities from me "
+    "anyway). Connect Zwift if you ride on it.\n\n"
     "*Then bring in your history* -- the more I can see, the better I can coach you. "
     "Tap the links ringed in *green*:\n"
     "• _Download old data_, under activities and under wellness\n"
-    "• _Import all Garmin data_ for everything: Garmin emails you a link to paste in\n"
-    "• _Import all Strava data_ if you have years on Strava")
+    "• _Import all Garmin data_ for everything: Garmin emails you a link to paste in")
 # Coaching extras (30 Sep 2026, lib/coaching_prefs.py): opt in or out at sign-up,
 # switchable later in Peak -> Settings -> Coaching extras.
 # Fitness chart comparison (Jamie, 1 Oct 2026): a past race to line this season up
@@ -4576,7 +4576,9 @@ _OB_BUTTONS = {
     "heat":      [[("Yes", "yes"), ("No", "no")]],
     "fuel":      [[("Yes", "yes"), ("No", "no")]],
 }
-_OB_IMAGES = {"icu_setup": ["icu-settings.png", "icu-garmin.png", "icu-strava.png"],
+# No Strava screenshot (Fred, 1 Oct 2026: Strava looked like it needed a paid
+# Intervals.icu plan). It isn't needed: Strava-sourced activities are hidden from the API.
+_OB_IMAGES = {"icu_setup": ["icu-settings.png", "icu-garmin.png"],
               "icu_key":   ["icu-developer.png", "icu-key.png"],
               "icu_fix":   ["icu-garmin.png"]}
 _OB_AFTER = {"icu_setup": "Tap below once that's done. History can keep arriving for a while -- that's fine.",
@@ -5209,8 +5211,6 @@ def _icu_setup_issues(icu_id, icu_key, chat_id=None):
                    f"{watch}, tap _Download old data_ (activities and wellness)"
                    + (f", or _Import all {watch} data_ for everything."
                       if watch in ("Garmin", "Polar") else "."))
-            if profile.get("strava_authorized"):
-                tip += " Older sessions on Strava: tap _Import all Strava data_."
             issues.append(tip)
     return issues
 

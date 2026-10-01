@@ -206,9 +206,11 @@ n = len(SENT)
 B.handle_onboarding("t", "125", "ob:icu_has:no")
 setup_msgs = [t for c, t, _ in SENT[n:] if c == "125"]
 check("'No' tap gives the set-up steps", any("Sign up free at intervals.icu" in t for t in setup_msgs), setup_msgs)
-check("set-up steps come with screenshots (settings, Garmin, Strava)", len(PHOTOS) == 3, PHOTOS)
-check("set-up asks for the history", any("Download old data" in t and "Import all Strava data" in t
-                                          for t in setup_msgs), setup_msgs)
+check("set-up steps come with screenshots (settings, Garmin)", len(PHOTOS) == 2, PHOTOS)
+check("set-up asks for the history", any("Download old data" in t for t in setup_msgs), setup_msgs)
+check("set-up says Strava isn't needed, and never asks for a Strava import",
+      any("Strava isn't needed" in t for t in setup_msgs)
+      and not any("Import all Strava data" in t for t in setup_msgs), setup_msgs)
 check("set-up ends on an I've done it button",
       SENT[-1][2] and SENT[-1][2]["inline_keyboard"][0][0]["callback_data"] == "ob:icu_setup:done", SENT[-1])
 n = len(SENT)
@@ -216,7 +218,7 @@ B.handle_onboarding("t", "125", "ob:icu_has:yes")              # the old questio
 check("a tap on an earlier question is ignored", len(SENT) == n)
 B.handle_onboarding("t", "125", "ob:icu_setup:done")
 check("then the API key steps, with their screenshots",
-      any("API key" in t for c, t, _ in SENT[n:]) and len(PHOTOS) == 5, (PHOTOS, SENT[n:]))
+      any("API key" in t for c, t, _ in SENT[n:]) and len(PHOTOS) == 4, (PHOTOS, SENT[n:]))
 n = len(SENT)
 B.handle_onboarding("t", "125", "not a key")
 check("a non-key is refused", any("doesn't look like an API key" in t for c, t, _ in SENT[n:]))
