@@ -975,6 +975,12 @@ def main():
     _LEVEL = {"event": _ev, "level": _lv["level"]} if _lv else None
 
     race_date_str = profile.get("race_date", "")
+    if not race_date_str and (_acfg0.get("goal") or {}).get("type"):
+        # A goal without a race (lib/goals.py) has no race blueprint: its weeks come from
+        # plan_tools.required_tss's goal branch and the library's non-race menu.
+        print(f"[{slug}] goal without a race ({_acfg0['goal']['type']}): no race blueprint "
+              "to build", file=sys.stderr)
+        sys.exit(0)
     if not race_date_str:
         print("Error: profile.json has no race_date.", file=sys.stderr)
         sys.exit(1)

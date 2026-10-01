@@ -73,6 +73,7 @@ from primitives.nutrition import fuel_target, recent_avg_g_hr   # noqa: E402
 from rpe_context import SPORT_FAMILY                             # noqa: E402
 import replan_gate                                               # noqa: E402
 import race_fitness as rf                                        # noqa: E402
+import goals as _goals                                           # noqa: E402
 
 # The three subcommands lib/icu_fetch.py's push_workout/edit_workout gate on (the
 # ad-hoc-replan fix, 24 Aug 2026 — see replan_gate.py). Running one of these for the
@@ -799,12 +800,15 @@ def post_race_block_week(cfg: dict, race_d, weeks_since: int) -> int:
     return max(1, weeks_since - start + 1)
 
 
-def all_bookings(cfg: dict) -> list:
+def all_bookings(cfg: dict, slug: str | None = None) -> list:
     """Every booked session (tests, PB attempts): the top-level `bookings`, which apply in
     any training block, plus the older `offseason.bookings`. Jamie, 29 Sep 2026: the
     tests and PB attempts carry on into the Brighton marathon block."""
     out = [b for b in (cfg.get("bookings") or []) if isinstance(b, dict)]
     out += [b for b in ((offseason_cfg(cfg) or {}).get("bookings") or []) if isinstance(b, dict)]
+    # A goal block's end-of-block tests (lib/goals.py), only in weeks the goal is running:
+    # an A race ahead, or its recovery weeks, own the calendar instead.
+    out += goal_test_bookings(cfg, slug)
     return out
 
 
@@ -843,6 +847,162 @@ def in_post_race_recovery(cfg: dict, today=None) -> bool:
     weeks_since = (wk - race_d).days // 7 + 1
     return (weeks_since <= max(_TRANSITION_FACTORS)
             or post_race_hold_active(cfg, race_d, as_of=wk))
+
+
+def a_race_ahead(cfg: dict, today=None) -> bool:
+    """True when an A race (the config's race_date or an A in the registry) is today or later."""
+    today = today or date.today()
+    for raw in [{"date": cfg.get("race_date"), "priority": "A"}] + list(cfg.get("races") or []):
+        if not isinstance(raw, dict) or str(raw.get("priority") or "").upper() != "A":
+            continue
+        try:
+            if date.fromisoformat(str(raw.get("date"))[:10]) >= today:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def goal_active(cfg: dict, today=None) -> bool:
+    """True when this week is planned as a GOAL BLOCK week (lib/goals.py): the athlete has a
+    goal, no A race ahead, is not in a race's recovery weeks, and has no off-season block
+    configured for after that race (the off-season block wins)."""
+    if not _goals.goal_cfg(cfg):
+        return False
+    today = today or date.today()
+    if a_race_ahead(cfg, today) or in_post_race_recovery(cfg, today):
+        return False
+    _, race_d = recovery_race(cfg, today)
+    return not (race_d and offseason_cfg(cfg))
+
+
+def goal_start(cfg: dict, slug: str | None = None, day=None):
+    """Monday the goal's CURRENT run of blocks started, as seen from `day`: block 1's
+    Monday, or after an A race, the first Monday out of its recovery weeks (the goal
+    restarts at block 1 week 1 rather than resuming mid-block). None without a goal."""
+    base = _goals.block_start(cfg, slug)
+    if not base:
+        return None
+    day = day or date.today()
+    _, race_d = recovery_race(cfg, day)
+    if race_d and race_d >= base - timedelta(days=7):
+        m = _monday(race_d) + timedelta(days=7)
+        for _ in range(60):
+            if not in_post_race_recovery(cfg, m):
+                break
+            m += timedelta(days=7)
+        return max(base, m)
+    return base
+
+
+def _goal_test_booking(test: dict, pos: dict) -> dict:
+    return {"week_start": pos["week_start"], "sport": test["sport"],
+            "name": f"{test['name']} (end of block {pos['block']})",
+            "match": test["match"], "goal_test": True}
+
+
+def goal_test_bookings(cfg: dict, slug: str | None = None, today=None,
+                       weeks: int = 60) -> list:
+    """The goal's end-of-block tests as bookings ({week_start, sport, name, match}), for
+    the weeks from ~6 weeks back to `weeks` ahead in which the goal is running. [] for a
+    goal with no test, or whose sport the plan does not cover."""
+    g = _goals.goal_cfg(cfg)
+    test = _goals.GOALS[g["type"]].get("test") if g else None
+    if not test:
+        return []
+    focus = _goals.GOALS[g["type"]].get("sport")
+    if focus and focus not in _goals.sports_for(cfg):
+        return []
+    base = _goals.block_start(cfg, slug)
+    if not base:
+        return []
+    w = max(base, _monday(today or date.today()) - timedelta(weeks=6))
+    out = []
+    for _ in range(weeks):
+        if goal_active(cfg, w):
+            pos = _goals.position(goal_start(cfg, slug, w), w)
+            if pos["kind"] == "test":
+                out.append(_goal_test_booking(test, pos))
+        w += timedelta(days=7)
+    return out
+
+
+def _goal_week(cfg: dict, ctl_today, today: date, last_week_tss=None,
+               slug: str | None = None, profile: dict | None = None) -> dict:
+    """required_tss for a GOAL BLOCK week. Load weeks: maintain converges on the band's
+    middle; the others add the goal's Fitness ramp (capped by the athlete's own ramp cap).
+    Easier and test weeks drop to easy_factor x maintenance with no floor. A load week
+    after a collapsed one (< _MISS_TRIGGER of maintenance) becomes an easier week, and a
+    load week after one at or under maintenance steps up at most _RETURN_STEP, as in a
+    race block."""
+    g = _goals.goal_cfg(cfg)
+    gd = _goals.GOALS[g["type"]]
+    start = goal_start(cfg, slug, today)
+    pos = _goals.position(start, today)
+    prev = _goals.position(start, today - timedelta(days=7))
+    kind, why = pos["kind"], ""
+    # This week's goal test (from the same start as `pos`), plus any hand-booked tests /
+    # PB attempts that fall this week.
+    gtest = gd.get("test")
+    focus = gd.get("sport")
+    test = (_goal_test_booking(gtest, pos) if gtest and kind == "test"
+            and (not focus or focus in _goals.sports_for(cfg, profile)) else None)
+    books = [b for b in week_bookings(cfg, today) if not b.get("goal_test")] + (
+        [test] if test else [])
+    out = {"phase": "goal", "week_type": "goal", "goal": g["type"],
+           "goal_label": gd["label"], "goal_block": pos["block"], "goal_week": pos["week"],
+           "goal_week_kind": kind, "goal_distribution": _goals.distribution(cfg, profile),
+           "goal_sports": _goals.sports_for(cfg, profile),
+           "training_week": pos["training_week"], "ctl_today": ctl_today,
+           "needs_next_race": False, "bookings": books}
+    if not ctl_today:
+        out.update({"required_weekly_tss": None, "recommended_weekly_tss": None,
+                    "weekly_tss_floor": 0,
+                    "note": _goals.week_note(g, pos, kind, "?", 0, 0) + (
+                        " No Fitness (CTL) is available yet, so there is no load target: "
+                        "plan from their availability, mostly easy.")})
+        return out
+    ctl = float(ctl_today)
+    maint = int(round(7.0 * ctl))
+    out["maintenance_weekly_tss"] = maint
+    if (kind == "load" and prev["kind"] == "load" and last_week_tss is not None
+            and float(last_week_tss) < _MISS_TRIGGER * maint):
+        kind, why = "easy", (f"last week's executed load ({int(last_week_tss)} TSS) was under "
+                             f"{int(_MISS_TRIGGER * 100)}% of maintenance")
+    max_ramp = float(cfg.get("max_ctl_ramp_per_week") or _goals.DEFAULT_RAMP_CAP)
+    lo_hi = _goals.band(cfg, ctl) if g["type"] == "maintain" else None
+    if kind in ("easy", "test"):
+        target = int(round(maint * gd["easy_factor"]))
+        floor = 0
+        out["week_type"] = "deload"          # a down-week everywhere DOWN_WEEK_TYPES is read
+        out["goal_easy"] = True
+    else:
+        if lo_hi:
+            mid = (lo_hi[0] + lo_hi[1]) / 2.0
+            target = compute_required_tss(ctl, mid, _MAINTENANCE_CONVERGE_WEEKS)
+            target = min(target, compute_required_tss(ctl, ctl + max_ramp, 1))
+            floor = min(target, compute_required_tss(ctl, lo_hi[0], _MAINTENANCE_CONVERGE_WEEKS))
+            out.update({"ctl_band": list(lo_hi), "in_band": lo_hi[0] <= ctl <= lo_hi[1]})
+        else:
+            ramp = min(float(gd["ramp"]), max_ramp)
+            target = compute_required_tss(ctl, ctl + ramp, 1)
+            floor = maint
+            out["goal_ramp_per_week"] = ramp
+        if (last_week_tss is not None and prev["kind"] == "load"
+                and float(last_week_tss) <= _DEFACTO_DELOAD_AT * maint):
+            step = max(maint, int(round(float(last_week_tss) * _RETURN_STEP)))
+            if step < target:
+                out.update({"uncapped_weekly_tss": target, "return_step_cap": step})
+                why = (f"RETURN TO LOAD: last week executed {int(last_week_tss)} TSS, at or "
+                       f"below maintenance, so step to ~{step} rather than ~{target}.")
+                target = step
+        floor = min(floor, target)
+    out.update({"goal_week_kind": kind, "required_weekly_tss": target,
+                "recommended_weekly_tss": target, "weekly_tss_floor": floor,
+                "note": _goals.week_note(g, pos, kind, target, floor, ctl, why=why,
+                                         band_lo_hi=lo_hi,
+                                         test_name=(test or {}).get("name"))})
+    return out
 
 
 # Chat side of the hold. Injected into the athlete's system prompt by lib/engine.py (same
@@ -1230,6 +1390,11 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
     athlete executed under 70% of prescription, this week becomes a recovery
     week (blueprint: "missed >30% -> next week is recovery")."""
     today = today or date.today()
+    # GOAL BLOCK (lib/goals.py): no A race ahead and a goal set, so the week is planned
+    # toward the goal. Checked first: such an athlete has no race CTL targets at all.
+    if goal_active(cfg, today):
+        return _goal_week(cfg, ctl_today, today, last_week_tss=last_week_tss, slug=slug,
+                          profile=profile)
     ctl_targets = cfg.get("ctl_targets") or {}
     phase_ctl = ctl_targets.get("phase_ctl") or {}
     if not phase_ctl and not ctl_targets.get("race_min"):
@@ -2636,6 +2801,82 @@ def cmd_race_setup(args) -> dict:
     return race_setup(args.athlete, apply=args.apply, into_taper=args.into_taper)
 
 
+# ── subcommand: goal-setup ─────────────────────────────────────────────────────
+def goal_setup(slug: str, goal: str | None = None, apply: bool = False, today=None,
+               path=None, sports=None, start=None, clear: bool = False,
+               ctl=None) -> dict:
+    """Set (or with clear, remove) the athlete's goal without a race (lib/goals.py).
+    A preview by default: what the blocks, tests and this week's load would be. With
+    apply, writes athletes.json `goal`, block 1 starting `start` or the coming Monday."""
+    import shutil
+    today = today or date.today()
+    p = Path(path or ATHLETES_CONFIG)
+    athletes = json.loads(p.read_text())
+    if slug not in athletes:
+        raise SystemExit(_err(f"unknown athlete '{slug}'"))
+    cfg = athletes[slug]
+    if clear:
+        if not apply:
+            return {"athlete": slug, "would_clear": cfg.get("goal"), "applied": False,
+                    "next": f"on their OK run goal-setup --athlete {slug} --clear --apply"}
+        shutil.copy2(p, p.with_name(p.name + f".bak-goal-setup-{today.isoformat()}"))
+        old = cfg.pop("goal", None)
+        p.write_text(json.dumps(athletes, indent=2) + "\n")
+        return {"athlete": slug, "cleared": old, "applied": True}
+    if goal not in _goals.GOALS:
+        raise SystemExit(_err(f"--goal must be one of {', '.join(_goals.GOAL_ORDER)}"))
+    profile = {}
+    try:
+        profile = json.loads((BASE / "athletes" / slug / "profile.json").read_text())
+    except Exception:
+        pass
+    if ctl is None and path is None:
+        try:
+            w = _client(cfg).get_wellness(days=3)
+            ctl = round(float(w[-1].get("ctl") or 0), 1) if w else None
+        except Exception:
+            ctl = None
+    if isinstance(sports, str):
+        sports = _goals.parse_sports(sports)
+    first = start if isinstance(start, date) else (
+        date.fromisoformat(start) if start else today + timedelta(days=(7 - today.weekday()) % 7 or 7))
+    g = _goals.make(goal, today=today, start=first, sports=sports, ctl=ctl, profile=profile)
+    trial = dict(cfg, goal=g)
+    gd = _goals.GOALS[goal]
+    out = {"athlete": slug, "goal": goal, "label": gd["label"],
+           "sports": _goals.sports_for(trial, profile),
+           "block_1": [g["start"], (date.fromisoformat(g["start"])
+                                    + timedelta(weeks=_goals.BLOCK_WEEKS, days=-1)).isoformat()],
+           "week_shape": list(_goals.BLOCK_SHAPE),
+           "tests": [b["week_start"] + ": " + b["name"]
+                     for b in goal_test_bookings(trial, slug, today=first)[:2]],
+           "zone_split": _goals.distribution(trial, profile),
+           "ctl_today": ctl, "applied": False}
+    if g.get("ctl_band"):
+        out["fitness_band"] = g["ctl_band"]
+    if ctl:
+        wk = required_tss(trial, ctl, today=date.fromisoformat(g["start"]), slug=slug,
+                          profile=profile)
+        out["first_week_tss"] = wk.get("recommended_weekly_tss")
+    if a_race_ahead(cfg, today):
+        out["note"] = ("An A race is ahead, so the race block runs first; the goal starts "
+                       "after its recovery weeks.")
+    if not apply:
+        out["next"] = (f"tell them the goal, the block shape and the first test in a few "
+                       f"lines; on their OK run goal-setup --athlete {slug} --goal {goal} --apply")
+        return out
+    shutil.copy2(p, p.with_name(p.name + f".bak-goal-setup-{today.isoformat()}"))
+    cfg["goal"] = g
+    p.write_text(json.dumps(athletes, indent=2) + "\n")
+    out["applied"] = True
+    return out
+
+
+def cmd_goal_setup(args) -> dict:
+    return goal_setup(args.athlete, args.goal, apply=args.apply, sports=args.sports,
+                      start=args.start, clear=args.clear)
+
+
 # Chat side of the choice: only the bot hears the athlete answer the Sunday question.
 _SURPLUS_PROMPT = (
     "FITTER THAN THE GOAL: when {name}'s Fitness is above what their goal needs, the "
@@ -2877,6 +3118,14 @@ def main():
     prs.add_argument("--into-taper", type=float, dest="into_taper",
                      help="the athlete's own total Fitness into the taper (overrides the level default; kept)")
 
+    pgs = sub.add_parser("goal-setup", help="a goal without a race: keep fitness, FTP, run / swim faster, fitter (preview; --apply)")
+    pgs.add_argument("--athlete", required=True)
+    pgs.add_argument("--goal", choices=list(_goals.GOAL_ORDER))
+    pgs.add_argument("--sports", help="e.g. bike,run (default: the profile's sports)")
+    pgs.add_argument("--start", help="Monday block 1 starts (default: the coming Monday)")
+    pgs.add_argument("--clear", action="store_true", help="remove the goal")
+    pgs.add_argument("--apply", action="store_true")
+
     prl = sub.add_parser("race-level", help="the athlete's level for their race and its numbers (blueprint §4.5)")
     prl.add_argument("--athlete", required=True)
 
@@ -2909,7 +3158,8 @@ def main():
                "post-race-ready": cmd_post_race_ready,
                "fitness-choice": cmd_fitness_choice,
                "bespoke-event": cmd_bespoke_event, "race-level": cmd_race_level,
-               "race-prompt": cmd_race_prompt, "race-setup": cmd_race_setup}[args.cmd]
+               "race-prompt": cmd_race_prompt, "race-setup": cmd_race_setup,
+               "goal-setup": cmd_goal_setup}[args.cmd]
     try:
         result = handler(args)
     except SystemExit:

@@ -53,6 +53,7 @@ import profile_fields
 import claude_call
 import hr_quality              # per-activity HR trust (wrist-sensor artefacts)
 import baseline as baseline_lib   # new athletes' baseline block: test capture + close
+import goals as goals_lib         # a goal without a race: block 1 pinned when baseline closes
 from git_sync import sync_commit_push
 from primitives.run_durability import compute_run_durability, fade_line
 
@@ -598,6 +599,23 @@ def _baseline_tick(slug: str, chat_id: str) -> None:
             print(f"[baseline:{slug}] block closed, blueprint rebuilding")
         except Exception as exc:
             print(f"[baseline:{slug}] blueprint rebuild failed to start: {exc}", file=sys.stderr)
+        # A goal without a race (lib/goals.py): block 1 starts the coming Monday, measured
+        # from the numbers the baseline week just tested.
+        try:
+            acfg = json.loads(ATHLETES_CONFIG.read_text()).get(slug) or {}
+            if goals_lib.goal_cfg(acfg) and not acfg["goal"].get("start"):
+                ctl = None
+                try:
+                    from icu_api import IcuClient
+                    w = IcuClient(acfg["icu_athlete_id"], acfg["icu_api_key"]).get_wellness(days=3)
+                    ctl = (w[-1].get("ctl") if w else None)
+                except Exception:
+                    pass
+                g = goals_lib.pin_start(slug, ctl=ctl)
+                if g:
+                    print(f"[baseline:{slug}] goal block 1 starts {g.get('start')}")
+        except Exception as exc:
+            print(f"[baseline:{slug}] goal start not pinned: {exc}", file=sys.stderr)
 
 
 def _dedup_session_log(path: Path) -> None:

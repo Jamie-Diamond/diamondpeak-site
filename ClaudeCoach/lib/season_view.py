@@ -13,6 +13,8 @@ build to the A race.
                  tri: {now_min, raceday_min}   triathlon A race: the IM model's numbers},
       "phases": [{name, family, start, end}] to the A race (blueprint canonical_phases),
       "trackingOnly": bool,                    no plan, so no phases
+      "goal": goals.view() for an athlete with a goal and no A race ahead (lib/goals.py),
+      "goalAfterRace": the goal's label when an A race is ahead of it,
     }
 
 Run-race predictions (Jamie, 1 Oct 2026: "do some research and do what you can"):
@@ -194,4 +196,20 @@ def payload(slug: str, cfg: dict, profile: dict, data: dict, today: date | None 
             phases = []
     a_view = next((v for v in views if a_race and v["name"] == a_race.get("name")
                    and v["date"] == a_race.get("date")), None)
-    return {"aRace": a_view, "races": views, "phases": phases, "trackingOnly": tracking}
+    out = {"aRace": a_view, "races": views, "phases": phases, "trackingOnly": tracking}
+    # A goal without a race (lib/goals.py): the goal card replaces the race hero while no A
+    # race is ahead; with one ahead, the page just says the goal resumes after it.
+    try:
+        import goals as goals_lib
+        if goals_lib.goal_cfg(cfg) and not tracking:
+            if a_race:
+                out["goalAfterRace"] = goals_lib.GOALS[cfg["goal"]["type"]]["label"]
+            else:
+                import plan_tools as _pt
+                out["goal"] = goals_lib.view(cfg, profile, slug, today,
+                                             ctl_now=(data.get("kpi") or {}).get("ctl"))
+                # No race ahead but still in the last race's recovery weeks.
+                out["goal"]["waiting"] = not _pt.goal_active(cfg, today)
+    except Exception:
+        pass
+    return out

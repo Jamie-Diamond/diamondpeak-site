@@ -214,7 +214,7 @@ class TestBookingsInAnyBlock:
 
 def test_a_run_race_keeps_the_athletes_cross_training_sports():
     src = (REPO / "lib" / "session_library.py").read_text()
-    assert "if ekey in _rf.RUN_EVENTS and not bespoke:" in src
+    assert "if ekey in _rf.RUN_EVENTS and not bespoke and not goal_mode:" in src
     assert '("bike", "bike_days"), ("swim", "swim_days")' in src
 
 

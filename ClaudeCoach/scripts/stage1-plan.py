@@ -831,7 +831,11 @@ def build_prompt(slug: str, brief: dict, week_start: date, feedback: str = "") -
             _bike_roll = ("Off-season bike quality is threshold/VO2 toward FTP: if the 2-week "
                           "bike Z4-5 is UNDER target add a threshold or VO2 set this week, if OVER "
                           "swap one for easy riding. "
-                          if (brief.get("week_type") or "").lower() == "offseason" else
+                          if ((brief.get("week_type") or "").lower() == "offseason"
+                              or brief.get("goal") == "ftp") else
+                          "Bike quality is sweetspot / tempo with a small VO2 touch: if the 2-week "
+                          "bike Z4-5 is UNDER target add one short VO2 set this week, if OVER drop "
+                          "it. " if brief.get("goal") else
                           "IM bike quality is predominantly "
                           "sweetspot (Z3) with a SMALL VO2 touch to hit ~6% Z4-5: if the 2-week bike VO2 "
                           "is UNDER target add one short VO2 set this week, if OVER drop it. ")
@@ -852,7 +856,16 @@ def build_prompt(slug: str, brief: dict, week_start: date, feedback: str = "") -
         _ex = {"Bike": "PREDOMINANTLY Z2 endurance + SWEETSPOT as the MAIN quality (toward the Z3%); add only ONE short VO2/threshold set toward the Z4-5% - a single touch, do NOT stack VO2 across rides (sweetspot dominates, VO2 is small)",
                "Run":  "easy Z2 + tempo sized to the Z3% + short faster reps sized to the Z4-5%",
                "Swim": "aerobic + CSS/threshold sized to the Z4-5% + a little speed"}
-        if _wt == "offseason":
+        if brief.get("goal") in ("ftp", "run"):
+            # Goal block (lib/goals.py): the goal sport's quality is the off-season top-end
+            # kind; the other sports keep the normal examples at their easy-heavy split.
+            _ex = dict(_ex, **({"Bike": "Z2 endurance + SWEETSPOT / THRESHOLD / over-unders, "
+                                        "then VO2 later in the block, toward FTP as the MAIN "
+                                        "quality (sized to the Z3% and Z4-5%)"}
+                               if brief.get("goal") == "ftp" else
+                               {"Run": "easy Z2 + threshold / cruise intervals (the Z3%) + short "
+                                       "fast reps toward 5k pace (the Z4-5%) + strides"}))
+        elif _wt == "offseason":
             _ex = dict(_ex,
                        Bike="Z2 endurance + THRESHOLD / over-unders / VO2 toward FTP as the MAIN "
                             "quality (sized to the Z4-5%), a little tempo for the Z3%",

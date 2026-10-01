@@ -30,6 +30,7 @@ import injury as _injury                                   # noqa: E402  (Phase 
 import thresholds as th                                    # noqa: E402
 import weekly_availability as _wa                          # noqa: E402  (day-rule precedence)
 import race_fitness as _rf                                 # noqa: E402  (run-race fitness, A/B/C)
+import goals as _goals                                     # noqa: E402  (goal blocks, no race)
 
 LIBRARY = BASE / "config" / "session-library.json"
 ATHLETES = BASE / "config" / "athletes.json"
@@ -269,8 +270,11 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     # profile carries prev_race (what the athlete's race ACTUALLY cost them) and their
     # thresholds, which is how race week prices the race off real data instead of an
     # event-average table.
+    # A goal block (lib/goals.py) is planned even with no Fitness yet: a new athlete with
+    # no history has CTL 0, and the goal still decides the menu, split and test.
     req = (pt.required_tss(cfg, ctl, today=today, last_week_tss=last_week_tss,
-                           profile=profile, slug=slug) if ctl else {})
+                           profile=profile, slug=slug)
+           if (ctl or pt.goal_active(cfg, today)) else {})
     # Long run is a PROGRESSING target for athletes with a configured long-run floor
     # (Kathryn): schedule it NEAR its climbing cap, not a static short run. Athletes
     # without a floor keep cap-only behaviour (no forced target) - unchanged.
@@ -282,10 +286,20 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     # week as Transition, but required_tss has typed it as a training week. Its own
     # session menu, its own distribution, and progressions counted from the block's
     # first week rather than from race day.
-    offseason = req.get("week_type") == "offseason"
+    # GOAL BLOCK (lib/goals.py, no race): the same non-race session menu, this goal's zone
+    # split for the athlete's own sports, and progressions counted from the block's week.
+    # An easier / test week of the block is typed "deload", so goal_mode, not week_type,
+    # is what marks every week of it.
+    goal_mode = bool(req.get("goal"))
+    offseason = req.get("week_type") == "offseason" or goal_mode
     if bespoke and not offseason and (bespoke.get("distribution") or {}).get(phase_name):
         ph = dict(ph, distribution=bespoke["distribution"][phase_name])
-    if offseason:
+    if goal_mode:
+        phase_name = "offseason"
+        week_in_phase = int(req.get("goal_week") or 1)
+        ph = dict(ph, distribution=req.get("goal_distribution") or pt.OFFSEASON_DISTRIBUTION)
+        event = dict(event, sports=list(req.get("goal_sports") or event.get("sports") or []))
+    elif offseason:
         phase_name = "offseason"
         week_in_phase = int(req.get("offseason_week") or 1)
         ph = dict(ph, distribution=((pt.offseason_cfg(cfg) or {}).get("distribution")
@@ -304,7 +318,7 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     # training for one keeps swimming and cycling as cross-training (Jamie's Brighton
     # block, 29 Sep 2026: "more fitness is ok, but running fitness is required"). Their
     # day_rules say which: a sport with standing days stays on the menu.
-    if ekey in _rf.RUN_EVENTS and not bespoke:
+    if ekey in _rf.RUN_EVENTS and not bespoke and not goal_mode:
         _dr = cfg.get("day_rules") or {}
         sports = list(sports) + [sp for sp, key in (("bike", "bike_days"), ("swim", "swim_days"))
                                  if _dr.get(key) and sp not in sports]
@@ -472,7 +486,12 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         dosing_note += (f" MINIMUM RUN: no run shorter than {rp.get('min_run_km') or ''}"
                         f"{' km' if rp.get('min_run_km') else ''} (~{min_run_min} min easy); "
                         "drop a run rather than shorten it below that.")
-    if offseason:
+    if goal_mode:
+        _gd = _goals.GOALS.get(req.get("goal"), {})
+        dosing_note += (f" GOAL BLOCK ({_gd.get('label', 'goal')}, no race): {_gd.get('focus', '')}. "
+                        "Spread the hard sessions so no two land on consecutive days, and hold "
+                        "everything else genuinely easy. ")
+    elif offseason:
         dosing_note += (" OFF-SEASON POWER/SPEED BLOCK: the quality is TOP-END, not race "
                         "pace. Bike quality = threshold / over-unders / VO2 toward FTP (not "
                         "sweetspot volume). Run quality = short fast reps, cruise intervals and "
@@ -495,11 +514,14 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     # ride and deliver NO WEEK AT ALL for the most important week of the year. The same
     # applies to the progressing long run. A week whose whole point is that it is short
     # cannot also be required to contain the longest session of the week.
-    _no_key_sessions = (req.get("week_type") in ("race", "post_race", "offseason"))
+    _no_key_sessions = (req.get("week_type") in ("race", "post_race", "offseason") or goal_mode)
     if _no_key_sessions:
         long_ride_min = None
         long_run_target_min = None
         dosing_note += (
+            "NO protected long ride and NO long-run target this week: it is a goal-block "
+            "week with no race to build volume for; a longer easy session is fine within the "
+            "caps. " if goal_mode else
             "NO protected long ride and NO long-run target this week: it is an off-season "
             "power/speed week, where volume is not the point. " if offseason else
             "NO protected long ride and NO long-run target this week: it is a race week "
@@ -565,7 +587,9 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     return {
         "athlete": slug,
         "event": ekey, "event_unknown": ekey is None,
-        "phase": phase_name, "week_in_phase": week_in_phase,
+        # A goal block borrows the off-season MENU, but is reported as "goal": every
+        # brief key reaches the LLM, and "offseason" would reach the athlete as wording.
+        "phase": "goal" if goal_mode else phase_name, "week_in_phase": week_in_phase,
         "weekly_tss_target": req.get("recommended_weekly_tss"),
         # HARD lower bound: min(phase requirement, 7 x CTL maintenance); 0 on
         # deload/taper. validate_week fails the week below it — a training week
@@ -606,9 +630,14 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
             _ZONE_BANDS),
         "intensity_weights": intensity_weights(
             ph.get("distribution") or _phase_distribution(bp, "peak"), ekey),
-        "emphasis": (((pt.offseason_cfg(cfg) or {}).get("emphasis")
-                      or ["threshold", "vo2", "reps", "css", "speed"])
+        "emphasis": (_goals.GOALS.get(req.get("goal"), {}).get("emphasis", []) if goal_mode
+                     else ((pt.offseason_cfg(cfg) or {}).get("emphasis")
+                           or ["threshold", "vo2", "reps", "css", "speed"])
                      if offseason else event.get("emphasis", [])),
+        # Goal block (lib/goals.py): which goal, and where in the 6-week block this week is.
+        **({"goal": req.get("goal"), "goal_label": req.get("goal_label"),
+            "goal_block": req.get("goal_block"), "goal_week": req.get("goal_week"),
+            "goal_week_kind": req.get("goal_week_kind")} if goal_mode else {}),
         # No brick outside a training block: the IM brick cadence reached the recovery
         # weeks after the race as "Easy run (off the bike)" (27 Sep 2026).
         # ...and none for a bespoke race without a run (an aquabike has no bike->run).

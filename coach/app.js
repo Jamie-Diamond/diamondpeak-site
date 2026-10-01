@@ -3632,6 +3632,46 @@
         ? 'The plan starts ' + fmt(ph[0].start) + '.' : '' });
   }
 
+  /* Goal without a race (lib/goals.py, 1 Oct 2026): the goal, where this week sits in the
+     6-week block, the next test and progress since the goal began. */
+  var GOAL_KIND = { load: 'Train', easy: 'Easier', test: 'Test' };
+  function goalBlock(g) {
+    var fmt = function (iso) {
+      return new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    };
+    var shape = ['load', 'load', 'easy', 'load', 'load', g.nextTest || g.type === 'run' ||
+                 g.type === 'ftp' || g.type === 'swim' ? 'test' : 'easy'];
+    var sub = g.type === 'maintain' && g.band
+      ? 'Fitness held between ' + g.band[0] + ' and ' + g.band[1] + '.'
+      : (g.nextTest ? 'Each 6-week block ends with ' + (g.nextTest.name === '5k time trial'
+          ? 'a 5k time trial' : 'an ' + g.nextTest.name) + '.' : 'Training runs in 6-week blocks.');
+    var h = '<section class="hero"><p class="hero-k">Goal · no race booked</p>' +
+      '<h2 class="hero-t">' + esc(g.label) + '</h2><p class="hero-m">' + esc(sub) + '</p></section>';
+    var cur = g.waiting || g.notStarted ? 0 : g.week;
+    var strip = '<div class="gb">' + shape.map(function (k, i) {
+      return '<div class="gb-w gb-' + k + (i + 1 === cur ? ' now' : '') + '"><b>' + (i + 1) +
+        '</b><span>' + GOAL_KIND[k] + '</span></div>';
+    }).join('') + '</div>';
+    var foot = g.waiting ? 'Starts once your race recovery weeks are done.'
+      : g.notStarted && g.started ? 'Block 1 starts ' + fmt(g.started) + '.'
+      : (g.nextTest ? 'Next test: ' + g.nextTest.name + ', week of ' + fmt(g.nextTest.week_start) + '.' : '');
+    h += card(g.waiting || g.notStarted ? 'The block' : 'Block ' + g.block + ' · week ' + g.week +
+      ' of ' + g.blockWeeks, strip, { foot: foot });
+    var rows = (g.progress || []).filter(function (r) { return r.now != null; });
+    if (rows.length) {
+      h += card('Progress', '<table class="tbl"><thead><tr><th></th><th>At the start</th><th>Now</th>' +
+        '</tr></thead><tbody>' + rows.map(function (r) {
+          var u = r.unit && r.unit !== 'W' ? r.unit : (r.unit ? ' ' + r.unit : '');
+          return '<tr><td class="lbl">' + esc(r.label) + '</td><td>' +
+            (r.start != null ? esc(String(r.start)) + u : '—') + '</td><td class="t' +
+            (r.better === true ? ' up' : r.better === false ? ' down' : '') + '">' +
+            esc(String(r.now)) + u + '</td></tr>';
+        }).join('') + '</tbody></table>', { flush: true,
+          foot: 'At the start: when the goal began. Tests update the numbers.' });
+    }
+    return h;
+  }
+
   function renderGoals() {
     var d = state.data, p = d.profile || {}, rp = d.racePredictor || {};
     var sv = d.season;
@@ -3648,9 +3688,15 @@
             { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + '</p></section>';
         h += card(a.hold ? 'What you could hold' : 'Times', goalTimes(a) + goalVerdict(a),
                   { foot: goalMethod(a) });
+      } else if (sv.goal) {
+        h += goalBlock(sv.goal);
       } else {
         h += '<section class="hero"><p class="hero-k">Season</p><h2 class="hero-t">No A race booked</h2>' +
-          '<p class="hero-m">Tell the coach your next target race and it shows here.</p></section>';
+          '<p class="hero-m">Tell the coach your next target race, or a goal such as raising ' +
+          'your FTP, and it shows here.</p></section>';
+      }
+      if (a && sv.goalAfterRace) {
+        h += '<p class="gv">After this race: back to your goal, ' + esc(sv.goalAfterRace.toLowerCase()) + '.</p>';
       }
       h += sv.trackingOnly ? card('The season', '<div class="empty">Tracking only, so there are no ' +
         'training phases. Your sessions are still logged and written up.</div>') : seasonTimeline(sv);

@@ -348,7 +348,8 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
         # the band floor, which is deliberately below the convergence target this would
         # substitute (plan_tools.offseason_cfg).
         elif (tss_floor and ctl and phase.get("family") in ("transition", "recovery")
-              and (req or {}).get("week_type") != "offseason"):
+              and (req or {}).get("week_type") != "offseason"
+              and not (req or {}).get("goal")):          # a goal block (lib/goals.py) too
             mct, _mct_src = pt.maintenance_ctl(cfg)
             basis = float(mct) if mct is not None else float(ctl)
             ramp_floor = pt.compute_required_tss(float(ctl), basis,
@@ -401,7 +402,9 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
                             run_week_min_cap=run_cap,
                             ramp_cap=float(cfg.get("max_ctl_ramp_per_week", 5.0)),
                             strength_max=(dr or {}).get("strength_max"),
-                            distribution=phase.get("distribution"),
+                            # A goal block has no blueprint phase: its own zone split.
+                            distribution=((req or {}).get("goal_distribution")
+                                          or phase.get("distribution")),
                             phase_family=phase.get("family"),
                         # Was an inline LONG_RIDE check here; validate_week now owns it
                         # so plan time and calendar time cannot disagree, and a breach is

@@ -64,6 +64,7 @@ import rule_registry
 import coach_facts             # per-turn computed FACTS block (superlatives/records/thresholds)
 import write_verify            # verify-after-write for Strava / ICU calendar claims
 import baseline as baseline_lib   # new athletes' baseline block (onboarding, 27 Sep 2026)
+import goals as goals_lib         # a goal without a race (1 Oct 2026)
 import chat_limits                # per-athlete monthly chat allowance (29 Sep 2026)
 from engine import call_claude, call_claude_with_image, stream_claude
 HEARTBEAT_FILE = BASE.parent / ".bot_heartbeat"  # touched each poll loop; watched by bot-watchdog.py
@@ -4489,7 +4490,8 @@ ONBOARDING_FILE = BASE.parent / "config/onboarding_state.json"  # gitignored
 # key and personal details removed).
 _OB_PHASE1 = [
     ("name",    "Hi! I'm ClaudeCoach. Just a few questions to get you set up.\n\nWhat's your *full name*?"),
-    ("race",    "What's your *target race* -- name and date? (e.g. _IM Frankfurt, 2027-06-29_)"),
+    ("race",    "What's your *target race* -- name and date? (e.g. _IM Frankfurt, 2027-06-29_)\n\n"
+                "Not training for a race? Reply _none_."),
     ("icu_has", "Do you already use *Intervals.icu*? It's the free training log I read your sessions, sleep and fitness from, and where I put your plan."),
     ("icu_key", "Now link me to it with your *API key*:\n\n"
                 "1. On intervals.icu, open *Settings* (in the ☰ menu)\n"
@@ -4568,6 +4570,9 @@ _OB_BUTTONS = {
     "icu_setup": [[("I've done it", "done")]],
     "icu_fix":   [[("Check again", "again"), ("Carry on for now", "skip")]],
     "level":     [[("Beginner", "beginner"), ("Mid", "mid"), ("Pro", "pro")]],
+    "goal":      [[("Keep my fitness", "maintain"), ("Raise my FTP", "ftp")],
+                  [("Run faster", "run"), ("Swim faster", "swim")],
+                  [("Get fitter", "fitter")]],
     "heat":      [[("Yes", "yes"), ("No", "no")]],
     "fuel":      [[("Yes", "yes"), ("No", "no")]],
 }
@@ -4701,6 +4706,12 @@ def _validate_ob_answer(key, answer):
     if key in ("heat", "fuel"):
         if not re.match(r"^\s*(y|yes|yep|yeah|n|no|nope)\b", answer, re.I):
             return "Tap *Yes* or *No*."
+    if key == "goal":
+        if not goals_lib.parse_goal(answer):
+            return "Tap one of the goals, or reply with a number from 1 to 5."
+    if key == "goal_sports":
+        if not goals_lib.parse_sports(answer):
+            return "Reply with the numbers of the sports you want, e.g. _2 3_ for bike and run."
     if key == "level":
         if answer.strip().lower() not in _LEVEL_WORDS:
             return "Tap one: *Beginner*, *Mid* or *Pro*."
@@ -4834,7 +4845,8 @@ def _build_remaining_queue(answers, icu_data, sports=None):
         race_name = race_str[:dm.start()].strip().rstrip(", ")
     sports = sports or ["swim", "bike", "run"]
 
-    qual = [(key, q.format(race_name=race_name)) for key, q in _OB_QUALITATIVE]
+    qual = [(key, q.format(race_name=race_name)) for key, q in _OB_QUALITATIVE
+            if not (key == "a_goal" and answers.get("goal"))]    # no race, no race goal
     if "bike" in sports and not icu_data.get("has_power"):
         qual.append(_OB_POWER)
     recent_q, recent_map = _recent_tests_question(icu_data, sports)
@@ -4950,6 +4962,11 @@ def _scaffold_athlete(chat_id, answers, icu_data, race_data=None, sports=None, r
     if dm:
         race_date = dm.group(1)
         race_name = race_str[:dm.start()].strip().rstrip(", ")
+    # A goal without a race (lib/goals.py): no race fields, the goal is the A goal.
+    goal_key = answers.get("goal") if answers.get("goal") in goals_lib.GOALS else None
+    goal_label = goals_lib.GOALS[goal_key]["label"] if goal_key else None
+    if goal_key:
+        race_str, race_name, race_date = "", "", None
 
     injuries_str = answers.get("injuries", "none").strip()
     injuries = [] if injuries_str.lower() == "none" else [
@@ -4957,7 +4974,7 @@ def _scaffold_athlete(chat_id, answers, icu_data, race_data=None, sports=None, r
     ]
 
     rd = race_data or {}
-    race_type = rd.get("race_type") or "triathlon"
+    race_type = rd.get("race_type") or ("" if goal_key else "triathlon")
 
     dist_parts = []
     if rd.get("swim_km"):  dist_parts.append(f"{rd['swim_km']}km swim")
@@ -4975,7 +4992,8 @@ def _scaffold_athlete(chat_id, answers, icu_data, race_data=None, sports=None, r
         "race_name": race_name, "race_date": race_date,
         "race_distance": race_type,
         "race_info": rd,
-        "a_goal": answers.get("a_goal", ""), "b_goal": None, "c_goal": "Finish",
+        "a_goal": goal_label or answers.get("a_goal", ""), "b_goal": None,
+        "c_goal": None if goal_key else "Finish",
         "ftp_watts": ftp, "indoor_ftp_watts": icu_data.get("indoor_ftp_watts"),
         "swim_css_per_100m": swim_css, "run_threshold_pace_per_km": run_thr, "lthr": lthr,
         "training_days": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"],
@@ -5023,7 +5041,8 @@ def _scaffold_athlete(chat_id, answers, icu_data, race_data=None, sports=None, r
 
     template_vars = dict(
         name=name, first_name=first_name, slug=slug,
-        race_name=race_name, race_date=race_date or "TBD",
+        race_name=race_name or (f"none booked -- goal: {goal_label}" if goal_key else ""),
+        race_date=race_date or ("-" if goal_key else "TBD"),
         race_distance=race_type,
         race_distance_detail=race_distance_detail,
         race_elevation_m=rd.get("elevation_m") or "unknown",
@@ -5067,6 +5086,10 @@ def _scaffold_athlete(chat_id, answers, icu_data, race_data=None, sports=None, r
         "active": False,
         "race_date": race_date or "", "race_name": race_name,
     }
+    if goal_key:
+        # Block 1 starts the Monday after the baseline week (goals.block_start); the
+        # tested numbers are pinned as the start values when that week closes.
+        athletes_data[slug]["goal"] = goals_lib.make(goal_key, sports=sports, profile=profile)
     ATHLETES_CONFIG.write_text(json.dumps(athletes_data, indent=2))
 
     return slug
@@ -5213,6 +5236,21 @@ def _ob_after_icu(token, chat_id, ob_state, session):
     """Intervals.icu is linked: say what it holds, look up the race, queue the rest."""
     send(token, chat_id, session.get("icu_summary") or "")
 
+    if session["answers"].get("goal"):
+        # A goal without a race: no race to look up; the sports are the athlete's own.
+        sports = (goals_lib.parse_sports(session["answers"].get("goal_sports") or "")
+                  or goals_lib.sports_for({"goal": {"type": session["answers"]["goal"]}}))
+        session["race_data"] = None
+        remaining, recent_map = _build_remaining_queue(session["answers"], session["icu_data"], sports)
+        session["sports"] = sports
+        session["recent_map"] = recent_map
+        session["queue"] = [[k, q] for k, q in remaining]
+        next_key, next_q = session["queue"].pop(0)
+        session["current_key"] = next_key
+        save_onboarding_state(ob_state)
+        _ob_ask(token, chat_id, next_key, next_q, session["answers"])
+        return True
+
     # Look up race details in the background while we send the ICU summary
     race_str = session["answers"].get("race", "")
     race_date_m = re.search(r'(\d{4}-\d{2}-\d{2})', race_str)
@@ -5316,6 +5354,13 @@ def handle_onboarding(token, chat_id, text):
         answer = "no" if re.match(r"^\s*(n|no|nope)\b", answer, re.I) else "yes"
     elif key == "icu_key":
         answer = answer.strip()
+    elif key == "race" and goals_lib.is_no_race(answer):
+        # No race (1 Oct 2026): ask the goal and the sports instead (lib/goals.py).
+        answer = "none"
+        session["queue"][0:0] = [["goal", goals_lib.SIGNUP_QUESTION],
+                                 ["goal_sports", goals_lib.SPORTS_QUESTION]]
+    elif key == "goal":
+        answer = goals_lib.parse_goal(answer)
     session["answers"][key] = answer
     for fam in reversed(_estimates_due(key, answer, session)):
         q = _OB_ESTIMATE[fam]
@@ -5442,7 +5487,7 @@ def handle_onboarding(token, chat_id, text):
              f"Name: {session['answers']['name']}\n"
              f"Handle: `{slug}`\n"
              f"Race: {session['answers'].get('race', '?')}\n"
-             f"Goal: {session['answers'].get('a_goal', '?')}\n\n"
+             f"Goal: {(goals_lib.GOALS.get(session['answers'].get('goal') or '') or {}).get('label') or session['answers'].get('a_goal', '?')}\n\n"
              f"Send `/approve {slug}` to activate.")
     return True
 

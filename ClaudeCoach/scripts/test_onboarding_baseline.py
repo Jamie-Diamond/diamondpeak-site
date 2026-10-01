@@ -349,6 +349,49 @@ check("another athlete's tap is ignored",
       B._handle_baseline_confirm("t", "555", "bl:yes:sam:bike", 5, {"555": {"slug": "ali"}}) is False)
 
 shutil.rmtree(tmp, ignore_errors=True)
+# ── 6. no race: a goal instead (lib/goals.py, 1 Oct 2026) ─────────────────────
+fake_icu(ICU_TRI, {})
+LOOKUPS = []
+B._lookup_race = lambda name, d: LOOKUPS.append(name) or {}
+SENT.clear()
+asked = onboard("606", ["Tess Goal", "none",
+                        "banana",          # not a goal: asked again
+                        "ob:goal:ftp",     # the Raise my FTP button
+                        "2 3",             # bike and run
+                        "yes", KEY,
+                        "2 years riding", "none", "8",
+                        "1",               # strap
+                        "yes",             # power
+                        "0",               # FTP 250 was not a test
+                        "about 240",       # rough FTP
+                        "no",              # run threshold: not tested
+                        "5k 25:00",        # rough run figure
+                        "no", "no", "no",  # comparison race, heat, fuelling
+                        "2", "tess"])
+blob = "\n".join(asked)
+check("race question offers 'none'", any("Not training for a race? Reply _none_" in t
+                                         for c, t, _ in SENT if c == "606"))
+check("no race asks the goal, with buttons", "What's the *goal* instead?" in blob
+      and any(m and "Raise my FTP" in json.dumps(m) for c, t, m in SENT if c == "606"))
+check("a non-goal answer is asked again", "Tap one of the goals" in blob)
+check("then which sports", "Which sports do you want in your plan?" in blob)
+check("no race is looked up", LOOKUPS == [], LOOKUPS)
+check("no 'A goal for <race>' question", "*A goal* for" not in blob)
+check("no swim questions for a bike + run plan", "100m or 400m" not in blob and "swim CSS" not in blob)
+_ath = json.loads(B.ATHLETES_CONFIG.read_text()).get("tess") or {}
+_prof = json.loads((tmp / "athletes/tess/profile.json").read_text())
+_g = _ath.get("goal") or {}
+check("athletes.json carries the goal, no race",
+      _g.get("type") == "ftp" and _g.get("sports") == ["bike", "run"]
+      and not _ath.get("race_date") and not _ath.get("race_name"), _ath)
+check("block 1 waits for the baseline week (start not pinned yet)", "start" not in _g, _g)
+check("profile: no race, the goal is the A goal, bike + run",
+      not _prof.get("race_date") and _prof.get("a_goal") == "Raise my FTP"
+      and _prof.get("sports") == ["bike", "run"], {k: _prof.get(k) for k in ("race_date", "a_goal", "sports")})
+check("baseline tests bike and run only",
+      json.loads((tmp / "athletes/tess/baseline.json").read_text())["sports"] == ["bike", "run"])
+check("coach notice names the goal", any("Goal: Raise my FTP" in t for c, t, _ in SENT if c == "999"))
+
 print()
 print("ALL PASS" if not FAILS else f"{len(FAILS)} FAILED: {FAILS}")
 sys.exit(1 if FAILS else 0)

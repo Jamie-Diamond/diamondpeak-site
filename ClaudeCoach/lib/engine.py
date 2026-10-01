@@ -277,6 +277,13 @@ def system_prompt_with_level(sp_file) -> str:
             text = text + "\n\n" + surplus
     except Exception as e:
         log(f"fitness-choice block skipped: {e}")
+    try:
+        import goals as _goals
+        gb = _goals.prompt_block(slug, first_name)
+        if gb:
+            text = text + "\n\n" + gb
+    except Exception as e:
+        log(f"goal block skipped: {e}")
     return text
 
 

@@ -437,9 +437,13 @@ def run_summary(slug: str = "jamie") -> str:
         current_state, week_start.isoformat(), week_end.isoformat())
     adherence_block = offplan_log.prompt_block(adherence)
 
-    race_date    = date.fromisoformat(profile.get("race_date", "2026-09-19"))
-    days_to_race = (race_date - today).days
-    race_name    = profile.get("race_name", "race")
+    try:
+        race_date    = date.fromisoformat(str(profile.get("race_date", "2026-09-19") or "")[:10])
+        days_to_race = (race_date - today).days
+    except ValueError:      # a goal without a race (lib/goals.py): no countdown
+        race_date, days_to_race = None, "none (no race booked)"
+    race_name    = (profile.get("race_name")
+                    or (f"goal ({profile['a_goal']})" if profile.get("a_goal") else "race"))
     first_name   = profile.get("name", slug).split()[0]
     ftp          = profile.get("ftp_watts", "unknown")
 

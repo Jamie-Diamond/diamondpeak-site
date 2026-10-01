@@ -82,5 +82,38 @@ for (const slug of ['jamie', 'kathryn', 'calum']) {
     console.log(`ok   ${slug}  countdown="${cd.replace(/<[^>]+>/g, '')}"`);
   }
 }
+// A goal without a race (lib/goals.py, 1 Oct 2026): no current athlete has one, so the
+// goal card is driven from Jamie's data with the season swapped for a goal-only one.
+{
+  const data = JSON.parse(fs.readFileSync(path + 'ClaudeCoach/public/training-data-jamie.json', 'utf8'));
+  const goals = [
+    { type: 'ftp', label: 'Raise my FTP', started: '2026-10-05', notStarted: false, block: 1, week: 3,
+      blockWeeks: 6, kind: 'easy', nextTest: { name: 'FTP test', week_start: '2026-11-09' }, band: null,
+      progress: [{ label: 'FTP', start: 231, now: 238, unit: 'W', better: true },
+                 { label: 'Fitness', start: 47, now: 49.2, unit: '', better: true }], waiting: false },
+    { type: 'maintain', label: 'Keep my fitness', started: '2026-10-12', notStarted: true, block: 1, week: 1,
+      blockWeeks: 6, kind: 'load', nextTest: null, band: [44, 50], progress: [], waiting: false },
+  ];
+  for (const g of goals) {
+    data.season = { aRace: null, races: [], phases: [], trackingOnly: false, goal: g };
+    global.__peak.state.data = data;
+    const errors = [];
+    const origError = console.error;
+    console.error = (...a) => { errors.push(a.join(' ')); };
+    try { global.__peak.renderAll(); } catch (e) { errors.push('renderAll threw: ' + e.message); }
+    console.error = origError;
+    const html = (registry['#v-goals'] || {}).innerHTML || '';
+    const want = [g.label, g.notStarted ? 'Block 1 starts' : 'Block 1 \u00b7 week 3',
+                  g.nextTest ? 'Next test: FTP test' : 'Fitness held between 44 and 50'];
+    const missing = want.filter((w) => !html.includes(w));
+    if (errors.length || missing.length) {
+      failures++;
+      console.log(`FAIL goal ${g.type}: ` + errors.concat(missing.map((m) => 'missing "' + m + '"')).join('; '));
+    } else {
+      console.log(`ok   goal ${g.type}`);
+    }
+  }
+}
+
 console.log(failures ? `\n${failures} athlete(s) fail to render` : '\nall three render clean');
 process.exit(failures ? 1 : 0);
