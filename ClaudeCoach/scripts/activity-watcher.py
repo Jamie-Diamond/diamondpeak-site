@@ -694,7 +694,11 @@ def _has_new_activity(slug: str, existing_ids: set) -> bool:
         if r.returncode != 0:
             return True
         for a in json.loads(r.stdout):
-            if str(a.get("id", "")) not in existing_ids:
+            # A session can be logged under its Strava or Garmin id instead of the
+            # ICU one (i192236501 sat in the log as Strava 20406359196, so this gate
+            # woke Sonnet every 5 min from 1 Oct 14:00 to answer ACTIVITY_ID: none).
+            ids = {str(a.get(k) or "") for k in ("id", "strava_id", "external_id")} - {""}
+            if not ids & existing_ids:
                 return True
         return False
     except Exception:
