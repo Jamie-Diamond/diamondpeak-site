@@ -130,5 +130,5 @@ def test_ledger_prices_per_day_chat_separately_from_27_sep(tmp_path, monkeypatch
     s = usage_ledger.summary(ath, today=TODAY)["athletes"]["jamie"]
     assert s["total"] == 3.5 and s["month"] == 2.5 and s["chat_month"] == 2.0
     assert s["chat_by_month"] == {"2026-09": 1.0, "2026-10": 2.0}
-    assert s["rate_month"] == round(3.5 / 5 * 30, 2)        # 27 Sep - 1 Oct = 5 days
+    assert s["rate_month"] == 3.5                            # actual, not scaled
     usage_ledger._cache.clear()

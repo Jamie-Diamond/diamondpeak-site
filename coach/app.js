@@ -1612,9 +1612,9 @@
           '<tr class="utot"><td class="lbl"><b>Total</b></td><td></td><td class="t">' +
           money(tot.rate_month) + '</td><td>' + money(tot.total) + '</td></tr>';
         box.innerHTML = '<table class="tbl utbl"><thead><tr><th>Athlete</th><th>Chat this month</th>' +
-          '<th>API / month</th><th>Since ' + whenShort(j.since) + '</th></tr></thead><tbody>' + body +
+          '<th>API / 28 days</th><th>Since ' + whenShort(j.since) + '</th></tr></thead><tbody>' + body +
           '</tbody></table><p class="card-f">API list prices, as if Peak ran on a pay-per-use key. ' +
-          'Per month: the last ' + (j.rateDays || '?') + ' days scaled to 30. Logging began ' +
+          '28 days: actual spend over the last ' + (j.rateDays || '?') + ' days (rolling, not a projection). Logging began ' +
           whenShort(j.since) + '. Chat: this month\u2019s messages and cost against the allowance.' +
           (j.error ? ' Costs unavailable: ' + esc(j.error) : '') + '</p>';
       })

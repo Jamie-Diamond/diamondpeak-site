@@ -22,7 +22,7 @@ from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent            # ClaudeCoach/
 LOG_START = date(2026, 9, 27)
-RATE_WINDOW_DAYS = 30
+RATE_WINDOW_DAYS = 28
 
 _ur = None
 _cache: dict = {}          # path -> ((mtime, size), (athlete, job, {day: usd}))
@@ -101,8 +101,8 @@ def daily(athletes: dict) -> dict:
 
 
 def summary(athletes: dict, today: date | None = None) -> dict:
-    """Per athlete: this calendar month so far, a per-month rate from the last
-    (up to) 30 logged days, the total since LOG_START, and chat this month - all USD at
+    """Per athlete: this calendar month so far, actual spend over the last
+    28 days (fewer while logging is younger), the total since LOG_START, and chat this month - all USD at
     API list prices."""
     today = today or date.today()
     d = daily(athletes)
@@ -114,7 +114,7 @@ def summary(athletes: dict, today: date | None = None) -> dict:
         alld, chatd = v["all"], v["chat"]
         last = sum(u for day, u in alld.items() if day >= win_start.isoformat())
         out[ath] = {"month": round(sum(u for day, u in alld.items() if day.startswith(month)), 2),
-                    "rate_month": round(last / n_days * 30, 2),
+                    "rate_month": round(last, 2),   # actual spend, last 28 days (not a projection)
                     "total": round(sum(alld.values()), 2),
                     "chat_month": round(sum(u for day, u in chatd.items()
                                             if day.startswith(month)), 2),
