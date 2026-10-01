@@ -4204,6 +4204,69 @@
     loadFoodHistory();
   }
 
+  // Tap a logged item: amount, meal, time, or delete (Jamie, 1 Oct 2026). The server
+  // rescales with the food bot's own code and republishes; the sheet then closes.
+  var MEAL_NAMES = [['breakfast', 'Breakfast'], ['lunch', 'Lunch'], ['snacks', 'Snacks'], ['dinner', 'Dinner']];
+  function openFoodEdit(it) {
+    var meal = it.fm;
+    var h = '<header class="dr-h"><div><p class="dr-k">' + esc(it.fk) + ' kcal' +
+      (it.fg ? ' \u00b7 ' + Math.round(it.fg) + ' g' : '') + '</p><h2 class="dr-t">' + esc(it.fn) + '</h2></div>' +
+      '<button type="button" class="dr-x" id="drX" aria-label="Close">\u2715</button></header>' +
+      '<div class="dr-b fe">' +
+      '<label class="fe-l">Amount</label><div class="fe-row"><input id="feG" type="number" inputmode="decimal" min="1" max="3000" ' +
+        'placeholder="grams" value="' + (it.fg ? Math.round(it.fg) : '') + '"><span>g</span>' +
+        '<button type="button" class="fe-x" data-fx="0.5">\u00d7\u00bd</button><button type="button" class="fe-x" data-fx="2">\u00d72</button></div>' +
+      (it.fg ? '' : '<p class="fe-n">No amount was recorded for this one: enter grams, or use \u00d7\u00bd / \u00d72.</p>') +
+      '<label class="fe-l">Meal</label><div class="fe-meals">' + MEAL_NAMES.map(function (m) {
+        return '<button type="button" data-fm="' + m[0] + '"' + (m[0] === meal ? ' class="on"' : '') + '>' + m[1] + '</button>';
+      }).join('') + '</div>' +
+      '<label class="fe-l">Time</label><div class="fe-row"><input id="feT" type="time" value="' + esc(it.ft || '') + '"></div>' +
+      '<p class="fe-msg" id="feMsg"></p>' +
+      '<div class="fe-go"><button type="button" class="fe-del" id="feDel">Delete</button>' +
+      '<button type="button" class="fe-save" id="feSave">Save</button></div></div>';
+    var dr = $('#drawer');
+    dr.innerHTML = h;
+    dr.classList.add('on');
+    document.body.classList.add('drawn');
+    $('#drX').onclick = closeDetail;
+    var factor = null;
+    dr.querySelector('.fe-meals').onclick = function (e) {
+      var b = e.target.closest('button[data-fm]'); if (!b) return;
+      meal = b.dataset.fm;
+      Array.prototype.forEach.call(this.querySelectorAll('button'), function (x) { x.classList.toggle('on', x === b); });
+    };
+    Array.prototype.forEach.call(dr.querySelectorAll('.fe-x'), function (b) {
+      b.onclick = function () {
+        var f = parseFloat(b.dataset.fx);
+        if (it.fg) { $('#feG').value = Math.round(it.fg * f); factor = null; }
+        else { factor = f; $('#feMsg').textContent = '\u00d7' + (f === 0.5 ? '\u00bd' : f) + ' of what was logged'; }
+      };
+    });
+    function send(body, btn) {
+      btn.disabled = true;
+      $('#feMsg').textContent = 'Saving\u2026';
+      body.date = it.fd; body.id = it.fi;
+      postJSON('/api/food/edit', body).then(function (j) {
+        closeDetail();
+        refreshNutrition();
+        if ($('#foodLog')) foodBubble('bot', '\u270f\ufe0f ' + j.said);
+      }).catch(function (err) { btn.disabled = false; $('#feMsg').textContent = err.message; });
+    }
+    $('#feSave').onclick = function () {
+      var body = {}, g = $('#feG').value, t = $('#feT').value;
+      if (factor) body.factor = factor;
+      else if (g && (!it.fg || Math.round(it.fg) !== Math.round(parseFloat(g)))) body.grams = parseFloat(g);
+      if (meal !== it.fm) body.meal = meal;
+      if (t && t !== it.ft) body.time = t;
+      if (!Object.keys(body).length) { closeDetail(); return; }
+      send(body, this);
+    };
+    $('#feDel').onclick = function () {
+      if (!this.classList.contains('armed')) { this.classList.add('armed'); this.textContent = 'Tap again to delete'; return; }
+      send({ delete: true }, this);
+    };
+  }
+
   function renderFood() {
     var n = state.nutr;
     var host = foodHost();
@@ -4213,6 +4276,8 @@
     if (!host.dataset.dayNav) {
       host.dataset.dayNav = '1';
       host.addEventListener('click', function (e) {
+        var it = e.target.closest('[data-fi]');
+        if (it) { openFoodEdit(it.dataset); return; }
         var row = e.target.closest('[data-food-date]');
         if (row) {
           state.foodDate = row.getAttribute('data-food-date');
@@ -4372,8 +4437,12 @@
       return '<div class="meal"><div class="meal-h"><b>' + esc(pair[1]) +
         '</b><span>' + Math.round(sub).toLocaleString() + ' kcal</span></div>' +
         items.map(function (i) {
+          // Tap to edit (food.py edit_entry): only when the publish carried an id.
+          var edit = state.me && i.id ? ' data-fi="' + esc(i.id) + '" data-fd="' + esc(day.date) + '"' +
+            ' data-fn="' + esc(i.name || '') + '" data-fg="' + (i.grams || '') + '" data-fm="' + esc(i.meal || pair[0]) +
+            '" data-ft="' + esc(i.logged_at || '') + '" data-fk="' + Math.round(i.kcal || 0) + '"' : '';
           return '<div class="mi' + (i.confidence === 'estimate' ? ' est' : '') +
-            (i.in_session ? ' insess' : '') + '">' +
+            (i.in_session ? ' insess' : '') + (edit ? ' tap' : '') + '"' + edit + '>' +
             '<span class="mi-n">' + esc(i.name || '') +
             (i.in_session ? ' <em>in session</em>' : '') +
             (i.confidence === 'estimate' ? ' <em>est</em>' : '') + '</span>' +

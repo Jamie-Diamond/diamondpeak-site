@@ -173,6 +173,73 @@ def history(slug: str, limit: int = 80) -> list:
              "buttons": r.get("buttons") or [], "photo": r.get("photo")} for r in rows]
 
 
+# ── tap-to-edit (Jamie, 1 Oct 2026): amount, meal, time, or delete one logged item ──
+
+MEALS = ("breakfast", "lunch", "snacks", "dinner")
+
+
+def _publish(slug: str) -> None:
+    """Republish the Food tab's data now, so the edit shows when the sheet closes."""
+    import subprocess
+    subprocess.run([sys.executable, str(CODE / "scripts" / "publish-nutrition-data.py"), slug],
+                   capture_output=True, text=True, timeout=90)
+
+
+def edit_entry(slug: str, day_iso: str, entry_id: str, grams: float | None = None,
+               factor: float | None = None, meal: str | None = None, time: str | None = None,
+               delete: bool = False) -> str:
+    """Change one logged item through the food store and the food bot's own rescale
+    (the same code as "make that 150g" in the chat). Returns what changed, in words."""
+    from datetime import date
+    with _busy_guard:
+        if slug in _busy:
+            raise Busy(slug)
+        _busy.add(slug)
+    try:
+        m = nb()
+        ctx, _token = _context(slug)
+        day = date.fromisoformat(day_iso)
+        entry = next((e for e in ctx.store.get_day(day).get("entries") or []
+                      if e.get("id") == entry_id), None)
+        if entry is None:
+            raise LookupError("that item isn't in the log any more")
+        name = entry.get("resolved_name") or "item"
+        if delete:
+            ctx.store.remove_entry(day, entry_id)
+            said = f"Deleted *{name}*."
+        else:
+            parts = []
+            if grams or factor:
+                new = m.rescale_item(entry, grams=grams, factor=factor)
+                if new is None:
+                    raise ValueError("there's no amount to scale this one from; tell the food chat instead")
+                patch = {f: new.get(f) for f in m._RESCALE_FIELDS if new.get(f) is not None}
+                patch.update({"portion_used_g": new.get("portion_used_g"),
+                              "portion_g": new.get("portion_used_g"),
+                              "portion_estimated": False,
+                              "portion_assumed": new.get("portion_assumed")})
+                ctx.store.update_entry(day, entry_id, **patch)
+                g = new.get("portion_used_g")
+                parts.append(f"{g:.0f} g, {round(new.get('kcal') or 0)} kcal" if g
+                             else f"{round(new.get('kcal') or 0)} kcal")
+            if meal and meal != entry.get("meal"):
+                ctx.store.set_meal(day, entry_id, meal)
+                parts.append(meal)
+            if time and time != str(entry.get("logged_at") or "")[11:16]:
+                ctx.store.update_entry(day, entry_id, logged_at=f"{day_iso}T{time}")
+                parts.append(time)
+            if not parts:
+                return "Nothing changed."
+            said = f"Changed *{name}*: " + ", ".join(parts) + "."
+        m.record_action(ctx, f"[Peak edit] {said}")
+        _record(slug, "bot", "\u270f\ufe0f " + said)
+        _publish(slug)
+        return said
+    finally:
+        with _busy_guard:
+            _busy.discard(slug)
+
+
 # ── one web turn ──
 
 _TAPS = {"confirm": "Log it", "cancel": "No"}

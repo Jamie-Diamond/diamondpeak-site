@@ -200,7 +200,10 @@ def build(slug: str, today: date) -> dict:
                 "protein_g": e.get("protein_g"), "carb_g": e.get("carb_g"),
                 "fat_g": e.get("fat_g"), "confidence": e.get("confidence"),
                 "rung": e.get("source_rung"), "in_session": bool(e.get("in_session")),
-                "logged_at": hhmm, "meal_stated": bool(stated)})
+                "logged_at": hhmm, "meal_stated": bool(stated),
+                # For Peak's tap-to-edit (api/food.py edit_entry, 1 Oct 2026).
+                "id": e.get("id"), "grams": e.get("portion_used_g") or e.get("portion_g"),
+                "meal": bucket})
         days.append({
             "date": d,
             "day_type": rec.get("day_type"),

@@ -786,6 +786,44 @@ async def food_button(request: Request):
     return _food_stream(slug, button=data)
 
 
+@app.post("/api/food/edit")
+async def food_edit(request: Request):
+    """Tap-to-edit in the Food tab: amount, meal, time, or delete one logged item."""
+    slug = _food_user(request)
+    try:
+        b = (await request.json()) or {}
+    except ValueError:
+        b = {}
+    day, eid = str(b.get("date") or ""), str(b.get("id") or "")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}-\d{1,4}", eid):
+        raise HTTPException(400, "which item?")
+    try:
+        grams = float(b["grams"]) if b.get("grams") not in (None, "") else None
+        factor = float(b["factor"]) if b.get("factor") not in (None, "") else None
+    except (TypeError, ValueError):
+        raise HTTPException(400, "that amount isn't a number")
+    if grams is not None and not 1 <= grams <= 3000:
+        raise HTTPException(400, "grams must be 1-3000")
+    if factor is not None and not 0.1 <= factor <= 10:
+        raise HTTPException(400, "that's too big a change")
+    meal = b.get("meal") or None
+    if meal is not None and meal not in food.MEALS:
+        raise HTTPException(400, "which meal?")
+    t = b.get("time") or None
+    if t is not None and not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", str(t)):
+        raise HTTPException(400, "time as HH:MM")
+    try:
+        said = food.edit_entry(slug, day, eid, grams=grams, factor=factor, meal=meal, time=t,
+                               delete=bool(b.get("delete")))
+    except food.Busy:
+        raise HTTPException(409, "the food chat is busy - try again in a moment")
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return JSONResponse({"ok": True, "said": said})
+
+
 @app.post("/api/food/photo")
 async def food_photo(request: Request, caption: str = ""):
     slug = _food_user(request)

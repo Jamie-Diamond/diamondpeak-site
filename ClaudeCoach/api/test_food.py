@@ -72,3 +72,37 @@ def test_one_turn_at_a_time(tmp_path, monkeypatch):
     except food.Busy:
         pass
     run(s1)
+
+
+def test_edit_rescales_moves_and_deletes_a_logged_item(tmp_path, monkeypatch):
+    import sys
+    from datetime import date
+    sys.path.insert(0, str(food.CODE / "lib"))
+    from nutrition_store import NutritionStore
+    monkeypatch.setattr(food, "CC", tmp_path)
+    adir = tmp_path / "athletes" / "jamie"
+    adir.mkdir(parents=True)
+    store = NutritionStore(adir)
+    m = food.nb()
+    e = store.add_entry(date(2026, 10, 1), raw_text="honey", resolved_name="Honey", kcal=28.8,
+                        protein_g=0.0, carb_g=7.6, fat_g=0.0, portion_g=10.0, portion_used_g=10.0,
+                        logged_at="2026-10-01T10:26", meal="breakfast",
+                        per_100g={"kcal": 288, "protein_g": 0.0, "carb_g": 76, "fat_g": 0.0})
+    eid = e["id"] if isinstance(e, dict) else e
+    ctx = type("C", (), {"store": store})()
+    monkeypatch.setattr(food, "_context", lambda slug: (ctx, "TOKEN"))
+    monkeypatch.setattr(m, "record_action", lambda c, t: None)
+    published = []
+    monkeypatch.setattr(food, "_publish", lambda slug: published.append(slug))
+    said = food.edit_entry("jamie", "2026-10-01", eid, grams=20, meal="snacks", time="11:00")
+    got = next(x for x in store.get_day("2026-10-01")["entries"] if x["id"] == eid)
+    assert round(got["kcal"]) == 58 and got["portion_used_g"] == 20 and got["meal"] == "snacks"
+    assert got["logged_at"] == "2026-10-01T11:00" and "20 g" in said and published == ["jamie"]
+    assert food.history("jamie")[-1]["text"].startswith("\u270f")
+    food.edit_entry("jamie", "2026-10-01", eid, delete=True)
+    assert not store.get_day("2026-10-01")["entries"]
+    try:
+        food.edit_entry("jamie", "2026-10-01", eid, delete=True)
+        assert False
+    except LookupError:
+        pass

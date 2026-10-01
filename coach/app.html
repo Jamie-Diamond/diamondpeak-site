@@ -862,6 +862,29 @@ button.crow:hover,a.crow:hover{background:rgba(20,24,29,.03)}
 .fcb.rec{background:#c0392b;border-color:#c0392b;color:#fff}
 .food-status{margin:0;padding:0 14px 8px;font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.08em;color:var(--muted)}
 .food-status:empty{display:none}
+/* Food item editor (app.js openFoodEdit) */
+.mi.tap{cursor:pointer}
+.mi.tap:active{background:rgba(20,24,29,.04)}
+.fe-l{display:block;margin:14px 0 6px;font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted)}
+.fe-l:first-child{margin-top:0}
+.fe-row{display:flex;align-items:center;gap:8px}
+.fe-row input{width:110px;height:40px;padding:0 12px;border:1px solid var(--rule);border-radius:10px;
+  background:var(--paper);font:16px 'DM Sans',sans-serif;color:var(--ink)}
+.fe-row span{color:var(--muted)}
+.fe-x{height:36px;padding:0 12px;border:1px solid var(--rule);border-radius:18px;background:none;
+  font:14px 'DM Sans',sans-serif;color:var(--ink-2);cursor:pointer}
+.fe-n{margin:8px 0 0;font-size:12.5px;color:var(--muted)}
+.fe-meals{display:flex;flex-wrap:wrap;gap:6px}
+.fe-meals button{height:36px;padding:0 14px;border:1px solid var(--rule);border-radius:18px;background:none;
+  font:14px 'DM Sans',sans-serif;color:var(--ink-2);cursor:pointer}
+.fe-meals button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.fe-msg{min-height:18px;margin:12px 0 0;font-size:13px;color:var(--muted)}
+.fe-go{display:flex;gap:10px;margin-top:10px}
+.fe-go button{flex:1;height:44px;border-radius:12px;font:600 15px 'DM Sans',sans-serif;cursor:pointer}
+.fe-save{border:0;background:var(--accent);color:#fff}
+.fe-del{border:1px solid #c0392b;background:none;color:#c0392b}
+.fe-del.armed{background:#c0392b;color:#fff}
 .msg-act.me{justify-content:flex-end}
 .msg-del{padding:5px 12px;border:1px solid #c0392b;border-radius:14px;background:var(--paper);
   color:#c0392b;font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
@@ -1176,6 +1199,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=62" defer></script>
+<script src="app.js?v=63" defer></script>
 </body>
 </html>
