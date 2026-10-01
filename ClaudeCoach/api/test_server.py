@@ -668,3 +668,20 @@ def test_delete_a_message_and_the_coach_reads_an_athletes_chat(env, monkeypatch)
     assert not any("Test" in l for l in lines) and any("how was my run?" in l for l in lines)
     assert env.post("/api/chat/delete", json={"key": "o:20260930070000-abcdef"}, headers=h).status_code == 200
     assert env.post("/api/chat/delete", json={"key": "../x"}, headers=h).status_code == 400
+
+
+def test_food_chat_is_only_for_athletes_with_food_tracking(env, monkeypatch):
+    seen = []
+    monkeypatch.setattr(server.food, "enabled", lambda slug: slug == "jamie")
+    monkeypatch.setattr(server.food, "history", lambda slug: [{"who": "me", "text": "eggs"}])
+    monkeypatch.setattr(server.food, "start_turn", lambda slug, **k: seen.append((slug, k)) or FakeSink([("done", "")]))
+    h = {"x-peak": "1"}
+    dev(monkeypatch, "kat@example.com")
+    assert env.get("/api/food/history").json() == {"enabled": False, "history": []}
+    assert env.post("/api/food/chat", json={"text": "eggs"}, headers=h).status_code == 403
+    dev(monkeypatch, "coach@example.com")
+    assert env.get("/api/food/history").json()["history"] == [{"who": "me", "text": "eggs"}]
+    assert env.post("/api/food/chat", json={"text": "2 eggs"}, headers=h).status_code == 200
+    assert env.post("/api/food/button", json={"data": "confirm"}, headers=h).status_code == 200
+    assert env.post("/api/food/button", json={"data": "rm -rf"}, headers=h).status_code == 400
+    assert seen == [("jamie", {"text": "2 eggs"}), ("jamie", {"button": "confirm"})]

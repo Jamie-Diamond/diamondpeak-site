@@ -314,6 +314,7 @@
     if (tab === 'trends') drawTrend();
     if (tab === 'today') drawToday();
     if (tab === 'chat') openChat();
+    if (tab === 'food' && state.me && $('#foodLog')) loadFoodHistory();
     document.body.classList.toggle('in-chat', tab === 'chat');
   }
 
@@ -4017,9 +4018,195 @@
     renderFood();
   }
 
+  /* ── Food chat (Jamie, 1 Oct 2026): the FOOD bot's own brain (api/food.py), at the top of
+     the Food tab. Separate from the coach chat; "Log it" / "No" work as on Telegram, and
+     the day below refreshes once something is logged. ── */
+  var food = { busy: false, rec: null, recSend: false };
+  var CAM_SVG = '<svg viewBox="0 0 24 24"><path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z"/><circle cx="12" cy="13.2" r="3.4"/></svg>';
+  var MIC_SVG = '<svg viewBox="0 0 24 24"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/></svg>';
+  function foodHost() {
+    var v = $('#v-food');
+    if (!v) return null;
+    if (!$('#foodBody')) {
+      v.innerHTML = (state.me ? '<section class="card food-chat"><header class="card-h"><h2>Log food</h2></header>' +
+        '<div class="food-log" id="foodLog"><div class="empty">Tell me what you ate, send a photo, or say it.</div></div>' +
+        '<form class="food-in" id="foodForm"><input type="file" id="foodFile" accept="image/*" hidden>' +
+        '<button type="button" class="fcb" id="foodCam" aria-label="Send a photo">' + CAM_SVG + '</button>' +
+        '<input id="foodText" autocomplete="off" placeholder="What did you eat?" aria-label="What did you eat">' +
+        '<button type="button" class="fcb" id="foodMic" aria-label="Say it">' + MIC_SVG + '</button>' +
+        '<button type="submit" class="fcb go" aria-label="Send">\u27a4</button></form>' +
+        '<p class="food-status" id="foodStatus"></p></section>' : '') + '<div id="foodBody"></div>';
+      if (state.me) wireFoodChat();
+    }
+    return $('#foodBody');
+  }
+  function foodBubble(who, text, buttons, photo, cls) {
+    var log = $('#foodLog');
+    var e = log.querySelector('.empty'); if (e) e.remove();
+    var d = document.createElement('div');
+    d.className = 'msg ' + (who === 'me' ? 'me' : 'coach') + (cls ? ' ' + cls : '');
+    d.innerHTML = (photo ? '<img class="msg-img" src="' + esc(photo) + '" alt="">' : '') +
+      (who === 'me' ? esc(text || '').replace(/\n/g, '<br>') : md(text || ''));
+    if ((buttons || []).length) {
+      d.innerHTML += '<div class="btns">' + buttons.map(function (row) {
+        return row.map(function (b) {
+          return b.data ? '<button type="button" data-food-cb="' + esc(b.data) + '">' + esc(b.text) + '</button>' : '';
+        }).join('');
+      }).join('') + '</div>';
+    }
+    log.appendChild(d);
+    log.scrollTop = log.scrollHeight;
+    return d;
+  }
+  function loadFoodHistory() {
+    if (!state.me || !$('#foodLog')) return;
+    fetch('/api/food/history', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j || food.busy) return;
+        $('#foodLog').innerHTML = '';
+        (j.history || []).slice(-40).forEach(function (m) {
+          foodBubble(m.who, m.text, m.buttons, m.photo ? '/api/media/' + encodeURIComponent(m.photo) : null);
+        });
+        if (!(j.history || []).length) {
+          $('#foodLog').innerHTML = '<div class="empty">Tell me what you ate, send a photo, or say it.</div>';
+        }
+      }).catch(function () {});
+  }
+  function refreshNutrition() {
+    fetch('../ClaudeCoach/public/nutrition-' + state.slug + '.json?v=' + Date.now(), { cache: 'no-cache' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { if (j) { state.nutr = j; if (state.tab === 'food') renderFood(); } })
+      .catch(function () {});
+  }
+  function foodStream(url, body, type) {
+    food.busy = true;
+    $('#foodStatus').textContent = 'Working it out\u2026';
+    var logged = false;
+    function onEvent(kind, text, obj) {
+      if (kind === 'heard') {
+        var p = $('#foodLog .msg.me.pending');
+        if (p) { p.classList.remove('pending'); p.innerHTML = '\ud83c\udf99 ' + esc(text); }
+      } else if (kind === 'message') {
+        foodBubble('bot', text, (obj || {}).buttons);
+        if (/logged|saved|added/i.test(text || '')) logged = true;
+      } else if (kind === 'error') {
+        foodBubble('bot', text, null, null, 'err');
+      }
+    }
+    fetch(url, { method: 'POST', cache: 'no-store', headers: { 'Content-Type': type, 'X-Peak': '1' }, body: body })
+      .then(function (r) {
+        if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) {
+          throw new Error(j.detail || 'Could not send');
+        });
+        var reader = r.body.getReader(), dec = new TextDecoder(), buf = '';
+        function pump() {
+          return reader.read().then(function (res) {
+            if (res.done) return;
+            buf += dec.decode(res.value, { stream: true });
+            var parts = buf.split('\n\n'); buf = parts.pop();
+            parts.forEach(function (block) {
+              var kind = null, data = '';
+              block.split('\n').forEach(function (line) {
+                if (line.indexOf('event: ') === 0) kind = line.slice(7);
+                else if (line.indexOf('data: ') === 0) data += line.slice(6);
+              });
+              if (!kind) return;
+              var obj = {}; try { obj = JSON.parse(data || '{}'); } catch (e) { obj = {}; }
+              onEvent(kind, obj.text, obj);
+            });
+            return pump();
+          });
+        }
+        return pump();
+      })
+      .catch(function (err) { foodBubble('bot', err.message, null, null, 'err'); })
+      .then(function () {
+        food.busy = false;
+        $('#foodStatus').textContent = '';
+        var p = $('#foodLog .msg.me.pending'); if (p) p.classList.remove('pending');
+        // Logging publishes the day in the background (nutrition_bot.publish_now).
+        setTimeout(refreshNutrition, logged ? 2500 : 6000);
+        setTimeout(refreshNutrition, 12000);
+      });
+  }
+  function foodPhoto(file) {
+    if (!file || food.busy) return;
+    var img = new Image(), url = URL.createObjectURL(file);
+    img.onload = function () {
+      var k = Math.min(1, 1600 / Math.max(img.width, img.height));
+      var c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob(function (blob) {
+        if (!blob) return;
+        var cap = $('#foodText').value.trim();
+        $('#foodText').value = '';
+        foodBubble('me', cap, null, URL.createObjectURL(blob));
+        foodStream('/api/food/photo?caption=' + encodeURIComponent(cap), blob, 'image/jpeg');
+      }, 'image/jpeg', 0.85);
+    };
+    img.onerror = function () { foodBubble('bot', 'That photo couldn\u2019t be read. Try another?', null, null, 'err'); };
+    img.src = url;
+  }
+  function foodMic() {
+    if (food.busy) return;
+    if (food.rec) { food.recSend = true; food.rec.stop(); return; }
+    if (!navigator.mediaDevices || !window.MediaRecorder) {
+      foodBubble('bot', 'This browser can\u2019t record audio.', null, null, 'err'); return;
+    }
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      var mime = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm'].filter(function (m) {
+        return MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m);
+      })[0];
+      var rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined), chunks = [];
+      rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+      rec.onstop = function () {
+        stream.getTracks().forEach(function (t) { t.stop(); });
+        food.rec = null;
+        $('#foodMic').classList.remove('rec');
+        $('#foodStatus').textContent = '';
+        if (!food.recSend) return;
+        var blob = new Blob(chunks, { type: rec.mimeType || mime || 'audio/webm' });
+        foodBubble('me', '\ud83c\udf99 \u2026', null, null, 'pending');
+        foodStream('/api/food/voice', blob, blob.type);
+      };
+      food.rec = rec; food.recSend = false;
+      rec.start();
+      $('#foodMic').classList.add('rec');
+      $('#foodStatus').textContent = 'Recording \u00b7 tap the mic again to send';
+    }).catch(function () {
+      foodBubble('bot', 'Microphone blocked. Allow it for coach.diamondpeak.uk in your browser settings.', null, null, 'err');
+    });
+  }
+  function wireFoodChat() {
+    $('#foodForm').onsubmit = function (e) {
+      e.preventDefault();
+      var t = $('#foodText').value.trim();
+      if (!t || food.busy) return;
+      $('#foodText').value = '';
+      foodBubble('me', t);
+      foodStream('/api/food/chat', JSON.stringify({ text: t }), 'application/json');
+    };
+    $('#foodCam').onclick = function () { if (!food.busy) $('#foodFile').click(); };
+    $('#foodFile').onchange = function () { foodPhoto(this.files && this.files[0]); this.value = ''; };
+    $('#foodMic').onclick = foodMic;
+    $('#foodLog').addEventListener('click', function (e) {
+      var img = e.target.closest('.msg-img');
+      if (img) { openPhoto(img.src); return; }
+      var b = e.target.closest('button[data-food-cb]');
+      if (!b || food.busy) return;
+      Array.prototype.forEach.call(b.parentNode.querySelectorAll('button'), function (x) { x.disabled = true; });
+      b.classList.add('picked');
+      foodStream('/api/food/button', JSON.stringify({ data: b.getAttribute('data-food-cb') }), 'application/json');
+    });
+    loadFoodHistory();
+  }
+
   function renderFood() {
     var n = state.nutr;
-    var host = $('#v-food');
+    var host = foodHost();
     if (!host) return;
     // Delegated ONCE on the host, which renderFood replaces wholesale every call: a handler
     // bound to the buttons themselves would be discarded on the next render.
@@ -4038,7 +4225,8 @@
     }
     if (!n || !n.days || !n.days.length) {
       host.innerHTML = '<div class="card"><div class="empty">Nothing logged yet. ' +
-        'Tell the nutrition bot what you ate and it appears here.</div></div>';
+        (state.me ? 'Log your first food above.' : 'Tell the nutrition bot what you ate and it appears here.') +
+        '</div></div>';
       return;
     }
     // The offset is clamped on every read rather than trusted: it survives in state across

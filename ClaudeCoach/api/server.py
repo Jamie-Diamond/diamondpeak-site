@@ -56,6 +56,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 
 import chat
+import food
 import push
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
@@ -719,6 +720,82 @@ def strava_disconnect(slug: str, request: Request):
     print(f"[strava] {slug} disconnected by {email} (Strava revoke {'ok' if revoked else 'failed'})",
           flush=True)
     return JSONResponse(_settings(slug), headers=NO_STORE)
+
+
+# ── Food tab chat (api/food.py): the food bot's own brain ──
+
+def _food_user(request: Request) -> str:
+    if request.headers.get("x-peak") != "1":
+        raise HTTPException(400, "missing app header")
+    slug = own_slug(request_email(request))
+    if not slug or not food.enabled(slug):
+        raise HTTPException(403, "food tracking isn't on for you")
+    return slug
+
+
+def _food_stream(slug: str, **turn) -> StreamingResponse:
+    try:
+        sink = food.start_turn(slug, **turn)
+    except food.Busy:
+        raise HTTPException(409, "still working on your last one")
+
+    def events():
+        while True:
+            try:
+                kind, text, extra = sink.q.get(timeout=10)
+            except Exception:
+                yield ": ping\n\n"
+                continue
+            yield _sse(kind, text, extra)
+            if kind == "done":
+                return
+
+    return StreamingResponse(events(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.get("/api/food/history")
+def food_history(request: Request):
+    slug = own_slug(request_email(request))
+    on = bool(slug) and food.enabled(slug)
+    return JSONResponse({"enabled": on, "history": food.history(slug) if on else []},
+                        headers=NO_STORE)
+
+
+@app.post("/api/food/chat")
+async def food_chat(request: Request):
+    slug = _food_user(request)
+    try:
+        text = str(((await request.json()) or {}).get("text") or "").strip()[:2000]
+    except ValueError:
+        text = ""
+    if not text:
+        raise HTTPException(400, "empty message")
+    return _food_stream(slug, text=text)
+
+
+@app.post("/api/food/button")
+async def food_button(request: Request):
+    slug = _food_user(request)
+    try:
+        data = str(((await request.json()) or {}).get("data") or "")
+    except ValueError:
+        data = ""
+    if data not in ("confirm", "cancel"):
+        raise HTTPException(400, "no such button")
+    return _food_stream(slug, button=data)
+
+
+@app.post("/api/food/photo")
+async def food_photo(request: Request, caption: str = ""):
+    slug = _food_user(request)
+    return _food_stream(slug, text=caption.strip()[:500], image=await _upload(request, 12))
+
+
+@app.post("/api/food/voice")
+async def food_voice(request: Request):
+    slug = _food_user(request)
+    return _food_stream(slug, audio=await _upload(request, 15))
 
 
 # ── notifications ──
