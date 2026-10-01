@@ -1085,6 +1085,42 @@
   }
 
   // The bot changed the message whose button was tapped (e.g. "✓ Pain 0/10 logged").
+  // Install guide (Jamie, 1 Oct 2026): home screen + notifications, per phone. The end
+  // of sign-up offers it (bot.py); the screenshots are coach/img/install-*.png.
+  var INSTALL = {
+    android: { steps: ['In Chrome, tap <b>\u22ee</b> at the top right',
+                       'Tap <b>Install and create shortcut</b> (some phones say <b>Add to Home screen</b>)',
+                       'Open Peak from your home screen, then tap the button below'],
+               imgs: ['img/install-android.png'] },
+    iphone: { steps: ['Tap <b>Share</b>: the square with an arrow, by the address',
+                      'Scroll down and tap <b>Add to Home Screen</b>',
+                      'Open Peak from your Home Screen, then tap the button below. On iPhone, ' +
+                      'notifications only work from the Home Screen app.'],
+              imgs: ['img/install-iphone-1.png', 'img/install-iphone-2.png'] }
+  };
+  function showInstall(kind, after) {
+    var g = INSTALL[kind];
+    if (!g) return;
+    var d = document.createElement('div');
+    d.className = 'msg coach install';
+    d.innerHTML = '<b>' + (kind === 'iphone' ? 'iPhone' : 'Android') + ': Peak on your home screen</b>' +
+      '<ol>' + g.steps.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ol>' +
+      g.imgs.map(function (src) { return '<img class="msg-img" src="' + src + '" alt="">'; }).join('') +
+      '<button type="button" class="notify-go">Turn on notifications</button>';
+    (after && after.parentNode ? after.parentNode : $('#chatLog')).insertBefore(d, after ? after.nextSibling : null);
+    d.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function turnOnFromGuide(btn) {
+    var st = pushState();
+    if (st === 'on') { btn.textContent = 'Notifications are on \u2713'; btn.disabled = true; return; }
+    if (st === 'ios-install') { btn.textContent = 'Open Peak from your Home Screen first'; return; }
+    if (st !== 'ask') { btn.textContent = st === 'denied'
+      ? 'Notifications are blocked in your browser settings' : 'This browser can\u2019t do notifications'; return; }
+    btn.disabled = true;
+    enablePush().then(function () { btn.textContent = 'Notifications are on \u2713'; })
+      .catch(function (err) { btn.disabled = false; btn.textContent = err.message || 'Didn\u2019t work, try again'; });
+  }
+
   // Delete (Jamie, 30 Sep 2026): tap a message to show Delete under it; tap Delete.
   // The coach forgets it too (api/chat.py delete_message).
   function toggleDelete(msg) {
@@ -1174,8 +1210,16 @@
     if (del) { deleteMessage(del); return; }
     var msg = e.target.closest('.msg[data-key]');
     if (msg && !e.target.closest('button, a, input, .logcard, .btns')) { toggleDelete(msg); return; }
+    var go = e.target.closest('.notify-go');
+    if (go) { turnOnFromGuide(go); return; }
     var b = e.target.closest('.btns button[data-cb]');
     if (!b || chatState.busy) return;
+    var cb = b.getAttribute('data-cb') || '';
+    if (cb.indexOf('peak:install:') === 0) {          // handled here, not by the coach
+      b.classList.add('picked');
+      showInstall(cb.slice(13), b.closest('.msg'));
+      return;
+    }
     Array.prototype.forEach.call(b.closest('.btns').querySelectorAll('button'), function (x) {
       x.disabled = true;
     });

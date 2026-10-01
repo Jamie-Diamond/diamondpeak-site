@@ -5424,6 +5424,15 @@ def handle_onboarding(token, chat_id, text):
          f"Your account isn't live yet -- your coach will activate it shortly "
          f"and you'll get a message here when you're good to go. Your first week "
          f"will be a short set of fitness tests, so your zones are built on real numbers.")
+    if str(chat_id).startswith("web-"):
+        # Install guide (Jamie, 1 Oct 2026): Peak on the home screen with notifications,
+        # so they hear when they're activated. The buttons are handled inside Peak
+        # (coach/app.js showInstall), no reply from here.
+        send(token, chat_id, "To get that message, put *Peak on your home screen* and turn "
+                             "notifications on. Which phone do you have?",
+             reply_markup={"inline_keyboard": [[
+                 {"text": "Android", "callback_data": "peak:install:android"},
+                 {"text": "iPhone", "callback_data": "peak:install:iphone"}]]})
 
     config_data = load_config()
     admin_id = admin_chat_id(config_data)

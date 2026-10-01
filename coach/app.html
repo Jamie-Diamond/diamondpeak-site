@@ -611,6 +611,9 @@ body.in-chat main{padding-bottom:calc(var(--tab-h) + 86px + env(safe-area-inset-
 .composer .cb.go{background:var(--accent);color:#fff}
 .composer .cb.rec{background:var(--red);animation:pulse 1.2s ease-in-out infinite}
 .composer .cb[hidden]{display:none}
+/* .composer sets display:flex, which beat the hidden attribute: the box showed while an
+   account waited for approval and on the coach's read-only view of an athlete's chat. */
+.composer[hidden],.notify-bar[hidden]{display:none!important}
 .composer .cb:disabled{opacity:.4}
 @keyframes pulse{50%{box-shadow:0 0 0 6px rgba(179,36,31,.18)}}
 .thumb{flex:0 0 100%;display:flex;align-items:flex-start;gap:6px}
@@ -839,6 +842,13 @@ button.crow:hover,a.crow:hover{background:rgba(20,24,29,.03)}
 .msg[data-key]{cursor:pointer}
 .msg.gone{opacity:0;transform:scale(.97);transition:opacity .25s,transform .25s}
 .msg-act{display:flex;margin:-4px 0 10px}
+/* install guide (app.js showInstall) */
+.msg.install ol{margin:8px 0 10px;padding-left:20px}
+.msg.install li{margin:4px 0}
+.msg.install .msg-img{display:block;width:100%;margin:8px 0;border-radius:8px}
+.notify-go{display:block;width:100%;margin-top:10px;padding:11px 14px;border:0;border-radius:10px;
+  background:var(--accent);color:#fff;font:600 14px 'DM Sans',sans-serif;cursor:pointer}
+.notify-go:disabled{opacity:.85;cursor:default}
 .msg-act.me{justify-content:flex-end}
 .msg-del{padding:5px 12px;border:1px solid #c0392b;border-radius:14px;background:var(--paper);
   color:#c0392b;font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
@@ -1153,6 +1163,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=60" defer></script>
+<script src="app.js?v=61" defer></script>
 </body>
 </html>
