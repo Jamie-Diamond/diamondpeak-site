@@ -1136,6 +1136,14 @@
   function deleteMessage(btn) {
     var bar = btn.closest('.msg-act'), msg = bar && bar.previousElementSibling;
     if (!msg || !msg.getAttribute('data-key')) return;
+    // Two taps, like the food sheet's Delete (Jamie, 1 Oct 2026).
+    if (!btn.classList.contains('armed')) {
+      btn.classList.add('armed'); btn.textContent = 'Tap again to delete';
+      setTimeout(function () {
+        if (btn.isConnected && !btn.disabled) { btn.classList.remove('armed'); btn.textContent = 'Delete'; }
+      }, 4000);
+      return;
+    }
     btn.disabled = true; btn.textContent = 'Deleting\u2026';
     postJSON('/api/chat/delete', { key: msg.getAttribute('data-key') })
       .then(function () {
