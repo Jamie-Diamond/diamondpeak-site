@@ -1835,14 +1835,19 @@
         (x.id === sel) + '">' + esc(x.label) + '</button>';
     }).join('') + '</div>';
 
+    // Calendar mode (no comparison race, 1 Oct 2026): years on calendar dates, no race day.
+    var calYears = state.data && state.data.seasonMode === 'calendar';
     var META = {
       fit:  fitMetric() === 'dur'
-        ? { title: 'Hours · three seasons',
+        ? { title: calYears ? 'Hours · by year' : 'Hours · three seasons',
             foot: 'Rolling training hours per week, smoothed on the same 42-day ' +
-                  'constant as CTL and aligned on race day. This is volume, not ' +
-                  'intensity: switch to TSS for the load that came with it.' }
-        : { title: 'Fitness · three seasons',
-            foot: 'CTL by calendar date. Pinch, scroll or drag to zoom; the shaded band is the race-day target.' },
+                  'constant as CTL and ' + (calYears ? 'overlaid by calendar date' : 'aligned on race day') +
+                  '. This is volume, not intensity: switch to TSS for the load that came with it.' }
+        : { title: calYears ? 'Fitness · this year and the last two' : 'Fitness · three seasons',
+            foot: calYears
+              ? 'CTL by calendar date, against the same dates in earlier years. Pinch, scroll or ' +
+                'drag to zoom.'
+              : 'CTL by calendar date. Pinch, scroll or drag to zoom; the shaded band is the race-day target.' },
       load: { title: 'Seven days either side',
               foot: 'Bars are daily TSS, faded where still planned. The line is form (TSB).' },
       heat: { title: 'Heat acclimation',

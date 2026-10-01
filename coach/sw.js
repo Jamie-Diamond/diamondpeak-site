@@ -20,7 +20,7 @@
 // Bump BOTH on every deploy that changes a precached file - the visible number
 // exists so Jamie can tell current from syncing from stale at a glance.
 const APP_VERSION = '3.5';
-const CACHE = 'peak-v63';
+const CACHE = 'peak-v64';
 
 // SHELL paths are relative to /coach/, where this worker actually lives - the app moved
 // out of /coach/app/ and these entries were left pointing at the old tree. addAll's
