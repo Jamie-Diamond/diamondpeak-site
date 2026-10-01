@@ -1191,7 +1191,7 @@ def _ctl_on(ctl_by_date, d):
     return ctl_by_date[max(earlier)] if earlier else None
 
 
-def _weekly_plan_targets(cfg, week_starts, ctl_by_date, weekly_actual):
+def _weekly_plan_targets(cfg, week_starts, ctl_by_date, weekly_actual, slug=None):
     """{week_start: {planned_tss, week_type, week_num}} from the PLANNING ENGINE.
 
     plan_tools.required_tss is the single source the CLI, the weekly brief, the plan
@@ -1223,7 +1223,9 @@ def _weekly_plan_targets(cfg, week_starts, ctl_by_date, weekly_actual):
             continue
         prev = weekly_actual.get((ws - timedelta(days=7)).isoformat())
         try:
-            r = required_tss(cfg, float(ctl), today=ws, last_week_tss=prev)
+            # slug: a run race's target is run-led (plan_tools._run_led), so the chart
+            # shows the same weekly figure the planner built to, not the total line.
+            r = required_tss(cfg, float(ctl), today=ws, last_week_tss=prev, slug=slug)
         except Exception as e:
             log(f"planVsActual: required_tss failed for {ws} ({e})")
             continue
@@ -1539,7 +1541,7 @@ def post_process(data):
                 _cfg = {}
             targets = _weekly_plan_targets(_cfg, weeks,
                                            dict(data.get("fitnessThis") or []),
-                                           weekly_actual)
+                                           weekly_actual, slug="jamie")
             plan_actual = []
             for wk_start in weeks:
                 t = targets.get(wk_start.isoformat())
@@ -1858,7 +1860,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
         this_monday = today - timedelta(days=today.weekday())
         weeks = [this_monday - timedelta(weeks=i) for i in range(5, -1, -1)]
         targets = _weekly_plan_targets(athlete_cfg, weeks, dict(fitness_this),
-                                       weekly_actual)
+                                       weekly_actual, slug=slug)
         plan_actual = []
         for wk_start in weeks:
             t = targets.get(wk_start.isoformat())
