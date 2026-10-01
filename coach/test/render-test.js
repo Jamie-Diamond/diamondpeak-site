@@ -55,10 +55,19 @@ const hooked = src.replace(
 );
 eval(hooked);
 
+// The athlete's FULL data, found the way api/server.py finds it (private since 29 Sep).
+function athleteData(slug) {
+  const cands = ['ClaudeCoach/athletes/' + slug + '/training-data.json',
+                 'ClaudeCoach/training-data-' + slug + '.json',
+                 'ClaudeCoach/public/training-data-' + slug + '.json'];
+  const hit = cands.find((c) => fs.existsSync(path + c));
+  if (!hit) throw new Error('no training data for ' + slug + ' (run on the VM)');
+  return JSON.parse(fs.readFileSync(path + hit, 'utf8'));
+}
+
 let failures = 0;
 for (const slug of ['jamie', 'kathryn', 'calum']) {
-  const data = JSON.parse(fs.readFileSync(
-    path + 'ClaudeCoach/public/training-data-' + slug + '.json', 'utf8'));
+  const data = athleteData(slug);
   global.__peak.state.data = data;
   global.__peak.state.slug = slug;
 
@@ -85,7 +94,7 @@ for (const slug of ['jamie', 'kathryn', 'calum']) {
 // A goal without a race (lib/goals.py, 1 Oct 2026): no current athlete has one, so the
 // goal card is driven from Jamie's data with the season swapped for a goal-only one.
 {
-  const data = JSON.parse(fs.readFileSync(path + 'ClaudeCoach/public/training-data-jamie.json', 'utf8'));
+  const data = athleteData('jamie');
   const goals = [
     { type: 'ftp', label: 'Raise my FTP', started: '2026-10-05', notStarted: false, block: 1, week: 3,
       blockWeeks: 6, kind: 'easy', nextTest: { name: 'FTP test', week_start: '2026-11-09' }, band: null,
