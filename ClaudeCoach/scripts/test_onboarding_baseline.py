@@ -119,6 +119,8 @@ asked = onboard("123", ["Sam Smith", "70.3 Test, 2027-06-01", "yes", KEY,
                         "no",            # run threshold: not tested
                         "5k 24:30 in August",   # rough run figure
                         "1:45",          # swim CSS: tested in last 6 weeks
+                        "my last race",  # comparison race without a date: asked again
+                        "Ironman Wales, Sept 2025",   # comparison race for the fitness chart
                         "no",            # heat training
                         "yes",           # fuelling coaching
                         "2",             # coaching level: mid
@@ -150,6 +152,9 @@ check("'no' is not written as a run threshold", prof.get("run_threshold_pace_per
       prof.get("run_threshold_pace_per_km"))
 check("level asked just before the handle", "How much *detail*" in asked[_setup - 2], asked[_setup - 3:_setup])
 check("coaching level saved", prof.get("coaching_level") == "mid", prof.get("coaching_level"))
+check("a comparison race without a date is asked again", "Add when it was" in blob)
+check("comparison race saved for the fitness chart",
+      prof.get("prev_race") == {"name": "Ironman Wales", "date": "2025-09-15", "approx": True}, prof.get("prev_race"))
 check("heat and fuelling asked before the level", "*heat training*" in blob and "*fuelling coaching*" in blob)
 check("heat no / fuelling yes saved", prof.get("heat_protocol") is False and prof.get("fuelling_coaching") is True)
 check("athlete ID comes from the key, never asked",
@@ -179,7 +184,7 @@ fake_icu({"ftp_watts": None, "run_threshold_pace_per_km": "4:30", "swim_css_per_
           "weight_kg": 60, "has_power": False},
          {"race_type": "Running Marathon", "run_km": 42.2})
 asked = onboard("124", ["Ali Run", "London Marathon, 2027-04-25", "y", KEY,
-                        "sub 3:30", "5 years", "none", "6", "1", "1", "yes", "no", "beginner", "ali"])
+                        "sub 3:30", "5 years", "none", "6", "1", "1", "no", "yes", "no", "beginner", "ali"])
 blob = "\n".join(asked)
 check("runner: no power question", "ride with *power*" not in blob)
 check("runner: no FTP or CSS gap question", "FTP" not in blob and "CSS" not in blob, blob[-400:])
@@ -225,7 +230,7 @@ B.handle_onboarding("t", "125", "ob:icu_fix:again")
 check("Check again, now fixed, carries on", any("All connected" in t for c, t, _ in SENT[n:])
       and any("A goal" in t for c, t, _ in SENT[n:]), SENT[n:])
 for a in ["sub 5", "2 years", "none", "8", "1", "yes", "0", "dunno", "no", "10k 50:00", "no", "don't know",
-          "ob:heat:yes", "ob:fuel:no"]:
+          "no", "ob:heat:yes", "ob:fuel:no"]:
     B.handle_onboarding("t", "125", a)
 n = len(SENT)
 B.handle_onboarding("t", "125", "ob:level:pro")
@@ -301,7 +306,7 @@ check("with Strava connected, nothing is left to fix",
       REAL_SETUP_ISSUES("i1", "k", WEB) == [])
 B.handle_onboarding("t", WEB, "ob:icu_fix:again")
 for a in ["sub 5", "2 years", "none", "8", "2", "yes", "0", "220", "no", "half 1:52", "no", "400m 8:30",
-          "no", "no", "ob:level:beginner", "robin"]:
+          "no", "no", "no", "ob:level:beginner", "robin"]:
     B.handle_onboarding("t", WEB, a)
 ath = json.loads(B.ATHLETES_CONFIG.read_text()).get("robin", {})
 check("signed up through Strava: copying switched on and the tokens moved in",

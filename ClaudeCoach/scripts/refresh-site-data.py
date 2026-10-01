@@ -150,6 +150,35 @@ def _prev_race_date(slug):
         return None
 
 
+def _calendar_seasons(slug, client, today) -> dict | None:
+    """No comparison race (Jamie, 1 Oct 2026: "if not just do the last 2 calendar
+    years"): last year's and the year before's CTL, Jan-Dec, for the fitness chart to
+    overlay on calendar dates. A finished year cannot change, so each is fetched once
+    and cached beside the athlete's other data."""
+    if _prev_race_date(slug):
+        return None
+    series = {}
+    for n, key in ((1, "fitnessPrev"), (2, "fitnessPrev2")):
+        y = today.year - n
+        cache = BASE / f"athletes/{slug}/fitness-year-{y}-cache.json"
+        if not cache.exists():
+            try:
+                rows = client.get_fitness(days=(date(y, 12, 31) - date(y, 1, 1)).days,
+                                          newest=f"{y}-12-31")
+                cache.write_text(json.dumps([[r["id"][:10], round(r.get("ctl") or 0, 1)]
+                                             for r in rows if r.get("ctl")]))
+            except Exception as e:
+                log(f"[{slug}] calendar season {y} skipped (non-fatal): {e}")
+                continue
+        try:
+            rows = json.loads(cache.read_text())
+            if rows:
+                series[key] = rows
+        except Exception:
+            pass
+    return {"series": series, "years": [today.year, today.year - 1, today.year - 2]}
+
+
 def fetch_fitness_prev(client):
     """Fetch last season's CTL series once and cache it. Skips if cache exists."""
     if FITNESS_PREV_CACHE.exists():
@@ -1866,6 +1895,12 @@ def _build_athlete_training_data(slug, athlete_cfg):
             data["fitnessPrev2"] = json.loads(prev2_cache.read_text())
         except Exception:
             pass
+
+    if "fitnessPrev" not in data:            # no comparison race: the last two calendar years
+        cal = _calendar_seasons(slug, client, today)
+        if cal:
+            data.update(cal["series"])
+            data["seasonMode"], data["seasonYears"] = "calendar", cal["years"]
 
     # Profile (goals + thresholds)
     profile_f = BASE / f"athletes/{slug}/profile.json"

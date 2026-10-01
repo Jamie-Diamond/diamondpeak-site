@@ -4515,6 +4515,41 @@ _OB_ICU_SETUP = ("icu_setup",
     "• _Import all Strava data_ if you have years on Strava")
 # Coaching extras (30 Sep 2026, lib/coaching_prefs.py): opt in or out at sign-up,
 # switchable later in Peak -> Settings -> Coaching extras.
+# Fitness chart comparison (Jamie, 1 Oct 2026): a past race to line this season up
+# against; "no" and Peak overlays the last two calendar years instead.
+_OB_COMPARE = ("compare_race",
+    "Is there a *past race* you'd like to compare your fitness against? e.g. "
+    "_Ironman Wales, Sept 2025_. Or _no_, and I'll compare with your last two years.")
+_MONTHS = {m: i for i, m in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug",
+                                       "sep", "oct", "nov", "dec"), 1)}
+
+
+def _parse_past_race(text):
+    """A past race as {"name", "date", "approx"}: approx when only month and year were
+    given (the 15th). None for "no" or no readable date."""
+    t = (text or "").strip()
+    if not t or _NO_WORDS.match(t):
+        return None
+    m = re.search(r"(\d{4})-(\d{2})-(\d{2})", t)
+    if m:
+        y, mo, d, approx = int(m.group(1)), int(m.group(2)), int(m.group(3)), False
+    else:
+        m = re.search(r"(?:(\d{1,2})(?:st|nd|rd|th)?\s+)?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?\s+(\d{4})",
+                      t, re.I)
+        if not m:
+            return None
+        y, mo = int(m.group(3)), _MONTHS[m.group(2).lower()[:3]]
+        d, approx = (int(m.group(1)), False) if m.group(1) else (15, True)
+    try:
+        when = date(y, mo, d)
+    except ValueError:
+        return None
+    if when >= date.today():
+        return None
+    name = re.sub(r"[,\s]+$", "", t[:m.start()]).strip() or "Past race"
+    return {"name": name[:60], "date": when.isoformat(), "approx": approx}
+
+
 _OB_HEAT = ("heat",
     "Do you want *heat training*? Short heat sessions (sauna, hot bath, or overdressed on "
     "the trainer) that prepare you to race in hot weather. You can change this later in "
@@ -4659,6 +4694,10 @@ def _validate_ob_answer(key, answer):
     if key == "icu_fix":
         if not re.match(r"^\s*(again|check|done|skip|carry on|later)", answer, re.I):
             return "Tap *Check again* once it's switched on, or *Carry on for now*."
+    if key == "compare_race":
+        if not _NO_WORDS.match(answer) and not _parse_past_race(answer):
+            return ("Add when it was, e.g. _Ironman Wales, Sept 2025_ (it has to be in the "
+                    "past), or _no_.")
     if key in ("heat", "fuel"):
         if not re.match(r"^\s*(y|yes|yep|yeah|n|no|nope)\b", answer, re.I):
             return "Tap *Yes* or *No*."
@@ -4806,7 +4845,7 @@ def _build_remaining_queue(answers, icu_data, sports=None):
         for icu_field, answer_key, fam, question in _OB_GAPS
         if not icu_data.get(icu_field) and (fam is None or fam in sports)
     ]
-    return qual + gaps + [_OB_HEAT, _OB_FUEL, _OB_LEVEL, _OB_SLUG], recent_map
+    return qual + gaps + [_OB_COMPARE, _OB_HEAT, _OB_FUEL, _OB_LEVEL, _OB_SLUG], recent_map
 
 
 def _baseline_inputs(answers, icu_data, sports, recent_map):
@@ -4946,6 +4985,9 @@ def _scaffold_athlete(chat_id, answers, icu_data, race_data=None, sports=None, r
         "injuries": injuries,
         "coaching_level": _LEVEL_WORDS.get((answers.get("level") or "").strip().lower(), "mid"),
     }
+    past = _parse_past_race(answers.get("compare_race") or "")
+    if past:                                  # the fitness chart's comparison season
+        profile["prev_race"] = past
     # Coaching extras (lib/coaching_prefs.py). Unanswered (an older sign-up) = unchanged.
     if answers.get("heat"):
         profile["heat_protocol"] = answers["heat"] == "yes"

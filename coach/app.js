@@ -2391,11 +2391,37 @@
    * days-to-race and not calendar day-of-year. */
   function seasonRaces(d) {
     var p = d.profile || {}, cp = d.ctlProjection || {};
+    // No comparison race (refresh-site-data.py seasonMode "calendar", 1 Oct 2026): the
+    // seasons are calendar years, anchored on 31 Dec so they overlay by calendar date.
+    if (d.seasonMode === 'calendar' && (d.seasonYears || []).length) {
+      var y = d.seasonYears[0];
+      return { current: y + '-12-31', prev: (y - 1) + '-12-31', prev2: (y - 2) + '-12-31',
+               calendar: true, years: d.seasonYears };
+    }
     return {
       current: cp.race_date || p.race_date,
       prev: (p.prev_race && p.prev_race.date) || p.prev_race_date,
       prev2: p.prev2_race_date
     };
+  }
+
+  // The x axis both season charts share: race day at 0, or (calendar mode) 31 Dec at
+  // 0 with today marked instead and no race-day wording.
+  function seasonAxis(races, label) {
+    if (!races.calendar) {
+      return { min: -175, max: 12, limits: { min: -400, max: 30, minRange: 21 },
+               lines: [{ x: 0, label: 'RACE DAY', color: C.accent }],
+               title: function (v) {
+                 return label(v) + ' \u00b7 ' + (v === 0 ? 'race day' : Math.abs(v) + 'd ' +
+                   (v < 0 ? 'to race' : 'after'));
+               },
+               names: null };
+    }
+    var xt = doy0(todayISO()) - doy0(races.current);
+    return { min: xt - 175, max: Math.min(0, xt + 21), limits: { min: -366, max: 0, minRange: 21 },
+             lines: [{ x: xt, label: 'TODAY', color: C.accent }],
+             title: function (v) { return label(v); },
+             names: races.years.map(String) };
   }
 
   // [[date, value], ...] -> [{x: days from race, y: value}, ...]. Empty for a season
@@ -2424,6 +2450,8 @@
     // still calendar dates, read off THIS season, which is what was asked for.
     var races = seasonRaces(d);
     var raceThis = races.current, racePrev = races.prev, racePrev2 = races.prev2;
+    var cal = !!races.calendar;
+    var ax0 = seasonAxis(races, function (v) { return raceAxisLabel(raceThis, v); });
 
     // 'all' = overall CTL; otherwise the per-sport series for the same season.
     var pick3 = function (which) {
@@ -2451,7 +2479,7 @@
 
     var ds = [];
 
-    if (cp.target_ctl_min != null && raceThis && state.fitSport === 'all') {
+    if (!cal && cp.target_ctl_min != null && raceThis && state.fitSport === 'all') {
       var x0 = doy0(todayISO()) - doy0(raceThis);
       ds.push({
         label: 'Target band', order: 9,
@@ -2469,14 +2497,14 @@
 
     if ((pick3('prev2') || []).length && racePrev2) {
       ds.push({
-        label: (p.prev2_race_name || '2023').replace(' IM', " '23"), order: 6,
+        label: ax0.names ? ax0.names[2] : (p.prev2_race_name || '2023').replace(' IM', " '23"), order: 6,
         data: rel(pick3('prev2'), racePrev2), borderColor: C.blue, borderWidth: 1,
         borderDash: [5, 3], pointRadius: 0, tension: 0.3, fill: false
       });
     }
     if ((pick3('prev') || []).length && racePrev) {
       ds.push({
-        label: 'Last season', order: 5,
+        label: ax0.names ? ax0.names[1] : 'Last season', order: 5,
         data: rel(pick3('prev'), racePrev), borderColor: C.muted, borderWidth: 1,
         borderDash: [2, 3], pointRadius: 0, tension: 0.3, fill: false
       });
@@ -2534,12 +2562,12 @@
       });
     }
     ds.push({
-      label: 'This season', order: 1,
+      label: ax0.names ? ax0.names[0] : 'This season', order: 1,
       data: rel(pick3('current'), raceThis),
       borderColor: SPORT_LINE_COLOR[state.fitSport] || C.accent, borderWidth: 2.2,
       pointRadius: 0, tension: 0.25, fill: false
     });
-    if ((cp.target_milestones || []).length && raceThis && state.fitSport === 'all') {
+    if (!cal && (cp.target_milestones || []).length && raceThis && state.fitSport === 'all') {
       var r0m = doy0(raceThis);
       ds.push({
         label: 'Milestones', order: 0, showLine: false,
@@ -2559,7 +2587,7 @@
         type: 'linear',
         // Default to the run-in rather than the whole three-year span: on a phone a
         // full season of three overlaid lines is unreadable. Zoom out reaches the rest.
-        min: -175, max: 12,
+        min: ax0.min, max: ax0.max,
         ticks: { color: C.muted, maxTicksLimit: 6, autoSkip: true,
                  font: { family: 'DM Mono', size: 9 },
                  callback: function (v) { return label(v); } },
@@ -2573,13 +2601,11 @@
       }
     };
     o.plugins.zoom = zoomOpts();
-    o.plugins.zoom.limits = { x: { min: -400, max: 30, minRange: 21 } };
-    o.plugins.vlines = { lines: [{ x: 0, label: 'RACE DAY', color: C.accent }] };
+    o.plugins.zoom.limits = { x: ax0.limits };
+    o.plugins.vlines = { lines: ax0.lines };
     o.plugins.tooltip.callbacks = {
       title: function (items) {
-        var v = Math.round(items[0].parsed.x);
-        return label(v) + ' · ' + (v === 0 ? 'race day' : Math.abs(v) + 'd ' +
-          (v < 0 ? 'to race' : 'after'));
+        return ax0.title(Math.round(items[0].parsed.x));
       },
       label: function (it) {
         var raw = it.raw || {};
@@ -2605,11 +2631,12 @@
     var p = d.profile || {};
     var races = seasonRaces(d);
     var sport = state.fitSport;
+    var ax0 = seasonAxis(races, function (v) { return raceAxisLabel(races.current, v); });
 
     var ds = [];
     if (relToRace(durSeries(d, 'prev2', sport), races.prev2).length) {
       ds.push({
-        label: (p.prev2_race_name || '2023').replace(' IM', " '23"), order: 6,
+        label: ax0.names ? ax0.names[2] : (p.prev2_race_name || '2023').replace(' IM', " '23"), order: 6,
         data: relToRace(durSeries(d, 'prev2', sport), races.prev2),
         borderColor: C.blue, borderWidth: 1,
         borderDash: [5, 3], pointRadius: 0, tension: 0.3, fill: false
@@ -2617,14 +2644,14 @@
     }
     if (relToRace(durSeries(d, 'prev', sport), races.prev).length) {
       ds.push({
-        label: 'Last season', order: 5,
+        label: ax0.names ? ax0.names[1] : 'Last season', order: 5,
         data: relToRace(durSeries(d, 'prev', sport), races.prev),
         borderColor: C.muted, borderWidth: 1,
         borderDash: [2, 3], pointRadius: 0, tension: 0.3, fill: false
       });
     }
     ds.push({
-      label: 'This season', order: 1,
+      label: ax0.names ? ax0.names[0] : 'This season', order: 1,
       data: relToRace(durSeries(d, 'current', sport), races.current),
       borderColor: SPORT_LINE_COLOR[sport] || C.accent, borderWidth: 2.2,
       pointRadius: 0, tension: 0.25, fill: false
@@ -2635,7 +2662,7 @@
     var o = baseOpts();
     o.scales = {
       x: {
-        type: 'linear', min: -175, max: 12,
+        type: 'linear', min: ax0.min, max: ax0.max,
         ticks: { color: C.muted, maxTicksLimit: 6, autoSkip: true,
                  font: { family: 'DM Mono', size: 9 },
                  callback: function (v) { return label(v); } },
@@ -2650,13 +2677,11 @@
       }
     };
     o.plugins.zoom = zoomOpts();
-    o.plugins.zoom.limits = { x: { min: -400, max: 30, minRange: 21 } };
-    o.plugins.vlines = { lines: [{ x: 0, label: 'RACE DAY', color: C.accent }] };
+    o.plugins.zoom.limits = { x: ax0.limits };
+    o.plugins.vlines = { lines: ax0.lines };
     o.plugins.tooltip.callbacks = {
       title: function (items) {
-        var v = Math.round(items[0].parsed.x);
-        return label(v) + ' · ' + (v === 0 ? 'race day' : Math.abs(v) + 'd ' +
-          (v < 0 ? 'to race' : 'after'));
+        return ax0.title(Math.round(items[0].parsed.x));
       },
       label: function (it) {
         return (it.dataset.label || '') + ': ' +
