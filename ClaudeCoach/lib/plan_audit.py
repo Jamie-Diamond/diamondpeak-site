@@ -245,7 +245,7 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
             # recovery week audits against the same reduced target the generator
             # used; future weeks can only know the deterministic cadence deloads.
             lw = pt.last_week_actual_tss(client) if ws <= date.today() <= ws + timedelta(days=6) else None
-            req = pt.required_tss(cfg, ctl, today=ws, last_week_tss=lw)
+            req = pt.required_tss(cfg, ctl, today=ws, last_week_tss=lw, slug=slug)
             tgt = req.get("recommended_weekly_tss")
             # A post-race recovery week is not judged on load: its target is a recovery
             # fraction, not a dose (same exemption as stage1's _load_on_target; Jamie,

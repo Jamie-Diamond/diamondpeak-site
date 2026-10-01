@@ -110,6 +110,14 @@ gain), so **a third of cycling Fitness** counts toward running Fitness, and **at
 quarters of the range's floor must come from running itself**. Example: running 60 + cycling
 30 counts as 70, the bottom of a sub-3 marathon's range, because 60 of it is running.
 
+**Run races are planned from running** (Jamie, 1 Oct 2026). Each week's load is built from
+the RUNNING target: enough run load to reach the level's running Fitness by the end of the
+phase, growing at most 15% a week over the load that holds current running Fitness (the
++10–15% run rule in load terms). Bike and swim only top the week up to keep total Fitness
+at the athlete's floor. Total phase targets are a floor here, never a number the week
+chases, so a shortfall the run caps will not allow stays a short week, not extra riding.
+Triathlons and bike events keep total Fitness as the target.
+
 **How much running Fitness** depends on the athlete's level for that race: see §4.5
 (four levels per event, picked from the goal time).
 

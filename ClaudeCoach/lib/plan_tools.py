@@ -1145,9 +1145,81 @@ def block_deload_weeks(cfg: dict) -> dict:
     return out
 
 
+def sport_ctl_cached(slug: str | None, max_age_days: int = 2):
+    """{"run", "ride", "swim"} Fitness from the dashboard's per-sport cache
+    (refresh-site-data, every 15 min), or None when missing or stale. No API call."""
+    if not slug:
+        return None
+    try:
+        d = json.loads((BASE / "athletes" / slug / "fitness-bysport-cache.json").read_text())
+        if (date.today() - date.fromisoformat(str(d.get("date"))[:10])).days > max_age_days:
+            return None
+        cur = d.get("current") or {}
+        return {k.lower(): float((cur.get(k) or [[None, 0.0]])[-1][1])
+                for k in ("Run", "Ride", "Swim")}
+    except Exception:
+        return None
+
+
+# RUN-LED WEEKS (Jamie, 1 Oct 2026: "the planning could end up pushing me to train more on
+# the bike when it's not relevant"). For a RUN race the total-Fitness line is the wrong
+# thing to chase: the gap between it and what running can safely grow by gets filled with
+# bike. So the week is built from RUNNING: enough run load to reach the level's running
+# target (race_fitness, a third of cycling credited), grown at most 15% a week over the
+# load that holds current running Fitness (the +10-15% run rule in load terms), and bike /
+# swim only top the week up to keep TOTAL Fitness at the athlete's own floor. Total phase
+# targets become that floor, never a target the week chases.
+_RUN_LOAD_GROWTH = 1.15
+
+
+def _run_led(cfg: dict, profile: dict | None, slug: str | None, phase: str,
+             ctl_today: float, weeks_remaining: int):
+    ev = rf.event_def(cfg, cfg.get("race_distance") or cfg.get("race_name"))
+    if not ev or ev.get("kind") != "run":
+        return None
+    sc = sport_ctl_cached(slug)
+    if not sc:
+        return None
+    if profile is None:
+        try:
+            profile = json.loads((BASE / "athletes" / slug / "profile.json").read_text())
+        except Exception:
+            profile = {}
+    lv = rf.athlete_level(cfg, profile, ev, fitness=sc["run"])
+    has_specific = "specific_end_week" in (cfg.get("phase_tss") or {})
+    nxt = {"base": "build", "build": "specific" if has_specific else "peak",
+           "specific": "peak", "peak": "taper"}.get(phase, "taper")
+    rng = rf.fitness_range(ev, lv["level"], nxt)
+    if not rng:
+        return None
+    credit = sc["ride"] * rf.BIKE_CREDIT
+    run_target = max((rng[0] + rng[1]) / 2 - credit, rng[0] * rf.MIN_RUN_SHARE)
+    hold_run = int(round(7 * sc["run"]))
+    w_run = compute_required_tss(sc["run"], run_target, weeks_remaining)
+    w_run = max(hold_run, min(w_run, int(round(hold_run * _RUN_LOAD_GROWTH))))
+    tfloor = rf.total_floor(cfg)
+    w_floor = (compute_required_tss(float(ctl_today), float(tfloor), _MAINTENANCE_CONVERGE_WEEKS)
+               if tfloor else 0)
+    w_cross = max(0, w_floor - w_run)
+    rec = w_run + w_cross
+    return {
+        "run_led": True, "run_weekly_tss": w_run, "cross_training_tss": w_cross,
+        "running_ctl": round(sc["run"], 1), "running_target_ctl": round(run_target, 1),
+        "bike_credit": round(credit, 1), "total_floor": tfloor,
+        "recommended_weekly_tss": rec, "required_weekly_tss": rec,
+        "weekly_tss_floor": min(rec, int(round(max(0.9 * w_run, 0.9 * w_floor)))),
+        "note": (f"RUN-LED WEEK ({ev.get('label')}, level {lv['level']} {lv['label']}): "
+                 f"~{w_run} of the week's load is RUNNING (running Fitness {sc['run']:g} "
+                 f"toward {run_target:.0f} by the end of {phase}, growing at most "
+                 f"{int((_RUN_LOAD_GROWTH - 1) * 100)}% a week); bike / swim ~{w_cross} "
+                 f"only, to keep total Fitness at the athlete's floor"
+                 + (f" ({tfloor:g})" if tfloor else "") + ". Never add bike to make up "
+                 "running the caps will not allow - a short week is better.")}
+
+
 def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
                  last_week_tss: float | None = None,
-                 profile: dict | None = None) -> dict:
+                 profile: dict | None = None, slug: str | None = None) -> dict:
     """Pure: weekly TSS needed to hit the current phase's CTL target on time,
     plus the ramp-capped safe ceiling — with deload and taper branches. Returns
     {"error": ...} if the athlete has no defensible CTL basis (no fabricated
@@ -1442,9 +1514,13 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
     # week to recovery.
     rec = out["recommended_weekly_tss"]
     out["week_type"] = phase
+    run_led = _run_led(cfg, profile, slug, phase, ctl_today, weeks_remaining)
+    if run_led:
+        out.update(run_led)
+        rec = run_led["recommended_weekly_tss"]
     maintenance_now = int(round(7 * float(ctl_today))) if ctl_today else None
     surplus_drift = False
-    if maintenance_now and rec is not None and int(rec) < maintenance_now:
+    if not run_led and maintenance_now and rec is not None and int(rec) < maintenance_now:
         # FITTER THAN THE GOAL (Jamie, 29 Sep 2026): current Fitness is above this
         # phase's target, so the CTL line asks for LESS than holding it. That used to be
         # prescribed silently (with the floor below then contradicting it at 7 x CTL).
@@ -1539,8 +1615,9 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
             })
             rec = out["recommended_weekly_tss"]
 
-    out["weekly_tss_floor"] = ((int(rec) if surplus_drift else max(int(rec), maintenance))
-                               if (rec and maintenance) else None)
+    out["weekly_tss_floor"] = (run_led["weekly_tss_floor"] if run_led else
+                               ((int(rec) if surplus_drift else max(int(rec), maintenance))
+                                if (rec and maintenance) else None))
     # Manual easy-week override (B-race taper etc.): a hand-declared week that the
     # mechanical every-Nth-week cadence doesn't know about. Keyed on the Monday of
     # the week `today` falls in, so it survives regardless of training-week drift.
@@ -1739,7 +1816,7 @@ def cmd_required_tss(args) -> dict:
         ctl_today = round(float(w[-1].get("ctl") or 0), 1)
     eval_day = date.fromisoformat(args.date) if getattr(args, "date", None) else None
     return {"athlete": args.athlete,
-            **required_tss(cfg, ctl_today, today=eval_day,
+            **required_tss(cfg, ctl_today, today=eval_day, slug=args.athlete,
                            last_week_tss=last_week_actual_tss(client, today=eval_day))}
 
 

@@ -282,6 +282,41 @@ def close_to_target(athlete: str, proposal: dict, target, brief: dict, tol=0.06,
     built = pb.build_sessions(athlete, proposal)
     if not target:
         return built
+    # RUN-LED WEEK (plan_tools._run_led): close RUNNING to its own goal first (run caps
+    # re-applied every pass), then let bike only top up to the cross-training figure. The
+    # whole-week target is NOT chased: a shortfall the run caps will not allow stays a
+    # short week rather than turning into extra riding (Jamie, 1 Oct 2026).
+    if brief.get("run_led"):
+        def _is_run(s):
+            return (s.get("sport") or "").lower() == "run"
+
+        def _sport_load(pred):
+            return sum(b["load_target"] for s, b in zip(proposal["sessions"], built["sessions"])
+                       if pred(s))
+        run_goal = brief.get("run_weekly_tss") or 0
+        for _ in range(max_iter):
+            run_now = _sport_load(_is_run)
+            if not run_goal or abs(run_now - run_goal) <= tol * run_goal:
+                break
+            fl = sum(b["load_target"] for s, b in zip(proposal["sessions"], built["sessions"])
+                     if _is_run(s) and _is_endurance(s) and not _is_long_run(s) and not _pinned(s))
+            if fl <= 0:
+                break
+            factor = max(0.4, min(2.2, (fl + (run_goal - run_now)) / fl))
+            for s in proposal["sessions"]:
+                if _is_run(s) and _is_endurance(s) and not _is_long_run(s) and not _pinned(s):
+                    for seg in s.get("segments", []):
+                        seg["minutes"] = max(15, round(seg["minutes"] * factor))
+            _lift_short_easy_runs(proposal, run_floor)
+            if mileage_cap_km:
+                _clamp_runs_to_cap(proposal, mileage_cap_km, lr_cap, PACE, run_min_cap,
+                                   floor=run_floor or _RUN_FLOOR_MIN)
+            built = pb.build_sessions(athlete, proposal)
+        target = _sport_load(_is_run) + (brief.get("cross_training_tss") or 0)
+        _flex_any = flex
+
+        def flex(s):                                   # noqa: F811 - bike only from here
+            return (s.get("sport") or "").lower() in ("bike", "ride") and _flex_any(s)
     for _ in range(max_iter):
         total = built["total_tss"]
         if abs(total - target) <= tol * target:
@@ -889,6 +924,9 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
   the session name. Each is a max effort: warm-up, the effort, cool-down. Keep the day before
   it easy or rest, and count it as that sport's quality for the week. Every date in
   "booking_easy_dates" is an EASY day (no hard work) - the days either side of a B/C race.
+- RUN-LED WEEK: if the brief has "run_led", the week is built from RUNNING: put about
+  run_weekly_tss of the load in runs (within the run caps) and only about
+  cross_training_tss in bike / swim. Never add bike to make up running the caps do not allow.
 - EVENT LEVEL: if the brief has "event_level", size the week to the athlete's level for their
   race (blueprint §4.5): run_km / hours are the PEAK weeks of the block (earlier phases sit
   lower), long_run_km / long_ride_h the longest session at peak. Never go above the top of a

@@ -311,8 +311,8 @@ def build_sessions(slug: str, proposal: dict) -> dict:
     if _ctl:
         try:
             _lw = _pt.last_week_actual_tss(_pt._client(cfg), today=ws)
-            _floor = _pt.required_tss(cfg, _ctl, today=ws,
-                                      last_week_tss=_lw).get("weekly_tss_floor")
+            _floor = _pt.required_tss(cfg, _ctl, today=ws, last_week_tss=_lw,
+                                      slug=slug).get("weekly_tss_floor")
         except Exception:
             _floor = None
     # The rest-day escape hatch, reaching the validator for the first time: without it

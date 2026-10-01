@@ -270,7 +270,7 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     # thresholds, which is how race week prices the race off real data instead of an
     # event-average table.
     req = (pt.required_tss(cfg, ctl, today=today, last_week_tss=last_week_tss,
-                           profile=profile) if ctl else {})
+                           profile=profile, slug=slug) if ctl else {})
     # Long run is a PROGRESSING target for athletes with a configured long-run floor
     # (Kathryn): schedule it NEAR its climbing cap, not a static short run. Athletes
     # without a floor keep cap-only behaviour (no forced target) - unchanged.
@@ -656,6 +656,9 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         # The athlete's level for their race (blueprint §4.5): peak weekly volume, longest
         # session, Fitness to enter this phase. Size the week toward these, not beyond.
         **({"event_level": event_level} if event_level else {}),
+        # Run race: the week is built from running; bike / swim only top up to the floor.
+        **({"run_led": True, "run_weekly_tss": req.get("run_weekly_tss"),
+            "cross_training_tss": req.get("cross_training_tss")} if req.get("run_led") else {}),
         # Fuelling / heat suggestions due this week (lib/race_prompts): shown on the
         # Sunday plan message; the bot records the answer.
         **({"_race_prompts": _prompts} if _prompts else {}),
