@@ -2008,6 +2008,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
         log(f"[{slug}] ctlProjection skipped: {exc}")
 
     data["nextRace"] = _next_race(slug)
+    data["season"] = _season(slug, data)
     out = BASE / f"training-data-{slug}.json"
     out.write_text(json.dumps(data, separators=(",", ":")))
     log(f"[{slug}] training-data-{slug}.json: CTL {kpi.get('ctl')}, {len(recent)} activities")
@@ -2062,6 +2063,20 @@ def _next_race(slug: str) -> dict | None:
         return None
 
 
+def _season(slug: str, data: dict) -> dict | None:
+    """The Goals page (lib/season_view.py): A/B/C races with goals and predictions,
+    and the phases to the A race."""
+    try:
+        import season_view
+        acfg = json.loads(ATHLETES_CONFIG.read_text()).get(slug) or {}
+        prof_f = BASE / "athletes" / slug / "profile.json"
+        prof = json.loads(prof_f.read_text()) if prof_f.exists() else {}
+        return season_view.payload(slug, acfg, prof, data)
+    except Exception as exc:
+        log(f"[{slug}] season view skipped: {exc}")
+        return None
+
+
 def refresh_one(slug):
     """Rebuild ONE athlete's private training data and nothing else - no library,
     no publish. The app's pull-to-refresh calls this through api/server.py."""
@@ -2078,6 +2093,7 @@ def refresh_one(slug):
         except Exception as e:
             log(f"Post-processing warning: {e} — continuing without extra fields")
         data["nextRace"] = _next_race("jamie")
+        data["season"] = _season("jamie", data)
         OUT_FILE.write_text(json.dumps(data, separators=(",", ":")))
         log(f"[jamie] refreshed: CTL {data['kpi'].get('ctl')}")
     else:
@@ -2157,6 +2173,7 @@ def main():
         except Exception as e:
             log(f"Post-processing warning: {e} — continuing without extra fields")
         data["nextRace"] = _next_race("jamie")
+        data["season"] = _season("jamie", data)
         OUT_FILE.write_text(json.dumps(data, separators=(",", ":")))
 
         # Sanitised public variant for GitHub Pages. The old root-level

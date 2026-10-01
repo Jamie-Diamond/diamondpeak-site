@@ -466,6 +466,32 @@ table.tbl tr.hl td{background:rgba(16,101,107,.05)}
 .goal .tag{font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:.16em;color:var(--muted);width:16px}
 .goal .v{font-family:'Libre Baskerville',serif;font-size:19px;letter-spacing:-.02em}
 .goal .n{margin-left:auto;font-family:'DM Mono',monospace;font-size:9.5px;color:var(--muted)}
+/* Goals: now / race day / goal, the season timeline, B and C races (app.js renderGoals) */
+.gt{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.gt.one{grid-template-columns:1fr}
+.gt b{display:block;font-family:'Libre Baskerville',serif;font-weight:400;font-size:24px;letter-spacing:-.02em}
+.gt span{display:block;margin-top:4px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted)}
+.gt .hl b{color:var(--accent)}
+.gv{margin:12px 0 0;text-align:center;font-size:13px;color:var(--accent)}
+.gv.warn{color:#b3541e}
+.tl{position:relative;padding-top:22px}
+.tl-bar{position:relative;height:16px;border-radius:8px;background:var(--rule-soft);overflow:hidden}
+.tl-bar i{position:absolute;top:0;bottom:0}
+.tl-bar .now{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink);border-radius:1px}
+.tl-dots{position:absolute;top:0;left:0;right:0;height:18px}
+.tl-dots em{position:absolute;transform:translateX(-50%);width:18px;height:18px;border-radius:50%;
+  font:600 9px/18px 'DM Mono',monospace;font-style:normal;text-align:center;color:#fff;background:var(--muted)}
+.p-a{background:var(--accent)!important}.p-b{background:#2c6e9b!important}.p-c{background:#8a8f96!important}
+.tl-ends{display:flex;justify-content:space-between;margin-top:6px;font-family:'DM Mono',monospace;font-size:9px;
+  color:var(--muted);letter-spacing:.08em}
+.tl-list{list-style:none;margin:12px 0 0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:6px 14px}
+.tl-list li{display:flex;align-items:center;gap:7px;font-size:12.5px}
+.tl-list .tl-sw{width:10px;height:10px;border-radius:3px;flex:0 0 auto}
+.tl-list span:last-child{margin-left:auto;font-family:'DM Mono',monospace;font-size:9.5px;color:var(--muted)}
+.ptag{display:inline-block;width:18px;height:18px;border-radius:50%;font:600 9px/18px 'DM Mono',monospace;
+  text-align:center;color:#fff;background:#8a8f96}
+.tbl small{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:.06em}
 
 /* bar — a printed measure, filled to the value */
 .bar{height:5px;background:var(--rule-soft);border-radius:3px;overflow:hidden;margin-top:7px}
@@ -1127,6 +1153,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=58" defer></script>
+<script src="app.js?v=59" defer></script>
 </body>
 </html>

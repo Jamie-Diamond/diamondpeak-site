@@ -3475,27 +3475,146 @@
 
   /* ── Goals ───────────────────────────────────────────────────────────── */
 
+  /* ── Goals (Jamie, 1 Oct 2026): the A race's now / race-day / goal times, the season's
+     A / B / C races, and the phases of the build. Data: refresh-site-data `season`
+     (lib/season_view.py), which says how each number was made. */
+  function rtime(sec) {
+    if (sec == null) return '\u2014';
+    sec = Math.round(sec);
+    var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), x = sec % 60;
+    return h ? h + ':' + String(m).padStart(2, '0') + ':' + String(x).padStart(2, '0')
+             : m + ':' + String(x).padStart(2, '0');
+  }
+  function paceStr(s) { return Math.floor(s / 60) + ':' + String(Math.round(s % 60)).padStart(2, '0'); }
+  var PHASE_BG = { base: 'rgba(16,101,107,.22)', build: 'rgba(16,101,107,.42)',
+                   specific: 'rgba(16,101,107,.62)', peak: 'rgba(16,101,107,.85)',
+                   taper: 'rgba(196,139,47,.65)' };
+
+  function goalTimes(r) {
+    if (r.hold) {
+      var w = r.hold.w_lo ? r.hold.w_lo + '\u2013' + r.hold.w_hi + ' W' : 'IF ' + r.hold.if_lo + '\u2013' + r.hold.if_hi;
+      return '<div class="gt one"><div><b>' + w + '</b><span>hold for ~' + r.hold.hours + ' h' +
+        (r.hold.w_lo ? ' \u00b7 IF ' + r.hold.if_lo + '\u2013' + r.hold.if_hi : '') + '</span></div></div>';
+    }
+    var now = r.tri ? r.tri.now_min * 60 : r.now_s, day = r.tri ? r.tri.raceday_min * 60 : r.raceday_s;
+    if (now == null && day == null && !r.goal) return '';
+    var cell = function (v, l, cls) {
+      return '<div' + (cls ? ' class="' + cls + '"' : '') + '><b>' + v + '</b><span>' + l + '</span></div>';
+    };
+    return '<div class="gt">' + cell(rtime(now), 'now') + cell(rtime(day), 'race day', 'hl') +
+      cell(r.goal ? esc(r.goal) : '\u2014', 'goal') + '</div>';
+  }
+
+  function goalVerdict(r) {
+    if (r.raceday_s == null || r.goal_s == null) return '';
+    var gap = r.raceday_s - r.goal_s;
+    return '<p class="gv' + (gap > 0 ? ' warn' : '') + '">' + (gap > 0
+      ? 'Race day is ' + rtime(gap) + ' slower than the goal.'
+      : 'On course: race day is ' + rtime(-gap) + ' inside the goal.') + '</p>';
+  }
+
+  function goalMethod(r) {
+    var v = r.volume;
+    if (r.hold) return 'A steady effort for the expected time, from your FTP.';
+    if (r.method === 'tanda' && v) {
+      return 'Marathon prediction from training (Tanda 2011). Now: your last 8 weeks, ' + v.k_now +
+        ' km a week at ' + paceStr(v.pace_s_km) + '/km. Race day: the same pace at the ~' + v.k_race +
+        ' km a week the plan builds to.';
+    }
+    if (r.method === 'riegel') {
+      return 'Now: from your tested threshold pace (Riegel).' + (r.raceday_s != null
+        ? ' Race day: adds the marathon model\u2019s training gain, scaled down for a shorter race. An estimate.'
+        : '');
+    }
+    if (r.tri) return 'Ironman model: bike IF scales with fitness from your anchor race.';
+    return 'No time prediction for this kind of race yet.';
+  }
+
+  function seasonTimeline(sv) {
+    var ph = sv.phases || [], a = sv.aRace;
+    if (!ph.length || !a) return '';
+    var t0 = new Date(ph[0].start + 'T12:00:00').getTime(), t1 = new Date(a.date + 'T12:00:00').getTime();
+    var pos = function (iso) {
+      return Math.max(0, Math.min(100, (new Date(iso + 'T12:00:00').getTime() - t0) / (t1 - t0) * 100));
+    };
+    var fmt = function (iso) {
+      return new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    };
+    var bar = ph.map(function (x) {
+      var w = pos(x.end) - pos(x.start) + (100 / ((t1 - t0) / 864e5));
+      return '<i style="left:' + pos(x.start).toFixed(2) + '%;width:' + w.toFixed(2) + '%;background:' +
+        (PHASE_BG[x.family] || PHASE_BG.base) + '"></i>';
+    }).join('');
+    var dots = (sv.races || []).filter(function (r) { return r.date >= ph[0].start && r.date <= a.date; })
+      .map(function (r) {
+        return '<em class="p-' + (r.priority || 'c').toLowerCase() + '" style="left:' + pos(r.date).toFixed(2) +
+          '%" title="' + esc(r.name) + '">' + esc(r.priority || '\u00b7') + '</em>';
+      }).join('');
+    var today = todayISO();
+    var now = today >= ph[0].start && today <= a.date
+      ? '<b class="now" style="left:' + pos(today).toFixed(2) + '%"></b>' : '';
+    var list = ph.map(function (x) {
+      return '<li><span class="tl-sw" style="background:' + (PHASE_BG[x.family] || PHASE_BG.base) + '"></span>' +
+        '<b>' + esc(x.name) + '</b><span>' + fmt(x.start) + ' \u2013 ' + fmt(x.end) + '</span></li>';
+    }).join('');
+    return card('The season', '<div class="tl"><div class="tl-dots">' + dots + '</div>' +
+      '<div class="tl-bar">' + bar + now + '</div>' +
+      '<div class="tl-ends"><span>' + fmt(ph[0].start) + '</span><span>' + fmt(a.date) + '</span></div></div>' +
+      '<ul class="tl-list">' + list + '</ul>', { foot: today < ph[0].start
+        ? 'The plan starts ' + fmt(ph[0].start) + '.' : '' });
+  }
+
   function renderGoals() {
     var d = state.data, p = d.profile || {}, rp = d.racePredictor || {};
+    var sv = d.season;
     var h = '';
+    var triSeason = !sv || !sv.aRace || sv.aRace.kind === 'tri';
 
-    h += '<section class="hero">' +
-      '<p class="hero-k">' + esc(p.race_distance || 'Race') +
-      (p.race_date ? ' · ' + daysBetween(todayISO(), p.race_date) + ' days' : '') + '</p>' +
-      '<h2 class="hero-t">' + esc(p.race_name || 'Race') + '</h2>' +
-      (p.race_date ? '<p class="hero-m">' +
-        new Date(p.race_date + 'T12:00:00').toLocaleDateString('en-GB',
-          { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + '</p>' : '') +
-      '</section>';
-
-    h += '<div class="goals">' +
-      '<div class="goal"><span class="tag">A</span><span class="v">' + esc(p.a_goal || '—') +
-      '</span><span class="n">primary</span></div>' +
-      '<div class="goal"><span class="tag">B</span><span class="v">' + esc(p.b_goal || '—') +
-      '</span><span class="n">fallback</span></div></div>';
+    if (sv) {
+      var a = sv.aRace;
+      if (a) {
+        h += '<section class="hero">' +
+          '<p class="hero-k">A race \u00b7 ' + esc(a.distance || '') + ' \u00b7 ' + a.days + ' days</p>' +
+          '<h2 class="hero-t">' + esc(a.name) + '</h2>' +
+          '<p class="hero-m">' + new Date(a.date + 'T12:00:00').toLocaleDateString('en-GB',
+            { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + '</p></section>';
+        h += card(a.hold ? 'What you could hold' : 'Times', goalTimes(a) + goalVerdict(a),
+                  { foot: goalMethod(a) });
+      } else {
+        h += '<section class="hero"><p class="hero-k">Season</p><h2 class="hero-t">No A race booked</h2>' +
+          '<p class="hero-m">Tell the coach your next target race and it shows here.</p></section>';
+      }
+      h += sv.trackingOnly ? card('The season', '<div class="empty">Tracking only, so there are no ' +
+        'training phases. Your sessions are still logged and written up.</div>') : seasonTimeline(sv);
+      var others = (sv.races || []).filter(function (r) { return !a || r.name !== a.name || r.date !== a.date; });
+      if (others.length) {
+        h += card('B and C races', '<table class="tbl"><thead><tr><th></th><th>Race</th><th>Now</th>' +
+          '<th>Race day</th><th>Goal</th></tr></thead><tbody>' + others.map(function (r) {
+            var hold = r.hold ? (r.hold.w_lo ? r.hold.w_lo + '\u2013' + r.hold.w_hi + ' W' : 'IF ' + r.hold.if_lo) : null;
+            return '<tr><td><span class="ptag p-' + (r.priority || 'c').toLowerCase() + '">' +
+              esc(r.priority || '\u00b7') + '</span></td><td class="lbl">' + esc(r.name) +
+              '<br><small>' + new Date(r.date + 'T12:00:00').toLocaleDateString('en-GB',
+                { day: 'numeric', month: 'short' }) + ' \u00b7 ' + r.days + ' days</small></td>' +
+              '<td>' + (hold || rtime(r.now_s)) + '</td><td class="t">' + (hold ? '' : rtime(r.raceday_s)) +
+              '</td><td>' + esc(r.goal || '\u2014') + '</td></tr>';
+          }).join('') + '</tbody></table>',
+          { flush: true, foot: 'Now: from your tested threshold pace. Race day: with the training ' +
+                               'the plan has built by then. Estimates.' });
+      }
+    } else {
+      h += '<section class="hero">' +
+        '<p class="hero-k">' + esc(p.race_distance || 'Race') +
+        (p.race_date ? ' \u00b7 ' + daysBetween(todayISO(), p.race_date) + ' days' : '') + '</p>' +
+        '<h2 class="hero-t">' + esc(p.race_name || 'Race') + '</h2></section>';
+      h += '<div class="goals">' +
+        '<div class="goal"><span class="tag">A</span><span class="v">' + esc(p.a_goal || '\u2014') +
+        '</span><span class="n">primary</span></div>' +
+        '<div class="goal"><span class="tag">B</span><span class="v">' + esc(p.b_goal || '\u2014') +
+        '</span><span class="n">fallback</span></div></div>';
+    }
 
     var cp = d.ctlProjection || {};
-    if (cp.target_ctl_min != null) {
+    if (triSeason && cp.target_ctl_min != null) {
       var now = (d.kpi || {}).ctl || 0, lo = cp.target_ctl_min, hi = cp.target_ctl_max;
       h += card('Fitness target for race day',
         // One wrapper, not two siblings: .card pads each direct child, so two
@@ -3508,7 +3627,7 @@
                           : 'Below the band — ' + (lo - now).toFixed(1) + ' CTL to find.' });
     }
 
-    if (rp.rows && rp.rows.length) {
+    if (triSeason && rp.rows && rp.rows.length) {
       h += card('Projection', '<table class="tbl">' +
         '<thead><tr><th>Scenario</th><th>CTL</th><th>Bike</th><th>Run</th><th>Total</th></tr></thead><tbody>' +
         rp.rows.map(function (r, i) {
@@ -3525,7 +3644,7 @@
     var has = function (o) { return o && o.date ? o : null; };
     var pr = has(p.prev_race), pr2 = has(p.prev2_race);
     var tg = (p.race_targets && Object.keys(p.race_targets).length) ? p.race_targets : null;
-    if (pr || pr2 || tg) {
+    if (triSeason && (pr || pr2 || tg)) {
       var cols = [];
       if (pr2) cols.push([pr2.date.slice(0, 4), pr2]);
       if (pr) cols.push([pr.date.slice(0, 4), pr]);
