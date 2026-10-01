@@ -1027,7 +1027,13 @@ def app_files(path: str, request: Request):
     target = (APP_DIR / (path or "app.html")).resolve()
     if APP_DIR.resolve() not in target.parents or not target.is_file():
         raise HTTPException(404)
-    headers = {"Service-Worker-Allowed": "/"} if target.name == "sw.js" else None
+    # Code and pages are revalidated every time, so neither Cloudflare's edge nor the
+    # browser serves an old release (1 Oct 2026: Jamie stuck three versions behind).
+    # Images and icons can be cached for a day.
+    static = target.suffix in (".png", ".jpg", ".svg", ".ico", ".woff2")
+    headers = {"Cache-Control": "public, max-age=86400" if static else "no-cache, must-revalidate"}
+    if target.name == "sw.js":
+        headers["Service-Worker-Allowed"] = "/"
     return FileResponse(target, headers=headers)
 
 

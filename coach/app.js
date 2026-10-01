@@ -27,6 +27,9 @@
  */
 (function () {
   'use strict';
+  // This script's own ?v= (app.html), so the service worker URL changes with every release
+  // and no cache (Cloudflare's edge or the browser's) can hand back an old worker.
+  var SCRIPT_V = ((document.currentScript && /[?&]v=(\d+)/.exec(document.currentScript.src)) || [])[1] || '0';
 
   // Athlete data has been private since 29 Sep 2026 and is no longer published to
   // GitHub Pages. The app lives at coach.diamondpeak.uk, behind a sign-in.
@@ -1577,13 +1580,12 @@
         var box = $('#adminBox');
         if (!box || !j) return;
         var rows = j.athletes.map(function (a) {
-          var chan = a.web_only ? 'Web only' : (a.telegram ? 'Telegram + Peak' : 'Peak only');
+          // No Telegram switch: Telegram coaching is retired (1 Oct 2026).
           return '<div class="adm-row"><div class="adm-t"><b>' + esc(a.name) + '</b><span>' +
-            esc((a.active ? '' : 'NOT ACTIVE · ') + chan +
-                (a.emails.length ? ' · ' + a.emails.join(', ') : ' · no web login')) + '</span></div>' +
+            esc((a.active ? '' : 'NOT ACTIVE · ') +
+                (a.emails.length ? a.emails.join(', ') : 'no web login')) + '</span></div>' +
             (!a.active && a.web_only ? '<button type="button" data-approve="' + esc(a.slug) + '">Approve</button>' : '') +
-            (a.web_only ? '' : '<button type="button" data-tg="' + esc(a.slug) + '" data-on="' + (!a.telegram) + '">' +
-              (a.telegram ? 'Telegram off' : 'Telegram on') + '</button>') + '</div>';
+            '</div>';
         }).join('');
         var inv = (j.invites || []).map(function (i) {
           return '<div class="adm-row"><div class="adm-t"><b>' + esc(i.email) + '</b><span>invited · ' +
@@ -4921,8 +4923,7 @@
           'heat ' + (pr.heat ? 'on' : 'off') + ' · fuelling ' + (pr.fuelling ? 'on' : 'off');
       }
       if (state.me.coach) {
-        coachH = card('Coach tools', '<div id="adminBox"><div class="empty">Loading…</div></div>',
-          { foot: 'Telegram off: that athlete\u2019s coach messages come to Peak only, with a notification.' });
+        coachH = card('Coach tools', '<div id="adminBox"><div class="empty">Loading…</div></div>');
       }
     }
 
@@ -5278,7 +5279,20 @@
 
     loadLibrary();
     if ('serviceWorker' in navigator && location.protocol === 'https:') {
-      navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {});
+      // 1 Oct 2026: Jamie was three releases behind. An installed Peak left in the background
+      // never navigates, so it never asked for a new worker; and Cloudflare cached sw.js.
+      // Now: a versioned worker URL, a check every time Peak comes back, and once a new
+      // worker takes over, the page reloads the next time it is out of sight.
+      navigator.serviceWorker.register('sw.js?v=' + SCRIPT_V, { scope: './' }).catch(function () {});
+      var swReload = false, hadController = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (!hadController) { hadController = true; return; }       // first install, not an update
+        if (document.hidden) location.reload(); else swReload = true;
+      });
+      document.addEventListener('visibilitychange', function () {
+        if (document.hidden) { if (swReload) location.reload(); return; }
+        navigator.serviceWorker.getRegistration().then(function (r) { if (r) r.update(); }).catch(function () {});
+      });
     }
   }
 
