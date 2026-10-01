@@ -1165,7 +1165,7 @@ def sport_ctl_cached(slug: str | None, max_age_days: int = 2):
 # the bike when it's not relevant"). For a RUN race the total-Fitness line is the wrong
 # thing to chase: the gap between it and what running can safely grow by gets filled with
 # bike. So the week is built from RUNNING: enough run load to reach the level's running
-# target (race_fitness, a third of cycling credited), grown at most 15% a week over the
+# target (race_fitness, half of cycling credited), grown at most 15% a week over the
 # load that holds current running Fitness (the +10-15% run rule in load terms), and bike /
 # swim only top the week up to keep TOTAL Fitness at the athlete's own floor. Total phase
 # targets become that floor, never a target the week chases.

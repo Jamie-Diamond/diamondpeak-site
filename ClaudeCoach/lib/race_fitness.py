@@ -312,10 +312,13 @@ def surplus_choice(cfg: dict):
 # CYCLING COUNTS, A LITTLE (Jamie, 30 Sep 2026: "cycling is a great way to boost
 # fitness and reduce intensity and deserves some benefit"). Cycling builds the engine but
 # not running economy (cross-training studies: 70-90% of the aerobic effect, no economy
-# gain), so a third of cycling Fitness counts toward a run race's running Fitness, and at
-# least three quarters of the range's floor must come from running itself.
-BIKE_CREDIT = 1 / 3
-MIN_RUN_SHARE = 0.75
+# gain), so HALF of cycling Fitness counts toward a run race's running Fitness, and at
+# least half of the range's floor must come from running itself. Raised from 1/3 and 3/4
+# on 1 Oct 2026, calibrated on Jamie's IM Italy run: 3:37 after a 178 km bike (~2:55-3:05
+# open) on running 40 / cycling 58 at peak; 1/3 + 3/4 called that short of even 3:00-3:30.
+# One athlete: re-check once testers race.
+BIKE_CREDIT = 1 / 2
+MIN_RUN_SHARE = 0.5
 
 
 def running_status(event, phase: str, run_ctl, level: int = 2, bike_ctl=None):

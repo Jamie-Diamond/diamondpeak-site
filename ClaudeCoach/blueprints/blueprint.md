@@ -104,11 +104,13 @@ A run race is judged on **two floors, each on its own**:
 A triathlete can be far above a 5k's needs on total and still under it on running (Jamie,
 29 Sep 2026: total 95, running 32), so neither number alone says whether they are ready.
 
-**Cycling counts, a little** (Jamie, 30 Sep 2026). Cycling builds the aerobic engine but not
-running economy (cross-training studies: roughly 70–90% of the aerobic effect, no economy
-gain), so **a third of cycling Fitness** counts toward running Fitness, and **at least three
-quarters of the range's floor must come from running itself**. Example: running 60 + cycling
-30 counts as 70, the bottom of a sub-3 marathon's range, because 60 of it is running.
+**Cycling counts, a lot** (Jamie, 30 Sep / 1 Oct 2026). Cycling builds the aerobic engine
+but not running economy, so **half of cycling Fitness** counts toward running Fitness and **at
+least half of the range's floor must come from running itself**. Calibrated on Jamie's IM
+Italy run (3:37 after a 178 km bike, roughly 2:55–3:05 as an open marathon) on running 40 /
+cycling 58: that counts as 69, right at the sub-3 line. A third and three quarters (the first
+setting) called the same athlete short of even 3:00–3:30. One athlete, so re-check as
+others race.
 
 **Run races are planned from running** (Jamie, 1 Oct 2026). Each week's load is built from
 the RUNNING target: enough run load to reach the level's running Fitness by the end of the

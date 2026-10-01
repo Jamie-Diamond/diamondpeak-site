@@ -226,18 +226,17 @@ def test_the_config_race_wins_over_a_stale_profile():
 
 
 class TestCyclingCredit:
-    """Jamie, 30 Sep 2026 (option a): a third of cycling Fitness counts toward running
-    Fitness, and at least three quarters of the floor must be real running."""
+    """1 Oct 2026 (option a): half of cycling Fitness counts toward running Fitness, and
+    at least half the floor must be real running. Calibrated on Jamie's IM run."""
 
-    def test_a_third_of_cycling_counts(self):
-        st = rf.running_status("marathon", "taper", 60, level=1, bike_ctl=30)
-        assert st["effective"] == 70 and st["bike_credit"] == 10
-        assert st["status"] == "in"                              # range 70-95
+    def test_jamies_im_peak_lands_on_the_sub3_line(self):
+        st = rf.running_status("marathon", "taper", 40.0, level=1, bike_ctl=57.6)
+        assert st["bike_credit"] == 28.8 and st["effective"] == 68.8
+        assert st["min_running"] == 35.0
 
-    def test_running_must_carry_three_quarters_of_the_floor(self):
-        st = rf.running_status("marathon", "taper", 50, level=1, bike_ctl=90)
-        assert st["effective"] == 80 and st["min_running"] == 52.5
-        assert st["status"] == "under"                           # 50 < 52.5
+    def test_running_must_carry_half_of_the_floor(self):
+        st = rf.running_status("marathon", "taper", 30, level=1, bike_ctl=90)
+        assert st["effective"] == 75 and st["status"] == "under"           # 30 < 35
 
     def test_without_cycling_it_is_running_alone(self):
         assert rf.running_status("marathon", "taper", 60, level=1)["status"] == "under"

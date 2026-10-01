@@ -676,7 +676,7 @@ def _level_section(cfg: dict, profile: dict, event: str) -> str:
     out.append(f"- {kind} Fitness to enter each phase: "
                + " · ".join(f"{n} {r[0]}–{r[1]}" for n, r in ent if r) + ".")
     if ev.get("kind") == "run":
-        out.append("- Running Fitness counts a third of cycling Fitness; total Fitness is a "
+        out.append("- Running Fitness counts half of cycling Fitness; total Fitness is a "
                    "floor for a run race, not a target.")
     if ev.get("blended_from"):
         out.append(f"- Temporary blueprint: {_rf.describe_blend(ev)}.")

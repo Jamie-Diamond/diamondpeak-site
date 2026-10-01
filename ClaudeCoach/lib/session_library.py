@@ -401,7 +401,7 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
             from icu_api import IcuClient as _IC
             _hist = _IC(cfg["icu_athlete_id"], cfg["icu_api_key"]).get_training_history(days=180)
             run_ctl = _rf.sport_ctl(_hist, today, "run")
-            bike_ctl = _rf.sport_ctl(_hist, today, "ride")      # a third of it counts
+            bike_ctl = _rf.sport_ctl(_hist, today, "ride")      # half of it counts
         except Exception:
             pass
     event_level = None
