@@ -183,6 +183,15 @@ Each tool is a `.tool-card` link card with an icon, title, description, and arro
 
 All ClaudeCoach scheduled tasks (watchdog, activity-watcher, refresh-site-data, checkins) run via **crontab on the VM only**. The scripts live in `ClaudeCoach/scripts/`. Do NOT use `CronCreate` for any of these — it injects prompts into the user's interactive session and survives context compaction. If asked to schedule something, add it to the VM crontab instead.
 
+## ClaudeCoach runs in Peak - the Telegram coaching bot is retired
+
+Since 30 Sep 2026 coaching runs in the Peak web app (`claudecoach-api.service`,
+coach.diamondpeak.uk); the API imports `telegram/bot.py` for chat. `claudecoach-bot.service`
+is **masked** on the VM: never start, restart or unmask it. After a deploy, restart
+`claudecoach-api` only. The food bot (`claudecoach-nutrition.service`) stays on Telegram.
+`scripts/telegram-inbox.py` passes any message sent to the old Telegram coach into
+Jamie's Peak chat.
+
 ## ClaudeCoach ops alerts - developer inbox, never Jamie's chat
 
 Ops alerts ("did not deliver", missing heartbeats, plan-audit findings) are a log for

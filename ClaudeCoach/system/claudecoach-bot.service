@@ -1,3 +1,5 @@
+# RETIRED 30 Sep 2026: coaching runs in Peak (claudecoach-api.service). This unit is
+# masked on the VM; do not install, start or restart it. Kept for reference.
 [Unit]
 Description=ClaudeCoach Telegram Bot
 After=network.target
