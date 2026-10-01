@@ -1409,8 +1409,11 @@ def race_weight_projection(current_kg: float, target_kg: float, days_to_race: in
             "deficit_by_day_type": per_day,
             "reaches_target": projected <= target_kg,
             "shortfall_kg": round(max(0.0, projected - target_kg), 1),
+            # A deficit over fewer than 14 days is not a plan: no figure (was / max(1, days),
+            # which turned a past race into 22,330 kcal a day, 1 Oct 2026).
             "required_daily_kcal_to_reach": (
-                round(gap_kg * KCAL_PER_KG_FAT / max(1, days_to_race)) if gap_kg else 0)}
+                round(gap_kg * KCAL_PER_KG_FAT / days_to_race) if gap_kg and days_to_race >= 14
+                else (0 if not gap_kg else None))}
 
 
 # --- protein accounting and micronutrients ----------------------------------

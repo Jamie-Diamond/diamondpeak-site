@@ -87,6 +87,23 @@ def _prescribed_g_hr(sport: str, session_log, cfg: dict) -> float:
                              last_g_hr=last_ride_g_hr(session_log)))
 
 
+def _next_a_race(slug: str, cfg: dict, profile: dict, today: date) -> tuple:
+    """(date iso, name) of the next upcoming A race, else (None, None)."""
+    try:
+        import races as races_lib
+        for r in races_lib.load_races(slug, config={slug: cfg}):
+            d = r.get("date")
+            if (str(r.get("priority") or "").upper() == "A" and d and not r.get("completed")
+                    and date.fromisoformat(str(d)[:10]) >= today):
+                return str(d)[:10], r.get("name")
+    except Exception as exc:
+        print(f"{slug}: race registry unavailable ({exc}); using the profile race")
+    d = profile.get("race_date")
+    if d and date.fromisoformat(str(d)[:10]) >= today:
+        return str(d)[:10], profile.get("race_name")
+    return None, None
+
+
 def build(slug: str, today: date) -> dict:
     athlete_dir = BASE / "athletes" / slug
     store = NutritionStore(athlete_dir)
@@ -421,11 +438,14 @@ def build(slug: str, today: date) -> dict:
     weight_series.sort(key=lambda r: r["date"])
     div = PL.diversity(days_raw, table, on=today)
 
-    race = profile.get("race_date") or None
+    # The NEXT A race (lib/races.py), not profile race_date: that is the last A race and
+    # counted on past it, so on 1 Oct 2026, 12 days after IM Italy, the "kcal a day to
+    # reach race weight" became the whole gap divided by one day: 22,330 kcal.
+    race, race_name = _next_a_race(slug, cfg_all.get(slug, {}), profile, today)
     days_to_race = ((date.fromisoformat(race) - today).days if race else None)
     weight_now = NE.rolling_weight_kg(measurements, on=today)
     projection = None
-    if weight_now and profile.get("race_weight_kg") and days_to_race is not None:
+    if weight_now and profile.get("race_weight_kg") and days_to_race is not None and days_to_race >= 14:
         rmr = NE.mifflin_st_jeor(weight_now, float(profile.get("height_m") or 1.86),
                                  profile.get("dob") or "1995-05-06", "M", on=today)
         projection = NE.race_weight_projection(
@@ -460,7 +480,7 @@ def build(slug: str, today: date) -> dict:
         # next. A dict that forwards everything cannot silently omit a new field.
         "plants": {**div, "basis": div["target_basis"],
                    "new_today": div["new_species_today"]},
-        "block": {"days_to_race": days_to_race, "race_name": profile.get("race_name"),
+        "block": {"days_to_race": days_to_race, "race_name": race_name,
                   "protein_floor_basis": "g/kg bodyweight, flexes with load"},
         "sodium": {"has_sweat_test": False,
                    "assumed_band_mg_l": [NE.SWEAT_NA_ASSUMED_LOW,

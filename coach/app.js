@@ -4492,7 +4492,7 @@
       fig(proj ? proj.projected_race_kg : '-', 'kg projected',
           proj ? (proj.reaches_target ? 'meets it' : proj.shortfall_kg + ' kg short') : '') +
       '</div>';
-    if (proj && !proj.reaches_target) {
+    if (proj && !proj.reaches_target && proj.required_daily_kcal_to_reach != null) {
       // The target is never shown without the shortfall: an unreachable number on its
       // own is worse than no number.
       blockBody += '<p class="proj miss">Reaching ' + w.race_target_kg +

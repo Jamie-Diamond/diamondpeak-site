@@ -438,6 +438,10 @@ check("projection states the shortfall", p["shortfall_kg"] > 0)
 check(f"required daily deficit to reach 79 is ~830 "
       f"(got {p['required_daily_kcal_to_reach']})",
       780 <= p["required_daily_kcal_to_reach"] <= 880)
+# 1 Oct 2026: 12 days after the race the gap was divided by one day (22,330 kcal/day).
+for d_left in (-12, 0, 5, 13):
+    check(f"no daily deficit figure {d_left} days out",
+          N.race_weight_projection(83.3, 79.0, d_left, RMR)["required_daily_kcal_to_reach"] is None)
 # The projection MUST agree with zones() day for day. It appears on the Peak tab and
 # in the bot, and an earlier cut re-derived the arithmetic here and drifted: it priced
 # the protein deficit bump unconditionally where zones() applies it only when headroom
