@@ -2843,24 +2843,36 @@ def goal_setup(slug: str, goal: str | None = None, apply: bool = False, today=No
     g = _goals.make(goal, today=today, start=first, sports=sports, ctl=ctl, profile=profile)
     trial = dict(cfg, goal=g)
     gd = _goals.GOALS[goal]
+    # The first week the goal would actually run: a race ahead, its recovery (or a recovery
+    # hold) and an off-season block all come first.
+    begins = next((w for w in (date.fromisoformat(g["start"]) + timedelta(weeks=i)
+                               for i in range(80)) if goal_active(trial, w)), None)
     out = {"athlete": slug, "goal": goal, "label": gd["label"],
            "sports": _goals.sports_for(trial, profile),
-           "block_1": [g["start"], (date.fromisoformat(g["start"])
-                                    + timedelta(weeks=_goals.BLOCK_WEEKS, days=-1)).isoformat()],
            "week_shape": list(_goals.BLOCK_SHAPE),
-           "tests": [b["week_start"] + ": " + b["name"]
-                     for b in goal_test_bookings(trial, slug, today=first)[:2]],
            "zone_split": _goals.distribution(trial, profile),
            "ctl_today": ctl, "applied": False}
+    if begins:
+        b1 = goal_start(trial, slug, begins)
+        out["block_1"] = [b1.isoformat(),
+                          (b1 + timedelta(weeks=_goals.BLOCK_WEEKS, days=-1)).isoformat()]
+        out["tests"] = [b["week_start"] + ": " + b["name"]
+                        for b in goal_test_bookings(trial, slug, today=begins)[:2]]
+        if ctl and begins == date.fromisoformat(g["start"]):
+            wk = required_tss(trial, ctl, today=begins, slug=slug, profile=profile)
+            out["first_week_tss"] = wk.get("recommended_weekly_tss")
     if g.get("ctl_band"):
         out["fitness_band"] = g["ctl_band"]
-    if ctl:
-        wk = required_tss(trial, ctl, today=date.fromisoformat(g["start"]), slug=slug,
-                          profile=profile)
-        out["first_week_tss"] = wk.get("recommended_weekly_tss")
     if a_race_ahead(cfg, today):
         out["note"] = ("An A race is ahead, so the race block runs first; the goal starts "
                        "after its recovery weeks.")
+    if not begins:
+        out["note"] = ("The goal would not start in the next 80 weeks: "
+                       + ("an off-season block is configured for after the race and wins"
+                          if offseason_cfg(cfg) else
+                          "a post-race recovery hold is on until they say they're ready"
+                          if cfg.get("post_race_hold") else "a race or its recovery comes first")
+                       + ". Say so; don't apply it without asking.")
     if not apply:
         out["next"] = (f"tell them the goal, the block shape and the first test in a few "
                        f"lines; on their OK run goal-setup --athlete {slug} --goal {goal} --apply")

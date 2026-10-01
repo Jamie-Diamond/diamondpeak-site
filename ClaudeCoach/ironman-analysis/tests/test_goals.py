@@ -215,3 +215,25 @@ def test_prompt_block_names_the_goal_and_the_setup_command(tmp_path):
 def test_distribution_puts_the_top_end_in_the_goal_sport():
     d = goals.distribution(_cfg("ftp", sports=["bike", "run"]))
     assert d == {"Bike": "70% Z1–2 / 12% Z3 / 18% Z4–5", "Run": "88% Z1–2 / 7% Z3 / 5% Z4–5"}
+
+
+def test_sports_fall_back_to_the_standing_day_rules():
+    cfg = {"goal": goals.make("maintain", today=SET),
+           "day_rules": {"swim_days": ["Tue"], "run_days": ["Sat"], "bike_days": []}}
+    assert goals.sports_for(cfg) == ["swim", "run"]
+
+
+def test_preview_with_a_race_ahead_starts_after_its_recovery(tmp_path):
+    p = tmp_path / "athletes.json"
+    p.write_text(json.dumps({"tess": {"race_date": "2026-11-01", "race_name": "Race"}}))
+    pv = pt.goal_setup("tess", "ftp", path=p, today=SET, ctl=40.0, sports="bike")
+    assert pv["block_1"][0] == "2026-11-23" and "race block runs first" in pv["note"]
+    assert pv["tests"][0].startswith("2026-12-28: FTP test (end of block 1)")
+
+
+def test_preview_says_when_an_off_season_block_wins(tmp_path):
+    p = tmp_path / "athletes.json"
+    p.write_text(json.dumps({"tess": {"race_date": "2026-11-01", "race_name": "Race",
+                                      "offseason": {"focus": "speed"}}}))
+    pv = pt.goal_setup("tess", "ftp", path=p, today=SET, ctl=40.0, sports="bike")
+    assert "block_1" not in pv and "off-season block" in pv["note"]

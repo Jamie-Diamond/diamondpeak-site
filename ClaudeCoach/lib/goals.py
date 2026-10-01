@@ -213,11 +213,15 @@ def position(start: date | None, day: date) -> dict:
 
 
 def sports_for(cfg: dict, profile: dict | None = None) -> list:
-    """What the plan covers: the goal's own list, else the profile's, else the goal sport,
-    else all three."""
+    """What the plan covers: the goal's own list, else the profile's, else the sports with
+    standing days in day_rules, else the goal sport, else all three."""
     g = goal_cfg(cfg) or {}
     sp = [s for s in (g.get("sports") or (profile or {}).get("sports") or [])
           if s in _LIB_SPORT]
+    if sp:
+        return sp
+    dr = (cfg or {}).get("day_rules") or {}
+    sp = [s for s in ("swim", "bike", "run") if dr.get(f"{s}_days")]
     if sp:
         return sp
     focus = GOALS.get(g.get("type"), {}).get("sport")
