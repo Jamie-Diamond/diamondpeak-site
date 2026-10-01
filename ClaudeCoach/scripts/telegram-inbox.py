@@ -49,7 +49,47 @@ def describe(update: dict, names: dict) -> tuple[str, str] | None:
     return (who, what) if what else None
 
 
+def food_inbox() -> int:
+    """The retired Telegram FOOD bot (1 Oct 2026): anything sent to it goes into that
+    athlete's Peak food chat, with a note to log it there, so nothing eaten is lost."""
+    cfg_f = CC / "telegram" / "nutrition_config.json"
+    if not cfg_f.exists():
+        return 0
+    cfg = json.loads(cfg_f.read_text())
+    slug = cfg.get("athlete") or "jamie"
+    state_f = Path("/root/.claudecoach-telegram-food-inbox.json")
+    try:
+        offset = int(json.loads(state_f.read_text()).get("offset", 0))
+    except (OSError, ValueError):
+        offset = 0
+    r = tg.post(cfg["bot_token"], "getUpdates", {"offset": offset, "timeout": 0,
+                                                 "allowed_updates": ["message"]}, log=log)
+    if not r.get("ok"):
+        log(f"food getUpdates failed: {r}")
+        return 1
+    passed = 0
+    sys.path.insert(0, str(CC / "api"))
+    import food
+    for u in r.get("result") or []:
+        offset = max(offset, int(u["update_id"]) + 1)
+        d = describe(u, {})
+        if not d:
+            continue
+        food._record(slug, "me", f"{d[1]} (sent to the old Telegram food bot)")
+        food._record(slug, "bot", "Telegram food logging is off now, so that wasn't logged. "
+                                  "Send it here and I'll log it.")
+        passed += 1
+    state_f.write_text(json.dumps({"offset": offset, "checked": datetime.now().isoformat()}))
+    if passed:
+        log(f"passed on {passed} Telegram food message(s)")
+    return 0
+
+
 def main() -> int:
+    try:
+        food_inbox()
+    except Exception as exc:
+        log(f"food inbox failed: {exc}")
     config = json.loads(CONFIG.read_text())
     token = config["bot_token"]
     admin = str(config.get("admin_chat_id") or config.get("chat_id") or "")

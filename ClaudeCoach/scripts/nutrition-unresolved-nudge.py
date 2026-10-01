@@ -66,6 +66,18 @@ _spec.loader.exec_module(NB)
 SCRIPT = "nutrition-unresolved-nudge"
 
 
+def _to_peak(slug: str, text: str) -> None:
+    """Into Peak's food chat, with a notification that opens the Food tab."""
+    try:
+        sys.path.insert(0, str(BASE / "api"))
+        import food
+        import push
+        food._record(slug, "bot", text)
+        push.notify(slug, push.plain(text), title="Food", url="/coach/app.html#food", kind="food")
+    except Exception as exc:
+        ops_log.alert(SCRIPT, f"could not put the nudge in Peak: {exc}", athlete=slug)
+
+
 def main(argv=None):
     argv = argv or sys.argv[1:]
     today = date.fromisoformat(argv[0]) if argv else date.today()
@@ -78,11 +90,29 @@ def main(argv=None):
         return 1
     slug = cfg.get("athlete") or ""
     store = NutritionStore(BASE / "athletes" / slug)
+    # The Telegram food bot is retired (1 Oct 2026): the nudge goes to Peak's food chat
+    # (api/food.py keeps it) with a phone notification, not to Telegram.
+    captured = []
+    real_send, real_post = NB.tg.send, NB.tg.post
+
+    def _send(token, chat_id, text, reply_markup=None, parse_mode="Markdown", log=print):
+        captured.append(text)
+        return {"ok": True, "result": {"message_id": 0}}
+
+    def _post(token, method, payload, log=print, timeout=10):
+        if method == "sendMessage":
+            captured.append((payload or {}).get("text") or "")
+        return {"ok": True, "result": {}}
+    NB.tg.send, NB.tg.post = _send, _post
     try:
         sent = NB.send_unresolved_nudge(store, cfg["bot_token"], cfg["chat_id"], today)
     except Exception as exc:
         ops_log.alert(SCRIPT, f"exception: {type(exc).__name__}: {exc}", athlete=slug)
         raise
+    finally:
+        NB.tg.send, NB.tg.post = real_send, real_post
+    for text in captured:
+        _to_peak(slug, text)
     open_rows = len(store.read_unresolved())
     if sent:
         # VERBATIM, whether or not it went out - ops_log.log_outbound exists precisely so
