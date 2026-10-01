@@ -63,3 +63,11 @@ def test_a_past_race_is_refused(tmp_path):
 def test_the_bot_is_told_to_preview_then_apply_on_ok(tmp_path):
     b = pt.fitness_choice_prompt_block("x", "Jamie", path=_cfg(tmp_path, BRIGHTON))
     assert "race-setup --athlete x" in b and "ONLY on their OK" in b
+
+
+def test_the_athletes_own_number_wins_and_is_kept(tmp_path):
+    p = _cfg(tmp_path, BRIGHTON)
+    out = pt.race_setup("x", apply=True, today=TODAY, path=p, into_taper=95)
+    assert out["fitness_targets"]["phase_ctl"]["peak"] == 95
+    again = pt.race_setup("x", today=TODAY, path=p)               # re-run, no override
+    assert again["fitness_targets"]["phase_ctl"]["peak"] == 95

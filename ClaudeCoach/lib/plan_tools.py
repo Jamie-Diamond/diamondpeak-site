@@ -2442,7 +2442,8 @@ def _block_weeks(weeks: int, taper_days, long_course: bool) -> dict:
     return out
 
 
-def race_setup(slug: str, apply: bool = False, today=None, path=None) -> dict:
+def race_setup(slug: str, apply: bool = False, today=None, path=None,
+               into_taper: float | None = None) -> dict:
     """Plan the block for the athlete's current A-race: level, phase weeks, total
     Fitness targets (phase_ctl, race_min) and, with apply, write them and rebuild the
     blueprint. Keeps an existing future plan_start (e.g. after a recovery hold)."""
@@ -2494,6 +2495,11 @@ def race_setup(slug: str, apply: bool = False, today=None, path=None) -> dict:
         mid *= _RUN_CROSS_TRAINING if (dr.get("bike_days") or dr.get("swim_days")) else 1.0
     floor = rf.total_floor(cfg) or 0
     top = max(float(floor), 5 * round(mid / 5))
+    # The athlete's own number wins (Jamie, 1 Oct 2026: Brighton peak 95, not the 105 the
+    # x1.3 default gives). Stored, so re-running the setup keeps it.
+    own = into_taper if into_taper is not None else (cfg.get("ctl_targets") or {}).get("into_taper_total")
+    if own:
+        top = max(float(floor), float(own))
     frac = rf.PHASE_FRACTION
     phase_ctl = {"base": round(top * frac["build"]),
                  "build": round(top * (frac["specific"] if "specific_end_week" in phases
@@ -2536,6 +2542,8 @@ def race_setup(slug: str, apply: bool = False, today=None, path=None) -> dict:
     cfg["phase_tss"] = phases
     ct = dict(cfg.get("ctl_targets") or {})
     ct.update({"phase_ctl": phase_ctl, "race_min": race_min})
+    if into_taper is not None:
+        ct["into_taper_total"] = float(into_taper)
     cfg["ctl_targets"] = ct
     p.write_text(json.dumps(athletes, indent=2) + "\n")
     out["applied"] = True
@@ -2548,7 +2556,7 @@ def race_setup(slug: str, apply: bool = False, today=None, path=None) -> dict:
 
 
 def cmd_race_setup(args) -> dict:
-    return race_setup(args.athlete, apply=args.apply)
+    return race_setup(args.athlete, apply=args.apply, into_taper=args.into_taper)
 
 
 # Chat side of the choice: only the bot hears the athlete answer the Sunday question.
@@ -2789,6 +2797,8 @@ def main():
     prs = sub.add_parser("race-setup", help="plan the block for the next A-race (preview; --apply to write it)")
     prs.add_argument("--athlete", required=True)
     prs.add_argument("--apply", action="store_true")
+    prs.add_argument("--into-taper", type=float, dest="into_taper",
+                     help="the athlete's own total Fitness into the taper (overrides the level default; kept)")
 
     prl = sub.add_parser("race-level", help="the athlete's level for their race and its numbers (blueprint §4.5)")
     prl.add_argument("--athlete", required=True)
