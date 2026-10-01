@@ -930,13 +930,15 @@ def main():
             _acfg0 = json.loads(ATHLETES_CONFIG.read_text()).get(slug, {})
         except Exception:
             _acfg0 = {}
+    import race_fitness as _rf
     if _acfg0.get("race_date") and _acfg0.get("race_date") != profile.get("race_date"):
+        # The goal moves with the race: the old race's "Sub 9:30" is not a marathon goal.
         profile = dict(profile, race_date=_acfg0["race_date"],
                        race_name=_acfg0.get("race_name") or profile.get("race_name"),
                        race_distance=_event_key(_acfg0.get("race_distance")
-                                                or _acfg0.get("race_name") or ""))
+                                                or _acfg0.get("race_name") or ""),
+                       a_goal=_rf.athlete_goal(_acfg0, profile) or "—")
     global _BESPOKE
-    import race_fitness as _rf
     _be = _rf.event_def(_acfg0, None) if (_acfg0.get("bespoke_event") or {}).get("levels") else None
     _BESPOKE = _be if isinstance(_be, dict) and _be.get("blended_from") else None
 
