@@ -242,6 +242,13 @@ class IcuClient:
         athlete_timezone: from get_athlete_profile, prevents UTC date bugs.
         """
         date_str = event_date if "T" in event_date else f"{event_date}T00:00:00"
+        # A day the athlete moved indoors (lib/indoor.py, Peak's Ride indoors button)
+        # stays indoors when that day is planned again.
+        try:
+            import indoor as _indoor
+            sport = _indoor.sticky_type(self.athlete_id, sport, date_str[:10])
+        except Exception:
+            pass
         payload = {
             "category": "WORKOUT",
             "start_date_local": date_str,

@@ -35,6 +35,7 @@ Paths mirror the GitHub Pages layout so Peak runs unchanged:
   POST /api/chat/button                       a tapped button (its callback data)
   GET  /api/chat/history                      your chat: conversation + scheduled messages
   GET  /api/admin/usage                       coach: every person's stage, chat and API cost
+  POST /api/indoor/<slug>                     move a planned ride under 2 h indoors / back out
   GET  /api/media/<name>                      a photo/chart from your chat
   GET  /api/push/key, POST /api/push/(un)subscribe, POST /api/push/test
   /api/admin/...                              coach only: athletes, Telegram switch, invites
@@ -331,6 +332,34 @@ def refresh(slug: str, request: Request):
     if code != 0:
         raise HTTPException(502, "refresh failed - the last data is still shown")
     return JSONResponse({"ok": True}, headers=NO_STORE)
+
+
+@app.post("/api/indoor/{slug}")
+async def ride_indoors(slug: str, request: Request):
+    """Peak's Ride indoors / Ride outdoors button on a planned ride under 2 hours
+    (lib/indoor.py). Switches the Intervals.icu event and says where to find it in
+    Zwift; the calendar data refreshes in the background."""
+    if request.headers.get("x-peak") != "1":
+        raise HTTPException(400, "missing app header")
+    require_slug(request, slug)
+    body = await request.json() or {}
+    event_id = str(body.get("event_id") or "")
+    if not event_id:
+        raise HTTPException(400, "which session?")
+    cfg = _load(ATHLETES_CONFIG).get(slug) or {}
+    if not cfg.get("icu_api_key"):
+        raise HTTPException(409, "no Intervals.icu link for this athlete")
+    import indoor
+    from icu_api import IcuClient
+    try:
+        out = indoor.switch(slug, IcuClient(cfg["icu_athlete_id"], cfg["icu_api_key"]),
+                            event_id, bool(body.get("indoor", True)))
+    except (LookupError, ValueError) as e:
+        raise HTTPException(409, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"Intervals.icu didn't take the change: {type(e).__name__}")
+    threading.Thread(target=lambda: run_refresh(slug), daemon=True).start()
+    return JSONResponse(out, headers=NO_STORE)
 
 
 # ── chat ──

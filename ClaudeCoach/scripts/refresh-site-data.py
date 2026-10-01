@@ -668,7 +668,10 @@ def _build_jamie_data(client) -> dict:
         week_calendar.append({"date":ev_date,"sport":ev_sport,"name":ev.get("name",""),
                                "tss":int(ev_tss) if ev_tss else None,
                                "duration_min":round(int(ev_dur)/60) if ev_dur else None,
-                               "status":"planned","key":bool(ev_tss and int(ev_tss)>=60),"detail":""})
+                               "status":"planned","key":bool(ev_tss and int(ev_tss)>=60),"detail":"",
+                               # Peak's Ride indoors button (lib/indoor.py) acts on this event.
+                               "event_id":ev.get("id"),
+                               "indoor":(ev.get("type") or "") == "VirtualRide"})
     week_calendar.sort(key=lambda x: x["date"])
 
     # loadChart (today−7 to today+7, 15 days)

@@ -50,7 +50,7 @@ const src = fs.readFileSync(path + 'coach/app.js', 'utf8');
 // Expose the internals the harness needs to drive, without editing the source.
 const hooked = src.replace(
   '  if (document.readyState === \'loading\') {',
-  '  global.__peak = { state: state, renderAll: renderAll, TABS: TABS };\n' +
+  '  global.__peak = { state: state, renderAll: renderAll, TABS: TABS, openDetail: openDetail };\n' +
   '  if (document.readyState === \'loading\') {'
 );
 eval(hooked);
@@ -121,6 +121,37 @@ for (const slug of ['jamie', 'kathryn', 'calum']) {
     } else {
       console.log(`ok   goal ${g.type}`);
     }
+  }
+}
+
+// Ride indoors (lib/indoor.py, 1 Oct 2026): the button shows on a planned ride under 2 h
+// from today on, not on a long ride, and says "outdoors" once a ride is indoors.
+{
+  const data = athleteData('jamie');
+  const tom = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+  data.weekCalendar = [
+    { date: tom, sport: 'Ride', name: 'Sweetspot 3x10', duration_min: 60, tss: 60, status: 'planned', event_id: 'e1' },
+    { date: tom, sport: 'Run', name: 'Easy run', duration_min: 40, tss: 30, status: 'planned', event_id: 'e2' },
+  ];
+  data.recent = [];
+  global.__peak.state.data = data;
+  global.__peak.state.me = { email: 'x', coach: true };
+  const drawerHTML = (sport, name) => {
+    global.__peak.openDetail(tom, sport, name);
+    return (registry['#drawer'] || {}).innerHTML || '';
+  };
+  const cases = [
+    ['short ride offers indoors', drawerHTML('Ride', 'Sweetspot 3x10').includes('Ride indoors')],
+    ['a run has no button', !drawerHTML('Run', 'Easy run').includes('Ride indoors')],
+  ];
+  data.weekCalendar[0].indoor = true;
+  cases.push(['an indoor ride offers outdoors', drawerHTML('Ride', 'Sweetspot 3x10').includes('Ride outdoors instead')]);
+  data.weekCalendar[0].indoor = false;
+  data.weekCalendar[0].duration_min = 150;
+  cases.push(['a 2.5 h ride stays outside', !drawerHTML('Ride', 'Sweetspot 3x10').includes('Ride indoors')]);
+  for (const [label, ok] of cases) {
+    if (!ok) failures++;
+    console.log((ok ? 'ok   ' : 'FAIL ') + 'indoor: ' + label);
   }
 }
 

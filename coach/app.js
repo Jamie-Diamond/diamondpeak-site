@@ -3899,7 +3899,7 @@
     var h = '<header class="dr-h"><div><p class="dr-k">' +
       esc(dow(dateISO) + ' ' + dnum(dateISO) + ' ' +
           new Date(dateISO + 'T12:00:00').toLocaleDateString('en-GB', { month: 'long' })) +
-      (done ? ' · completed' : ' · planned') + '</p>' +
+      (done ? ' · completed' : ' · planned' + (pl.indoor ? ' · indoors' : '')) + '</p>' +
       '<h2 class="dr-t"><span class="sp ' + sportClass(sport) + '"></span>' +
       esc(name || pl.name || a.name || sport || 'Session') + '</h2></div>' +
       '<button type="button" class="dr-x" id="drX" aria-label="Close">✕</button></header>';
@@ -3934,6 +3934,20 @@
       pl.detail ? ['Prescription', pl.detail] : null
     ]) || '<div class="empty">No summary recorded</div>', { flush: true });
 
+    // Ride indoors (lib/indoor.py, 1 Oct 2026): a planned ride under 2 hours can move to
+    // the trainer. The session is unchanged; it becomes a virtual ride, which Intervals.icu
+    // sends to Zwift when the rider has connected it.
+    var canIndoor = state.me && !done && pl.event_id && pl.sport === 'Ride' &&
+      pl.duration_min != null && pl.duration_min < 120 && dateISO >= todayISO();
+    if (canIndoor) {
+      h += card('Indoors or out', '<div class="indoor"><p>' + (pl.indoor
+        ? 'Riding this one <b>indoors</b>. It goes to Zwift if you\u2019ve connected Zwift in Intervals.icu.'
+        : 'Short enough for the trainer. Same session, ridden indoors.') + '</p>' +
+        '<div class="btns"><button type="button" id="indoorBtn">' +
+        (pl.indoor ? 'Ride outdoors instead' : 'Ride indoors') + '</button></div>' +
+        '<p class="indoor-msg" id="indoorMsg"></p></div>');
+    }
+
     // Fuelling. Every row is shown even when empty: a blank is information (it says
     // log it), whereas hiding the row makes a gap look like a feature that is missing.
     h += card('Fuelling', kvRows([
@@ -3964,6 +3978,26 @@
     document.body.classList.add('drawn');
     $('#drX').onclick = closeDetail;
     dr.querySelector('.dr-h').focus && dr.querySelector('.dr-x').focus();
+    var ib = $('#indoorBtn');
+    if (ib) ib.onclick = function () {
+      ib.disabled = true;
+      ib.textContent = '\u2026';
+      postJSON('/api/indoor/' + encodeURIComponent(state.slug), { event_id: pl.event_id, indoor: !pl.indoor })
+        .then(function (j) {
+          pl.indoor = !!j.indoor;
+          openDetail(dateISO, sport, name);
+          var m = $('#indoorMsg');
+          if (m) m.innerHTML = esc(j.message || '') +
+            (j.suggestion ? '<br><small>' + esc(j.suggestion) + '</small>' : '');
+          setTimeout(function () { load(state.slug); }, 15000);   // the server refreshes the calendar
+        })
+        .catch(function (e) {
+          ib.disabled = false;
+          ib.textContent = pl.indoor ? 'Ride outdoors instead' : 'Ride indoors';
+          var m = $('#indoorMsg');
+          if (m) m.textContent = e.message;
+        });
+    };
   }
 
   function closeDetail() {
