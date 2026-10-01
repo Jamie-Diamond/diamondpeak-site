@@ -16,7 +16,7 @@ CC_ENV      = Path("/root/.claude/cc.env")  # same file cc-run sources for cron
 
 sys.path.insert(0, str(BASE / "lib"))
 from icu_api import IcuClient
-from strava_client import StravaClient
+from strava_client import StravaClient, safe_to_auto_write_description
 import public_text_guard
 import ops_log
 from claude_call import is_auth_failure
@@ -309,7 +309,10 @@ def main():
         # The activity's own name is exempt: it is already public and athlete-chosen.
         description = public_text_guard.assert_publishable(
             description, exempt=entry.get("name") or detail.get("name"))
-        _snapshot_existing_description(slug, icu_id, strava_id, sc)
+        if not safe_to_auto_write_description(slug, icu_id, strava_id, sc, entry):
+            print(f"Description left alone for {slug}/{icu_id}: athlete-authored or not snapshotted",
+                  file=sys.stderr)
+            sys.exit(0)
         # update_description returns `r.status == 200`; it used to be discarded and this
         # line printed unconditionally, so the log claimed a write Strava had refused.
         # (The bot's verify-after-write path re-reads the description independently.)

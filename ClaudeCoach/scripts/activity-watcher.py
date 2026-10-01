@@ -1296,7 +1296,7 @@ def _rename_strava(slug: str, icu_id: str, new_name: str) -> bool:
         import sys as _sys
         _sys.path.insert(0, str(BASE / "lib"))
         from icu_api import IcuClient
-        from strava_client import StravaClient
+        from strava_client import StravaClient, safe_to_auto_write_description
 
         athletes_cfg = json.loads(ATHLETES_CONFIG.read_text())
         a = athletes_cfg[slug]
@@ -1368,6 +1368,10 @@ def _strava_update(slug: str, icu_activity_id: str, analysis: str,
         if segment_prs and chat_id:
             pr_lines = "\n".join(f"🏆 PR: {n}" for n in segment_prs)
             _notify(pr_lines, chat_id, slug=slug)
+
+        if not safe_to_auto_write_description(slug, icu_activity_id, strava_id, sc, session_entry):
+            print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Description left alone on {icu_activity_id}: athlete-authored or not snapshotted", file=sys.stderr)
+            return
 
         description = _strava_description(
             first_name, sport, analysis, plan_delta_raw, session_entry,
