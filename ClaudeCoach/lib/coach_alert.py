@@ -101,6 +101,14 @@ MODEL_CHANGED       = "model_changed"
 # re-alert for as long as it is auditable, while a new or changed finding is a
 # different key and alerts at once. plan_audit's own identity store is the
 # primary dedup; this is the backstop for when that store cannot be written.
+# 1 Oct 2026, Jamie: "why is Jamie still getting the 'status' messages". None of these
+# reach his chat any more: every reason is written to the alert log instead, which
+# development sessions read first (his 27 Sep rule, CLAUDE.md "ops alerts - developer
+# inbox, never Jamie's chat"). This withdraws the 17 Aug PLAN_HARD_FAIL interrupt too.
+# CC_CHAT_ALERTS=1 puts them back in his chat (read per call, so a test can set it).
+def chat_alerts() -> bool:
+    return os.environ.get("CC_CHAT_ALERTS") == "1"
+
 REASONS = {
     DELIVERABLE_MISSING: {"cooldown_h": 12},
     CLAUDE_AUTH_FAILED:  {"cooldown_h": 6},
@@ -1050,6 +1058,14 @@ def send(reason: str, text: str, key: str = "", cooldown_h: float = None) -> str
     if dry_run():
         ops_log.log_outbound(f"coach-alert:{reason}", text, sent=False)
         return "dry-run"
+
+    if not chat_alerts():                    # the developer log, not his chat (1 Oct 2026)
+        ops_log.alert("coach-alert", f"[{reason}] {text}")
+        ops_log.log_outbound(f"coach-alert:{reason}", text, sent=False)
+        state = _read_state()
+        state[f"{reason}|{key}"] = now.isoformat(timespec="seconds")
+        _write_state(state)
+        return "logged"
 
     # --- THE GUARD: a test may never execute the real notify.py ---------------
     #

@@ -379,7 +379,7 @@ def weekly_alerts(week_entries, athletes, now=None, audit=None) -> list[str]:
             f"Nothing is lost — the detail is in the ops log on the VM.",
             key=key, cooldown_h=WEEKLY_ALERT_COOLDOWN_H)
         print(f"coach-alert deliverable_missing weekly:{d['script']}: {action}", file=sys.stderr)
-        if action in ("sent", "dry-run"):
+        if action in ("sent", "logged", "dry-run"):
             alerted.append(f"{d['label']}{who}")
     return alerted
 

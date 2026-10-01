@@ -575,7 +575,7 @@ def notify_hard_fail(report: dict) -> str:
         return "known"
     action = coach_alert.send(coach_alert.PLAN_HARD_FAIL, alert_text(report),
                               key=f"{slug}|{_fingerprint(ids)}")
-    if action in ("sent", "dry-run", "cooldown"):
+    if action in ("sent", "logged", "dry-run", "cooldown"):
         now = datetime.now().isoformat(timespec="seconds")
         _save_alerted(slug, {i: seen.get(i, now) for i in ids})
     return action

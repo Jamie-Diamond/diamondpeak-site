@@ -50,6 +50,9 @@ def _never_telegram():
     """
     before = os.environ.get("CC_ALERT_DRY_RUN")
     os.environ["CC_ALERT_DRY_RUN"] = "1"
+    # The suite exercises the chat-alert path itself (stubbed subprocess); production
+    # logs instead since 1 Oct 2026 (coach_alert.chat_alerts). Tests keep the old path.
+    os.environ.setdefault("CC_CHAT_ALERTS", "1")
     yield
     if before is None:
         os.environ.pop("CC_ALERT_DRY_RUN", None)
