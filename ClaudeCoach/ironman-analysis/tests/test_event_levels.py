@@ -154,3 +154,20 @@ def test_an_aquabike_is_a_swim_bike_blend_with_no_bricks():
     assert set(ev["distribution"]["peak"]) == {"Swim", "Bike"}
     src = (REPO / "lib" / "session_library.py").read_text()
     assert 'bespoke and "run" not in (bespoke.get("sports") or [])' in src
+
+
+def test_every_athlete_blueprint_carries_fitness_targets_from_their_level():
+    """30 Sep 2026: the per-athlete blueprint only filled ctl_entry_* for Ironman / 70.3."""
+    from datetime import date as _d
+    gb = _load("gb2", "scripts/generate-blueprint.py")
+    ev = rf.level_table("marathon") and rf._ev("marathon")
+    gb._LEVEL = {"event": ev, "level": 1}
+    try:
+        assert gb.ctl_range("Marathon", "Build") == rf.fitness_range("marathon", 1, "build")
+        assert gb.ctl_entry_kind() == "running"
+        gb._LEVEL = {"event": rf._ev("sprint"), "level": 3}
+        assert gb.ctl_range("Sprint", "Peak") == rf.fitness_range("sprint", 3, "peak")
+        assert gb.ctl_entry_kind() == "total"
+    finally:
+        gb._LEVEL = None
+    assert gb.ctl_range("Full Ironman", "Base") == (55, 70)       # no athlete: old table

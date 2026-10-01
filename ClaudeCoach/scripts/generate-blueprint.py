@@ -118,10 +118,30 @@ CTL_TARGETS = {
     },
 }
 
+# The athlete's event level (lib/race_fitness, blueprint §4.5), set by main() for the
+# athlete being generated: {"event": <event def>, "level": int}. None = no athlete
+# context, which falls back to the two single-band tables above.
+_LEVEL: dict | None = None
+
+
 def ctl_range(event: str, phase_name: str) -> tuple[int, int] | None:
-    """Return (low, high) CTL target for entry to a phase, or None if unknown."""
+    """Return (low, high) CTL target for entry to a phase, or None if unknown.
+
+    From the athlete's LEVEL for their event when known (every event, 30 Sep 2026: the
+    per-athlete blueprint used to carry fitness targets only for Ironman and 70.3) -
+    RUNNING Fitness for a run race, total otherwise (ctl_entry_kind). Else the old
+    single-band table."""
     fam = content_family(phase_family(phase_name))
+    if _LEVEL:
+        import race_fitness as _rf
+        rng = _rf.fitness_range(_LEVEL["event"], _LEVEL["level"], fam)
+        if rng:
+            return rng
     return CTL_TARGETS.get(_event_key(event), {}).get(fam)
+
+
+def ctl_entry_kind() -> str:
+    return ("running" if _LEVEL and (_LEVEL["event"] or {}).get("kind") == "run" else "total")
 
 
 # -- Live CTL fetch ------------------------------------------------------------
@@ -651,6 +671,13 @@ def _level_section(cfg: dict, profile: dict, event: str) -> str:
     kind = "Running" if ev.get("kind") == "run" else "Total"
     out.append(f"- {kind} Fitness into the taper: {lv['fitness_at_taper'][0]}–"
                f"{lv['fitness_at_taper'][1]}. Taper {ev['taper_days'][0]}–{ev['taper_days'][1]} days.")
+    ent = [(ph.title(), _rf.fitness_range(ev, lv["level"], ph))
+           for ph in ("base", "build", "specific", "peak", "taper")]
+    out.append(f"- {kind} Fitness to enter each phase: "
+               + " · ".join(f"{n} {r[0]}–{r[1]}" for n, r in ent if r) + ".")
+    if ev.get("kind") == "run":
+        out.append("- Running Fitness counts a third of cycling Fitness; total Fitness is a "
+                   "floor for a run race, not a target.")
     if ev.get("blended_from"):
         out.append(f"- Temporary blueprint: {_rf.describe_blend(ev)}.")
     for n in ev.get("notes") or []:
@@ -852,6 +879,7 @@ def build_blueprint_data(slug: str, profile: dict, phases: list[dict],
             "if_target": IF_TARGETS.get(cfam),
             "ctl_entry_low": entry[0] if entry else None,
             "ctl_entry_high": entry[1] if entry else None,
+            "ctl_entry_kind": ctl_entry_kind() if entry else None,
             "distribution": event_dist.get(cfam, {}),
             "fuelling": fuelling_note(event, p["name"], profile),
             "brick_min": BRICK_MIN.get(cfam) if bricks_apply else None,
@@ -938,9 +966,13 @@ def main():
                        race_distance=_event_key(_acfg0.get("race_distance")
                                                 or _acfg0.get("race_name") or ""),
                        a_goal=_rf.athlete_goal(_acfg0, profile) or "—")
-    global _BESPOKE
+    global _BESPOKE, _LEVEL
     _be = _rf.event_def(_acfg0, None) if (_acfg0.get("bespoke_event") or {}).get("levels") else None
     _BESPOKE = _be if isinstance(_be, dict) and _be.get("blended_from") else None
+    _ev = _rf.event_def(_acfg0, _acfg0.get("race_distance") or _acfg0.get("race_name")
+                        or profile.get("race_distance") or profile.get("race_name"))
+    _lv = _rf.athlete_level(_acfg0, profile, _ev) if _ev else None
+    _LEVEL = {"event": _ev, "level": _lv["level"]} if _lv else None
 
     race_date_str = profile.get("race_date", "")
     if not race_date_str:

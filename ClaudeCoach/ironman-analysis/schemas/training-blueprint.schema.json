@@ -31,6 +31,8 @@
           "if_target": {"type": ["number", "null"]},
           "ctl_entry_low": {"type": ["integer", "null"]},
           "ctl_entry_high": {"type": ["integer", "null"]},
+          "ctl_entry_kind": {"enum": ["running", "total", null],
+                             "description": "running = a run race's RUNNING Fitness; total otherwise"},
           "distribution": {
             "type": "object",
             "description": "sport -> 'NN% Z1-2 / ...' string. Empty {} for events not yet specified (stubs).",
