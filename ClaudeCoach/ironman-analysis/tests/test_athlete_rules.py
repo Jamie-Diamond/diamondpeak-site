@@ -170,10 +170,18 @@ def test_tidy_leaves_the_rule_when_the_check_finds_something_missing(tmp_path):
         "Confirmed by Calum 30 Aug 2026.")
 
 
-def test_short_rules_are_never_sent_to_the_model(tmp_path):
+def test_every_rule_is_reviewed_once_whatever_its_length(tmp_path):
     base = _base(tmp_path)
-    llm = _fake([])
-    assert rule_tidy.tidy("tess", base, llm=llm)["tidied"] == [] and llm.calls == []
+    # Already all instruction: the model hands each rule back unchanged with no backstory.
+    unchanged = [json.dumps({"rule": ar.split_tag(raw)[2], "backstory": ""})
+                 for _r, _e, raw in sorted(ar._active("tess", base), key=lambda x: -len(x[2]))]
+    llm = _fake(unchanged)
+    out = rule_tidy.tidy("tess", base, llm=llm)
+    assert out["tidied"] == [] and len(out["skipped"]) == 4 and len(llm.calls) == 4
+    before = (base / "athletes/tess/persistent-rules.md").read_text()
+    llm2 = _fake([])
+    assert rule_tidy.tidy("tess", base, llm=llm2)["skipped"] == [] and llm2.calls == []
+    assert (base / "athletes/tess/persistent-rules.md").read_text() == before
 
 
 def test_digest_stores_topic_and_summary_against_the_current_wording(tmp_path):

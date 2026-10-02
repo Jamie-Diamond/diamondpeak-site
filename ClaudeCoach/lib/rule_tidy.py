@@ -38,9 +38,11 @@ BASE = LIB.parent                                         # ClaudeCoach/
 
 import athlete_rules as ar                               # noqa: E402
 
-TIDY_MIN_WORDS = 60           # rules at or under this are left alone
-MAX_PER_RUN = 12              # bounded nightly work per athlete
-SHRINK_AT_LEAST = 0.8         # a tidy must cut at least 20% or it is not worth the churn
+MAX_PER_RUN = 12              # bounded nightly work per athlete (the rest wait a night)
+# No word limits (Jamie, 2 Oct 2026: "it could be 120 words but information dense, or 60
+# words and fluffy - it's about information density, not arbitrary counts"). Every rule
+# is reviewed ONCE per wording (registry tidy_hash); the model removes only what is not
+# instruction, and a rule that is already all instruction is left exactly as it is.
 
 _CONFIRMED_DATE = re.compile(
     r"\bconfirmed\b(?:\s+by\s+[A-Za-z]+)?\s*[,:]?\s*\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}", re.I)
@@ -48,15 +50,15 @@ _CONFIRMED_DATE = re.compile(
 TIDY_PROMPT = """You are tidying ONE standing coaching rule for an athlete. It is sent with
 every message the coach writes, so it must state only what applies NOW.
 
-Rewrite it as the current instruction:
-- keep every limit, number, day, product, threshold, preference and "never do X" that
-  still applies today
-- drop past-event dates, superseded values ("was X, now Y" becomes just Y), quotes,
-  evidence and the story of how it came about
-- plain and direct, as short as it can be while keeping every instruction that still
-  applies (usually well under half the original); do not add anything new
+Make it information-dense - this is about density, not length:
+- keep every instruction: every limit, number, day, product, threshold, method step,
+  preference and "never do X" that still applies today, however long that is
+- remove only what is NOT instruction: past-event dates, superseded values ("was X, now Y"
+  becomes just Y), quotes, evidence, the story of how it came about, repetition
+- plain and direct; do not add anything new
+- if it is already all instruction, return it unchanged
 
-Put everything you dropped into "backstory". It is kept in a notes file, so nothing is lost.
+Put everything you removed into "backstory". It is kept in a notes file, so nothing is lost.
 
 Rule:
 {rule}
@@ -126,8 +128,8 @@ def tidy_one(text: str, label: str, llm=_llm) -> dict | None:
     conf = _confirmation(text)
     if conf and not _CONFIRMED_DATE.search(new):
         new = new.rstrip(". ") + f". ({conf})"           # stays locked for the capture guard
-    if len(new) >= len(text) * SHRINK_AT_LEAST:
-        return None
+    if len(new) >= len(text) or not str(got.get("backstory") or "").strip():
+        return None                                      # nothing that wasn't instruction
     check = _json(llm(CHECK_PROMPT.format(orig=text, new=new), label) or "")
     if not isinstance(check, dict) or check.get("ok") is not True:
         return None
@@ -136,12 +138,13 @@ def tidy_one(text: str, label: str, llm=_llm) -> dict | None:
 
 def tidy(slug: str, base: Path | None = None, max_rules: int = MAX_PER_RUN,
          dry_run: bool = False, llm=_llm) -> dict:
-    """Shorten up to `max_rules` long rules for one athlete (longest first)."""
+    """Review up to `max_rules` rules not yet reviewed in their current wording (longest
+    first, where the most non-instruction usually sits)."""
     import rule_registry as rr
     base = base or BASE
     rules = ar._active(slug, base)
     long_ = sorted(((rid, e, raw) for rid, e, raw in rules
-                    if len(ar.split_tag(raw)[2].split()) > TIDY_MIN_WORDS),
+                    if e.get("tidy_hash") != e.get("hash")),
                    key=lambda x: -len(x[2]))[:max_rules]
     done, skipped = [], []
     for rid, e, raw in long_:
@@ -156,7 +159,17 @@ def tidy(slug: str, base: Path | None = None, max_rules: int = MAX_PER_RUN,
     out = {"athlete": slug, "tidied": [{k: d[k] for k in ("id", "before_words", "after_words")}
                                        for d in done],
            "skipped": skipped, "dry_run": dry_run}
-    if dry_run or not done:
+    if dry_run:
+        return out
+    # Reviewed and left as it is: not asked again until its wording changes.
+    if skipped:
+        reg = rr.load_registry(base, slug)
+        for rid in skipped:
+            if rid in reg["rules"]:
+                reg["rules"][rid]["tidy_hash"] = reg["rules"][rid].get("hash")
+        rr.registry_path(base, slug).write_text(json.dumps(reg, indent=2, sort_keys=True) + "\n",
+                                                encoding="utf-8")
+    if not done:
         return out
     ar.archive(slug, [{"reason": "tidied", "id": d["id"], "rule": d["raw"], "now": d["new"],
                        "backstory": d["backstory"]} for d in done], base)
@@ -169,7 +182,8 @@ def tidy(slug: str, base: Path | None = None, max_rules: int = MAX_PER_RUN,
     reg = rr.load_registry(base, slug)
     for d in done:
         if d["id"] in reg["rules"]:
-            reg["rules"][d["id"]].update({"hash": rr.content_hash(d["new"]),
+            h = rr.content_hash(d["new"])
+            reg["rules"][d["id"]].update({"hash": h, "tidy_hash": h,
                                           "fingerprint": rr.fingerprint(d["new"]),
                                           "summary": None, "summary_hash": None,
                                           "tidied": date.today().isoformat()})
