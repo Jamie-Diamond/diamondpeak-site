@@ -1800,6 +1800,17 @@ def _athlete_reason(why: str) -> str:
     for prefix in ("rule(hard): ", "rule(soft): "):
         if w.startswith(prefix):
             w = w[len(prefix):]
+    # "load 29.4% off target" (Calum, 6 Sep 2026: "There was no target for this week, how
+    # can I be off load?"). The target is the planner's own aim, never agreed with the
+    # athlete, and the bare figure hid that the week was 30% TOO BIG. Say which way, in
+    # plain words, and never call it a target.
+    import re as _re
+    m = _re.match(r"^load (-?\d+(?:\.\d+)?)% off target$", w)
+    if m:
+        pct = float(m.group(1))
+        size = max(5, int(round(abs(pct) / 5.0) * 5))
+        return (f"it came out about {size}% bigger than I meant to give you" if pct > 0
+                else f"it came out about {size}% lighter than I meant to give you")
     return w or "it does not hold together the way I want it to"
 
 
