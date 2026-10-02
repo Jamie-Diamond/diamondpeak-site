@@ -1642,18 +1642,20 @@
           return '<tr><td class="lbl"><b>' + esc(r.name) + '</b><small><span class="ust ust-' +
             esc(r.stage_kind) + '">' + esc(r.stage) + '</span></small>' +
             (last ? '<small>' + esc(last) + '</small>' : '') + '</td>' +
-            '<td>' + chat + '</td><td class="t">' + (k ? money(k.month) : '\u2014') + '</td>' +
-            '<td>' + (k ? money(k.total) : '\u2014') + '</td></tr>';
+            '<td>' + chat + '</td><td class="t">' + (k ? money(k.week) : '\u2014') + '</td>' +
+            '<td>' + (k ? money(k.last7) : '\u2014') + '</td>' +
+            '<td>' + (k ? money(k.avg_week) : '\u2014') + '</td></tr>';
         }).join('');
         var sh = j.shared, tot = j.total || {};
         body += (sh ? '<tr class="usub"><td class="lbl"><b>Shared jobs</b><small>bug fixer, rule tidy-ups</small></td>' +
-          '<td></td><td class="t">' + money(sh.month) + '</td><td>' + money(sh.total) + '</td></tr>' : '') +
+          '<td></td><td class="t">' + money(sh.week) + '</td><td>' + money(sh.last7) + '</td><td>' +
+          money(sh.avg_week) + '</td></tr>' : '') +
           '<tr class="utot"><td class="lbl"><b>Total</b></td><td></td><td class="t">' +
-          money(tot.month) + '</td><td>' + money(tot.total) + '</td></tr>';
+          money(tot.week) + '</td><td>' + money(tot.last7) + '</td><td>' + money(tot.avg_week) + '</td></tr>';
         box.innerHTML = '<table class="tbl utbl"><thead><tr><th>Athlete</th><th>Chat this month</th>' +
-          '<th>API this month</th><th>Since ' + whenShort(j.since) + '</th></tr></thead><tbody>' + body +
+          '<th>This week</th><th>Last 7 days</th><th>Avg / week</th></tr></thead><tbody>' + body +
           '</tbody></table><p class="card-f">API list prices, as if Peak ran on a pay-per-use key. ' +
-          'This month: actual spend since the 1st. Logging began ' +
+          'This week: since Monday. Avg / week: since logging began, or since the athlete joined. Logging began ' +
           whenShort(j.since) + '. Chat: this month\u2019s messages and cost against the allowance.' +
           (j.error ? ' Costs unavailable: ' + esc(j.error) : '') + '</p>';
       })

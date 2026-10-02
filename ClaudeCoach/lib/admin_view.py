@@ -33,6 +33,7 @@ QUESTION = {
     "est_swim": "rough swim figure", "compare_race": "comparison race", "heat": "heat",
     "fuel": "fuelling", "level": "coaching level", "slug": "account handle (last question)",
 }
+COST_KEYS = ("week", "last7", "avg_week", "month", "rate_month", "total")
 ORDER = {"coached": 0, "test_week": 1, "approval": 2, "tracking": 3, "signing_up": 4,
          "invited": 5}
 
@@ -120,7 +121,7 @@ def rows(users: dict, athletes: dict, pending: list, onboarding: dict, costs: di
                          "usd": round(float(m.get("usd") or 0), 2),
                          "allowance": chat_limits.allowance(cfg),
                          "exempt": chat_limits.exempt(cfg, admin_chat_id)},
-                "cost": ({k: c.get(k) for k in ("month", "rate_month", "total")} if c else None)}
+                "cost": ({k: c.get(k) for k in COST_KEYS} if c else None)}
 
     for email, u in (users or {}).items():
         if not isinstance(u, dict):
@@ -157,7 +158,7 @@ def rows(users: dict, athletes: dict, pending: list, onboarding: dict, costs: di
 
 def totals(costs: dict) -> dict:
     """All athletes plus the shared jobs, for the page's footer row."""
-    t = {"month": 0.0, "rate_month": 0.0, "total": 0.0}
+    t = dict.fromkeys(COST_KEYS, 0.0)
     for c in (costs or {}).values():
         for k in t:
             t[k] += float(c.get(k) or 0)

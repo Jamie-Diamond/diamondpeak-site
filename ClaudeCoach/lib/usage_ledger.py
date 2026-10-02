@@ -101,9 +101,9 @@ def daily(athletes: dict) -> dict:
 
 
 def summary(athletes: dict, today: date | None = None) -> dict:
-    """Per athlete: this calendar month so far, actual spend over the last
-    28 days (fewer while logging is younger), the total since LOG_START, and chat this month - all USD at
-    API list prices."""
+    """Per athlete: this week so far, the last 7 days, the average week, this calendar month
+    so far, actual spend over the last 28 days (fewer while logging is younger), the total
+    since LOG_START, and chat this month - all USD at API list prices."""
     today = today or date.today()
     d = daily(athletes)
     win_start = max(LOG_START, today - timedelta(days=RATE_WINDOW_DAYS - 1))
@@ -113,7 +113,17 @@ def summary(athletes: dict, today: date | None = None) -> dict:
     for ath, v in d.items():
         alld, chatd = v["all"], v["chat"]
         last = sum(u for day, u in alld.items() if day >= win_start.isoformat())
-        out[ath] = {"month": round(sum(u for day, u in alld.items() if day.startswith(month)), 2),
+        # Weekly view (Jamie, 2 Oct 2026): this week so far (from Monday), the last 7 days,
+        # and the average week - over the days since this athlete's first logged cost, so
+        # someone who joined later is not averaged over days before they existed.
+        mon = (today - timedelta(days=today.weekday())).isoformat()
+        d7 = (today - timedelta(days=6)).isoformat()
+        first = max(LOG_START, date.fromisoformat(min(alld))) if alld else today
+        span = (today - first).days + 1
+        out[ath] = {"week": round(sum(u for day, u in alld.items() if day >= mon), 2),
+                    "last7": round(sum(u for day, u in alld.items() if day >= d7), 2),
+                    "avg_week": round(sum(alld.values()) / span * 7, 2),
+                    "month": round(sum(u for day, u in alld.items() if day.startswith(month)), 2),
                     "rate_month": round(last, 2),   # actual spend, last 28 days (not a projection)
                     "total": round(sum(alld.values()), 2),
                     "chat_month": round(sum(u for day, u in chatd.items()

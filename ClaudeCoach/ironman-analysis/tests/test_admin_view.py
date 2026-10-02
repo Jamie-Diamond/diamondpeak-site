@@ -56,8 +56,10 @@ USERS = {
 }
 PENDING = ["web-s1", "web-d"]
 ONBOARDING = {"web-s1": {"current_key": "icu_key", "answers": {"name": "Sam Test"}}}
-COSTS = {"jamie": {"month": 20.0, "rate_month": 316.4, "total": 90.1},
-         "kat": {"month": 2.0, "rate_month": 45.5, "total": 12.0}}
+COSTS = {"jamie": {"week": 30.0, "last7": 40.0, "avg_week": 70.0,
+                   "month": 20.0, "rate_month": 316.4, "total": 90.1},
+         "kat": {"week": 3.0, "last7": 4.0, "avg_week": 7.0,
+                 "month": 2.0, "rate_month": 45.5, "total": 12.0}}
 
 
 def _rows(tmp_path):
@@ -88,7 +90,7 @@ def test_chat_and_cost_columns(tmp_path):
     r = _rows(tmp_path)
     j = r["Jamie Diamond"]
     assert j["chat"] == {"replies": 12, "usd": 8.9, "allowance": 20.0, "exempt": True}
-    assert j["cost"] == {"month": 20.0, "rate_month": 316.4, "total": 90.1}
+    assert j["cost"] == COSTS["jamie"]
     assert j["last_message"] == "2026-10-01T09:43"          # the athlete's line, not the 18:00 card
     assert r["Kat"]["chat"]["exempt"] is False and r["Kat"]["chat"]["replies"] == 0
     assert r["duncan"]["chat"] is None and r["duncan"]["cost"] is None
@@ -96,8 +98,10 @@ def test_chat_and_cost_columns(tmp_path):
 
 
 def test_totals_add_the_shared_jobs():
-    t = admin_view.totals(dict(COSTS, system={"month": 1, "rate_month": 10, "total": 3}))
-    assert t == {"month": 23.0, "rate_month": 371.9, "total": 105.1}
+    t = admin_view.totals(dict(COSTS, system={"week": 1, "last7": 1, "avg_week": 2,
+                                              "month": 1, "rate_month": 10, "total": 3}))
+    assert t == {"week": 34.0, "last7": 45.0, "avg_week": 79.0,
+                 "month": 23.0, "rate_month": 371.9, "total": 105.1}
 
 
 # ── usage_ledger: per-day pricing from transcripts ─────────────────────────────
@@ -131,4 +135,8 @@ def test_ledger_prices_per_day_chat_separately_from_27_sep(tmp_path, monkeypatch
     assert s["total"] == 3.5 and s["month"] == 2.5 and s["chat_month"] == 2.0
     assert s["chat_by_month"] == {"2026-09": 1.0, "2026-10": 2.0}
     assert s["rate_month"] == 3.5                            # actual, not scaled
+    # Weekly view (2 Oct 2026). TODAY is Thu 1 Oct: the week began Mon 28 Sep. This
+    # athlete's first logged cost is 30 Sep, so the average week is over 2 days, not 5.
+    assert s["week"] == 3.5 and s["last7"] == 3.5
+    assert s["avg_week"] == round(3.5 / 2 * 7, 2)
     usage_ledger._cache.clear()
