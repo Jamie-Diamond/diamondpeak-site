@@ -744,6 +744,66 @@ def _prescription_shadow(slug: str, cfg: dict) -> None:
     _log_backstop(slug, "shadow", _engine_prescription(slug))
 
 
+PAIN_FLAG_SCORE = 4          # the prompt's "recent pain >=4" threshold
+PAIN_RECENT_DAYS = 7
+
+
+def _pain_flag(slug: str, today: date | None = None) -> str | None:
+    """A non-ankle pain location the model must factor in: a score of 4+ in the last
+    week, or three readings rising in a row (the prompt's "pain >=4 or a rising
+    history"). The ankle is the engine's own R1 rule, so it is not checked here."""
+    today = today or date.today()
+    try:
+        cs = json.loads((BASE / "athletes" / slug / "current-state.json").read_text()) or {}
+    except Exception:
+        return None
+    lo = (today - timedelta(days=PAIN_RECENT_DAYS)).isoformat()
+    for loc, block in (cs.get("pain") or {}).items():
+        hist = [h for h in (block or {}).get("history") or [] if isinstance(h, dict)]
+        if any((h.get("date") or "") >= lo and (h.get("score") or 0) >= PAIN_FLAG_SCORE
+               for h in hist):
+            return f"{loc} pain {PAIN_FLAG_SCORE}+ in the last week"
+        last3 = [h.get("score") or 0 for h in hist[-3:]]
+        if len(last3) == 3 and last3[0] < last3[1] < last3[2]:
+            return f"{loc} pain rising {last3}"
+    return None
+
+
+def _no_model_needed(slug: str, engine: dict) -> str | None:
+    """Why today's prescription needs no model run, or None if it does (2 Oct 2026).
+
+    The engine already decides go / modified / swapped / blocked in Python; on a rest
+    day Sonnet ran only to print "Rest day", and on a GO day with no rule fired it wrote
+    a card nobody sees (the card goes to the log; the athlete-facing <telegram> line is
+    omitted on GO days). Sonnet still runs whenever there is judgement to make: a rule
+    fired, a progression flag, an active illness flag, or non-ankle pain."""
+    if engine.get("error"):
+        return None
+    if engine.get("planned") is None:
+        return "rest day"
+    rx = engine.get("rx")
+    if rx is None or not rx.go or rx.modified or rx.swapped_to_z2 or rx.applied_rules:
+        return None
+    if engine["planned"].get("_progression_flag"):
+        return None
+    try:
+        if illness_lib.is_active(slug):
+            return None
+    except Exception:
+        return None
+    if _pain_flag(slug):
+        return None
+    return "GO, no rule fired, no progression / illness / pain flag"
+
+
+def _python_card(engine: dict) -> str:
+    planned = engine.get("planned")
+    if not planned:
+        return "Rest day — no session planned."
+    return (f"Today: {planned['_name']} — execute as planned.\n"
+            f"Planned: {planned['total_duration_min']} min, intensity {planned['target_intensity']}.")
+
+
 def run_for_athlete(slug: str, cfg: dict) -> str | None:
     name      = cfg.get("name", slug)
     race_name = cfg.get("race_name", "upcoming race")
@@ -805,6 +865,15 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
                           f"backstop engine failed ({engine['error']}) — fell back to "
                           "LLM-mediated prescription for today",
                           athlete=slug)
+
+    # Rest days and GO days with nothing to judge are written in Python (2 Oct 2026).
+    if mode == "authoritative" and engine is not None:
+        why = _no_model_needed(slug, engine)
+        if why:
+            _log_backstop(slug, "authoritative", engine)
+            with open(LOG_FILE, "a") as lf:
+                lf.write(f"[prescription:{slug}] no model run: {why}\n")
+            return _python_card(engine)
 
     prompt = build_prompt(slug, name, race_name, coaching_level=coaching_level,
                           cycle=cycle, readiness_prefetch=readiness_prefetch,

@@ -108,3 +108,62 @@ class TestPrescriptionShadow:
         monkeypatch.setattr(dp, "LOG_FILE", tmp_path / "p.log")
         monkeypatch.setenv("PRESCRIPTION_BACKSTOP", "shadow")
         dp._prescription_shadow("x", {})     # must not raise
+
+
+# ── no model run on days with nothing to judge (2 Oct 2026) ─────────────────
+from datetime import date as _date
+from types import SimpleNamespace
+
+
+def _rx(**kw):
+    base = dict(go=True, modified=False, swapped_to_z2=False, applied_rules=[])
+    return SimpleNamespace(**{**base, **kw})
+
+
+def _engine(rx=None, planned=True, **pk):
+    p = {"_name": "Easy Z2 ride", "total_duration_min": 90, "target_intensity": 0.65, **pk}
+    return {"planned": p if planned else None, "rx": rx, "error": None}
+
+
+class TestNoModelNeeded:
+    @pytest.fixture(autouse=True)
+    def _quiet(self, dp, monkeypatch, tmp_path):
+        monkeypatch.setattr(dp, "BASE", tmp_path)
+        monkeypatch.setattr(dp.illness_lib, "is_active", lambda slug: False)
+        (tmp_path / "athletes" / "x").mkdir(parents=True)
+
+    def test_rest_day(self, dp):
+        assert dp._no_model_needed("x", _engine(planned=False)) == "rest day"
+        assert dp._python_card(_engine(planned=False)) == "Rest day — no session planned."
+
+    def test_go_with_nothing_fired(self, dp):
+        assert dp._no_model_needed("x", _engine(_rx())).startswith("GO")
+        assert "execute as planned" in dp._python_card(_engine(_rx()))
+
+    @pytest.mark.parametrize("rx", [_rx(go=False), _rx(modified=True), _rx(swapped_to_z2=True),
+                                    _rx(applied_rules=["R6"])])
+    def test_any_engine_change_runs_the_model(self, dp, rx):
+        assert dp._no_model_needed("x", _engine(rx)) is None
+
+    def test_progression_flag_runs_the_model(self, dp):
+        assert dp._no_model_needed("x", _engine(_rx(), _progression_flag="+2 reps")) is None
+
+    def test_illness_runs_the_model(self, dp, monkeypatch):
+        monkeypatch.setattr(dp.illness_lib, "is_active", lambda slug: True)
+        assert dp._no_model_needed("x", _engine(_rx())) is None
+
+    def test_engine_error_runs_the_model(self, dp):
+        assert dp._no_model_needed("x", {"planned": None, "rx": None, "error": "boom"}) is None
+
+    def test_recent_or_rising_pain_runs_the_model(self, dp, tmp_path):
+        import json
+        cs = tmp_path / "athletes" / "x" / "current-state.json"
+        today = _date.today().isoformat()
+        cs.write_text(json.dumps({"pain": {"knee": {"history": [{"date": today, "score": 4}]}}}))
+        assert dp._no_model_needed("x", _engine(_rx())) is None
+        cs.write_text(json.dumps({"pain": {"knee": {"history": [
+            {"date": "2026-01-01", "score": 1}, {"date": "2026-01-02", "score": 2},
+            {"date": "2026-01-03", "score": 3}]}}}))
+        assert "rising" in dp._pain_flag("x")
+        cs.write_text(json.dumps({"pain": {"knee": {"history": [{"date": "2026-01-01", "score": 6}]}}}))
+        assert dp._pain_flag("x") is None            # old pain, not rising: no flag

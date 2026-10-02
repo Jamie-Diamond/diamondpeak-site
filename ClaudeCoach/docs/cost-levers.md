@@ -20,13 +20,15 @@ Cache writes were 54-72% of every job's cost: each run writes its whole prompt o
 | Watchdog triggers in Python (`lib/watchdog_checks.py`); the model runs only for a NEW trigger | 2325ddde | ~$2.5-3 |
 | One resumable chat session per model: a Sonnet<->Opus switch re-sent the whole conversation (~20% of chat cost) | 059eda9d | ~$4-5 |
 | Chat live-data block carries event/activity ids, last week's plan done/not done, 3 weeks ahead (`lib/chat_context.py`) | 059eda9d | ~$2-4 (fewer tool calls) |
+| Daily prescription: no model on rest days or GO days with nothing to judge (`_no_model_needed`); Sonnet only when a rule fired or a progression / illness / pain flag | see git log | ~$3.5 (rules fired on ~12% of past days) |
+| Peak usage page: bug fixes done through the coach chat get their own row | c92d4373 | reporting only |
 
 Re-measure after Fri 9 Oct with the job profile (per job: runs, calls per run, context
 per call, $ per run) and compare with the table above.
 
 ## On hold (Jamie, 2 Oct 2026)
 
-**Daily messages as Python + Haiku.** Morning card, night-before brief and evening
+**Daily messages as Python + Haiku - wait for Haiku 5.5.** Morning card, night-before brief and evening
 check-in: Python builds the card (session, load, reminders, flags); Haiku writes only the
 one or two sentences of coach voice from a compact data block. Python, not Haiku, decides
 what is notable. About $0.01 a message instead of $0.10-0.13; ~$8/athlete/month. Risk:
@@ -42,9 +44,9 @@ long session (often 80-190k tokens) is re-sent whole. Starting a fresh session i
 would re-send ~40k, but drops the earlier tool output from the conversation. Quality
 trade-off, so not done.
 
-## Checked: daily prescription (not built)
+## Daily prescription (built 2 Oct 2026; BLOCKED / swap days stay on Sonnet while Haiku is on hold)
 
-Verdict: a Python gate, with Sonnet only on days that need judgement (an estimated
+Verdict at the check: a Python gate, with Sonnet only on days that need judgement (an estimated
 15-30% of athlete-days; no prescription log was available to measure it).
 
 - The go / modified / swapped / blocked decision, % FTP and duration are already made in
