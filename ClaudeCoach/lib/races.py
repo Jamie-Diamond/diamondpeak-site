@@ -82,6 +82,7 @@ def normalise(raw: dict) -> dict:
         # Status is derived from the date when it was not stated: a race in the past has
         # happened. Explicit status still wins, so a DNS/withdrawn race can be recorded.
         "status":   status or _implied_status(d),
+        "status_implied": not status,       # judged from the date, so re-judgeable
     }
     for k in ("notes", "source", "icu_event_id"):
         if raw.get(k):
@@ -153,6 +154,11 @@ def countdown(slug: str, athlete_cfg: dict = None, today=None):
         races = load_races(slug, config=cfg)
     except Exception:
         races = []
+    # A status only IMPLIED by the date was judged against the real today when the race
+    # was loaded; re-judge it against the `today` asked about, or a countdown for any
+    # other day reads a race as done the moment the real calendar passes it (2 Oct 2026).
+    races = [dict(r, status=_implied_status(_as_date(r.get("date")), today))
+             if r.get("status_implied") else r for r in races]
     nxt = next_race(races, today)
     if not nxt:
         return None, ""
@@ -265,7 +271,8 @@ def add_race(slug: str, name: str, race_date, priority=None, distance=None,
         merged.update({k: v for k, v in race.items() if v is not None})
         races[existing] = normalise(merged)
         race = races[existing]
-    entry["races"] = sorted(races, key=lambda r: r["date"] or "9999-12-31")
+    entry["races"] = sorted(({k: v for k, v in r.items() if k != "status_implied"} for r in races),
+                            key=lambda r: r["date"] or "9999-12-31")
     sync_legacy_fields(entry)
     p.write_text(json.dumps(cfg, indent=2) + "\n")
     return race
