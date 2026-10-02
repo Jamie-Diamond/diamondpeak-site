@@ -132,3 +132,37 @@ class StravaClient:
     def update_description(self, strava_activity_id: int | str, text: str) -> bool:
         """Write text to a Strava activity description. Returns True on success."""
         return self.update_activity(strava_activity_id, description=text)
+
+
+def safe_to_auto_write_description(slug: str, icu_id: str, strava_id, sc: "StravaClient",
+                                   entry: dict | None = None) -> bool:
+    """Gate every automatic description write (277).
+
+    False when session-log marks the caption athlete-authored, or when the current
+    text cannot be read and snapshotted first. Otherwise the existing text is saved to
+    strava-description-log.json and True is returned, so an overwrite is recoverable.
+    """
+    if (entry or {}).get("caption_athlete_authored"):
+        return False
+    try:
+        existing = (sc.get_activity_detail(strava_id) or {}).get("description") or ""
+    except Exception:
+        return False
+    if not existing:
+        return True
+    log_path = BASE / "athletes" / slug / "strava-description-log.json"
+    try:
+        history = json.loads(log_path.read_text()) if log_path.exists() else []
+    except Exception:
+        history = []
+    history.insert(0, {
+        "icu_id": icu_id,
+        "strava_id": strava_id,
+        "snapshotted_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "previous_description": existing,
+    })
+    try:
+        log_path.write_text(json.dumps(history, indent=2))
+    except Exception:
+        return False
+    return True
