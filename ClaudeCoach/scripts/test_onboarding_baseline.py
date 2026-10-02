@@ -428,6 +428,26 @@ check("the injury question names what they said",
 check("'No' to the injury question is no injury, not an injury called No",
       B._NO_WORDS.match("No") is not None)
 
+# ── 9. an active injury: asked specifically, the physio plan becomes a rule (2 Oct) ─
+fake_icu(ICU_TRI, {})
+SENT.clear()
+asked = onboard("909", ["Ivy Test", "none", "ob:goal:ftp", "2", "yes", KEY,
+                        "3 years riding", "ACL surgery on my left knee in July",
+                        "one hamstring and one quad session a week", "6", "ob:hr_source:1",
+                        "yes", "0", "about 200", "no", "no", "no", "2", "ivy"])
+blob = "\n".join(asked)
+check("injury question asks about injuries or recovery specifically",
+      "*injured or recovering from anything*" in blob)
+check("an injury brings the physio follow-up", "Is your physio having you do anything" in blob)
+_ivy = json.loads((tmp / "athletes/ivy/profile.json").read_text())
+check("injury and its physio plan saved", _ivy["injuries"] == [{
+    "location": "", "description": "ACL surgery on my left knee in July",
+    "protocol": "one hamstring and one quad session a week", "status": "active"}], _ivy["injuries"])
+_rules = (tmp / "athletes/ivy/persistent-rules.md").read_text()
+check("and seeded as a rule the athlete can see",
+      "[perm] Active injury at sign-up: ACL surgery on my left knee in July. Physio / what to work "
+      "around: one hamstring and one quad session a week." in _rules, _rules)
+
 print()
 print("ALL PASS" if not FAILS else f"{len(FAILS)} FAILED: {FAILS}")
 sys.exit(1 if FAILS else 0)

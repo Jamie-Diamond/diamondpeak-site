@@ -4640,6 +4640,8 @@ _OB_BUTTONS = {
     "goal_sports": [[("Bike", "2"), ("Run", "3"), ("Swim", "1")],
                     [("Bike + run", "2 3"), ("Swim, bike + run", "1 2 3")]],
     "recent_tests": [[("None of them", "0"), ("All of them", "all")]],
+    "injuries":  [[("No injuries", "none")]],
+    "injury_plan": [[("Nothing specific", "none")]],
     "goal":      [[("Keep my fitness", "maintain"), ("Raise my FTP", "ftp")],
                   [("Run faster", "run"), ("Swim faster", "swim")],
                   [("Get fitter", "fitter")]],
@@ -4674,7 +4676,10 @@ _ICU_INDOOR_ONLY = {"ZWIFT", "CONCEPT2", "MANUAL"}
 _OB_QUALITATIVE = [
     ("a_goal",     "What's your *A goal* for {race_name}?"),
     ("experience", "How long have you been doing endurance sport, and what's the longest event you've finished? What do you most want to work on?"),
-    ("injuries",   "Any current injuries or health constraints? (or _none_)"),
+    # Asked specifically (Jamie, 2 Oct 2026): Fred, recovering from ACL surgery, answered
+    # "No" to "any current injuries or health constraints?".
+    ("injuries",   "Are you *injured or recovering from anything* right now, including surgery, "
+                   "physio or rehab? Tell me what and where, or tap below."),
     ("max_hours",  "What's the *maximum hours per week* you can realistically train?"),
     ("hr_source",  "What do you wear for *heart rate*?"),
 ]
@@ -5067,8 +5072,11 @@ def _scaffold_athlete(chat_id, answers, icu_data, race_data=None, sports=None, r
 
     injuries_str = answers.get("injuries", "none").strip()
     # "No" is no injury (Fred, 1 Oct 2026: it was saved as an injury called "No").
+    injury_plan = (answers.get("injury_plan") or "").strip()
+    if _NO_WORDS.match(injury_plan) or injury_plan.lower() in ("none", "nothing specific"):
+        injury_plan = ""
     injuries = [] if (_NO_WORDS.match(injuries_str) or injuries_str.lower() == "none") else [
-        {"location": "", "description": injuries_str, "protocol": "", "status": "active"}
+        {"location": "", "description": injuries_str, "protocol": injury_plan, "status": "active"}
     ]
 
     rd = race_data or {}
@@ -5134,8 +5142,16 @@ def _scaffold_athlete(chat_id, answers, icu_data, race_data=None, sports=None, r
 
     (adir / "current-state.md").write_text(
         f"# {name} -- Current State\n\nLast updated: {today_str}\n\n"
-        f"## Injuries / Niggles\n{injuries_str}\n\n## Open Actions\n- [ ] Set up initial training plan\n"
+        f"## Injuries / Niggles\n{(injuries_str + ((' Physio: ' + injury_plan) if injury_plan else '')) if injuries else 'None'}"
+        f"\n\n## Open Actions\n- [ ] Set up initial training plan\n"
     )
+    if injuries:
+        # Visible on Your rules and in every reply from day one (Fred, 1 Oct 2026: his ACL
+        # never reached his rules, so the plan didn't know).
+        with open(adir / "persistent-rules.md", "a", encoding="utf-8") as fh:
+            fh.write(f"[perm] Active injury at sign-up: {injuries_str.rstrip('.')}."
+                     + (f" Physio / what to work around: {injury_plan.rstrip('.')}." if injury_plan else "")
+                     + "\n")
 
     template_vars = dict(
         name=name, first_name=first_name, slug=slug,
@@ -5458,6 +5474,11 @@ def handle_onboarding(token, chat_id, text):
                                  ["goal_sports", goals_lib.SPORTS_QUESTION]]
     elif key == "goal":
         answer = goals_lib.parse_goal(answer)
+    elif key == "injuries" and not _NO_WORDS.match(answer):
+        # An active injury: what the physio has them doing, or avoiding, becomes a rule.
+        session["queue"].insert(0, ["injury_plan",
+            "Is your physio having you do anything, or is there anything to avoid? e.g. "
+            "_one hamstring and one quad session a week_, _no running yet_. Or tap below."])
     elif key == "experience":
         # Fred, 1 Oct 2026: "I am recovering from ACL surgery" here, then "No" to the injury
         # question, so the plan never knew. Name what they said in the injury question.
@@ -5465,9 +5486,8 @@ def handle_onboarding(token, chat_id, text):
         if hit:
             for q in session["queue"]:
                 if q[0] == "injuries":
-                    q[1] = (f"You mentioned *{hit.group(0).strip()}*. Is there anything the plan "
-                            "should work around, like physio exercises or movements to avoid? "
-                            "Tell me in a line, or _none_.")
+                    q[1] = (f"You mentioned *{hit.group(0).strip()}*. Is that still with you? "
+                            "Tell me what and where, or tap below if it's behind you.")
     session["answers"][key] = answer
     for fam in reversed(_estimates_due(key, answer, session)):
         q = _OB_ESTIMATE[fam]
