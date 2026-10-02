@@ -151,6 +151,45 @@ def first_prompt(rows):
     return ""
 
 
+# Code work done through the coach chat (Jamie, 2 Oct 2026: "split out bug fixes from my
+# usage, add as another row"). A chat turn - an athlete message and every call it set
+# off - is a bug fix when it changed code: an Edit/Write to a file outside athletes/ and
+# config/, or a git commit that names a code file. Coaching edits to athlete files and
+# config (races, rules) stay coaching.
+DEV = "bug fixes (chat)"
+_CODE_FILE = re.compile(r"\.(py|js|html|css|sh|md)\b")
+_NOT_CODE = ("/athletes/", "/config/", "/tmp/")
+
+
+def _changes_code(block: dict) -> bool:
+    name, inp = block.get("name"), block.get("input") or {}
+    if name in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
+        path = str(inp.get("file_path") or inp.get("notebook_path") or "")
+        return bool(_CODE_FILE.search(path)) and not any(x in path for x in _NOT_CODE)
+    if name == "Bash":
+        cmd = str(inp.get("command") or "")
+        return "git commit" in cmd and bool(_CODE_FILE.search(cmd))
+    return False
+
+
+def dev_message_ids(rows: list) -> set:
+    """Message ids of the chat turns that changed code (see DEV)."""
+    out, turn, dev = set(), set(), False
+    for r in rows:
+        m = r.get("message") or {}
+        c = m.get("content")
+        if r.get("type") == "user" and (isinstance(c, str) or any(
+                isinstance(x, dict) and x.get("type") == "text" for x in c or [])):
+            if dev:
+                out |= turn
+            turn, dev = set(), False                  # a new athlete message starts a turn
+        elif r.get("type") == "assistant":
+            turn.add(m.get("id") or r.get("requestId") or id(r))
+            dev = dev or any(isinstance(b, dict) and b.get("type") == "tool_use" and _changes_code(b)
+                             for b in c or [])
+    return out | (turn if dev else set())
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--days", type=int, default=30)
@@ -198,15 +237,16 @@ def main():
             # replies minutes apart, so the longer cache pays for itself there).
             # --as-recorded prices every write exactly as the subscription recorded it.
             five = (job != "chat") and not args.as_recorded
-            for model, u, t in msgs.values():
+            dev = dev_message_ids(rows) if job == "chat" else set()
+            for mid, (model, u, t) in msgs.items():
                 c = cost(model, u, writes_5m=five)
-                session_cost += c
+                a, j = (DEV, DEV) if mid in dev else (ath, job)
+                by_ath[a] += c
+                by_job[j] += c
+                by_ath_job[(a, j)] += c
                 by_model[price_key(model) or model] += c
                 first_ts = t if first_ts is None or t < first_ts else first_ts
                 last_ts = t if last_ts is None or t > last_ts else last_ts
-            by_ath[ath] += session_cost
-            by_job[job] += session_cost
-            by_ath_job[(ath, job)] += session_cost
             runs[(ath, job)] += 1
 
     if UNPRICED:
@@ -229,7 +269,7 @@ def main():
     print(f"Window: {out['window_days']} days of transcripts, scaled to 30 days (USD, API list prices)")
     print("\nPer athlete / month:")
     for a, v in out["per_athlete_month"].items():
-        print(f"  {a:10} ${v:8.2f}")
+        print(f"  {a:18} ${v:8.2f}")
     print("\nPer job / month:")
     for j, v in out["per_job_month"].items():
         print(f"  {j:20} ${v:8.2f}")

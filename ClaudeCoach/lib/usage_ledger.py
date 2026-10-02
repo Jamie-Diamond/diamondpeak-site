@@ -59,21 +59,24 @@ def _price_file(f: str, athletes: dict) -> tuple:
             continue
         msgs[m.get("id") or r.get("requestId") or id(r)] = (m.get("model"), m["usage"], ts[:10])
     if not msgs:
-        return ("system", "none", {})
+        return ("system", "none", {}, {})
     prompt = ur.first_prompt(rows)
     job = "bug fixer" if "-tmp-cc-bugfix" in f else ur.classify(prompt)
     ath = ur.athlete_of(prompt, athletes) if job not in ("bug fixer", "smoke test") else "system"
-    days = defaultdict(float)
-    for model, u, day in msgs.values():
+    # Chat turns that changed code are bug fixes, not coaching (usage-report.py DEV).
+    dev = ur.dev_message_ids(rows) if job == "chat" else set()
+    days, dev_days = defaultdict(float), defaultdict(float)
+    for mid, (model, u, day) in msgs.items():
         # Priced as an API deployment would bill it (usage-report.py): jobs on the
         # 5-minute cache, chat as recorded (1-hour; a person replies minutes apart).
-        days[day] += ur.cost(model, u, writes_5m=(job != "chat"))
-    return (ath, job, dict(days))
+        (dev_days if mid in dev else days)[day] += ur.cost(model, u, writes_5m=(job != "chat"))
+    return (ath, job, dict(days), dict(dev_days))
 
 
 def daily(athletes: dict) -> dict:
     """{athlete: {"all": {day: usd}, "chat": {day: usd}}} since LOG_START. "system" holds
-    the shared jobs (bug fixer, rule prunes, smoke tests)."""
+    the shared jobs (bug fixer, rule prunes, smoke tests); "dev" the code work done
+    through the coach chat (Jamie's bug fixes), kept out of his coaching cost."""
     ur = _report()
     out: dict = defaultdict(lambda: {"all": defaultdict(float), "chat": defaultdict(float)})
     start = LOG_START.isoformat()
@@ -92,12 +95,15 @@ def daily(athletes: dict) -> dict:
                     except OSError:
                         continue
                     _cache[f] = hit
-                ath, job, days = hit[1]
+                ath, job, days, dev_days = hit[1]
                 for day, usd in days.items():
                     if day >= start:
                         out[ath]["all"][day] += usd
                         if job == "chat":
                             out[ath]["chat"][day] += usd
+                for day, usd in dev_days.items():
+                    if day >= start:
+                        out["dev"]["all"][day] += usd
     return out
 
 

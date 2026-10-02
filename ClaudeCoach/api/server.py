@@ -1012,9 +1012,9 @@ def admin_usage(request: Request):
     coach_slug = _slug_of(users.get(email) or {}, athletes)
     admin_cid = str((athletes.get(coach_slug) or {}).get("chat_id") or "")
     out = admin_view.rows(users, athletes, _load_list(PENDING_FILE), onboarding,
-                          {k: v for k, v in costs.items() if k != "system"},
+                          {k: v for k, v in costs.items() if k not in ("system", "dev")},
                           admin_chat_id=admin_cid)
-    return JSONResponse({"rows": out, "shared": costs.get("system"),
+    return JSONResponse({"rows": out, "shared": costs.get("system"), "dev": costs.get("dev"),
                          "total": admin_view.totals(costs), "since": summ.get("since"),
                          "rateDays": summ.get("rate_days"), "generated": summ.get("generated"),
                          "error": summ.get("error")}, headers=NO_STORE)

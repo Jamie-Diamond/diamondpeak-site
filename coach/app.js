@@ -1646,10 +1646,14 @@
             '<td>' + (k ? money(k.avg_week) : '\u2014') + '</td>' +
             '<td>' + (k ? money(k.avg_month) : '\u2014') + '</td></tr>';
         }).join('');
-        var sh = j.shared, tot = j.total || {};
+        var sh = j.shared, dv = j.dev, tot = j.total || {};
+        // Code changed through the coach chat (Jamie, 2 Oct 2026): kept out of his coaching row.
         body += (sh ? '<tr class="usub"><td class="lbl"><b>Shared jobs</b><small>bug fixer, rule tidy-ups</small></td>' +
           '<td></td><td class="t">' + money(sh.last7) + '</td><td>' +
           money(sh.avg_week) + '</td><td>' + money(sh.avg_month) + '</td></tr>' : '') +
+          (dv ? '<tr class="usub"><td class="lbl"><b>Bug fixes in chat</b><small>code changed through the coach chat</small></td>' +
+          '<td></td><td class="t">' + money(dv.last7) + '</td><td>' +
+          money(dv.avg_week) + '</td><td>' + money(dv.avg_month) + '</td></tr>' : '') +
           '<tr class="utot"><td class="lbl"><b>Total</b></td><td></td><td class="t">' +
           money(tot.last7) + '</td><td>' + money(tot.avg_week) +
           '</td><td>' + money(tot.avg_month) + '</td></tr>';
