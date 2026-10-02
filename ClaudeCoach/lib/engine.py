@@ -242,11 +242,24 @@ def system_prompt_with_level(sp_file) -> str:
         try:
             profile = json.loads(profile_path.read_text())
             first_name = (profile.get("name") or slug).split()[0]
-            block = _level_block(profile.get("coaching_level", "mid"))
-            if block:
-                text = text + "\n\n" + block
         except Exception:
             pass
+    # The coach manual (lib/coach_manual.md, 2 Oct 2026): how the coach works, ONE copy
+    # for every athlete, in front of the athlete's own brief - instead of a copy in each
+    # system_prompt.txt that went stale on its own.
+    try:
+        import athlete_brief as _brief
+        _man = _brief.manual(first_name, slug)
+        if _man and not text.startswith("You are ClaudeCoach"):
+            text = _man + "\n\n" + text
+    except Exception as e:
+        log(f"coach manual skipped: {e}")
+    try:
+        block = _level_block(profile.get("coaching_level", "mid")) if profile else ""
+        if block:
+            text = text + "\n\n" + block
+    except Exception:
+        pass
     # HR source and baseline block (27 Sep 2026). Both are empty for an athlete
     # onboarded before then: no hr_source in profile.json, no baseline.json.
     if _hr_quality is not None and _baseline is not None:

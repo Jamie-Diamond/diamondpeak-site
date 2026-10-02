@@ -265,3 +265,21 @@ def test_sweep_moves_general_methods_merges_and_keeps_personal(tmp_path):
     assert "three lines at most.\n" not in sh.replace("matters.\n", "")
     assert "moved to shared rules" in ar.notes_path("tess", base).read_text()
     assert "merged with a rule from tess" in ar.notes_path("_shared", base).read_text()
+
+
+def test_dedupe_removes_only_rules_the_manual_already_carries(tmp_path):
+    base = _base(tmp_path)
+    sd = base / "athletes" / "_shared"
+    sd.mkdir(parents=True)
+    (sd / "persistent-rules.md").write_text(
+        "# shared\n\n[perm] Always use GAP for runs, never raw pace.\n"
+        "[perm] Debriefs: three lines at most.\n")
+    ids = {ar.split_tag(raw)[2][:10]: rid for rid, _e, raw in ar._active("_shared", base)}
+    llm = _fake([json.dumps([{"id": ids["Always use"], "covered_by": "Runs: ALWAYS use GAP"},
+                             {"id": ids["Debriefs: "], "covered_by": "Response style"}]),
+                 json.dumps({"ok": True}), json.dumps({"ok": False, "missing": ["three lines"]})])
+    out = rule_tidy.dedupe_shared(base, llm=llm, always="Runs: ALWAYS use GAP, not raw pace.")
+    assert out["removed"] == [ids["Always use"]] and out["kept_on_check"] == [ids["Debriefs: "]]
+    sh = (sd / "persistent-rules.md").read_text()
+    assert "GAP" not in sh and "Debriefs" in sh
+    assert "already in the coach manual or code" in ar.notes_path("_shared", base).read_text()

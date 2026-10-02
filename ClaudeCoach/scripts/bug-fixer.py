@@ -223,7 +223,8 @@ def _surface_bytes(slug: str, athlete_rules: str | None = None) -> int:
     else:
         total += len(athlete_rules)
     for p in (BASE / "athletes" / "_shared" / "persistent-rules.md",
-              BASE / "athletes" / slug / "system_prompt.txt"):
+              BASE / "athletes" / slug / "system_prompt.txt",
+              BASE / "lib" / "coach_manual.md"):          # sent with every reply too
         try:
             total += len(p.read_text()) if p.exists() else 0
         except OSError:
@@ -289,7 +290,7 @@ def _engine_rule_constants() -> dict:
     out = {}
     try:
         tree = ast.parse((BASE / "lib" / "engine.py").read_text())
-        want = {"_FEEDBACK_LOG_RULE", "_ACCURACY_RULE"}
+        want = {"_FEEDBACK_LOG_RULE", "_ACCURACY_RULE", "_AUTHORITY_RULE", "_ACCURACY_BLOCK"}
         for node in tree.body:
             if isinstance(node, ast.Assign):
                 for t in node.targets:

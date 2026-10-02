@@ -5175,10 +5175,12 @@ def _scaffold_athlete(chat_id, answers, icu_data, race_data=None, sports=None, r
         lthr=profile.get("lthr", "TBD"),
     )
 
-    template_file = BASE.parent / "onboarding/templates/system_prompt.txt"
-    if template_file.exists():
-        sp = Template(template_file.read_text()).safe_substitute(**template_vars)
-        (adir / "system_prompt.txt").write_text(sp)
+    # The athlete brief: who they are. How the coach works is the shared coach manual
+    # (lib/coach_manual.md), put in front of it at prompt time (lib/athlete_brief.py).
+    import athlete_brief
+    (adir / "system_prompt.txt").write_text(athlete_brief.render(
+        name, profile, {"race_date": race_date, "race_name": race_name,
+                        **({"goal": {"type": goal_key}} if goal_key else {})}))
 
     rules_template = BASE.parent / "onboarding/templates/rules.md"
     if rules_template.exists():

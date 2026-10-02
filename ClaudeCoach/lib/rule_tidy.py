@@ -319,6 +319,79 @@ def sweep_general(slug: str, base: Path | None = None, dry_run: bool = False, ll
     return out
 
 
+COVER_PROMPT = """These are the SHARED coaching rules every athlete gets. The coach ALSO always
+gets the instructions under "ALREADY ALWAYS SENT" (the coach manual and the rules built into
+the code). List the shared rules that are FULLY carried by those instructions already, so they
+can be removed as duplicates. Be strict: a rule that adds anything - a number, a condition, an
+exception, a different case - is NOT a duplicate.
+
+ALREADY ALWAYS SENT:
+{always}
+
+SHARED RULES:
+{shared}
+
+Reply with JSON only: [{{"id": "...", "covered_by": "the passage that already says it"}}]"""
+
+COVER_CHECK = """Coaching rule:
+{rule}
+
+Instructions the coach already always gets:
+{always}
+
+Does that text already carry EVERY instruction in the rule - every number, condition and
+exception? Reply with JSON only: {{"ok": true or false, "missing": ["..."]}}"""
+
+
+def always_sent() -> str:
+    """The coach manual + the rule constants engine.py injects for every athlete."""
+    import importlib.util
+    import athlete_brief
+    spec = importlib.util.spec_from_file_location("cc_bug_fixer", BASE / "scripts" / "bug-fixer.py")
+    bf = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bf)
+    return (athlete_brief.manual("the athlete", "<slug>") + "\n\n"
+            + "\n\n".join(str(v) for v in bf._engine_rule_constants().values()))
+
+
+def dedupe_shared(base: Path | None = None, dry_run: bool = False, llm=None,
+                  always: str | None = None) -> dict:
+    """Remove shared rules the coach manual or the code already says in full (Jamie,
+    2 Oct 2026: "remove what the code and shared rules both say"). Each removal is checked
+    on its own and archived word for word first."""
+    import rule_registry as rr
+    base = base or BASE
+    llm = llm or (lambda prompt, label: _llm_opus(prompt, label))
+    always = always if always is not None else always_sent()
+    shared = ar._active("_shared", base)
+    by_id = {rid: raw for rid, _e, raw in shared}
+    listing = "\n".join(f"- id {rid}: {ar.split_tag(raw)[2]}" for rid, _e, raw in shared)
+    got = _json(llm(COVER_PROMPT.format(always=always, shared=listing), "_shared") or "")
+    if not isinstance(got, list):
+        return {"error": "no usable answer"}
+    gone, kept = [], []
+    for g in got:
+        rid = g.get("id") if isinstance(g, dict) else None
+        if rid not in by_id:
+            continue
+        chk = _json(llm(COVER_CHECK.format(rule=ar.split_tag(by_id[rid])[2], always=always),
+                        "_shared") or "")
+        (gone if isinstance(chk, dict) and chk.get("ok") is True else kept).append(rid)
+    out = {"removed": gone, "kept_on_check": kept, "dry_run": dry_run,
+           "preview": [ar.split_tag(by_id[r])[2][:160] for r in gone]}
+    if dry_run or not gone:
+        return out
+    raws = {by_id[r] for r in gone}
+    ar.archive("_shared", [{"reason": "already in the coach manual or code", "id": r,
+                            "rule": by_id[r]} for r in gone], base)
+    sp = ar._rules_path("_shared", base)
+    shutil.copy2(sp, sp.with_name(sp.name + f".bak-rule-dedupe-{datetime.now():%Y%m%d%H%M%S}"))
+    sp.write_text("\n".join(l for l in sp.read_text(encoding="utf-8").splitlines()
+                             if l.strip() not in raws) + "\n", encoding="utf-8")
+    rr.sync(base, "_shared", write=True)
+    return out
+
+
 def _llm_opus(prompt: str, label: str) -> str:
     import claude_call
     r = claude_call.run_claude(prompt, model=claude_call.OPUS, fallback=[claude_call.SONNET],
@@ -333,11 +406,16 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--max", type=int, default=MAX_PER_RUN)
     ap.add_argument("--no-digest", action="store_true")
+    ap.add_argument("--dedupe-shared", action="store_true",
+                    help="remove shared rules the coach manual or the code already say in full")
     ap.add_argument("--sweep-general", action="store_true",
                     help="move this athlete's general coaching methods into the shared rules")
     a = ap.parse_args()
     if a.sweep_general and a.athlete:
         print(json.dumps(sweep_general(a.athlete, dry_run=a.dry_run), indent=1))
+        return
+    if a.dedupe_shared:
+        print(json.dumps(dedupe_shared(dry_run=a.dry_run), indent=1))
         return
     if a.all:
         cfg = json.loads((BASE / "config" / "athletes.json").read_text())
