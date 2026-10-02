@@ -426,6 +426,11 @@ _CRON_INTERPRETERS = {"bash", "sh", "python", "python3", "env"}
 # A name here that has NO live cron entry is also reported: a stale exemption is
 # the same class of drift as a stale registration.
 CRON_EXEMPT = {
+    "icu-sync-nudge.py":
+        "daily nudge to Calum to reconnect Garmin (scripts/icu-sync-nudge.py, 2 Oct 2026). "
+        "Sending nothing is its normal outcome (already sent today, or fixed), so there is "
+        "no heartbeat to watch; a failed check, a failed send and the fix itself each write "
+        "an ops-alerts line. Temporary: delete it with its crontab line once fixed.",
     "rule_tidy.py":
         "nightly rule tidy (lib/rule_tidy.py, 2 Oct 2026). Optional upkeep: a missed night "
         "leaves rules as long as they were, nothing reaches an athlete, and the next night "
@@ -962,6 +967,7 @@ OUTCOME_CLASS = {
     "rules-lint":         FINDING,   # "rule may withhold Swim high work"
     "thresholds":         FINDING,   # "zones may be stale-high"
     "selftest":           FINDING,   # "loud-path verification (not a real failure)"
+    "icu-sync-nudge":     FINDING,   # a missed reminder, or "fixed, remove me"
 }
 
 
