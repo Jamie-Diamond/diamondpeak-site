@@ -1197,6 +1197,9 @@ _CRON_LINES = [
     f"25 6 * * * /root/.claude/cc-run python3 {CC}/lib/plan_audit.py --all >> /root/Library/Logs/ClaudeCoach/plan-audit.log 2>&1",
     f"15 3 * * * /root/.claude/cc-run python3 {CC}/scripts/claude-cli-update.py >> /root/Library/Logs/ClaudeCoach/claude-cli-update.log 2>&1",
     f"0 8 * * * /root/.claude/cc-run python3 {CC}/scripts/icu-sync-nudge.py >> /root/Library/Logs/ClaudeCoach/icu-sync-nudge.log 2>&1",
+    # Rule management (2 Oct 2026): both CRON_EXEMPT, with their reasons in coach_alert.
+    f"30 1 * * * /root/.claude/cc-run python3 {CC}/lib/rule_tidy.py --all >> /root/Library/Logs/ClaudeCoach/rule-tidy.log 2>&1",
+    f"45 18 * * 0 /usr/bin/python3 {CC}/scripts/rule-check.py >> /root/Library/Logs/ClaudeCoach/rule-check.log 2>&1",
 ]
 
 # FIXED 28 Jul 2026 (this ticket): activity-watcher.py and sync-private-repo.sh
