@@ -227,3 +227,41 @@ def test_an_unrelated_rewrite_is_still_refused(tmp_path, monkeypatch):
         "[perm] Swim on Tuesdays only.")
     text, drops = rc.enforce_rule_guards(before, after, [], slug="tess", allow_supersede=True)
     assert text == before and drops[0][0].startswith("ABORT")
+
+
+# ── sweep: general methods move to the shared rules ────────────────────────────
+
+def test_sweep_moves_general_methods_merges_and_keeps_personal(tmp_path):
+    base = _base(tmp_path, "# r\n\n"
+                 "[perm] Jamie's Edge 830 altitude is never used for gradient work.\n"
+                 "[perm] When Jamie gives a bare number, check which field and unit it means before writing it.\n"
+                 "[perm] When Jamie names a B-race, keep the long ride the day before.\n"
+                 "[perm] Debrief tone: lead with the one thing that matters to Jamie.\n")
+    sd = base / "athletes" / "_shared"
+    sd.mkdir(parents=True)
+    (sd / "persistent-rules.md").write_text("# shared\n\n[perm] Debriefs: three lines at most.\n")
+    mine = {ar.split_tag(raw)[2][:12]: rid for rid, _e, raw in ar._active("tess", base)}
+    shared_id = next(rid for rid, _e, _r in ar._active("_shared", base))
+    answer = json.dumps([
+        {"id": mine["Jamie's Edge"], "scope": "personal"},
+        {"id": mine["When Jamie g"], "scope": "general", "merge_into": None,
+         "text": "When the athlete gives a bare number, check which field and unit it means before writing it."},
+        {"id": mine["When Jamie n"], "scope": "general", "merge_into": None,
+         "text": "Before a B-race, cut the long ride."},
+        {"id": mine["Debrief tone"], "scope": "general", "merge_into": shared_id,
+         "merged": "Debriefs: three lines at most, leading with the one thing that matters."},
+    ])
+    # sweep answer, then checks in order: B-race (fails), bare number (ok), debrief merge (ok)
+    llm = _fake([answer, json.dumps({"ok": True}), json.dumps({"ok": False, "missing": ["keep the long ride"]}),
+                 json.dumps({"ok": True})])
+    out = rule_tidy.sweep_general("tess", base, llm=llm)
+    assert len(out["moved"]) == 1 and list(out["merged"]) == [shared_id]
+    assert out["kept_personal_on_check"] == [mine["When Jamie n"]]
+    t = (base / "athletes/tess/persistent-rules.md").read_text()
+    assert "Edge 830" in t and "B-race" in t and "bare number" not in t and "Debrief tone" not in t
+    sh = (base / "athletes/_shared/persistent-rules.md").read_text()
+    assert "[perm] When the athlete gives a bare number" in sh
+    assert "Debriefs: three lines at most, leading with the one thing that matters." in sh
+    assert "three lines at most.\n" not in sh.replace("matters.\n", "")
+    assert "moved to shared rules" in ar.notes_path("tess", base).read_text()
+    assert "merged with a rule from tess" in ar.notes_path("_shared", base).read_text()

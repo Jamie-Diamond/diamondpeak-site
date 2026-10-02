@@ -224,6 +224,108 @@ def digest(slug: str, base: Path | None = None, llm=_llm, batch: int = 25) -> in
     return n
 
 
+SWEEP_PROMPT = """Below are ONE athlete's standing coaching rules, and the SHARED rules every
+athlete already gets. Sort each athlete rule:
+- personal: about this athlete - their devices, body, injuries, schedule, races, places,
+  people, preferences or history
+- general: a coaching method or behaviour that should apply to EVERY athlete
+Be conservative: a rule that mixes this athlete's own facts with a method stays personal.
+
+For a general rule also give:
+- "text": the rule reworded so it names no athlete ("the athlete"), keeping every instruction
+- "merge_into": the id of a shared rule on the same topic it should be merged with, or null
+- "merged": when merging, that shared rule rewritten to carry every instruction of both
+
+Athlete rules:
+{mine}
+
+Shared rules:
+{shared}
+
+Reply with JSON only: [{{"id": "...", "scope": "personal" or "general", "text": "...",
+"merge_into": "..." or null, "merged": "..."}}] - one entry per athlete rule."""
+
+
+def sweep_general(slug: str, base: Path | None = None, dry_run: bool = False, llm=None) -> dict:
+    """Move an athlete's GENERAL coaching methods into the shared rules (Jamie, 2 Oct 2026:
+    "a lot of my rules are applicable to all athletes"; first sweep at the coach's
+    discretion). Each move is verified like a tidy (no instruction lost); the athlete's
+    copy and any shared rule it merges into are archived word for word first."""
+    import rule_registry as rr
+    base = base or BASE
+    llm = llm or (lambda prompt, label: _llm_opus(prompt, label))
+    mine = ar._active(slug, base)
+    shared = ar._active("_shared", base)
+    listing = "\n".join(f"- id {rid}: {ar.split_tag(raw)[2]}" for rid, _e, raw in mine)
+    shared_l = "\n".join(f"- id {rid}: {ar.split_tag(raw)[2]}" for rid, _e, raw in shared)
+    got = _json(llm(SWEEP_PROMPT.format(mine=listing, shared=shared_l), slug) or "")
+    if not isinstance(got, list):
+        return {"athlete": slug, "error": "no usable answer"}
+    by_mine = {rid: raw for rid, _e, raw in mine}
+    by_shared = {rid: raw for rid, _e, raw in shared}
+    moves, merges, kept = [], {}, []
+    for g in got:
+        if not isinstance(g, dict) or g.get("scope") != "general" or g.get("id") not in by_mine:
+            continue
+        raw = by_mine[g["id"]]
+        orig = ar.split_tag(raw)[2]
+        target = g.get("merge_into") if g.get("merge_into") in by_shared else None
+        if target and target not in merges:
+            merged = re.sub(r"\s+", " ", str(g.get("merged") or "").strip())
+            both = ar.split_tag(by_shared[target])[2] + " " + orig
+            chk = _json(llm(CHECK_PROMPT.format(orig=both, new=merged), slug) or "") if merged else None
+            if isinstance(chk, dict) and chk.get("ok") is True:
+                merges[target] = {"from": g["id"], "raw": raw, "old_shared": by_shared[target],
+                                  "new_shared": f"[perm] {merged}"}
+                continue
+        text = re.sub(r"\s+", " ", str(g.get("text") or "").strip())
+        chk = _json(llm(CHECK_PROMPT.format(orig=orig, new=text), slug) or "") if text else None
+        if isinstance(chk, dict) and chk.get("ok") is True:
+            moves.append({"from": g["id"], "raw": raw, "new_shared": f"[perm] {text}"})
+        else:
+            kept.append(g["id"])
+    out = {"athlete": slug, "moved": [m["from"] for m in moves],
+           "merged": {t: m["from"] for t, m in merges.items()}, "kept_personal_on_check": kept,
+           "preview": [{"from": m["from"], "to": m["new_shared"]} for m in moves]
+                      + [{"from": m["from"], "into": t, "to": m["new_shared"]} for t, m in merges.items()],
+           "dry_run": dry_run}
+    if dry_run or not (moves or merges):
+        return out
+    gone = {m["raw"] for m in moves} | {m["raw"] for m in merges.values()}
+    ar.archive(slug, [{"reason": "moved to shared rules", "rule": r} for r in gone], base)
+    ar.archive("_shared", [{"reason": f"merged with a rule from {slug}", "id": t,
+                            "rule": m["old_shared"], "now": m["new_shared"]}
+                           for t, m in merges.items()], base)
+    p = ar._rules_path(slug, base)
+    shutil.copy2(p, p.with_name(p.name + f".bak-rule-sweep-{datetime.now():%Y%m%d%H%M%S}"))
+    p.write_text("\n".join(l for l in p.read_text(encoding="utf-8").splitlines()
+                            if l.strip() not in gone) + "\n", encoding="utf-8")
+    sp = ar._rules_path("_shared", base)
+    shutil.copy2(sp, sp.with_name(sp.name + f".bak-rule-sweep-{datetime.now():%Y%m%d%H%M%S}"))
+    swap = {m["old_shared"]: m["new_shared"] for m in merges.values()}
+    lines = [swap.get(l.strip(), l) for l in sp.read_text(encoding="utf-8").splitlines()]
+    lines += [m["new_shared"] for m in moves]
+    sp.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    # Merged shared rules keep their IDs under the new wording.
+    reg = rr.load_registry(base, "_shared")
+    for t, m in merges.items():
+        if t in reg["rules"]:
+            h = rr.content_hash(m["new_shared"])
+            reg["rules"][t].update({"hash": h, "tidy_hash": h, "fingerprint": rr.fingerprint(m["new_shared"])})
+    rr.registry_path(base, "_shared").write_text(json.dumps(reg, indent=2, sort_keys=True) + "\n",
+                                                 encoding="utf-8")
+    rr.sync(base, "_shared", write=True)
+    rr.sync(base, slug, write=True)
+    return out
+
+
+def _llm_opus(prompt: str, label: str) -> str:
+    import claude_call
+    r = claude_call.run_claude(prompt, model=claude_call.OPUS, fallback=[claude_call.SONNET],
+                               timeout=600, label=f"rule-sweep:{label}")
+    return (r.stdout or "").strip() if r.returncode == 0 else ""
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--athlete")
@@ -231,7 +333,12 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--max", type=int, default=MAX_PER_RUN)
     ap.add_argument("--no-digest", action="store_true")
+    ap.add_argument("--sweep-general", action="store_true",
+                    help="move this athlete's general coaching methods into the shared rules")
     a = ap.parse_args()
+    if a.sweep_general and a.athlete:
+        print(json.dumps(sweep_general(a.athlete, dry_run=a.dry_run), indent=1))
+        return
     if a.all:
         cfg = json.loads((BASE / "config" / "athletes.json").read_text())
         slugs = [s for s, v in cfg.items() if isinstance(v, dict) and v.get("active")] + ["_shared"]
