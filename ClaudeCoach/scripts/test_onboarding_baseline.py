@@ -414,6 +414,20 @@ check("'All of them' / 'none' for recent tests",
 check("no question still says 'Reply with the number'",
       "Reply with the number" not in B._OB_QUALITATIVE[-1][1])
 
+# ── 8. a health mention earlier in sign-up is asked about by name (Fred, 1 Oct) ─
+fake_icu(ICU_TRI, {})
+B._lookup_race = lambda name, d: {}
+SENT.clear()
+asked = onboard("808", ["Fred Test", "none", "ob:goal:ftp", "2", "yes", KEY,
+                        "8 years, half Ironman. I am recovering from ACL surgery and want my FTP up",
+                        "No"])
+blob = "\n".join(asked)
+check("the injury question names what they said",
+      "You mentioned *I am recovering from ACL surgery and want my FTP up*" in blob
+      or "You mentioned" in blob and "ACL surgery" in blob, blob[-400:])
+check("'No' to the injury question is no injury, not an injury called No",
+      B._NO_WORDS.match("No") is not None)
+
 print()
 print("ALL PASS" if not FAILS else f"{len(FAILS)} FAILED: {FAILS}")
 sys.exit(1 if FAILS else 0)

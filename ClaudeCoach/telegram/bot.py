@@ -4754,6 +4754,11 @@ def save_onboarding_state(ob_state):
     ONBOARDING_FILE.write_text(json.dumps(ob_state, indent=2))
 
 
+# Health words in a sign-up answer that the injury question should ask about by name.
+_HEALTH_MENTION = re.compile(
+    r"[^.;,]*\b(surgery|operation|injur\w*|acl|cruciate|menisc\w*|fractur\w*|broken|"
+    r"torn|tear|tendon\w*|physio\w*|rehab\w*|recovering from)\b[^.;,]*", re.I)
+
 _HR_WORDS = ((r"strap|chest|arm|belt|polar h|hrm", "1"), (r"mix|both|sometimes", "3"),
              (r"wrist|watch|optical", "2"), (r"^\s*(no|none|nothing|nope)\b", "4"))
 
@@ -5061,8 +5066,9 @@ def _scaffold_athlete(chat_id, answers, icu_data, race_data=None, sports=None, r
         race_str, race_name, race_date = "", "", None
 
     injuries_str = answers.get("injuries", "none").strip()
-    injuries = [] if injuries_str.lower() == "none" else [
-        {"location": "", "description": injuries_str, "protocol": ""}
+    # "No" is no injury (Fred, 1 Oct 2026: it was saved as an injury called "No").
+    injuries = [] if (_NO_WORDS.match(injuries_str) or injuries_str.lower() == "none") else [
+        {"location": "", "description": injuries_str, "protocol": "", "status": "active"}
     ]
 
     rd = race_data or {}
@@ -5452,6 +5458,16 @@ def handle_onboarding(token, chat_id, text):
                                  ["goal_sports", goals_lib.SPORTS_QUESTION]]
     elif key == "goal":
         answer = goals_lib.parse_goal(answer)
+    elif key == "experience":
+        # Fred, 1 Oct 2026: "I am recovering from ACL surgery" here, then "No" to the injury
+        # question, so the plan never knew. Name what they said in the injury question.
+        hit = _HEALTH_MENTION.search(answer)
+        if hit:
+            for q in session["queue"]:
+                if q[0] == "injuries":
+                    q[1] = (f"You mentioned *{hit.group(0).strip()}*. Is there anything the plan "
+                            "should work around, like physio exercises or movements to avoid? "
+                            "Tell me in a line, or _none_.")
     session["answers"][key] = answer
     for fam in reversed(_estimates_due(key, answer, session)):
         q = _OB_ESTIMATE[fam]
