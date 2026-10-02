@@ -269,7 +269,8 @@ def _log_to_history(slug: str, message: str) -> None:
         history = json.loads(history_file.read_text()) if history_file.exists() else []
     except Exception:
         history = []
-    history.append({"user": "", "assistant": message})
+    history.append({"user": "", "assistant": message,
+                    "ts": datetime.now().isoformat(timespec="seconds")})
     history_file.write_text(json.dumps(history[-30:], indent=2))
 
 

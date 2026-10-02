@@ -222,3 +222,24 @@ def test_opus_keeps_the_original_file_and_reset_clears_every_model(athlete):
     assert (athlete.parent / ".chat_session.sonnet.json").exists()
     engine._clear_session(athlete)
     assert not list(athlete.parent.glob(".chat_session*.json"))
+
+
+def test_scheduled_message_reaches_a_resumed_session():
+    """2 Oct 2026: the 21:00 check-in was in history.json with no ts, so the catch-up
+    skipped it and Jamie's "No" was read as answering the ride comparison before it."""
+    history = [
+        {"ts": "2026-10-02T18:35:27", "user": "Why was today slower?", "assistant": "Ride compare"},
+        {"user": "", "assistant": "*Tomorrow — Easy run 20km*"},
+        {"user": "", "assistant": "Did the Strength B happen today?"},
+    ]
+    prompt = engine._resume_prompt("No", history, "Jamie", "", "2026-10-02T18:35:37.5")
+    assert "Did the Strength B happen today?" in prompt
+    assert "Ride compare" not in prompt                 # the session already has its own reply
+
+
+def test_unstamped_entries_before_the_last_seen_reply_are_not_replayed():
+    history = [{"user": "", "assistant": "OLD-MORNING-CARD"},
+               {"ts": "2026-10-02T09:00:00", "user": "hi", "assistant": "hello"},
+               {"ts": "2026-10-02T21:00:38", "user": "", "assistant": "NEW-CHECKIN"}]
+    missed = engine._missed_since(history, "2026-10-02T09:00:10")
+    assert [h["assistant"] for h in missed] == ["NEW-CHECKIN"]

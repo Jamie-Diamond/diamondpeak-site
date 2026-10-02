@@ -9,6 +9,7 @@ Usage:
   echo "text" | notify.py                  # pipe text
 """
 import json, sys, ssl, urllib.request, urllib.error
+from datetime import datetime
 from pathlib import Path
 
 _cafile = "/etc/ssl/cert.pem" if __import__("os").path.exists("/etc/ssl/cert.pem") else None
@@ -58,7 +59,12 @@ def _append_history(message):
             history = json.loads(hf.read_text()) if hf.exists() else []
         except Exception:
             history = []
-        history.append({"user": "", "assistant": message})
+        # Stamped (2 Oct 2026): a resumed chat session only catches up on entries newer
+        # than its last reply (lib/engine.py _missed_since), so an unstamped evening
+        # check-in never reached it and the athlete's "No" was read as answering the
+        # previous message.
+        history.append({"user": "", "assistant": message,
+                        "ts": datetime.now().isoformat(timespec="seconds")})
         hf.write_text(json.dumps(history[-30:], indent=2))
     except Exception:
         pass

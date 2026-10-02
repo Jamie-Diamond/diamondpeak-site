@@ -570,6 +570,20 @@ def _session_usable(st, fp, max_turns: int | None = None) -> bool:
     )
 
 
+def _missed_since(history, last_seen):
+    """History entries a resumed session has not seen: stamped after last_seen, or
+    unstamped and sitting after the last entry it has seen. Scheduled messages (morning
+    card, debriefs, the 21:00 check-in) were appended with no ts until 2 Oct 2026, and a
+    ts-only filter dropped every one: "Did Strength B happen today?" never reached the
+    chat, so Jamie's "No" was read as answering the message before it."""
+    last_seen = last_seen or ""
+    seen = -1
+    for i, h in enumerate(history):
+        if h.get("ts") and h["ts"] <= last_seen:
+            seen = i
+    return [h for h in history[seen + 1:] if not h.get("ts") or h["ts"] > last_seen]
+
+
 def _resume_prompt(user_message, history, athlete_name, context, last_seen):
     """Prompt for a resumed session: live-context block + any exchanges the
     session missed (voice notes, fast-path buttons — they append to history
@@ -579,8 +593,7 @@ def _resume_prompt(user_message, history, athlete_name, context, last_seen):
     if context:
         parts.append(context)
         parts.append("")
-    missed = [h for h in history if h.get("ts", "") > (last_seen or "")]
-    missed = missed[-SESSION_CATCHUP_PAIRS:]
+    missed = _missed_since(history, last_seen)[-SESSION_CATCHUP_PAIRS:]
     if missed:
         parts.append("(For context — exchanges logged outside this thread since your last reply:)")
         parts.extend(render_history(missed, athlete_name))
