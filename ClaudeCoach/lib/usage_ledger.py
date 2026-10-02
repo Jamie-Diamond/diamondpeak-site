@@ -23,6 +23,7 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parent.parent            # ClaudeCoach/
 LOG_START = date(2026, 9, 27)
 RATE_WINDOW_DAYS = 28
+DAYS_PER_MONTH = 365.25 / 12          # the average month, for the Avg / month column
 
 _ur = None
 _cache: dict = {}          # path -> ((mtime, size), (athlete, job, {day: usd}))
@@ -123,6 +124,7 @@ def summary(athletes: dict, today: date | None = None) -> dict:
         out[ath] = {"week": round(sum(u for day, u in alld.items() if day >= mon), 2),
                     "last7": round(sum(u for day, u in alld.items() if day >= d7), 2),
                     "avg_week": round(sum(alld.values()) / span * 7, 2),
+                    "avg_month": round(sum(alld.values()) / span * DAYS_PER_MONTH, 2),
                     "month": round(sum(u for day, u in alld.items() if day.startswith(month)), 2),
                     "rate_month": round(last, 2),   # actual spend, last 28 days (not a projection)
                     "total": round(sum(alld.values()), 2),

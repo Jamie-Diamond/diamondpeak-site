@@ -56,9 +56,9 @@ USERS = {
 }
 PENDING = ["web-s1", "web-d"]
 ONBOARDING = {"web-s1": {"current_key": "icu_key", "answers": {"name": "Sam Test"}}}
-COSTS = {"jamie": {"week": 30.0, "last7": 40.0, "avg_week": 70.0,
+COSTS = {"jamie": {"week": 30.0, "last7": 40.0, "avg_week": 70.0, "avg_month": 300.0,
                    "month": 20.0, "rate_month": 316.4, "total": 90.1},
-         "kat": {"week": 3.0, "last7": 4.0, "avg_week": 7.0,
+         "kat": {"week": 3.0, "last7": 4.0, "avg_week": 7.0, "avg_month": 30.0,
                  "month": 2.0, "rate_month": 45.5, "total": 12.0}}
 
 
@@ -98,9 +98,9 @@ def test_chat_and_cost_columns(tmp_path):
 
 
 def test_totals_add_the_shared_jobs():
-    t = admin_view.totals(dict(COSTS, system={"week": 1, "last7": 1, "avg_week": 2,
+    t = admin_view.totals(dict(COSTS, system={"week": 1, "last7": 1, "avg_week": 2, "avg_month": 9,
                                               "month": 1, "rate_month": 10, "total": 3}))
-    assert t == {"week": 34.0, "last7": 45.0, "avg_week": 79.0,
+    assert t == {"week": 34.0, "last7": 45.0, "avg_week": 79.0, "avg_month": 339.0,
                  "month": 23.0, "rate_month": 371.9, "total": 105.1}
 
 
@@ -139,4 +139,5 @@ def test_ledger_prices_per_day_chat_separately_from_27_sep(tmp_path, monkeypatch
     # athlete's first logged cost is 30 Sep, so the average week is over 2 days, not 5.
     assert s["week"] == 3.5 and s["last7"] == 3.5
     assert s["avg_week"] == round(3.5 / 2 * 7, 2)
+    assert s["avg_month"] == round(3.5 / 2 * 365.25 / 12, 2)
     usage_ledger._cache.clear()

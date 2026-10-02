@@ -33,7 +33,7 @@ QUESTION = {
     "est_swim": "rough swim figure", "compare_race": "comparison race", "heat": "heat",
     "fuel": "fuelling", "level": "coaching level", "slug": "account handle (last question)",
 }
-COST_KEYS = ("week", "last7", "avg_week", "month", "rate_month", "total")
+COST_KEYS = ("week", "last7", "avg_week", "avg_month", "month", "rate_month", "total")
 ORDER = {"coached": 0, "test_week": 1, "approval": 2, "tracking": 3, "signing_up": 4,
          "invited": 5}
 

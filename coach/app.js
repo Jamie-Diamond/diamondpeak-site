@@ -1644,18 +1644,20 @@
             (last ? '<small>' + esc(last) + '</small>' : '') + '</td>' +
             '<td>' + chat + '</td><td class="t">' + (k ? money(k.week) : '\u2014') + '</td>' +
             '<td>' + (k ? money(k.last7) : '\u2014') + '</td>' +
-            '<td>' + (k ? money(k.avg_week) : '\u2014') + '</td></tr>';
+            '<td>' + (k ? money(k.avg_week) : '\u2014') + '</td>' +
+            '<td>' + (k ? money(k.avg_month) : '\u2014') + '</td></tr>';
         }).join('');
         var sh = j.shared, tot = j.total || {};
         body += (sh ? '<tr class="usub"><td class="lbl"><b>Shared jobs</b><small>bug fixer, rule tidy-ups</small></td>' +
           '<td></td><td class="t">' + money(sh.week) + '</td><td>' + money(sh.last7) + '</td><td>' +
-          money(sh.avg_week) + '</td></tr>' : '') +
+          money(sh.avg_week) + '</td><td>' + money(sh.avg_month) + '</td></tr>' : '') +
           '<tr class="utot"><td class="lbl"><b>Total</b></td><td></td><td class="t">' +
-          money(tot.week) + '</td><td>' + money(tot.last7) + '</td><td>' + money(tot.avg_week) + '</td></tr>';
+          money(tot.week) + '</td><td>' + money(tot.last7) + '</td><td>' + money(tot.avg_week) +
+          '</td><td>' + money(tot.avg_month) + '</td></tr>';
         box.innerHTML = '<table class="tbl utbl"><thead><tr><th>Athlete</th><th>Chat this month</th>' +
-          '<th>This week</th><th>Last 7 days</th><th>Avg / week</th></tr></thead><tbody>' + body +
+          '<th>This week</th><th>7 days</th><th>Avg / wk</th><th>Avg / mo</th></tr></thead><tbody>' + body +
           '</tbody></table><p class="card-f">API list prices, as if Peak ran on a pay-per-use key. ' +
-          'This week: since Monday. Avg / week: since logging began, or since the athlete joined. Logging began ' +
+          'This week: since Monday. Averages: since logging began, or since the athlete joined. Logging began ' +
           whenShort(j.since) + '. Chat: this month\u2019s messages and cost against the allowance.' +
           (j.error ? ' Costs unavailable: ' + esc(j.error) : '') + '</p>';
       })
