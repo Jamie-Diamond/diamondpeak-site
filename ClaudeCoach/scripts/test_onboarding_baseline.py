@@ -403,7 +403,7 @@ def _labels(key):
 check("heart rate is four buttons", _labels("hr_source") ==
       ["Chest or arm strap", "Just my watch", "A mix of the two", "Nothing"], _labels("hr_source"))
 check("power, sports and recent tests have buttons",
-      _labels("power") == ["Yes", "No"] and "Bike + run" in _labels("goal_sports")
+      _labels("power") == ["Yes", "No"] and _labels("goal_sports") == ["Swim", "Bike", "Run", "All three", "Done"]
       and _labels("recent_tests") == ["None of them", "All of them"])
 check("typed 'Chest strap' reads as a strap", B._ob_normalise("hr_source", "Chest strap") == "1")
 check("typed 'just my watch' reads as wrist", B._ob_normalise("hr_source", "just my watch") == "2")

@@ -4637,8 +4637,9 @@ _OB_BUTTONS = {
     "hr_source": [[("Chest or arm strap", "1"), ("Just my watch", "2")],
                   [("A mix of the two", "3"), ("Nothing", "4")]],
     "power":     [[("Yes", "yes"), ("No", "no")]],
-    "goal_sports": [[("Bike", "2"), ("Run", "3"), ("Swim", "1")],
-                    [("Bike + run", "2 3"), ("Swim, bike + run", "1 2 3")]],
+    # Multi-select (Jamie, 2 Oct 2026: one tap moved on): taps toggle a sport, Done confirms.
+    "goal_sports": [[("Swim", "1"), ("Bike", "2"), ("Run", "3")],
+                    [("All three", "1 2 3"), ("Done", "done")]],
     "recent_tests": [[("None of them", "0"), ("All of them", "all")]],
     "injuries":  [[("No injuries", "none")]],
     "injury_plan": [[("Nothing specific", "none")]],
@@ -5209,11 +5210,12 @@ def _scaffold_athlete(chat_id, answers, icu_data, race_data=None, sports=None, r
     return slug
 
 
-def _ob_markup(key):
+def _ob_markup(key, picked=()):
     rows = _OB_BUTTONS.get(key)
     if not rows:
         return None
-    return {"inline_keyboard": [[{"text": t, "callback_data": f"ob:{key}:{v}"} for t, v in row]
+    return {"inline_keyboard": [[{"text": ("✓ " + t) if v in picked else t,
+                                  "callback_data": f"ob:{key}:{v}"} for t, v in row]
                                 for row in rows]}
 
 
@@ -5443,6 +5445,23 @@ def handle_onboarding(token, chat_id, text):
         _, tkey, value = (text.split(":", 2) + ["", ""])[:3]
         if tkey != key:
             return True                 # a button on an earlier question
+        if key == "goal_sports" and value in ("1", "2", "3", "done"):
+            picked = list(session.get("sports_picked") or [])
+            if value != "done":
+                picked = [x for x in picked if x != value] if value in picked else picked + [value]
+                session["sports_picked"] = picked
+                save_onboarding_state(ob_state)
+                _outbox_clear_buttons(chat_id)
+                names = {"1": "Swim", "2": "Bike", "3": "Run"}
+                send(token, chat_id, "Picked: " + (", ".join(names[x] for x in sorted(picked))
+                     or "nothing yet") + ". Tap more, or *Done*.",
+                     reply_markup=_ob_markup(key, picked))
+                return True
+            if not picked:
+                send(token, chat_id, "Tap at least one sport first.", reply_markup=_ob_markup(key))
+                return True
+            value = " ".join(sorted(picked))
+            session.pop("sports_picked", None)
         answer = value
         shown = next((t for row in _OB_BUTTONS.get(key, []) for t, v in row if v == value), value)
     else:
