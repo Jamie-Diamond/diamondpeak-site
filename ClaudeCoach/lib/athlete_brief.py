@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import json
 import shutil
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from string import Template
 
@@ -67,10 +67,18 @@ def _race_line(cfg: dict, profile: dict) -> str:
             label = g.get("type", "goal")
         return f"No race booked. Goal: {label}."
     name = cfg.get("race_name") or profile.get("race_name")
-    when = cfg.get("race_date") or profile.get("race_date")
+    when = str(cfg.get("race_date") or profile.get("race_date") or "")[:10]
     if not (name or when):
         return "No race booked."
-    goal = profile.get("a_goal")
+    if when and when < date.today().isoformat():
+        return f"No race booked (last race: {name or 'race'}, {when})."
+    # The goal moves with the race (generate-blueprint, 1 Oct 2026): profile.a_goal can
+    # still be the LAST race's goal ("Sub 9:30" against the Brighton Marathon).
+    try:
+        import race_fitness
+        goal = race_fitness.athlete_goal(cfg, profile)
+    except Exception:
+        goal = None
     return (f"Race: {name or 'race'}{f', {when}' if when else ''}."
             + (f" Goal: {goal}." if goal and goal not in ("—", "-") else ""))
 

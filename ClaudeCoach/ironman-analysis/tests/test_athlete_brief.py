@@ -29,9 +29,10 @@ def test_render_goal_athlete_with_an_injury():
 
 
 def test_render_race_athlete_and_a_no_injury():
-    out = ab.render("Sam", {"a_goal": "sub 5:30", "injuries": [{"description": "No"}]},
-                    {"race_name": "70.3 Test", "race_date": "2027-06-01"})
-    assert "- Race: 70.3 Test, 2027-06-01. Goal: sub 5:30." in out
+    out = ab.render("Sam", {"a_goal": "sub 5:30", "race_name": "70.3 Test", "race_date": "2099-06-01",
+                            "injuries": [{"description": "No"}]},
+                    {"race_name": "70.3 Test", "race_date": "2099-06-01"})
+    assert "- Race: 70.3 Test, 2099-06-01. Goal: sub 5:30." in out
     assert "- Injuries / constraints: none" in out
 
 
@@ -72,3 +73,11 @@ def test_engine_puts_the_manual_in_front_of_a_new_brief_only(tmp_path):
     sp.write_text("You are ClaudeCoach, Tess's old full brief.\n")
     text = engine.system_prompt_with_level(sp)
     assert text.count("You are ClaudeCoach") == 1          # never doubled onto an old brief
+
+
+def test_a_past_race_reads_as_last_race_and_a_stale_goal_is_dropped():
+    out = ab.render("Kat", {"a_goal": "Sub 5:30"}, {"race_name": "70.3 Old", "race_date": "2020-09-20"})
+    assert "- No race booked (last race: 70.3 Old, 2020-09-20)." in out
+    out = ab.render("Jo", {"a_goal": "Sub 9:30", "race_name": "Ironman X", "race_date": "2020-09-19"},
+                    {"race_name": "Brighton Marathon", "race_date": "2099-04-04"})
+    assert "Brighton Marathon, 2099-04-04" in out and "9:30" not in out
