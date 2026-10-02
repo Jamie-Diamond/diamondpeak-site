@@ -653,7 +653,7 @@ def _build_jamie_data(client) -> dict:
             continue
         ev_sport = _sport_normalise(ev.get("type") or ev.get("sport_type") or "Other")
         # Prefer the workout-computed load; load_target can be a stale/manual over-estimate.
-        ev_tss = ev.get("icu_training_load") or ev.get("load") or ev.get("load_target")
+        ev_tss = _planned_load(ev)
         same_day_completed = [e for e in week_calendar
                                if e["date"] == ev_date and e["sport"] == ev_sport
                                and e["status"] == "completed"]
@@ -693,7 +693,7 @@ def _build_jamie_data(client) -> dict:
                     continue
                 # Prefer the workout-computed load (icu_training_load); load_target can be a stale/
                 # manual over-estimate that doesn't match the prescribed (e.g. Z2) structure.
-                ev_tss = ev.get("icu_training_load") or ev.get("load") or ev.get("load_target")
+                ev_tss = _planned_load(ev)
                 ev_dur = ev.get("moving_time") or ev.get("duration")
                 acts.append({"sport":ev_sport,"name":ev.get("name",""),
                               "tss":int(ev_tss) if ev_tss else None,
@@ -1567,6 +1567,17 @@ def post_process(data):
     return data
 
 
+def _planned_load(ev: dict):
+    """The Load to show for a planned session: Intervals.icu's own figure from the workout
+    steps, else the planned figure (load_target) - a by-feel session has no steps to price,
+    so Fred's 4 Oct easy ride showed no bar on the chart (2 Oct 2026). A baseline test
+    (name starts 🔬) always uses the planned figure: a ramp is written to the very top so
+    ERG never runs out, and Intervals.icu prices every step (Fred's ramp: 201 vs ~50)."""
+    if str(ev.get("name") or "").startswith("\U0001f52c") and ev.get("load_target"):
+        return ev["load_target"]
+    return ev.get("icu_training_load") or ev.get("load") or ev.get("load_target")
+
+
 def _sport_normalise(raw):
     return {"VirtualRide": "Ride", "GravelRide": "Ride", "VirtualRun": "Run", "TrailRun": "Run"}.get(raw, raw)
 
@@ -1697,7 +1708,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
         if not ev_date or ev_date < today.isoformat():
             continue
         ev_sport = _sport_normalise(ev.get("type") or ev.get("sport_type") or "Other")
-        ev_tss = ev.get("icu_training_load") or ev.get("load")
+        ev_tss = _planned_load(ev)
         # If there's already a completed activity of the same sport on that date,
         # keep the actual TSS as the headline figure but carry what was prescribed
         # so the app can show actual against planned rather than losing the plan
@@ -1750,7 +1761,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
                 ev_sport = _sport_normalise(ev.get("type") or ev.get("sport_type") or "Other")
                 if any(a["sport"] == ev_sport for a in acts):
                     continue
-                ev_tss = ev.get("icu_training_load") or ev.get("load")
+                ev_tss = _planned_load(ev)
                 ev_dur = ev.get("moving_time") or ev.get("duration")
                 acts.append({
                     "sport": ev_sport,
