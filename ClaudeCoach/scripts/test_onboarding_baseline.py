@@ -127,7 +127,7 @@ asked = onboard("123", ["Sam Smith", "70.3 Test, 2027-06-01", "yes", KEY,
                         "sam"])
 blob = "\n".join(asked)
 check("asks what they wear for heart rate", "What do you wear for *heart rate*" in blob)
-check("rejects an HR answer outside 1-4", "number from 1 to 4" in blob)
+check("rejects an HR answer that isn't an option", "Tap one of the buttons" in blob)
 check("asks about power when ICU shows none", "ride with *power*" in blob)
 check("asks whether the ICU FTP was a real test", "Bike FTP 250 W" in blob and "last 6 weeks" in blob)
 check("experience question is not triathlon-only", "full-distance triathlons" not in blob)
@@ -393,6 +393,24 @@ check("profile: no race, the goal is the A goal, bike + run",
 check("baseline tests bike and run only",
       json.loads((tmp / "athletes/tess/baseline.json").read_text())["sports"] == ["bike", "run"])
 check("coach notice names the goal", any("Goal: Raise my FTP" in t for c, t, _ in SENT if c == "999"))
+
+# ── 7. buttons, not numbered replies (Jamie, 2 Oct 2026) ─────────────────────
+def _labels(key):
+    m = B._ob_markup(key) or {}
+    return [b["text"] for row in m.get("inline_keyboard", []) for b in row]
+check("heart rate is four buttons", _labels("hr_source") ==
+      ["Chest or arm strap", "Just my watch", "A mix of the two", "Nothing"], _labels("hr_source"))
+check("power, sports and recent tests have buttons",
+      _labels("power") == ["Yes", "No"] and "Bike + run" in _labels("goal_sports")
+      and _labels("recent_tests") == ["None of them", "All of them"])
+check("typed 'Chest strap' reads as a strap", B._ob_normalise("hr_source", "Chest strap") == "1")
+check("typed 'just my watch' reads as wrist", B._ob_normalise("hr_source", "just my watch") == "2")
+check("typed 'both' reads as a mix", B._ob_normalise("hr_source", "both really") == "3")
+check("'All of them' / 'none' for recent tests",
+      B._ob_normalise("recent_tests", "All of them") == "1 2 3"
+      and B._ob_normalise("recent_tests", "none") == "0")
+check("no question still says 'Reply with the number'",
+      "Reply with the number" not in B._OB_QUALITATIVE[-1][1])
 
 print()
 print("ALL PASS" if not FAILS else f"{len(FAILS)} FAILED: {FAILS}")

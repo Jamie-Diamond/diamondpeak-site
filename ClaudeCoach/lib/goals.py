@@ -103,14 +103,10 @@ GOALS = {
 }
 GOAL_ORDER = ("maintain", "ftp", "run", "swim", "fitter")
 
-# Sign-up wording. The numbers are the GOAL_ORDER positions.
-SIGNUP_QUESTION = (
-    "No race -- no problem. What's the *goal* instead?\n\n"
-    "1 Keep my fitness\n2 Raise my FTP (cycling)\n3 Run faster\n4 Swim faster\n"
-    "5 Get fitter\n\nTap one, or reply with the number.")
-SPORTS_QUESTION = (
-    "Which sports do you want in your plan?\n\n1 Swim\n2 Bike\n3 Run\n\n"
-    "Reply with the numbers, e.g. _2 3_.")
+# Sign-up wording; the answers are buttons (telegram/bot.py _OB_BUTTONS). A typed
+# 1-5 is still read as the GOAL_ORDER position.
+SIGNUP_QUESTION = "No race -- no problem. What's the *goal* instead?"
+SPORTS_QUESTION = "Which sports do you want in your plan?"
 
 _NO_RACE = re.compile(
     r"^\s*(no|none|nope|n/?a|nothing|no race|no races|not yet|not really|no target|"

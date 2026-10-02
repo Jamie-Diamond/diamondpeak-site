@@ -4570,6 +4570,14 @@ _OB_BUTTONS = {
     "icu_setup": [[("I've done it", "done")]],
     "icu_fix":   [[("Check again", "again"), ("Carry on for now", "skip")]],
     "level":     [[("Beginner", "beginner"), ("Mid", "mid"), ("Pro", "pro")]],
+    # Buttons, not numbered replies (Jamie, 2 Oct 2026: "this should be a button not a
+    # number reply, that's clunky"). Typed words still work (_ob_normalise).
+    "hr_source": [[("Chest or arm strap", "1"), ("Just my watch", "2")],
+                  [("A mix of the two", "3"), ("Nothing", "4")]],
+    "power":     [[("Yes", "yes"), ("No", "no")]],
+    "goal_sports": [[("Bike", "2"), ("Run", "3"), ("Swim", "1")],
+                    [("Bike + run", "2 3"), ("Swim, bike + run", "1 2 3")]],
+    "recent_tests": [[("None of them", "0"), ("All of them", "all")]],
     "goal":      [[("Keep my fitness", "maintain"), ("Raise my FTP", "ftp")],
                   [("Run faster", "run"), ("Swim faster", "swim")],
                   [("Get fitter", "fitter")]],
@@ -4606,7 +4614,7 @@ _OB_QUALITATIVE = [
     ("experience", "How long have you been doing endurance sport, and what's the longest event you've finished? What do you most want to work on?"),
     ("injuries",   "Any current injuries or health constraints? (or _none_)"),
     ("max_hours",  "What's the *maximum hours per week* you can realistically train?"),
-    ("hr_source",  "What do you wear for *heart rate*?\n\n1 A chest or arm strap\n2 Just my watch (wrist)\n3 A mix of the two\n4 Nothing\n\nReply with the number."),
+    ("hr_source",  "What do you wear for *heart rate*?"),
 ]
 _OB_SLUG = ("slug", "Last one: choose a short *account handle* for your profile. Lowercase letters and numbers only (e.g. _sarah_). Can't be changed later.")
 # Rough figures (30 Sep 2026): asked for each sport the baseline week will test, right
@@ -4621,7 +4629,7 @@ _OB_ESTIMATE = {
                          "_100m 2:05_ or _400m 8:30_. Or _don't know_."),
 }
 _GAP_FAMILY = {"ftp": "bike", "run_threshold": "run", "swim_css": "swim"}
-_OB_POWER = ("power", "Do you ride with *power* (a power meter or a smart trainer)? _yes_ or _no_")
+_OB_POWER = ("power", "Do you ride with *power* (a power meter or a smart trainer)?")
 _HR_SOURCE_BY_DIGIT = {"1": "strap", "2": "wrist", "3": "mixed", "4": "none"}
 _NO_WORDS = re.compile(r"^\s*(no|nope|n|0|none|not sure|unsure|don'?t know|dunno|idk|\?)\s*\.?\s*$", re.I)
 
@@ -4684,6 +4692,25 @@ def save_onboarding_state(ob_state):
     ONBOARDING_FILE.write_text(json.dumps(ob_state, indent=2))
 
 
+_HR_WORDS = ((r"strap|chest|arm|belt|polar h|hrm", "1"), (r"mix|both|sometimes", "3"),
+             (r"wrist|watch|optical", "2"), (r"^\s*(no|none|nothing|nope)\b", "4"))
+
+
+def _ob_normalise(key, answer):
+    """Typed words for the button questions: "chest strap" -> 1, "all" -> every option."""
+    a = (answer or "").strip()
+    if key == "hr_source" and not re.search(r"[1-4]", a):
+        for pat, digit in _HR_WORDS:
+            if re.search(pat, a, re.I):
+                return digit
+    if key == "recent_tests":
+        if re.match(r"^\s*(all|all of them|every|yes)\b", a, re.I):
+            return "1 2 3"
+        if re.match(r"^\s*(none|no|nope|nothing)\b", a, re.I):
+            return "0"
+    return answer
+
+
 def _validate_ob_answer(key, answer):
     """Return error string if invalid, else None."""
     if not answer:
@@ -4728,7 +4755,7 @@ def _validate_ob_answer(key, answer):
             return "Please enter a number -- e.g. _12_ for 12 hours/week."
     if key == "hr_source":
         if not re.search(r'[1-4]', answer):
-            return "Reply with a number from 1 to 4 -- e.g. _2_ if it's just your watch."
+            return "Tap one of the buttons above, e.g. *Just my watch*."
     if key == "power":
         if not re.match(r'^\s*(y|yes|yep|n|no|nope)\b', answer, re.I):
             return "Just _yes_ or _no_ -- do you ride with a power meter or smart trainer?"
@@ -4831,8 +4858,9 @@ def _recent_tests_question(icu_data, sports):
         return None, []
     listing = "\n".join(f"{i} {label}" for i, (_, label) in enumerate(opts, 1))
     q = ("Intervals.icu has these for you:\n\n" + listing + "\n\nWhich came from a proper "
-         "*test in the last 6 weeks*? Reply with the numbers (e.g. _1 3_), or _0_ for none. "
-         "Anything not tested gets tested in your first week, so your zones are real.")
+         "*test in the last 6 weeks*? Tap below, or reply with the numbers of just some of "
+         "them (e.g. _1 3_). Anything not tested gets tested in your first week, so your "
+         "zones are real.")
     return q, [f for f, _ in opts]
 
 
@@ -5338,6 +5366,7 @@ def handle_onboarding(token, chat_id, text):
         shown = "🔑 API key sent" if key == "icu_key" else answer
     _outbox_answer(chat_id, shown)
 
+    answer = _ob_normalise(key, answer)
     err = _validate_ob_answer(key, answer)
     if err:
         send(token, chat_id, err)
