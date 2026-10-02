@@ -653,7 +653,7 @@ def _build_jamie_data(client) -> dict:
             continue
         ev_sport = _sport_normalise(ev.get("type") or ev.get("sport_type") or "Other")
         # Prefer the workout-computed load; load_target can be a stale/manual over-estimate.
-        ev_tss = _planned_load(ev)
+        ev_tss = _planned_load(ev, _strength_load(history_21))
         same_day_completed = [e for e in week_calendar
                                if e["date"] == ev_date and e["sport"] == ev_sport
                                and e["status"] == "completed"]
@@ -693,7 +693,7 @@ def _build_jamie_data(client) -> dict:
                     continue
                 # Prefer the workout-computed load (icu_training_load); load_target can be a stale/
                 # manual over-estimate that doesn't match the prescribed (e.g. Z2) structure.
-                ev_tss = _planned_load(ev)
+                ev_tss = _planned_load(ev, _strength_load(history_21))
                 ev_dur = ev.get("moving_time") or ev.get("duration")
                 acts.append({"sport":ev_sport,"name":ev.get("name",""),
                               "tss":int(ev_tss) if ev_tss else None,
@@ -1567,7 +1567,18 @@ def post_process(data):
     return data
 
 
-def _planned_load(ev: dict):
+_STRENGTH_TYPES = ("WeightTraining", "Workout", "Crossfit", "Yoga", "Pilates")
+
+
+def _strength_load(history: list) -> int | None:
+    """The athlete's own typical Load for a strength session: the median of their recent
+    logged ones (Fred's are ~17). None when they have none logged."""
+    loads = sorted(int(a.get("icu_training_load") or 0) for a in history or []
+                   if a.get("type") in _STRENGTH_TYPES and (a.get("icu_training_load") or 0) > 0)
+    return loads[len(loads) // 2] if loads else None
+
+
+def _planned_load(ev: dict, strength_load: int | None = None):
     """The Load to show for a planned session: Intervals.icu's own figure from the workout
     steps, else the planned figure (load_target) - a by-feel session has no steps to price,
     so Fred's 4 Oct easy ride showed no bar on the chart (2 Oct 2026). A baseline test
@@ -1575,7 +1586,15 @@ def _planned_load(ev: dict):
     ERG never runs out, and Intervals.icu prices every step (Fred's ramp: 201 vs ~50)."""
     if str(ev.get("name") or "").startswith("\U0001f52c") and ev.get("load_target"):
         return ev["load_target"]
-    return ev.get("icu_training_load") or ev.get("load") or ev.get("load_target")
+    got = ev.get("icu_training_load") or ev.get("load") or ev.get("load_target")
+    if got or ev.get("type") not in _STRENGTH_TYPES:
+        return got
+    # A planned strength session carries no Load at all (Jamie, 2 Oct 2026: "show them,
+    # even if small"): the athlete's own typical one, else ~0.4 a minute, else 15.
+    if strength_load:
+        return strength_load
+    mins = (ev.get("moving_time") or ev.get("duration") or 0) / 60
+    return round(mins * 0.4) if mins else 15
 
 
 def _sport_normalise(raw):
@@ -1708,7 +1727,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
         if not ev_date or ev_date < today.isoformat():
             continue
         ev_sport = _sport_normalise(ev.get("type") or ev.get("sport_type") or "Other")
-        ev_tss = _planned_load(ev)
+        ev_tss = _planned_load(ev, _strength_load(history_21))
         # If there's already a completed activity of the same sport on that date,
         # keep the actual TSS as the headline figure but carry what was prescribed
         # so the app can show actual against planned rather than losing the plan
@@ -1761,7 +1780,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
                 ev_sport = _sport_normalise(ev.get("type") or ev.get("sport_type") or "Other")
                 if any(a["sport"] == ev_sport for a in acts):
                     continue
-                ev_tss = _planned_load(ev)
+                ev_tss = _planned_load(ev, _strength_load(history_21))
                 ev_dur = ev.get("moving_time") or ev.get("duration")
                 acts.append({
                     "sport": ev_sport,
