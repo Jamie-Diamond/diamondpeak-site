@@ -59,3 +59,10 @@ def test_fetch_failure_fails_open(monkeypatch):
     monkeypatch.setattr(aw.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(
         a, 1, stdout="", stderr="boom"))
     assert aw._has_new_activity("x", set())
+
+
+def test_prompt_drops_plan_delta_when_structure_not_executed():
+    # 3 Oct 2026: two continuous blocks, no lap presses, graded against a planned 8x100.
+    assert "planned structure not executed" in aw.STRUCTURE_RULE
+    assert "PLAN_DELTA: none" in aw.STRUCTURE_RULE
+    assert "rep by rep" in aw.STRUCTURE_RULE

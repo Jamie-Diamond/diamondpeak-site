@@ -24,6 +24,17 @@ TOOLS = "Read,Write,Bash"
 # and an unexplained missing week is the failure that has actually happened.
 CALLER = "activity-watcher"
 
+# Grade what was done, not what was planned. Without this the model graded a session of two
+# continuous blocks (no lap presses) against a planned 8x100 and printed a vs-plan Load delta.
+STRUCTURE_RULE = (
+    "Executed structure vs plan: from the Strava laps, count the work reps and check for lap presses,"
+    " then compare with the planned structure (rep count, rep length). If the rep count or lap"
+    " presses do not match the plan (e.g. two continuous blocks and no lap presses against a planned"
+    " 8x100), the planned structure was NOT executed: output `PLAN_DELTA: none`, do NOT grade rep by"
+    " rep against the plan, and say plainly 'planned structure not executed' before describing what"
+    " was actually done (blocks, durations, pace, HR). Grade only on what was done."
+)
+
 _WATER_SPORTS = {"sail", "watersport", "windsurf", "kitesurf", "kiteboard"}
 
 
@@ -260,6 +271,8 @@ ANALYSIS: <coaching message — see rules below>
 
 Interval source: prefer Strava laps when they give a cleaner breakdown than ICU (e.g. ICU splits one effort into 3 pieces). Use gap_pace from Strava laps where available, else pace.
 
+{STRUCTURE_RULE}
+
 Rules for ANALYSIS — each logical line must be a separate output line (no semicolons to merge lines):
 
 Always lead with a one-sentence narrative verdict (e.g. "Solid Z2. Form held to the end.").
@@ -317,6 +330,7 @@ If a planned session exists in today's events matching this sport, output:
 PLAN_DELTA: <planned_session_name>|<planned_tss>|<actual_tss>|<delta_pct>
 (delta_pct = round((actual_tss - planned_tss) / planned_tss * 100, 1))
 If no planned session found for today or TSS unavailable: PLAN_DELTA: none
+Also PLAN_DELTA: none when the planned structure was not executed (see the executed-structure rule above).
 
 If the activity looks like a performance threshold test, output:
 TEST_RESULT: <type>|<value>|<activity_id>
