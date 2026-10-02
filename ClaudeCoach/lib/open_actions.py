@@ -381,21 +381,30 @@ _COVERAGE_CHECK = """  T9b (coverage, Tier 2): read {ref} if it exists.
 """
 
 
+def watchdog_firing(slug: str, today: date | None = None,
+                    window_days: int = T9_WINDOW_DAYS) -> list[dict]:
+    """The open actions T9 fires on: overdue, due within the window, or open-ended."""
+    return [i for i in open_items(evaluate(slug, today))
+            if i["bucket"] == "overdue"
+            or (i["bucket"] == "due_soon" and i["days_until"] <= window_days)
+            or i["bucket"] == "open_ended"]
+
+
+def coverage_check(slug: str) -> str:
+    """The T9b instruction (decision-points.md vs the store) - the one part that reads prose."""
+    return _COVERAGE_CHECK.format(ref=str(BASE / "athletes" / slug / "reference" / "decision-points.md"))
+
+
 def watchdog_block(slug: str, today: date | None = None,
                    window_days: int = T9_WINDOW_DAYS) -> str:
     """T9 for the watchdog prompt — fires or does not fire, decided here in Python."""
-    items = evaluate(slug, today)
-    firing = [i for i in open_items(items)
-              if i["bucket"] == "overdue"
-              or (i["bucket"] == "due_soon" and i["days_until"] <= window_days)
-              or i["bucket"] == "open_ended"]
+    firing = watchdog_firing(slug, today, window_days)
     head = ("T9 (Tier 2): ALREADY EVALUATED in Python before this prompt ran, off the single "
             "store (current-state.json open_actions[]) via lib/open_actions.py — the same call "
             "the weekly card uses, so the two can never disagree. Do NOT recompute any date or "
             "day count, do NOT read open actions out of current-state.md, and do NOT invent an "
             f"item. Window: due within {window_days} days, already overdue, or open-ended.")
-    ref = str((BASE / "athletes" / slug / "reference" / "decision-points.md"))
-    coverage = _COVERAGE_CHECK.format(ref=ref)
+    coverage = coverage_check(slug)
     if not firing:
         return (head + "\n  T9 DOES NOT FIRE — nothing outstanding in the window.\n"
                 + coverage)

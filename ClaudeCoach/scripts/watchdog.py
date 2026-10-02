@@ -16,6 +16,7 @@ import ops_log
 import planning_pause    # tracking-only athletes: no prescribing, no adherence
 import heat as heat_lib
 import open_actions as oa_lib   # T9: single store, arithmetic in Python
+import watchdog_checks as wc    # T1-T12 in Python; the model only logs NEW triggers
 CLAUDE      = "/usr/bin/claude"
 NOTIFY      = BASE / "telegram/notify.py"
 CONFIG      = BASE / "config/athletes.json"
@@ -229,6 +230,7 @@ def ramp_trail(breaches: list[dict]) -> str:
 # window. If any of this fails the prompt falls back to the old fetch-it-yourself
 # instructions, so a data hiccup costs money, never a missed trigger.
 PRELOAD_DAYS = 14
+HISTORY_DAYS = 21     # T11 counts the last 2 COMPLETED weeks, up to 20 days back
 _ACT_FIELDS = ("id", "start_date_local", "type", "name", "moving_time", "distance",
                "icu_training_load", "icu_intensity", "decoupling", "average_heartrate")
 _SESSION_FIELDS = ("date", "sport", "name", "duration_min", "tss", "rpe", "notes",
@@ -260,18 +262,28 @@ def _section(md: str, heading_word: str) -> str:
     return "\n".join(out[:60])
 
 
-def preload_block(slug: str, today: date, has_ankle: bool, heat_on: bool) -> str | None:
+def preload_data(slug: str, today: date) -> dict:
+    """One parallel fetch for both the Python triggers and the model's data block."""
+    from icu_api import IcuClient
+    import hr_quality
+    acfg = json.loads(CONFIG.read_text())[slug]
+    client = IcuClient(acfg["icu_athlete_id"], acfg["icu_api_key"])
+    wellness, history, events = client.fetch_all(
+        ("get_wellness", PRELOAD_DAYS),
+        ("get_training_history", HISTORY_DAYS),
+        ("get_events", (today - timedelta(days=7)).isoformat(), today.isoformat(), "WORKOUT"),
+    )
+    return {"wellness": wellness or [], "history": history or [], "events": events or [],
+            "untrusted": {str(i) for i in hr_quality.untrusted_ids(slug)}}
+
+
+def preload_block(slug: str, today: date, has_ankle: bool, heat_on: bool,
+                  data: dict | None = None) -> str | None:
     try:
-        from icu_api import IcuClient
-        import hr_quality
-        acfg = json.loads(CONFIG.read_text())[slug]
-        client = IcuClient(acfg["icu_athlete_id"], acfg["icu_api_key"])
-        wellness, history, events = client.fetch_all(
-            ("get_wellness", PRELOAD_DAYS),
-            ("get_training_history", PRELOAD_DAYS),
-            ("get_events", (today - timedelta(days=7)).isoformat(), today.isoformat(), "WORKOUT"),
-        )
-        untrusted = hr_quality.untrusted_ids(slug)
+        data = data or preload_data(slug, today)
+        wellness, events, untrusted = data["wellness"], data["events"], data["untrusted"]
+        since_hist = (today - timedelta(days=PRELOAD_DAYS)).isoformat()
+        history = [a for a in data["history"] if str(a.get("start_date_local") or "") >= since_hist]
         well = [{"date": w.get("id"), "ctl": w.get("ctl"), "atl": w.get("atl"),
                  "hrv": w.get("hrv"), "sleep_h": round(w["sleepSecs"] / 3600, 2)
                  if w.get("sleepSecs") else None, "resting_hr": w.get("restingHR"),
@@ -475,6 +487,42 @@ If ANY trigger fires:
 """
 
 
+def build_fired_prompt(slug: str, name: str, race_name: str, new: list, data_block: str,
+                       t9b: str = "") -> str:
+    """The prompt for a morning with something NEW to log (lib/watchdog_checks.py decided
+    which triggers fired and which were already logged). The model writes the log line
+    with a suggested adjustment from the athlete's context, and does T9b when it is due."""
+    today = date.today().isoformat()
+    athlete_dir = BASE / "athletes" / slug
+    lines = "\n".join(f"- {f['trigger']} (Tier {f['tier']}): {f['signal']}" for f in new) or "(none)"
+    t9b_part = (f"\nAlso run T9b, the one check that reads prose:\n{t9b}\n" if t9b else "")
+    return f"""You are running the daily watchdog for {name}'s {race_name} coaching system. Today is {today}.
+
+These triggers were evaluated in Python against the data below. Their numbers are final:
+do NOT recompute them, and do NOT evaluate or add any other trigger.
+
+NEW TRIGGERS
+{lines}
+{t9b_part}
+For each one:
+1. If {athlete_dir}/current-state.md already logs this exact item in the last 3 days (the
+   dated lines are in the data below), skip it.
+2. Otherwise append ONE line to the "## Watchdog flags" section of current-state.md (create
+   the section at the end of the file if it is missing):
+   - **{today} — Tn (Tier x):** <the signal above>. <one-sentence suggested adjustment that
+     fits what the athlete has already agreed and the block they are in>
+   The file is long: find the section with `grep -n "^## " {athlete_dir}/current-state.md`,
+   Read just that part with offset/limit, then Edit.
+3. Print one L2 trail per trigger to stdout (coaching log only, never sent to the athlete):
+   [signal with real number] -> [rule] -> [suggested adjustment] -> [expected effect]
+
+DO NOT SEND ANY MESSAGE - never run notify.py; the 06:30 morning card surfaces flags. Do NOT
+run any git command.
+
+{data_block}
+"""
+
+
 def run_for_athlete(slug: str, cfg: dict) -> str | None:
     name      = cfg.get("name", slug)
     race_name = cfg.get("race_name", "upcoming race")
@@ -487,15 +535,14 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
     if profile.get("strength_programme"):
         strength_target = int((cfg.get("day_rules") or {}).get("strength_max", 2))
 
-    has_ankle = bool((load_json(BASE / "athletes" / slug / "current-state.json") or {}).get("ankle"))
-    data_block = preload_block(slug, date.today(), has_ankle,
-                               bool(heat.get("active") and not heat.get("silent")))
-    prompt = build_prompt(slug, name, race_name, race_date, chat_id, heat=heat,
-                          strength_target=strength_target, data_block=data_block)
+    cs = load_json(BASE / "athletes" / slug / "current-state.json") or {}
+    has_ankle = bool(cs.get("ankle"))
+    heat_on = bool(heat.get("active") and not heat.get("silent"))
+    today = date.today()
 
     # T12 runs HERE, in Python, before the model is asked anything: the flag is
     # written from the session log whether or not the Claude call succeeds.
-    ramp_out = ""
+    ramp_out, breaches = "", []
     try:
         breaches = ramp_flags(slug, cfg)
         if breaches:
@@ -507,6 +554,51 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
     except Exception as e:
         with open(LOG_FILE, "a") as lf:
             lf.write(f"[watchdog:{slug}] T12 ramp check failed: {e}\n")
+
+    # Every other trigger in Python too (2 Oct 2026). Most mornings nothing NEW fires and
+    # the model is not called at all; if the data fetch fails, the old prompt runs and the
+    # model fetches for itself, so a data hiccup costs money, never a missed trigger.
+    new, fp, t9b_due = None, None, False
+    try:
+        data = preload_data(slug, today)
+        hl = load_json(BASE / "athletes" / slug / "heat-log.json")
+        fired = wc.evaluate(
+            today, data["wellness"], data["history"], data["events"],
+            ankle=cs.get("ankle"), heat=heat, heat_log=hl if isinstance(hl, list) else [],
+            strength_target=strength_target, untrusted=data["untrusted"],
+            open_firing=oa_lib.watchdog_firing(slug, today), render=oa_lib.render_line,
+            # T12 is new only for a week not already in watchdog_flags (cs was read before
+            # ramp_flags wrote today's): the 4-week lookback must not re-log the same week.
+            ramp_breaches=[b for b in breaches if b["week_end"] not in {
+                f.get("week_end") for f in cs.get("watchdog_flags") or []
+                if isinstance(f, dict) and f.get("trigger") == "T12"}],
+            heat_floors=(heat_lib.MAINTENANCE_DOSE_14D, heat_lib.PROTOCOL_DOSE_14D))
+        state = wc.load_state(slug)
+        new = wc.new_only(fired, state, today)
+        fp = wc.t9b_fingerprint(slug)
+        t9b_due = bool(fp and fp != state.get("t9b"))
+        with open(LOG_FILE, "a") as lf:
+            lf.write(f"[watchdog:{slug}] python: fired {[f['trigger'] for f in fired]}, "
+                     f"new {[f['trigger'] for f in new]}, T9b {'due' if t9b_due else 'unchanged'}\n")
+        if not new and not t9b_due:
+            ops_log.record_run("watchdog", athlete=slug, ok=True,
+                               detail=f"silent - Python: {len(fired)} fired, none new")
+            return ramp_out or None
+        data_block = preload_block(slug, today, has_ankle, heat_on, data=data)
+        t9b = ""
+        if t9b_due:
+            t9_lines = "\n".join("  " + oa_lib.render_line(i)
+                                  for i in oa_lib.watchdog_firing(slug, today)) or "  (none outstanding)"
+            t9b = f"  The T9 list (open actions in the store, due within 7 days or overdue):\n{t9_lines}\n" \
+                  + oa_lib.coverage_check(slug)
+        prompt = build_fired_prompt(slug, name, race_name, new, data_block or "", t9b=t9b)
+    except Exception as e:
+        new = None
+        with open(LOG_FILE, "a") as lf:
+            lf.write(f"[watchdog:{slug}] python triggers failed, full model run: {e}\n")
+        prompt = build_prompt(slug, name, race_name, race_date, chat_id, heat=heat,
+                              strength_target=strength_target,
+                              data_block=preload_block(slug, today, has_ankle, heat_on))
 
     with tempfile.NamedTemporaryFile(
         mode="w", prefix="claudecoach_watchdog_", delete=False, suffix=".txt"
@@ -531,6 +623,8 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
             return ramp_out or None
         ops_log.record_run("watchdog", athlete=slug, ok=True,
                            detail="triggered" if output else "silent")
+        if new is not None:
+            wc.record(slug, new, today, fp if t9b_due else None)
         return "\n".join(x for x in (ramp_out, output) if x) or None
     except Exception as e:
         with open(LOG_FILE, "a") as lf:
