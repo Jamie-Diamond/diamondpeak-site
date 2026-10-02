@@ -676,11 +676,44 @@ def _resolve_ftp(slug: str, profile: dict, session_log_f: Path) -> int:
     return profile.get("ftp_watts") or 250
 
 
+def _activity_ids(a: dict) -> set:
+    """Every id a session can be logged under: Intervals, Strava, Garmin. i192236501
+    sat in session-log.json as Strava 20406359196, so matching on the ICU id alone
+    woke Sonnet every 5 min from 1 Oct 2026 14:00 to answer ACTIVITY_ID: none."""
+    return {str(a.get(k) or "") for k in ("id", "strava_id", "external_id")} - {""}
+
+
+def _same_session(a: dict, b: dict) -> bool:
+    """True when a and b are two recordings of one session (Zwift + a watch, Garmin +
+    Strava) that Intervals.icu did not merge: same sport (VirtualRide counts as Ride)
+    and their times overlap by more than half of the shorter one."""
+    def sport(x):
+        t = str(x.get("type") or "")
+        return next((s for s in ("Ride", "Run", "Swim") if s in t), t)
+
+    def span(x):
+        start = datetime.fromisoformat(str(x.get("start_date_local") or ""))
+        return start, start + timedelta(seconds=int(x.get("elapsed_time") or x.get("moving_time") or 0))
+
+    try:
+        if sport(a) != sport(b):
+            return False
+        (s1, e1), (s2, e2) = span(a), span(b)
+        overlap = (min(e1, e2) - max(s1, s2)).total_seconds()
+        return overlap > 0.5 * min((e1 - s1).total_seconds(), (e2 - s2).total_seconds())
+    except (TypeError, ValueError):
+        return False
+
+
 def _has_new_activity(slug: str, existing_ids: set) -> bool:
     """Cheap, LLM-free pre-gate: True if ICU history shows any activity whose id
     is not already in session-log.json. This lets the expensive analysis LLM be
     skipped entirely on the ~99% of cycles with nothing new — so the watcher can
     poll often without burning the Sonnet weekly bucket.
+
+    A second recording of a logged session is not new: the analysis prompt's
+    duplicate guard answers ACTIVITY_ID: none for it, so letting it through would
+    call Sonnet every 5 min until it leaves the 3-day window.
 
     Fail-OPEN: any fetch/parse error returns True so we never silently miss an
     activity (worst case = one wasted LLM call that returns ACTIVITY_ID: none,
@@ -693,13 +726,12 @@ def _has_new_activity(slug: str, existing_ids: set) -> bool:
         )
         if r.returncode != 0:
             return True
-        for a in json.loads(r.stdout):
-            # A session can be logged under its Strava or Garmin id instead of the
-            # ICU one (i192236501 sat in the log as Strava 20406359196, so this gate
-            # woke Sonnet every 5 min from 1 Oct 14:00 to answer ACTIVITY_ID: none).
-            ids = {str(a.get(k) or "") for k in ("id", "strava_id", "external_id")} - {""}
-            if not ids & existing_ids:
-                return True
+        acts = json.loads(r.stdout)
+        logged = [a for a in acts if _activity_ids(a) & existing_ids]
+        for a in acts:
+            if _activity_ids(a) & existing_ids or any(_same_session(a, b) for b in logged):
+                continue
+            return True
         return False
     except Exception:
         return True
