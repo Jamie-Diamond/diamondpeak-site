@@ -65,6 +65,7 @@ import coach_facts             # per-turn computed FACTS block (superlatives/rec
 import write_verify            # verify-after-write for Strava / ICU calendar claims
 import baseline as baseline_lib   # new athletes' baseline block (onboarding, 27 Sep 2026)
 import duplicates                   # a session in Intervals.icu twice: delete or merge (2 Oct 2026)
+import did_happen                   # Yes / No buttons on the evening check-in (2 Oct 2026)
 import goals as goals_lib         # a goal without a race (1 Oct 2026)
 import chat_limits                # per-athlete monthly chat allowance (29 Sep 2026)
 from engine import call_claude, call_claude_with_image, stream_claude
@@ -3267,6 +3268,82 @@ def _handle_duplicate(token, chat_id, data, message_id, athletes):
         edit_keyboard_confirm(token, chat_id, message_id, f"Duplicate: {done}")
     send(token, chat_id, reply)
     _append_capture_history(chat_id, slug, f"[tapped: duplicate {action}]", reply)
+    return True
+
+
+def _handle_did_happen(token, chat_id, data, message_id, athletes):
+    """did:... from the evening check-in's "Did the [session] happen today?"
+    (lib/did_happen.py). Yes asks how hard it was; No offers Reschedule or Skip;
+    Reschedule offers the next six days and moves the session in Intervals.icu (and
+    pins that day, as a chat move does, so Sunday's build leaves it); Skip logs it as
+    missed and leaves it on the calendar. Each answer is kept in history.json with the
+    text the card ends on, so the coach reads it and Peak shows it once."""
+    p = did_happen.parse(data)
+    if not p:
+        return False
+    verb, slug, event_id, day = p
+    athlete = athletes.get(chat_id)
+    if not athlete or athlete["slug"] != slug:
+        return False
+    try:
+        client = _icu_client(slug)
+        ev = client.get_event(event_id)
+    except Exception as e:
+        log(f"[{slug}] did-happen {verb} {event_id}: event read failed: {e}")
+        send(token, chat_id, "I couldn't reach Intervals.icu just now, so nothing has "
+                             "changed. Tap the button again in a few minutes.")
+        return True
+    name = (ev.get("name") or "the session").strip()
+    ev_day = did_happen.event_day(ev) or date.today()
+    ask = f"Did the {name} happen today?"
+
+    def card(text, markup=None):
+        if message_id:
+            tg_post(token, "editMessageText", {
+                "chat_id": chat_id, "message_id": message_id, "text": text,
+                "reply_markup": markup or {"inline_keyboard": []}})
+
+    if verb == "y":
+        card(f"{ask}\n✅ Yes")
+        reply = f"Good, {name} done. How hard was it, out of 10?"
+        send(token, chat_id, reply)
+        _append_capture_history(chat_id, slug, "", reply)
+    elif verb == "n":
+        card(f"{ask}\n❌ No. Move it or skip it?", did_happen.no_markup(slug, event_id))
+    elif verb == "r":
+        card(f"{ask}\n❌ No. Move it to:", did_happen.day_markup(slug, event_id, ev_day))
+    elif verb == "m":
+        try:
+            client.edit_workout(event_id, start_date_local=did_happen.moved_start(ev, day))
+        except Exception as e:
+            log(f"[{slug}] did-happen move {event_id} -> {day} failed: {e}")
+            ops_log.alert("bot", f"did-happen move {event_id} -> {day} failed: {e}", athlete=slug)
+            send(token, chat_id, "I couldn't move it in Intervals.icu just now, so it is "
+                                 "still where it was. Tap the day again in a few minutes.")
+            return True
+        try:
+            if day not in agreed_week.pinned_dates_span(slug, day, day):
+                secs = ev.get("moving_time") or 0
+                agreed_week.pin(slug, day, why="moved from the evening check-in", by="athlete",
+                                session=agreed_week.session_record(
+                                    sport=ev.get("type") or "", name=name,
+                                    minutes=round(secs / 60) if secs else 0,
+                                    load_target=ev.get("load_target")))
+        except Exception as e:
+            ops_log.alert("bot", f"did-happen move {event_id} -> {day}: moved but pin "
+                                 f"FAILED ({e!r}), a plan build may rebuild that day", athlete=slug)
+        done = (f"{name} didn't happen on {did_happen.nice_day(ev_day)}.\n"
+                f"📅 Moved to {did_happen.nice_day(date.fromisoformat(day))}.")
+        card(done)
+        _append_capture_history(chat_id, slug, "", done)
+    elif verb == "s":
+        if not did_happen.record_skip(_athlete_dir(slug), ev):
+            ops_log.alert("bot", f"did-happen skip {event_id}: could not write missed_sessions",
+                          athlete=slug)
+        done = (f"{name} didn't happen on {did_happen.nice_day(ev_day)}.\n"
+                f"⏭ Skipped, logged as missed.")
+        card(done)
+        _append_capture_history(chat_id, slug, "", done)
     return True
 
 
@@ -7616,6 +7693,8 @@ def dispatch_callback(token, chat_id, text, msg_id, athletes, config):
     if _handle_rule_check(token, chat_id, text, msg_id, athletes):
         return True
     if _handle_duplicate(token, chat_id, text, msg_id, athletes):
+        return True
+    if _handle_did_happen(token, chat_id, text, msg_id, athletes):
         return True
     if _handle_replan_confirm(token, chat_id, text, msg_id, athletes):
         return True

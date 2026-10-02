@@ -119,6 +119,10 @@ class IcuClient:
             params["category"] = category
         return self._get("events", params)
 
+    def get_event(self, event_id: str | int) -> dict:
+        """One planned calendar event."""
+        return self._get(f"events/{event_id}")
+
     def get_activity_detail(self, activity_id: str) -> dict:
         """Full activity data. Response includes garmin_attribution — display it as
         a footer whenever showing this data to the athlete (API terms requirement)."""

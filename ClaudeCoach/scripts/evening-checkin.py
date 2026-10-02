@@ -37,6 +37,7 @@ from coaching_levels import level_block as _level_block
 import illness as illness_lib   # structured illness/compromised flag (surfacing gate)
 import ops_log
 import planning_pause    # tracking-only athletes: no prescribing, no adherence
+import did_happen        # Yes / No buttons on "Did the [session] happen today?"
 
 TOOLS = "Read,Bash"
 
@@ -330,12 +331,13 @@ OUTPUT FORMAT — follow exactly:
 - Cases C or D: output exactly <notify>SKIP</notify>. No other text."""
 
 
-def notify(msg, chat_id, slug=""):
+def notify(msg, chat_id, slug="", markup=None):
     """Send via notify.py, retry once; alert the ops log if delivery fails."""
+    extra = ["--buttons", json.dumps(markup)] if markup else []
     for _attempt in (1, 2):
         try:
             r = subprocess.run(
-                ["python3", str(NOTIFY), "--chat-id", str(chat_id), msg],
+                ["python3", str(NOTIFY), "--chat-id", str(chat_id), *extra, msg],
                 cwd=PROJECT_DIR, timeout=15,
             )
             if r.returncode == 0:
@@ -344,6 +346,24 @@ def notify(msg, chat_id, slug=""):
             pass
     ops_log.alert("evening-checkin", "Telegram send failed after retry", athlete=slug)
     return False
+
+
+def _did_happen_markup(slug, content):
+    """✅ Yes / ❌ No under a Case B "Did the [session] happen today?" (lib/did_happen.py),
+    when the session it names can be found on today's calendar. None otherwise: the
+    question still goes, and a typed answer still works."""
+    if not did_happen.is_ask(content):
+        return None
+    try:
+        from icu_api import IcuClient      # deferred: a missing requests must not stop the check-in
+        a = json.loads(ATHLETES_CONFIG.read_text())[slug]
+        today = date.today().isoformat()
+        events = IcuClient(a["icu_athlete_id"], a["icu_api_key"]).get_events(today, today, "WORKOUT")
+        ev = did_happen.find_event(content, events)
+        return did_happen.ask_markup(slug, ev["id"]) if ev else None
+    except Exception as e:
+        print(f"[{slug}] did-happen buttons skipped: {e}", file=sys.stderr)
+        return None
 
 
 def _record(slug, ok=True, detail=""):
@@ -416,10 +436,10 @@ def run_athlete(slug, athlete_cfg):
     content = m.group(2).strip() if m else ""
     msg_ids = [i.strip() for i in ((m.group(1) if m else "") or "").split(",") if i.strip()]
 
-    def _send(text, ids, detail):
+    def _send(text, ids, detail, markup=None):
         """One send path, so the ledger and the queue are only ever written after the
         message actually left."""
-        if not notify(text, chat_id, slug=slug):
+        if not notify(text, chat_id, slug=slug, markup=markup):
             return
         if ids:
             try:
@@ -459,7 +479,8 @@ def run_athlete(slug, athlete_cfg):
         _record(slug, ok=True, detail=f"suppressed-dup:{ack_sport}")
     else:
         detail = "sent (deferred debrief ask)" if queued_ask else "sent"
-        _send(content, msg_ids, detail)
+        _send(content, msg_ids, detail,
+              markup=None if msg_ids else _did_happen_markup(slug, content))
 
 
 def main():

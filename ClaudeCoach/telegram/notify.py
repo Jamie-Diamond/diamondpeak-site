@@ -6,6 +6,7 @@ Usage:
   notify.py <message>                      # send text (defaults to config chat_id)
   notify.py --chat-id <id> <message>       # send to specific athlete
   notify.py --photo <path> [caption]       # send photo
+  notify.py --buttons '<keyboard JSON>' <message>   # text with inline buttons
   echo "text" | notify.py                  # pipe text
 """
 import json, sys, ssl, urllib.request, urllib.error
@@ -37,6 +38,16 @@ if "--chat-id" in _args:
         chat_id = config["chat_id"]
 else:
     chat_id = config["chat_id"]
+
+# --buttons <inline keyboard JSON>: buttons under a text message (in Peak too)
+reply_markup = None
+if "--buttons" in _args:
+    _idx = _args.index("--buttons")
+    try:
+        reply_markup = json.loads(_args[_idx + 1])
+    except (IndexError, ValueError):
+        print("notify.py: --buttons needs inline keyboard JSON; sending without", file=sys.stderr)
+    _args = _args[:_idx] + _args[_idx + 2:]
 
 # --no-history: for senders that append to the athlete's history themselves
 log_history = True
@@ -70,21 +81,26 @@ def _append_history(message):
         pass
 
 
-def _web_only(text="", photo=None):
+def _web_only(text="", photo=None, markup=None):
     """Record for the web app; True when this athlete no longer gets Telegram."""
     if outbox is None:
         return False
-    outbox.record(chat_id, text, photo=photo, source="notify", parse_mode="Markdown")
+    outbox.record(chat_id, text, reply_markup=markup, photo=photo, source="notify",
+                  parse_mode="Markdown")
     return not outbox.telegram_on(chat_id)
 
 
-def send_text(text):
-    if _web_only(text):
+def send_text(text, markup=None):
+    if _web_only(text, markup=markup):
         if log_history:
             _append_history(text)
         return
-    for chunk in [text[i:i+4096] for i in range(0, len(text), 4096)]:
-        payload = json.dumps({"chat_id": chat_id, "text": chunk, "parse_mode": "Markdown"}).encode()
+    chunks = [text[i:i+4096] for i in range(0, len(text), 4096)]
+    for n, chunk in enumerate(chunks):
+        body = {"chat_id": chat_id, "text": chunk, "parse_mode": "Markdown"}
+        if markup and n == len(chunks) - 1:
+            body["reply_markup"] = markup
+        payload = json.dumps(body).encode()
         req = urllib.request.Request(
             f"https://api.telegram.org/bot{token}/sendMessage",
             data=payload,
@@ -95,7 +111,7 @@ def send_text(text):
         except urllib.error.HTTPError as e:
             if e.code == 400:
                 # Malformed Markdown — retry as plain text
-                plain = json.dumps({"chat_id": chat_id, "text": chunk}).encode()
+                plain = json.dumps({k: v for k, v in body.items() if k != "parse_mode"}).encode()
                 req2 = urllib.request.Request(
                     f"https://api.telegram.org/bot{token}/sendMessage",
                     data=plain,
@@ -159,4 +175,4 @@ if __name__ == "__main__":
         message = " ".join(args).strip() if args else sys.stdin.read().strip()
         if not message:
             sys.exit(0)
-        send_text(message)
+        send_text(message, reply_markup)
