@@ -241,7 +241,28 @@ def _line_conflicts(line: str, prefs: list) -> str:
     return ""
 
 
-def enforce_rule_guards(before_text: str, after_text: str, prefs: list, slug: str | None = None):
+# REPLACE, NOT STACK (2 Oct 2026). Live chat only (bot.py passes allow_supersede=True):
+# the athlete has just said a rule has changed, so the model may REWRITE that rule to its
+# new state - figures included - instead of having to keep every old number and pile up
+# "superseded again ... history for context" prose. A rewrite counts as the same rule when
+# the new line still carries this share of the old rule's content words (and at least
+# SUPERSEDE_MIN_SHARED of them). The old wording is archived word for word to
+# athletes/<slug>/reference/rule-notes.md (lib/athlete_rules.py), so nothing is lost.
+# Confirmed preferences and the silent hourly session-sync never get this.
+SUPERSEDE_MIN_COVERAGE = 0.4
+SUPERSEDE_MIN_SHARED = 4
+
+
+def _supersedes(removed_line: str, new_line: str) -> bool:
+    old = _content_tokens(removed_line)
+    if not old:
+        return False
+    shared = len(old & _content_tokens(new_line))
+    return shared >= SUPERSEDE_MIN_SHARED and shared / len(old) >= SUPERSEDE_MIN_COVERAGE
+
+
+def enforce_rule_guards(before_text: str, after_text: str, prefs: list, slug: str | None = None,
+                        allow_supersede: bool = False):
     """TIER A — capture-time guard. Runs AFTER the model has edited persistent-rules.md.
 
     Two edit shapes are allowed:
@@ -284,6 +305,7 @@ def enforce_rule_guards(before_text: str, after_text: str, prefs: list, slug: st
         return after_text, []
 
     confirmed   = {_norm(p) for p in prefs}
+    superseded  = []                                  # (old rule, the line replacing it)
     raw_by_norm = {}
     for l in before_perm:
         raw_by_norm.setdefault(_norm(l), l)
@@ -304,7 +326,15 @@ def enforce_rule_guards(before_text: str, after_text: str, prefs: list, slug: st
         if n in confirmed:
             rtoks = _sig_tokens(rline)
             return not rtoks or any(rtoks <= _sig_tokens(l) for l in perm_lines)
-        return any(_absorbs(rline, l) for l in perm_lines)
+        if any(_absorbs(rline, l) for l in perm_lines):
+            return True
+        # Replace-not-stack: a NEW line on the same topic stands in for the old one.
+        if allow_supersede and slug:
+            for l in perm_lines:
+                if _norm(l) not in before_norm and _supersedes(rline, l):
+                    superseded.append((rline.strip(), l.strip()))
+                    return True
+        return False
 
     def _fold_ok(perm_lines) -> str:
         """'' if every removed rule survives in perm_lines; else an ABORT reason.
@@ -341,7 +371,8 @@ def enforce_rule_guards(before_text: str, after_text: str, prefs: list, slug: st
     # A fold-result line (the survivor a removed rule folded into) must never be dropped, or the
     # fold loses data; it is count-neutral so it cannot breach the ceiling either.
     def _is_fold_result(i):
-        return any(_sig_tokens(rl) and _absorbs(rl, after_lines[i]) for rl in removed_raw)
+        return (any(_sig_tokens(rl) and _absorbs(rl, after_lines[i]) for rl in removed_raw)
+                or any(after_lines[i].strip() == new for _old, new in superseded))
 
     dropped = {}                                      # idx -> reason
     for i in appended_idx:
@@ -412,7 +443,20 @@ def enforce_rule_guards(before_text: str, after_text: str, prefs: list, slug: st
                           f"(estimate), over the {SURFACE_TOKEN_BUDGET}-token budget — prune "
                           f"an existing rule before adding another")
 
+    def _archive_superseded():
+        if not (superseded and slug):
+            return
+        try:
+            import athlete_rules
+            seen = set()
+            athlete_rules.archive(slug, [{"reason": "superseded", "rule": o, "now": n}
+                                         for o, n in superseded
+                                         if not (o in seen or seen.add(o))])
+        except Exception:
+            pass                       # archiving must never block the athlete's change
+
     if not dropped:
+        _archive_superseded()
         return after_text, []
 
     new_text = "".join(l for j, l in enumerate(after_lines) if j not in dropped)
@@ -434,6 +478,7 @@ def enforce_rule_guards(before_text: str, after_text: str, prefs: list, slug: st
             return before_text, [(reason.replace("edit", "guard drop"), "")]
 
     drops = [(reason, after_lines[i].strip()) for i, reason in sorted(dropped.items())]
+    _archive_superseded()
     return new_text, drops
 
 

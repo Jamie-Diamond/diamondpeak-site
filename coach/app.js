@@ -1612,6 +1612,75 @@
     });
   }
 
+  /* Your rules (Jamie, 2 Oct 2026): the standing rules the coach always keeps in mind,
+     grouped by topic, one plain line each (lib/athlete_rules.py). Tap one to see it in
+     full and keep, change or remove it. The coach keeps the list short on its own (the
+     nightly tidy) and asks about one rule at most once a week. */
+  function loadRules() {
+    var slug = state.slug;
+    if (!slug) return;
+    fetch('/api/rules/' + encodeURIComponent(slug), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        var box = $('#rulesBox');
+        if (!box) return;
+        if (!j) { box.innerHTML = '<div class="empty">Couldn\u2019t load the rules just now.</div>'; return; }
+        if (!j.count) { box.innerHTML = '<div class="empty">Nothing yet. When you tell the coach how you like ' +
+          'things done, it shows up here.</div>'; return; }
+        var fmt = function (iso) {
+          return new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+        };
+        var h = (j.groups || []).map(function (g) {
+          return '<p class="rg-h">' + esc(g.label) + '</p>' + g.rules.map(function (r) {
+            return '<div class="rule" data-id="' + esc(r.id) + '">' +
+              '<button type="button" class="rule-s">' + esc(r.summary) +
+              (r.expires ? ' <small>until ' + fmt(r.expires) + '</small>' : '') + '</button>' +
+              '<div class="rule-d" hidden><p>' + esc(r.text) + '</p>' +
+              '<div class="btns"><button type="button" data-act="keep">Still right</button>' +
+              '<button type="button" data-act="change">Change</button>' +
+              '<button type="button" data-act="drop">Remove</button></div>' +
+              '<div class="rule-edit" hidden><textarea rows="4">' + esc(r.text) + '</textarea>' +
+              '<div class="btns"><button type="button" data-act="save">Save</button></div></div>' +
+              '<p class="rule-msg"></p></div></div>';
+          }).join('');
+        }).join('');
+        if ((j.ended || []).length) {
+          h += '<p class="rg-h">Ended recently</p>' + j.ended.map(function (e) {
+            return '<div class="rule ended"><span>' + esc(e.rule || '') + ' <small>' +
+              (e.reason === 'expired' ? 'ended ' : 'removed ') + fmt(e.when) + '</small></span></div>';
+          }).join('');
+        }
+        box.innerHTML = h + '<p class="card-f">The coach keeps these short on its own and checks ' +
+          'one with you now and then. Older versions are kept, never lost.</p>';
+        box.onclick = function (e) {
+          var row = e.target.closest('.rule[data-id]');
+          if (!row) return;
+          var d = row.querySelector('.rule-d'), msg = row.querySelector('.rule-msg');
+          if (e.target.closest('.rule-s')) { d.hidden = !d.hidden; return; }
+          var b = e.target.closest('button[data-act]');
+          if (!b) return;
+          var act = b.getAttribute('data-act');
+          if (act === 'change') { row.querySelector('.rule-edit').hidden = false; row.querySelector('textarea').focus(); return; }
+          if (act === 'drop' && !b.classList.contains('armed')) {
+            b.classList.add('armed'); b.textContent = 'Tap again to remove'; return;
+          }
+          var body = { id: row.getAttribute('data-id'), action: act === 'save' ? 'change' : act };
+          if (act === 'save') body.text = row.querySelector('textarea').value;
+          b.disabled = true;
+          postJSON('/api/rules/' + encodeURIComponent(slug), body)
+            .then(function (r) {
+              msg.textContent = r.message || 'Done.';
+              if (act !== 'keep') setTimeout(loadRules, 1200);
+            })
+            .catch(function (err) { b.disabled = false; msg.textContent = err.message; });
+        };
+      })
+      .catch(function () {
+        var box = $('#rulesBox');
+        if (box) box.innerHTML = '<div class="empty">Couldn\u2019t load the rules just now.</div>';
+      });
+  }
+
   /* Athletes & usage (Jamie, 1 Oct 2026: "an admin page so I don't need to ask you every
      time"): every person's sign-up stage and last message, chat this month against the
      allowance, and API-equivalent cost (api/server.py /api/admin/usage). */
@@ -5041,7 +5110,7 @@
         '<span class="gate-go">\u2197</span></a>';
     }).join('') + '</div>', { flush: true, foot: 'Calculators on diamondpeak.uk.' });
 
-    var notifH = '', coachH = '', usageH = '', optsH = '', optsHint = '';
+    var notifH = '', coachH = '', usageH = '', rulesH = '', optsH = '', optsHint = '';
     if (state.me) {
       var ps = pushState();
       // Connections and coaching options are for the athlete ON SCREEN (Jamie, 30 Sep
@@ -5103,6 +5172,9 @@
         coachH = card('Coach tools', '<div id="adminBox"><div class="empty">Loading…</div></div>');
         usageH = '<div id="usageBox"><div class="empty">Loading…</div></div>';
       }
+      if (state.me) {
+        rulesH = '<div id="rulesBox"><div class="empty">Loading…</div></div>';
+      }
     }
 
     var sessionH = '<div class="drawers"><button type="button" class="crow" id="logout">' +
@@ -5123,6 +5195,8 @@
       drawer('sports', 'Focus sports', fs.map(function (x) { return SPNAME[x]; }).join(' · '), sportsH) +
       drawer('food', 'Food', nutritionOn() ? 'tab showing' : 'tab hidden', foodH) +
       drawer('options', 'Coaching options', optsHint, optsH) +
+      drawer('rules', state.me && state.me.own === state.slug ? 'Your rules' : 'Their rules',
+             'what the coach always keeps in mind', rulesH) +
       drawer('coaching', 'Coach tools', 'invites and approvals · all athletes', coachH) +
       drawer('usage', 'Athletes & usage', 'sign-up stage · chat · API cost', usageH) +
       drawer('data', 'Data & sources', 'refreshed ' + (d.generated || '—'), dataH) +
@@ -5170,6 +5244,7 @@
         });
     };
     if (state.me && state.me.coach) { loadAdmin(); loadUsage(); }
+    if (state.me) loadRules();
     var pr = $('#pushRow');
     if (pr) pr.onclick = function () {
       var ps = pushState();

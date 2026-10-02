@@ -549,6 +549,15 @@ def run_athlete(slug: str, athlete_cfg: dict, claude_pass: bool = False) -> None
         _log(f"auto-clear backup at {backup.name}")
         for cat, cline in removals:
             _log(f"auto-cleared [{cat}]: {cline}")
+        # Word-for-word into the athlete's rule notes, so the Your rules page can say what
+        # ended (lib/athlete_rules.recently_ended) and nothing leaves without a record.
+        try:
+            sys.path.insert(0, str(BASE / "lib"))
+            import athlete_rules
+            athlete_rules.archive(slug, [{"reason": {"expired": "expired"}.get(cat, f"removed ({cat})"),
+                                          "rule": cline} for cat, cline in removals])
+        except Exception as e:
+            _log(f"rule notes not written: {e}")
 
     # TIER C — kick off the reviewed consolidation for judgement work (debounced + detached).
     final_count    = bug_fixer._count_rules(text)

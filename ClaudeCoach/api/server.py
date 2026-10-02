@@ -36,6 +36,8 @@ Paths mirror the GitHub Pages layout so Peak runs unchanged:
   GET  /api/chat/history                      your chat: conversation + scheduled messages
   GET  /api/admin/usage                       coach: every person's stage, chat and API cost
   POST /api/indoor/<slug>                     move a planned ride under 2 h indoors / back out
+  GET  /api/rules/<slug>                      Your rules: standing rules by topic, one line each
+  POST /api/rules/<slug>                      keep / change / drop one rule (archived first)
   GET  /api/media/<name>                      a photo/chart from your chat
   GET  /api/push/key, POST /api/push/(un)subscribe, POST /api/push/test
   /api/admin/...                              coach only: athletes, Telegram switch, invites
@@ -336,6 +338,42 @@ def refresh(slug: str, request: Request):
     if code != 0:
         raise HTTPException(502, "refresh failed - the last data is still shown")
     return JSONResponse({"ok": True}, headers=NO_STORE)
+
+
+@app.get("/api/rules/{slug}")
+def rules_list(slug: str, request: Request):
+    """Your rules (lib/athlete_rules.py): the standing rules the coach always keeps in
+    mind, grouped by topic, one line each, plus what ended recently."""
+    require_slug(request, slug)
+    import athlete_rules
+    return JSONResponse(athlete_rules.groups(slug), headers=NO_STORE)
+
+
+@app.post("/api/rules/{slug}")
+async def rules_action(slug: str, request: Request):
+    """keep / change / drop one rule. Every change and removal is archived first."""
+    if request.headers.get("x-peak") != "1":
+        raise HTTPException(400, "missing app header")
+    require_slug(request, slug)
+    body = await request.json() or {}
+    rid, action = str(body.get("id") or ""), str(body.get("action") or "")
+    email = request_email(request)
+    who = "coach" if (is_coach(email) and own_slug(email) != slug) else "athlete"
+    import athlete_rules
+    try:
+        if action == "keep":
+            out = athlete_rules.keep(slug, rid)
+        elif action == "drop":
+            out = athlete_rules.drop(slug, rid, who=who)
+        elif action == "change":
+            out = athlete_rules.change(slug, rid, str(body.get("text") or ""), who=who)
+        else:
+            raise HTTPException(400, "keep, change or drop")
+    except LookupError as e:
+        raise HTTPException(409, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return JSONResponse(out, headers=NO_STORE)
 
 
 @app.post("/api/indoor/{slug}")

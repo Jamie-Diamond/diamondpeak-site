@@ -1732,7 +1732,10 @@ def _apply_rule_capture_guard(slug: str, before_text: str) -> list:
         return []
     try:
         prefs = rules_capture.confirmed_preferences(slug)
-        guarded, drops = rules_capture.enforce_rule_guards(before_text, after_text, prefs, slug=slug)
+        # Live chat: the athlete is here saying what changed, so a rule may be REPLACED
+        # (old wording archived to rule-notes.md) rather than stacked (2 Oct 2026).
+        guarded, drops = rules_capture.enforce_rule_guards(before_text, after_text, prefs,
+                                                           slug=slug, allow_supersede=True)
     except Exception as e:
         log(f"[{slug}] rule capture guard errored (leaving file as the model wrote it): {e}")
         return []
@@ -3202,6 +3205,39 @@ def _handle_baseline_confirm(token, chat_id, data, message_id, athletes):
         edit_keyboard_confirm(token, chat_id, message_id, f"🔬 {family.title()} test result: {done}")
     send(token, chat_id, reply)
     _append_capture_history(chat_id, slug, f"[tapped: {family} test {verdict}]", reply)
+    return True
+
+
+def _handle_rule_check(token, chat_id, data, message_id, athletes):
+    """rule:keep|change|drop:<slug>:<rule id> from the weekly rule check
+    (scripts/rule-check.py, lib/athlete_rules.py). Keep resets its check clock, drop removes
+    it (archived first), change asks for the new wording, which the next chat turn writes."""
+    if not data.startswith("rule:"):
+        return False
+    parts = data.split(":")
+    if len(parts) != 4:
+        return False
+    _, verdict, slug, rid = parts
+    athlete = athletes.get(chat_id)
+    if not athlete or athlete["slug"] != slug or verdict not in ("keep", "change", "drop"):
+        return False
+    import athlete_rules
+    try:
+        if verdict == "keep":
+            athlete_rules.keep(slug, rid)
+            reply, done = "Kept. I won't ask about that one for a while.", "✅ Still right"
+        elif verdict == "drop":
+            athlete_rules.drop(slug, rid, who="athlete")
+            reply, done = "Dropped. I'll stop applying it.", "🗑 Dropped"
+        else:
+            reply, done = ("What should it say now? Tell me in your own words and I'll "
+                           "update it."), "✏️ Changing it"
+    except LookupError:
+        reply, done = "That one has already changed since I asked, so nothing to do.", None
+    if message_id and done:
+        edit_keyboard_confirm(token, chat_id, message_id, done)
+    send(token, chat_id, reply)
+    _append_capture_history(chat_id, slug, f"[tapped: rule check {verdict} {rid}]", reply)
     return True
 
 
@@ -7511,6 +7547,8 @@ def dispatch_callback(token, chat_id, text, msg_id, athletes, config):
     if _handle_test_confirm(token, chat_id, text, msg_id, athletes):
         return True
     if _handle_baseline_confirm(token, chat_id, text, msg_id, athletes):
+        return True
+    if _handle_rule_check(token, chat_id, text, msg_id, athletes):
         return True
     if _handle_duplicate(token, chat_id, text, msg_id, athletes):
         return True

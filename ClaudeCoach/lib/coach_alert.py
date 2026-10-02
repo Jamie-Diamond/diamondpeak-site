@@ -426,6 +426,13 @@ _CRON_INTERPRETERS = {"bash", "sh", "python", "python3", "env"}
 # A name here that has NO live cron entry is also reported: a stale exemption is
 # the same class of drift as a stale registration.
 CRON_EXEMPT = {
+    "rule_tidy.py":
+        "nightly rule tidy (lib/rule_tidy.py, 2 Oct 2026). Optional upkeep: a missed night "
+        "leaves rules as long as they were, nothing reaches an athlete, and the next night "
+        "picks up where it left off. Its one line per athlete is in rule-tidy.log.",
+    "rule-check.py":
+        "weekly one-rule check (scripts/rule-check.py, 2 Oct 2026). An optional nudge: a "
+        "missed Sunday means no question that week and the rule is simply asked next time.",
     "ops-digest.py":
         "this alarm itself. Its schedule is declared as DIGEST_CRON and "
         "cross-checked against the live crontab by cron_audit() — a deliverable "
