@@ -186,3 +186,39 @@ def test_peak_format_note_rides_on_the_message_and_keeps_the_session(athlete):
     _e, prompt, mode, _s = engine._plan_session(
         "hello", {"session_max_turns": 12}, [], athlete, "Tester", "")
     assert mode == "resume" and "shown in Peak" not in prompt
+
+
+# ── one session per model (2 Oct 2026) ───────────────────────────────────────
+# A prompt cache belongs to one model: resuming a Sonnet session on Opus re-sent the
+# whole conversation at Opus prices (~20% of chat cost). Each model resumes its own.
+
+def test_each_model_resumes_its_own_session(athlete):
+    fp = engine._prompt_fingerprint(athlete)
+    engine._save_session(athlete, {"session_id": "sess-sonnet", "fp": fp, "turns": 2,
+                                   "started": time.time(), "last_seen": ""}, engine.MODEL_SONNET)
+    extra, _p, mode, _s = engine._plan_session("hi", {}, [], athlete, "Tester", "",
+                                               engine.MODEL_SONNET)
+    assert mode == "resume" and extra == ["--resume", "sess-sonnet"]
+    _e, prompt, mode, _s = engine._plan_session("plan my week", {}, [], athlete, "Tester", "",
+                                                engine.MODEL_OPUS)
+    assert mode == "new" and RULE_MARKER in prompt        # Opus starts its own, with the rules
+
+
+def test_the_other_models_replies_reach_a_resumed_session(athlete):
+    fp = engine._prompt_fingerprint(athlete)
+    engine._save_session(athlete, {"session_id": "s", "fp": fp, "turns": 1, "started": time.time(),
+                                   "last_seen": "2026-10-02T09:00:00"}, engine.MODEL_SONNET)
+    history = [{"ts": "2026-10-02T09:05:00", "user": "rebuild next week",
+                "assistant": "OPUS-REPLY-MARKER"}]
+    _e, prompt, mode, _s = engine._plan_session("thanks", {}, history, athlete, "Tester", "",
+                                                engine.MODEL_SONNET)
+    assert mode == "resume" and "OPUS-REPLY-MARKER" in prompt
+
+
+def test_opus_keeps_the_original_file_and_reset_clears_every_model(athlete):
+    engine._save_session(athlete, {"session_id": "o"}, engine.MODEL_OPUS)
+    engine._save_session(athlete, {"session_id": "s"}, engine.MODEL_SONNET)
+    assert (athlete.parent / ".chat_session.json").exists()
+    assert (athlete.parent / ".chat_session.sonnet.json").exists()
+    engine._clear_session(athlete)
+    assert not list(athlete.parent.glob(".chat_session*.json"))

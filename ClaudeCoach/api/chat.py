@@ -598,7 +598,8 @@ def delete_message(chat_id: str, slug: str | None, key: str, by: str = "") -> bo
         tmp = hf.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(hist, indent=2))
         tmp.replace(hf)
-        (CC / "athletes" / slug / ".chat_session.json").unlink(missing_ok=True)
+        for f in (CC / "athletes" / slug).glob(".chat_session*.json"):   # one per model
+            f.unlink(missing_ok=True)
     return True
 
 

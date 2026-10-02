@@ -20,7 +20,7 @@ and are invalidated when the system prompt / persistent rules change
 the worst case is exactly the old behaviour. Disable with "session_resume":
 false in config.json.
 """
-import hashlib, json, signal, subprocess, sys, threading, time, shutil, os, uuid
+import hashlib, json, re, signal, subprocess, sys, threading, time, shutil, os, uuid
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -473,8 +473,22 @@ def _assemble(user_message, history, system_prompt_file, athlete_name, context):
 # system prompt; athletes/ is gitignored so this never lands in the repo)
 # ---------------------------------------------------------------------------
 
-def _session_path(sp_file) -> Path:
-    return Path(sp_file).parent / ".chat_session.json"
+def _model_key(model) -> str:
+    m = str(model or "").lower()
+    return next((k for k in ("opus", "sonnet", "haiku", "fable") if k in m),
+                re.sub(r"[^a-z0-9]+", "-", m).strip("-") or "opus")
+
+
+def _session_path(sp_file, model=None) -> Path:
+    """One resumable session per model (2 Oct 2026). A prompt cache belongs to one
+    model, so a Sonnet session resumed on Opus re-sent the whole conversation at Opus
+    prices: ~20% of chat cost (9 rewrites averaging 80k tokens in 3 days). Each model
+    now resumes its own session and picks up the other's replies through the catch-up
+    block. The original file keeps the Opus session (call_claude's default model), so
+    existing state and tooling carry on."""
+    key = _model_key(model)
+    return Path(sp_file).parent / (".chat_session.json" if key == "opus"
+                                   else f".chat_session.{key}.json")
 
 
 def _prompt_fingerprint(sp_file) -> str:
@@ -504,9 +518,9 @@ def _prompt_fingerprint(sp_file) -> str:
     return hashlib.sha256(blob.encode()).hexdigest()[:16]
 
 
-def _load_session(sp_file):
+def _load_session(sp_file, model=None):
     try:
-        st = json.loads(_session_path(sp_file).read_text())
+        st = json.loads(_session_path(sp_file, model).read_text())
         if st.get("session_id"):
             return st
     except Exception:
@@ -514,16 +528,20 @@ def _load_session(sp_file):
     return None
 
 
-def _save_session(sp_file, st):
+def _save_session(sp_file, st, model=None):
     try:
-        _session_path(sp_file).write_text(json.dumps(st))
+        _session_path(sp_file, model).write_text(json.dumps(st))
     except Exception as e:
         log(f"session state save failed: {e}")
 
 
-def _clear_session(sp_file):
+def _clear_session(sp_file, model=None):
+    """model None clears every model's session (a reset); a model clears just its own."""
     try:
-        _session_path(sp_file).unlink(missing_ok=True)
+        paths = ([_session_path(sp_file, model)] if model is not None
+                 else Path(sp_file).parent.glob(".chat_session*.json"))
+        for p in paths:
+            p.unlink(missing_ok=True)
     except Exception:
         pass
 
@@ -572,7 +590,8 @@ _WEB_NOTE = (
     "(settings), e.g. [see Thursday in your calendar](peak:cal). Only those screens.]")
 
 
-def _plan_session(user_message, config, history, sp_file, athlete_name, context):
+def _plan_session(user_message, config, history, sp_file, athlete_name, context,
+                  model=None):
     """Decide how this call runs. Returns (extra_args, prompt, mode, state):
     mode 'stateless' — old behaviour, fresh throwaway session (config opt-out)
     mode 'resume'    — continue the athlete's persisted session
@@ -583,7 +602,7 @@ def _plan_session(user_message, config, history, sp_file, athlete_name, context)
         return (["--no-session-persistence"],
                 _assemble(user_message, history, sp_file, athlete_name, context),
                 "stateless", None)
-    st = _load_session(sp_file)
+    st = _load_session(sp_file, model)
     try:
         max_turns = int(config.get("session_max_turns", SESSION_MAX_TURNS))
     except (TypeError, ValueError):
@@ -597,7 +616,7 @@ def _plan_session(user_message, config, history, sp_file, athlete_name, context)
             "new", None)
 
 
-def _finish_session(sp_file, mode, st, session_id):
+def _finish_session(sp_file, mode, st, session_id, model=None):
     """Persist session state after a successful turn. last_seen is stamped 10s
     in the future: the bot appends this exchange to history.json moments after
     we return, and without the skew that entry would look "missed" and be
@@ -608,7 +627,7 @@ def _finish_session(sp_file, mode, st, session_id):
     if mode == "resume" and st:
         st["turns"] = st.get("turns", 0) + 1
         st["last_seen"] = last_seen
-        _save_session(sp_file, st)
+        _save_session(sp_file, st, model)
     elif mode == "new" and session_id:
         _save_session(sp_file, {
             "session_id": session_id,
@@ -616,7 +635,7 @@ def _finish_session(sp_file, mode, st, session_id):
             "turns": 1,
             "started": time.time(),
             "last_seen": last_seen,
-        })
+        }, model)
 
 
 def _log_timing(path, model, mode, t0, t_init, t_first,
@@ -976,8 +995,9 @@ def _run_once(prompt, model, extra_args, cwd, timeout=300, env=None):
 def call_claude(user_message, config, history, model=MODEL_OPUS,
                 system_prompt_file=None, athlete_name="Jamie", context=""):
     sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
+    session_model = model
     extra, prompt, mode, st = _plan_session(user_message, config, history,
-                                            sp_file, athlete_name, context)
+                                            sp_file, athlete_name, context, model)
     env = scoped_env(sp_file)
     t0 = time.time()
     _cost_reset()
@@ -985,9 +1005,9 @@ def call_claude(user_message, config, history, model=MODEL_OPUS,
         text, sid, rc = _run_once(prompt, model, extra, config["project_dir"], env=env)
         if (rc != 0 or not text) and mode == "resume":
             log(f"[session] resume failed rc={rc} — retrying with fresh session")
-            _clear_session(sp_file)
+            _clear_session(sp_file, session_model)
             extra, prompt, mode, st = _plan_session(user_message, config, history,
-                                                    sp_file, athlete_name, context)
+                                                    sp_file, athlete_name, context, session_model)
             text, sid, rc = _run_once(prompt, model, extra, config["project_dir"], env=env)
         if _is_limit_message(text):
             # A capped bucket must never surface a rate-limit notice to the athlete while
@@ -1003,7 +1023,7 @@ def call_claude(user_message, config, history, model=MODEL_OPUS,
         # IN PLACE - reading it afterwards logs the NEXT turn, not the one just served.
         turn_idx = _turn_index(st)
         if rc == 0 and text:
-            _finish_session(sp_file, mode, st, sid)
+            _finish_session(sp_file, mode, st, sid, session_model)
         _log_timing("call", model, mode, t0, None, None,
                     turns=turn_idx, prompt_bytes=len(prompt or ""))
         _meter(sp_file)
@@ -1189,8 +1209,9 @@ def stream_claude(user_message, config, history, model=MODEL_OPUS,
     run = _register_run(run_id or new_run_id(), run_owner)
     try:
         sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
+        session_model = model
         extra, prompt, mode, st = _plan_session(user_message, config, history,
-                                                sp_file, athlete_name, context)
+                                                sp_file, athlete_name, context, model)
         env = scoped_env(sp_file)
         t0 = time.time()
         _cost_reset()
@@ -1204,9 +1225,9 @@ def stream_claude(user_message, config, history, model=MODEL_OPUS,
         # wrong answer start over.
         if not run.cancelled and mode == "resume" and rc != 0 and not (final or streamed.strip()):
             log(f"[session] resume failed rc={rc} — falling back to fresh session")
-            _clear_session(sp_file)
+            _clear_session(sp_file, session_model)
             extra, prompt, mode, st = _plan_session(user_message, config, history,
-                                                    sp_file, athlete_name, context)
+                                                    sp_file, athlete_name, context, session_model)
             final, streamed, sid, rc, t_init, t_first = yield from _stream_once(
                 prompt, model, extra, config["project_dir"], env=env, run=run)
 
@@ -1230,7 +1251,7 @@ def stream_claude(user_message, config, history, model=MODEL_OPUS,
         # a session whose turn counter did not advance, which only means it
         # rotates a turn early.
         if rc == 0 and text and not run.cancelled:
-            _finish_session(sp_file, mode, st, sid)
+            _finish_session(sp_file, mode, st, sid, session_model)
         _log_timing("stream", model, mode, t0, t_init, t_first,
                     turns=turn_idx, prompt_bytes=len(prompt or ""))
         # Metered whether or not the athlete cancelled: the tokens were spent either way.

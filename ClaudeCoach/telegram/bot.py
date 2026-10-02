@@ -4110,10 +4110,14 @@ def prefetch_context(slug: str) -> str:
         # get_sport_settings dropped from this fetch (13 Aug): its only consumer was the
         # FTP figure on the fitness line, and thresholds now come from get_thresholds
         # below, which reads sport-settings itself.
-        wellness, events, history_acts = client.fetch_all(
+        # Last week's plan is a separate call so `events` (the write-verify snapshot
+        # below) keeps exactly the forward window it has always had.
+        wellness, events, history_acts, past_events = client.fetch_all(
             ("get_wellness", 14),
             ("get_events", today.isoformat(), end_date),
             ("get_training_history", 7),
+            ("get_events", (today - timedelta(days=7)).isoformat(),
+             (today - timedelta(days=1)).isoformat(), "WORKOUT"),
         )
         # "Before" side of verifying a claimed calendar write — free, the events are
         # already here. Stored with its timestamp so the verifier can refuse to judge on
@@ -4177,25 +4181,17 @@ def prefetch_context(slug: str) -> str:
             ))
 
         # Recent activities
+        # With ids, so a move/edit or "how did Tuesday go" needs no fetch (lib/chat_context.py).
+        import chat_context as _cc
         if history_acts:
-            lines.append("Recent activities:")
-            for a in sorted(history_acts, key=lambda x: x.get("start_date_local",""), reverse=True)[:5]:
-                date_str = (a.get("start_date_local") or "")[:10]
-                sport_type = a.get("type", "?")
-                dur = round((a.get("moving_time") or 0) / 60)
-                tss = a.get("icu_training_load") or 0
-                dist = a.get("distance") or 0
-                dist_str = f"  {dist/1000:.1f}km" if dist else ""
-                lines.append(f"  {date_str}  {sport_type:<12} {dur}min{dist_str}  Load={tss}")
-
-        # Upcoming planned events
+            lines.append("Recent activities (last 7 days):")
+            lines.extend(_cc.activity_lines(history_acts))
+        if past_events:
+            lines.append("Planned last 7 days:")
+            lines.extend(_cc.planned_last_week(past_events, history_acts))
         if events:
-            lines.append("Upcoming events:")
-            for ev in events[:8]:
-                ev_date = (ev.get("start_date_local") or "")[:10]
-                ev_name = ev.get("name") or ""
-                ev_type = ev.get("type") or ev.get("category") or ""
-                lines.append(f"  {ev_date}  {ev_type:<12} {ev_name}")
+            lines.append("Upcoming events (next 3 weeks):")
+            lines.extend(_cc.upcoming(events))
 
         lines.append(
             f"\nFor more detail call: python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint <endpoint> [options]"
