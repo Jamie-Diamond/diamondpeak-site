@@ -5634,7 +5634,10 @@ def handle_onboarding(token, chat_id, text):
              f"Handle: `{slug}`\n"
              f"Race: {session['answers'].get('race', '?')}\n"
              f"Goal: {(goals_lib.GOALS.get(session['answers'].get('goal') or '') or {}).get('label') or session['answers'].get('a_goal', '?')}\n\n"
-             f"Send `/approve {slug}` to activate.")
+             "Activate them?",
+             reply_markup={"inline_keyboard": [[
+                 {"text": "Yes, activate", "callback_data": f"/approve {slug}"},
+                 {"text": "No, not yet", "callback_data": f"/hold {slug}"}]]})
     return True
 
 
@@ -5675,6 +5678,11 @@ def handle_admin_command(token, chat_id, text, config):
             send(token, chat_id, f"`{who}` chat allowance set to ${usd:.0f} a month.")
             return True
         send(token, chat_id, chat_limits.report(athletes_data, admin_id))
+        return True
+
+    if lower.startswith("/hold "):
+        send(token, chat_id, f"Left inactive. Tap or send `/approve {text.split(None, 1)[1].strip()}` "
+                             "when you're ready.")
         return True
 
     if lower.startswith("/approve "):
