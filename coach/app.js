@@ -39,11 +39,16 @@
     return;
   }
 
-  var ATHLETES = [
-    { slug: 'jamie', name: 'Jamie' },
-    { slug: 'kathryn', name: 'Kathryn' },
-    { slug: 'calum', name: 'Calum' }
-  ];
+  // Who this person may open comes from /api/me; until it answers (or offline), the last
+  // list it gave. Was a hard-coded Jamie / Kathryn / Calum, which is all a laptop signed
+  // in with an unregistered email saw (2 Oct 2026) - and never Fred.
+  var ATHLETES_KEY = 'peak.athletes';
+  var ATHLETES = (function () {
+    try {
+      var a = JSON.parse(localStorage.getItem(ATHLETES_KEY) || '[]');
+      return Array.isArray(a) ? a : [];
+    } catch (e) { return []; }
+  })();
 
   var TELEGRAM = 'https://t.me/ClaudeCoachTri_bot';
 
@@ -5303,6 +5308,25 @@
 
   }
 
+  // Signed in to Cloudflare, but not as anyone Peak knows (403), or the sign-in has
+  // lapsed (401). Say which email, and offer the way out, rather than a stale list.
+  function signInProblem(me) {
+    var known = me.denied === 403;
+    $('#gateList').innerHTML = '<div class="gate-msg"><b>' +
+      (known && me.email ? 'Signed in as ' + esc(me.email) : 'Your sign-in has expired') + '</b><p>' +
+      (known ? 'That email isn\u2019t registered with Peak. Log out, then sign in with the email ' +
+               'your coach invited.' : 'Log out and sign in again.') + '</p>' +
+      '<button type="button" class="gate-out" id="gateLogout">Log out</button></div>';
+    $('#gateList').onclick = null;
+    $('#gateLogout').onclick = function () {
+      try { localStorage.removeItem(ATHLETES_KEY); } catch (e) { /* fine */ }
+      location.href = '/cdn-cgi/access/logout';
+    };
+    var sub = document.querySelector('.gate-sub');
+    if (sub) sub.textContent = 'Peak couldn\u2019t confirm who you are.';
+    openGate();
+  }
+
   function openGate() {
     document.body.classList.add('gated');
     var g = $('#gate');
@@ -5393,9 +5417,18 @@
     // in and which athletes they may see, and serves their private data under the same
     // paths. On GitHub Pages /api/me is a 404 and the picker is unchanged.
     fetch('/api/me', { cache: 'no-store' })
-      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (r) {
+        if (r.ok) return r.json();
+        if (r.status === 401 || r.status === 403) {
+          return r.json().catch(function () { return {}; }).then(function (j) {
+            return { denied: r.status, email: j.email || '' };
+          });
+        }
+        return null;
+      })
       .catch(function () { return null; })
       .then(function (me) {
+        if (me && me.denied) { signInProblem(me); return; }
         if (me && !(me.athletes && me.athletes.length) && me.state) {
           // Invited and still signing up (or waiting for approval): the app is just the
           // chat, where the bot's own sign-up questions run.
@@ -5408,6 +5441,7 @@
         }
         if (me && me.athletes && me.athletes.length) {
           ATHLETES = me.athletes;
+          try { localStorage.setItem(ATHLETES_KEY, JSON.stringify(ATHLETES)); } catch (e) { /* fine */ }
           state.me = me;
           buildGate();
           var gf = document.querySelector('.gate-foot');

@@ -343,6 +343,11 @@ body.gated{overflow:hidden}
 .gate-word em{font-style:italic;color:var(--accent)}
 .gate-sub{margin:9px 0 0;font-size:14.5px;color:var(--ink-2);max-width:30ch}
 .gate-list{margin-top:26px;border-top:1px solid var(--rule)}
+.gate-msg{padding:18px 4px 4px;text-align:left}
+.gate-msg b{display:block;font-weight:500;font-size:15px;word-break:break-all}
+.gate-msg p{margin:6px 0 14px;font-size:13.5px;color:var(--ink-2);line-height:1.45}
+.gate-out{appearance:none;border:1px solid var(--accent);background:var(--accent);color:#fff;
+  border-radius:16px;padding:8px 18px;font-size:14px;cursor:pointer}
 
 /* Hairline rows rather than boxed cards: the list should look like an index in a
    printed book, which is the whole conceit of the app. */
@@ -1225,6 +1230,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=72" defer></script>
+<script src="app.js?v=73" defer></script>
 </body>
 </html>

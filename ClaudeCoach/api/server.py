@@ -270,7 +270,11 @@ def me(request: Request):
     athletes = allowed_athletes(email)
     _, own, state = own_chat(email)
     if not athletes and not state:
-        raise HTTPException(403, "this email has no athlete")
+        # Their own email back, so Peak can say who they are signed in as (2 Oct 2026: a
+        # laptop signed in with an unregistered email just showed a stale athlete list).
+        print(f"[me] signed in as an email with no athlete: {email}", flush=True)
+        return JSONResponse({"detail": "this email has no athlete", "email": email},
+                            status_code=403, headers=NO_STORE)
     return JSONResponse({"email": email, "athletes": athletes, "own": own, "state": state,
                          "coach": is_coach(email), "push": push.subscribed(email),
                          "strava": _strava_state(email)},
