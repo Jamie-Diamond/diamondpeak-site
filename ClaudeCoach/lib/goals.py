@@ -1,7 +1,7 @@
 """Goals without a race (Jamie, 1 Oct 2026: "make sure if an athlete has the ask to just
 maintain fitness, or improve FTP or something non race related you know what to do").
 
-An athlete with no A race ahead trains in repeating 6-week GOAL BLOCKS toward one goal:
+An athlete with no A race ahead trains in repeating GOAL BLOCKS toward one goal:
 
     maintain  Keep my fitness  Fitness held in a band around where they started
     ftp       Raise my FTP     bike sweetspot / threshold / VO2; FTP test ends each block
@@ -9,7 +9,9 @@ An athlete with no A race ahead trains in repeating 6-week GOAL BLOCKS toward on
     swim      Swim faster      CSS and speed sets; CSS test ends each block
     fitter    Get fitter       Fitness rises slowly; no test, the Fitness trend is the measure
 
-Each block is load, load, easier, load, load, easier + test (BLOCK_SHAPE). The weekly
+Each block is build weeks then ONE easier week that carries the test: 3 + 1 by default,
+4 + 1 with `block_weeks: 5` (Jamie, 2 Oct 2026: "normally it's 3/4 weeks on, 1 off", not
+the first cut's load, load, easier, load, load, test). The weekly
 load comes from plan_tools.required_tss (its goal branch), the session menu from the
 library's non-race ("offseason") menu with this goal's zone split, and the test from a
 booking (plan_tools.goal_test_bookings), so the validator insists on it exactly as on a
@@ -42,8 +44,16 @@ from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent            # ClaudeCoach/
 
-BLOCK_WEEKS = 6
-BLOCK_SHAPE = ("load", "load", "easy", "load", "load", "test")
+BLOCK_WEEKS = 4                  # default block: 3 build weeks + 1 easier week with the test
+MIN_BLOCK_WEEKS, MAX_BLOCK_WEEKS = 3, 6
+
+
+def shape(n: int = BLOCK_WEEKS) -> tuple:
+    """Week kinds for an n-week block: build weeks, then one easier week with the test."""
+    return ("load",) * (n - 1) + ("test",)
+
+
+BLOCK_SHAPE = shape()            # the default block, for display
 MAINTAIN_HALF_BAND = 3.0          # maintain: Fitness held within +/- this of the start
 DEFAULT_RAMP_CAP = 3.0            # Fitness per week when the athlete has no ramp cap set
 
@@ -197,14 +207,23 @@ def block_start(cfg: dict, slug: str | None = None) -> date | None:
     return _on_or_after_monday(set_d) if set_d else None
 
 
-def position(start: date | None, day: date) -> dict:
-    """Where `day` falls: block (1-based), week in block (1-6), its kind, that week's
-    Monday, and the training week counted from block 1. A day before block 1 reads as
-    block 1 week 1 (the lead-in is planned like the first week)."""
+def block_weeks(cfg: dict | None) -> int:
+    """This athlete's block length: goal.block_weeks (3-6), else BLOCK_WEEKS."""
+    try:
+        n = int((goal_cfg(cfg or {}) or {}).get("block_weeks") or BLOCK_WEEKS)
+    except (TypeError, ValueError):
+        n = BLOCK_WEEKS
+    return min(MAX_BLOCK_WEEKS, max(MIN_BLOCK_WEEKS, n))
+
+
+def position(start: date | None, day: date, weeks: int = BLOCK_WEEKS) -> dict:
+    """Where `day` falls: block (1-based), week in block, its kind, that week's Monday,
+    and the training week counted from block 1. A day before block 1 reads as block 1
+    week 1 (the lead-in is planned like the first week)."""
     wk = _monday(day)
     n = max(0, (wk - start).days // 7) if start else 0
-    return {"block": n // BLOCK_WEEKS + 1, "week": n % BLOCK_WEEKS + 1,
-            "kind": BLOCK_SHAPE[n % BLOCK_WEEKS], "week_start": wk.isoformat(),
+    return {"block": n // weeks + 1, "week": n % weeks + 1, "weeks": weeks,
+            "kind": shape(weeks)[n % weeks], "week_start": wk.isoformat(),
             "training_week": n + 1}
 
 
@@ -262,7 +281,7 @@ def week_note(g: dict, pos: dict, kind: str, target, floor, ctl, why: str = "",
     """The planner's instruction for the week (the LLM reads it; never shown verbatim)."""
     gd = GOALS[g["type"]]
     head = (f"GOAL BLOCK (no race): \"{gd['label']}\". Block {pos['block']}, week "
-            f"{pos['week']} of {BLOCK_WEEKS}. ")
+            f"{pos['week']} of {pos.get('weeks', BLOCK_WEEKS)}. ")
     tail = (" There is no race: never mention a countdown, race prep or race pace. "
             "Call it their goal block, not an off-season.")
     if kind == "load":
@@ -312,7 +331,7 @@ def make(goal_type: str, *, today: date | None = None, start: date | None = None
     if goal_type not in GOALS:
         raise ValueError(f"unknown goal '{goal_type}' (one of {', '.join(GOAL_ORDER)})")
     today = today or date.today()
-    g = {"type": goal_type, "set": today.isoformat(), "block_weeks": BLOCK_WEEKS}
+    g = {"type": goal_type, "set": today.isoformat(), "block_weeks": BLOCK_WEEKS}   # 3 + 1
     if start:
         g["start"] = _monday(start).isoformat()
     if sports:
@@ -400,7 +419,7 @@ def view(cfg: dict, profile: dict, slug: str | None = None, today: date | None =
     import plan_tools as _pt                 # lazy: plan_tools imports this module
     today = today or date.today()
     start = _pt.goal_start(cfg, slug, today)
-    pos = position(start, today)
+    pos = position(start, today, block_weeks(cfg))
     gd = GOALS[g["type"]]
     next_test = None
     for b in _pt.goal_test_bookings(cfg, slug, today=today):
@@ -412,7 +431,8 @@ def view(cfg: dict, profile: dict, slug: str | None = None, today: date | None =
     return {"type": g["type"], "label": gd["label"],
             "started": start.isoformat() if start else None,
             "notStarted": bool(start and today < start),
-            "block": pos["block"], "week": pos["week"], "blockWeeks": BLOCK_WEEKS,
+            "block": pos["block"], "week": pos["week"], "blockWeeks": pos["weeks"],
+            "shape": list(shape(pos["weeks"])),
             "kind": pos["kind"], "nextTest": next_test,
             "band": list(lo_hi) if lo_hi else None,
             "progress": progress(cfg, profile, ctl_now)}
@@ -420,9 +440,9 @@ def view(cfg: dict, profile: dict, slug: str | None = None, today: date | None =
 
 _PROMPT = (
     "GOAL WITHOUT A RACE: {name} has no A race; their goal is \"{label}\". The plan runs "
-    "6-week goal blocks (load, load, easier, load, load, easier + test); today is block "
-    "{block}, week {week}{test}. Quote the block and the goal, never a race countdown or "
-    "race prep, and don't call it an off-season.")
+    "{weeks}-week goal blocks ({builds} build weeks, then one easier week with the test); "
+    "today is block {block}, week {week}{test}. Quote the block and the goal, never a race "
+    "countdown or race prep, and don't call it an off-season.")
 _SETUP = (
     "\nGOAL SETUP: if {name} has no race and wants to keep fit, raise their FTP, run or swim "
     "faster or just get fitter, or changes that goal, run `python3 "
@@ -451,10 +471,11 @@ def prompt_block(slug: str, first_name: str = "", path=None, today: date | None 
             active = False
         if active:
             today = today or date.today()
-            pos = position(_pt.goal_start(cfg, slug, today), today)
+            pos = position(_pt.goal_start(cfg, slug, today), today, block_weeks(cfg))
             v = view(cfg, {}, slug, today) or {}
             nt = v.get("nextTest")
             test = (f"; next test: {nt['name']}, week of {nt['week_start']}" if nt else "")
             out = _PROMPT.format(name=name, label=GOALS[g["type"]]["label"],
+                                 weeks=pos["weeks"], builds=pos["weeks"] - 1,
                                  block=pos["block"], week=pos["week"], test=test)
     return out + _SETUP.format(name=name, slug=slug)

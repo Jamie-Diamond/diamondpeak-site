@@ -3799,18 +3799,22 @@
   }
 
   /* Goal without a race (lib/goals.py, 1 Oct 2026): the goal, where this week sits in the
-     6-week block, the next test and progress since the goal began. */
-  var GOAL_KIND = { load: 'Train', easy: 'Easier', test: 'Test' };
+     block (build weeks, then one easier week), the next test and progress. */
+  var GOAL_KIND = { load: 'Build', easy: 'Easier', test: 'Test' };
   function goalBlock(g) {
     var fmt = function (iso) {
       return new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
     };
-    var shape = ['load', 'load', 'easy', 'load', 'load', g.nextTest || g.type === 'run' ||
-                 g.type === 'ftp' || g.type === 'swim' ? 'test' : 'easy'];
+    // Build weeks, then one easier week with the test (lib/goals.py shape).
+    var n = g.blockWeeks || 4;
+    var shape = g.shape || [];
+    if (!shape.length) { for (var i = 1; i < n; i++) shape.push('load'); shape.push('test'); }
+    var hasTest = !!(g.nextTest || g.type === 'run' || g.type === 'ftp' || g.type === 'swim');
+    shape = shape.map(function (k) { return k === 'test' && !hasTest ? 'easy' : k; });
     var sub = g.type === 'maintain' && g.band
       ? 'Fitness held between ' + g.band[0] + ' and ' + g.band[1] + '.'
-      : (g.nextTest ? 'Each 6-week block ends with ' + (g.nextTest.name === '5k time trial'
-          ? 'a 5k time trial' : 'an ' + g.nextTest.name) + '.' : 'Training runs in 6-week blocks.');
+      : (g.nextTest ? (n - 1) + ' build weeks, then an easier week with ' + (g.nextTest.name === '5k time trial'
+          ? 'a 5k time trial' : 'an ' + g.nextTest.name) + '.' : (n - 1) + ' build weeks, then an easier week.');
     var h = '<section class="hero"><p class="hero-k">Goal · no race booked</p>' +
       '<h2 class="hero-t">' + esc(g.label) + '</h2><p class="hero-m">' + esc(sub) + '</p></section>';
     var cur = g.waiting || g.notStarted ? 0 : g.week;

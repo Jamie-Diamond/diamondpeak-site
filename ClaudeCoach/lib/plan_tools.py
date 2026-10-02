@@ -920,7 +920,7 @@ def goal_test_bookings(cfg: dict, slug: str | None = None, today=None,
     out = []
     for _ in range(weeks):
         if goal_active(cfg, w):
-            pos = _goals.position(goal_start(cfg, slug, w), w)
+            pos = _goals.position(goal_start(cfg, slug, w), w, _goals.block_weeks(cfg))
             if pos["kind"] == "test":
                 out.append(_goal_test_booking(test, pos))
         w += timedelta(days=7)
@@ -938,8 +938,9 @@ def _goal_week(cfg: dict, ctl_today, today: date, last_week_tss=None,
     g = _goals.goal_cfg(cfg)
     gd = _goals.GOALS[g["type"]]
     start = goal_start(cfg, slug, today)
-    pos = _goals.position(start, today)
-    prev = _goals.position(start, today - timedelta(days=7))
+    nwk = _goals.block_weeks(cfg)
+    pos = _goals.position(start, today, nwk)
+    prev = _goals.position(start, today - timedelta(days=7), nwk)
     kind, why = pos["kind"], ""
     # This week's goal test (from the same start as `pos`), plus any hand-booked tests /
     # PB attempts that fall this week.
@@ -2804,7 +2805,7 @@ def cmd_race_setup(args) -> dict:
 # ── subcommand: goal-setup ─────────────────────────────────────────────────────
 def goal_setup(slug: str, goal: str | None = None, apply: bool = False, today=None,
                path=None, sports=None, start=None, clear: bool = False,
-               ctl=None) -> dict:
+               ctl=None, block_weeks: int | None = None) -> dict:
     """Set (or with clear, remove) the athlete's goal without a race (lib/goals.py).
     A preview by default: what the blocks, tests and this week's load would be. With
     apply, writes athletes.json `goal`, block 1 starting `start` or the coming Monday."""
@@ -2841,6 +2842,8 @@ def goal_setup(slug: str, goal: str | None = None, apply: bool = False, today=No
     first = start if isinstance(start, date) else (
         date.fromisoformat(start) if start else today + timedelta(days=(7 - today.weekday()) % 7 or 7))
     g = _goals.make(goal, today=today, start=first, sports=sports, ctl=ctl, profile=profile)
+    if block_weeks:                      # 5 = 4 build weeks + 1 easier, for an experienced athlete
+        g["block_weeks"] = max(_goals.MIN_BLOCK_WEEKS, min(_goals.MAX_BLOCK_WEEKS, int(block_weeks)))
     trial = dict(cfg, goal=g)
     gd = _goals.GOALS[goal]
     # The first week the goal would actually run: a race ahead, its recovery (or a recovery
@@ -2849,13 +2852,13 @@ def goal_setup(slug: str, goal: str | None = None, apply: bool = False, today=No
                                for i in range(80)) if goal_active(trial, w)), None)
     out = {"athlete": slug, "goal": goal, "label": gd["label"],
            "sports": _goals.sports_for(trial, profile),
-           "week_shape": list(_goals.BLOCK_SHAPE),
+           "week_shape": list(_goals.shape(_goals.block_weeks(trial))),
            "zone_split": _goals.distribution(trial, profile),
            "ctl_today": ctl, "applied": False}
     if begins:
         b1 = goal_start(trial, slug, begins)
         out["block_1"] = [b1.isoformat(),
-                          (b1 + timedelta(weeks=_goals.BLOCK_WEEKS, days=-1)).isoformat()]
+                          (b1 + timedelta(weeks=_goals.block_weeks(trial), days=-1)).isoformat()]
         out["tests"] = [b["week_start"] + ": " + b["name"]
                         for b in goal_test_bookings(trial, slug, today=begins)[:2]]
         if ctl and begins == date.fromisoformat(g["start"]):
@@ -2886,7 +2889,7 @@ def goal_setup(slug: str, goal: str | None = None, apply: bool = False, today=No
 
 def cmd_goal_setup(args) -> dict:
     return goal_setup(args.athlete, args.goal, apply=args.apply, sports=args.sports,
-                      start=args.start, clear=args.clear)
+                      start=args.start, clear=args.clear, block_weeks=args.block_weeks)
 
 
 # Chat side of the choice: only the bot hears the athlete answer the Sunday question.
@@ -3136,6 +3139,8 @@ def main():
     pgs.add_argument("--sports", help="e.g. bike,run (default: the profile's sports)")
     pgs.add_argument("--start", help="Monday block 1 starts (default: the coming Monday)")
     pgs.add_argument("--clear", action="store_true", help="remove the goal")
+    pgs.add_argument("--block-weeks", type=int, dest="block_weeks",
+                     help="block length: 4 = 3 build + 1 easier (default), 5 = 4 + 1")
     pgs.add_argument("--apply", action="store_true")
 
     prl = sub.add_parser("race-level", help="the athlete's level for their race and its numbers (blueprint §4.5)")

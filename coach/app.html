@@ -480,7 +480,7 @@ table.tbl tr.hl td{background:rgba(16,101,107,.05)}
 .gt .hl b{color:var(--accent)}
 .gv{margin:12px 0 0;text-align:center;font-size:13px;color:var(--accent)}
 .gv.warn{color:#b3541e}
-.gb{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;text-align:center}
+.gb{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:6px;text-align:center}
 .gb-w{border:1px solid var(--rule);border-radius:8px;padding:8px 2px}
 .gb-w b{display:block;font-family:'Libre Baskerville',serif;font-weight:400;font-size:18px}
 .gb-w span{display:block;margin-top:2px;font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;opacity:.7}
@@ -1252,6 +1252,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=79" defer></script>
+<script src="app.js?v=80" defer></script>
 </body>
 </html>

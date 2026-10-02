@@ -33,11 +33,21 @@ def test_block_starts_the_monday_after_the_goal_was_set():
     assert goals.block_start(_cfg()) == MON
 
 
-def test_six_week_shape_load_load_easy_load_load_test_then_repeats():
+def test_three_build_weeks_then_one_easier_week_then_repeats():
+    # Jamie, 2 Oct 2026: "normally it's 3/4 weeks on, 1 off" - not the first cut's
+    # load, load, easier, load, load, test.
     cfg = _cfg()
     kinds = [pt.required_tss(cfg, 45.0, today=MON + timedelta(weeks=i))["goal_week_kind"]
              for i in range(8)]
-    assert kinds == ["load", "load", "easy", "load", "load", "test", "load", "load"]
+    assert kinds == ["load", "load", "load", "test", "load", "load", "load", "test"]
+
+
+def test_a_five_week_block_is_four_build_weeks_then_one_easier():
+    cfg = _cfg()
+    cfg["goal"]["block_weeks"] = 5
+    kinds = [pt.required_tss(cfg, 45.0, today=MON + timedelta(weeks=i))["goal_week_kind"]
+             for i in range(5)]
+    assert kinds == ["load", "load", "load", "load", "test"]
 
 
 def test_load_week_adds_the_goal_ramp_and_never_floors_under_maintenance():
@@ -54,7 +64,7 @@ def test_athlete_ramp_cap_bounds_the_goal_ramp():
 
 
 def test_easy_and_test_weeks_are_down_weeks_with_no_floor():
-    for i in (2, 5):
+    for i in (3, 7):
         r = pt.required_tss(_cfg(), 45.0, today=MON + timedelta(weeks=i))
         assert r["week_type"] in pt.DOWN_WEEK_TYPES and r["goal_easy"]
         assert r["weekly_tss_floor"] == 0
@@ -62,7 +72,7 @@ def test_easy_and_test_weeks_are_down_weeks_with_no_floor():
 
 
 def test_test_week_books_the_goal_test():
-    r = pt.required_tss(_cfg(), 45.0, today=MON + timedelta(weeks=5))
+    r = pt.required_tss(_cfg(), 45.0, today=MON + timedelta(weeks=3))
     names = [b["name"] for b in r["bookings"]]
     assert names == ["FTP test (end of block 1)"]
     assert "FTP test" in r["note"]
@@ -76,7 +86,7 @@ def test_goals_without_a_test_book_none():
 
 def test_a_goal_sport_outside_the_plan_books_no_test():
     assert pt.goal_test_bookings(_cfg("swim", sports=["bike", "run"]), today=MON) == []
-    r = pt.required_tss(_cfg("swim", sports=["bike", "run"]), 45.0, today=MON + timedelta(weeks=5))
+    r = pt.required_tss(_cfg("swim", sports=["bike", "run"]), 45.0, today=MON + timedelta(weeks=3))
     assert r["bookings"] == []
 
 
@@ -119,7 +129,7 @@ def test_an_a_race_ahead_takes_over_from_the_goal():
     # goal's block 1 after it (race 4 Apr, recovery to 25 Apr, block 1 from 26 Apr).
     tests = pt.goal_test_bookings(cfg, today=MON)
     assert tests and all(t["week_start"] > "2027-04-25" for t in tests)
-    assert tests[0] == {"week_start": "2027-05-31", "sport": "Ride", "goal_test": True,
+    assert tests[0] == {"week_start": "2027-05-17", "sport": "Ride", "goal_test": True,
                         "name": "FTP test (end of block 1)", "match": "FTP test"}
 
 
@@ -165,8 +175,9 @@ def test_goal_setup_preview_then_apply(tmp_path):
     p = tmp_path / "athletes.json"
     p.write_text(json.dumps({"tess": {"name": "Tess", "race_date": "", "race_name": ""}}))
     pv = pt.goal_setup("tess", "run", path=p, today=SET, ctl=40.0, sports="run")
-    assert not pv["applied"] and pv["block_1"] == ["2026-10-05", "2026-11-15"]
-    assert pv["tests"][0].startswith("2026-11-09: 5k time trial")
+    assert not pv["applied"] and pv["block_1"] == ["2026-10-05", "2026-11-01"]
+    assert pv["tests"][0].startswith("2026-10-26: 5k time trial")
+    assert pv["week_shape"] == ["load", "load", "load", "test"]
     assert "goal" not in json.loads(p.read_text())["tess"]
     pt.goal_setup("tess", "run", path=p, today=SET, ctl=40.0, sports="run", apply=True)
     g = json.loads(p.read_text())["tess"]["goal"]
@@ -190,8 +201,9 @@ def test_view_and_progress():
     cfg = _cfg()
     cfg["goal"]["start_values"] = {"ftp": 231, "ctl": 47}
     v = goals.view(cfg, {"ftp_watts": 238}, today=MON + timedelta(weeks=2), ctl_now=49.2)
-    assert (v["label"], v["block"], v["week"], v["kind"]) == ("Raise my FTP", 1, 3, "easy")
-    assert v["nextTest"] == {"name": "FTP test", "week_start": "2026-11-09"}
+    assert (v["label"], v["block"], v["week"], v["kind"]) == ("Raise my FTP", 1, 3, "load")
+    assert v["blockWeeks"] == 4 and v["shape"] == ["load", "load", "load", "test"]
+    assert v["nextTest"] == {"name": "FTP test", "week_start": "2026-10-26"}
     assert [(r["label"], r["better"]) for r in v["progress"]] == [("FTP", True), ("Fitness", True)]
 
 
@@ -205,8 +217,9 @@ def test_run_progress_reads_pace_lower_as_better():
 def test_prompt_block_names_the_goal_and_the_setup_command(tmp_path):
     p = tmp_path / "athletes.json"
     p.write_text(json.dumps({"tess": _cfg()}))
-    txt = goals.prompt_block("tess", "Tess", path=p, today=MON + timedelta(weeks=5))
-    assert "Raise my FTP" in txt and "week 6" in txt and "goal-setup" in txt
+    txt = goals.prompt_block("tess", "Tess", path=p, today=MON + timedelta(weeks=3))
+    assert "Raise my FTP" in txt and "week 4" in txt and "goal-setup" in txt
+    assert "4-week goal blocks (3 build weeks, then one easier week" in txt
     assert "countdown" in txt
     p.write_text(json.dumps({"tess": {}}))
     assert "GOAL WITHOUT A RACE" not in goals.prompt_block("tess", "Tess", path=p)
@@ -228,7 +241,7 @@ def test_preview_with_a_race_ahead_starts_after_its_recovery(tmp_path):
     p.write_text(json.dumps({"tess": {"race_date": "2026-11-01", "race_name": "Race"}}))
     pv = pt.goal_setup("tess", "ftp", path=p, today=SET, ctl=40.0, sports="bike")
     assert pv["block_1"][0] == "2026-11-23" and "race block runs first" in pv["note"]
-    assert pv["tests"][0].startswith("2026-12-28: FTP test (end of block 1)")
+    assert pv["tests"][0].startswith("2026-12-14: FTP test (end of block 1)")
 
 
 def test_preview_says_when_an_off_season_block_wins(tmp_path):
