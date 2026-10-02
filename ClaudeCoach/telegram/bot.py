@@ -64,6 +64,7 @@ import rule_registry
 import coach_facts             # per-turn computed FACTS block (superlatives/records/thresholds)
 import write_verify            # verify-after-write for Strava / ICU calendar claims
 import baseline as baseline_lib   # new athletes' baseline block (onboarding, 27 Sep 2026)
+import duplicates                   # a session in Intervals.icu twice: delete or merge (2 Oct 2026)
 import goals as goals_lib         # a goal without a race (1 Oct 2026)
 import chat_limits                # per-athlete monthly chat allowance (29 Sep 2026)
 from engine import call_claude, call_claude_with_image, stream_claude
@@ -3201,6 +3202,35 @@ def _handle_baseline_confirm(token, chat_id, data, message_id, athletes):
         edit_keyboard_confirm(token, chat_id, message_id, f"🔬 {family.title()} test result: {done}")
     send(token, chat_id, reply)
     _append_capture_history(chat_id, slug, f"[tapped: {family} test {verdict}]", reply)
+    return True
+
+
+def _handle_duplicate(token, chat_id, data, message_id, athletes):
+    """dup:del|merge|keep:<slug>:<x>:<y> from the activity watcher's "in Intervals.icu
+    twice" message (lib/duplicates.py). del deletes x and keeps y; merge copies x's heart
+    rate into y and then deletes x; keep leaves both."""
+    if not data.startswith("dup:"):
+        return False
+    parts = data.split(":")
+    if len(parts) != 5 or parts[1] not in ("del", "merge", "keep"):
+        return False
+    _, action, slug, x_id, y_id = parts
+    athlete = athletes.get(chat_id)
+    if not athlete or athlete["slug"] != slug:
+        return False
+    try:
+        reply = duplicates.apply(slug, action, x_id, y_id, _icu_client(slug))
+        done = {"del": "🗑 Deleted", "merge": "🔗 Merged", "keep": "Kept both"}[action]
+    except Exception as e:
+        log(f"[{slug}] duplicate {action} {x_id}/{y_id} failed: {e}")
+        ops_log.alert("bot", f"duplicate {action} {x_id}/{y_id} failed: {e}", athlete=slug)
+        reply = ("I couldn't reach Intervals.icu just now, so nothing has changed. "
+                 "Tap the button again in a few minutes.")
+        done = None
+    if message_id and done:
+        edit_keyboard_confirm(token, chat_id, message_id, f"Duplicate: {done}")
+    send(token, chat_id, reply)
+    _append_capture_history(chat_id, slug, f"[tapped: duplicate {action}]", reply)
     return True
 
 
@@ -7485,6 +7515,8 @@ def dispatch_callback(token, chat_id, text, msg_id, athletes, config):
     if _handle_test_confirm(token, chat_id, text, msg_id, athletes):
         return True
     if _handle_baseline_confirm(token, chat_id, text, msg_id, athletes):
+        return True
+    if _handle_duplicate(token, chat_id, text, msg_id, athletes):
         return True
     if _handle_replan_confirm(token, chat_id, text, msg_id, athletes):
         return True

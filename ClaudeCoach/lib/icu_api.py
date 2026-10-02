@@ -293,6 +293,14 @@ class IcuClient:
             "moving_time": int(moving_time_s), "icu_training_load": int(training_load),
             "description": description})
 
+    def put_activity_streams(self, activity_id: str | int, streams: list) -> dict:
+        """Write streams into a completed activity, e.g. [{"type": "heartrate", "data": [...]}].
+        Intervals.icu recomputes HR metrics at once (verified live 2 Oct 2026)."""
+        url = f"{BASE_URL}/activity/{activity_id}/streams"
+        r = self.session.put(url, json=streams, timeout=30)
+        r.raise_for_status()
+        return r.json()
+
     def delete_activity(self, activity_id: str | int) -> None:
         """Delete a completed activity (undo path for log-strength mistakes)."""
         url = f"{BASE_URL}/activity/{activity_id}"

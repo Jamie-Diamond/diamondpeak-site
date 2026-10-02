@@ -53,6 +53,7 @@ import profile_fields
 import claude_call
 import hr_quality              # per-activity HR trust (wrist-sensor artefacts)
 import baseline as baseline_lib   # new athletes' baseline block: test capture + close
+import duplicates                  # a session in Intervals.icu twice: ask, then delete or merge
 import goals as goals_lib         # a goal without a race: block 1 pinned when baseline closes
 from git_sync import sync_commit_push
 from primitives.run_durability import compute_run_durability, fade_line
@@ -676,35 +677,6 @@ def _resolve_ftp(slug: str, profile: dict, session_log_f: Path) -> int:
     return profile.get("ftp_watts") or 250
 
 
-def _activity_ids(a: dict) -> set:
-    """Every id a session can be logged under: Intervals, Strava, Garmin. i192236501
-    sat in session-log.json as Strava 20406359196, so matching on the ICU id alone
-    woke Sonnet every 5 min from 1 Oct 2026 14:00 to answer ACTIVITY_ID: none."""
-    return {str(a.get(k) or "") for k in ("id", "strava_id", "external_id")} - {""}
-
-
-def _same_session(a: dict, b: dict) -> bool:
-    """True when a and b are two recordings of one session (Zwift + a watch, Garmin +
-    Strava) that Intervals.icu did not merge: same sport (VirtualRide counts as Ride)
-    and their times overlap by more than half of the shorter one."""
-    def sport(x):
-        t = str(x.get("type") or "")
-        return next((s for s in ("Ride", "Run", "Swim") if s in t), t)
-
-    def span(x):
-        start = datetime.fromisoformat(str(x.get("start_date_local") or ""))
-        return start, start + timedelta(seconds=int(x.get("elapsed_time") or x.get("moving_time") or 0))
-
-    try:
-        if sport(a) != sport(b):
-            return False
-        (s1, e1), (s2, e2) = span(a), span(b)
-        overlap = (min(e1, e2) - max(s1, s2)).total_seconds()
-        return overlap > 0.5 * min((e1 - s1).total_seconds(), (e2 - s2).total_seconds())
-    except (TypeError, ValueError):
-        return False
-
-
 _HISTORY_SPORT = {"VirtualRide": "Ride", "GravelRide": "Ride", "MountainBikeRide": "Ride",
                   "TrailRun": "Run", "VirtualRun": "Run", "WeightTraining": "Strength"}
 
@@ -752,7 +724,34 @@ def _log_pre_activation_history(slug: str, athlete_cfg: dict, session_log_f: Pat
     return len(added)
 
 
-def _has_new_activity(slug: str, existing_ids: set) -> bool:
+def _recent_activities(slug: str) -> list | None:
+    """The last 3 days of Intervals.icu activities, or None if the fetch failed."""
+    try:
+        r = subprocess.run(
+            ["python3", str(BASE / "lib/icu_fetch.py"), "--athlete", slug,
+             "--caller", CALLER, "--endpoint", "history", "--days", "3"],
+            capture_output=True, text=True, cwd=PROJECT_DIR, timeout=30,
+        )
+        return json.loads(r.stdout) if r.returncode == 0 else None
+    except Exception:
+        return None
+
+
+def _duplicate_tick(slug: str, chat_id: str, acts: list | None) -> None:
+    """Ask once about each session that is in Intervals.icu twice (lib/duplicates.py).
+    The buttons are handled by the bot's dup: callback."""
+    if not chat_id or not acts:
+        return
+    try:
+        for out in duplicates.new_questions(slug, acts):
+            _tg_send_keyboard(chat_id, out["text"], out["keyboard"])
+            _log_to_history(slug, out["text"])
+            print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] asked about a duplicate", file=sys.stderr)
+    except Exception as exc:
+        print(f"[{slug}] duplicate check failed: {exc}", file=sys.stderr)
+
+
+def _has_new_activity(slug: str, existing_ids: set, acts: list | None = None) -> bool:
     """Cheap, LLM-free pre-gate: True if ICU history shows any activity whose id
     is not already in session-log.json. This lets the expensive analysis LLM be
     skipped entirely on the ~99% of cycles with nothing new — so the watcher can
@@ -766,17 +765,12 @@ def _has_new_activity(slug: str, existing_ids: set) -> bool:
     activity (worst case = one wasted LLM call that returns ACTIVITY_ID: none,
     exactly as before this gate existed)."""
     try:
-        r = subprocess.run(
-            ["python3", str(BASE / "lib/icu_fetch.py"), "--athlete", slug,
-             "--caller", CALLER, "--endpoint", "history", "--days", "3"],
-            capture_output=True, text=True, cwd=PROJECT_DIR, timeout=30,
-        )
-        if r.returncode != 0:
+        acts = _recent_activities(slug) if acts is None else acts
+        if acts is None:
             return True
-        acts = json.loads(r.stdout)
-        logged = [a for a in acts if _activity_ids(a) & existing_ids]
+        logged = [a for a in acts if duplicates.activity_ids(a) & existing_ids]
         for a in acts:
-            if _activity_ids(a) & existing_ids or any(_same_session(a, b) for b in logged):
+            if duplicates.activity_ids(a) & existing_ids or any(duplicates.same_session(a, b) for b in logged):
                 continue
             return True
         return False
@@ -1609,7 +1603,9 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     # nothing new. The cheap cyclic tasks above (test reminders, Strava refresh)
     # and the follow-up nudge below still run every cycle — only the expensive
     # Claude call is gated, so this script can poll every 5 min cheaply.
-    if not _has_new_activity(slug, existing_ids):
+    recent = _recent_activities(slug)
+    _duplicate_tick(slug, chat_id, recent)
+    if not _has_new_activity(slug, existing_ids, recent):
         if announce_empty and chat_id:
             last = _last_logged_label(session_log_f)
             msg = (f"Nothing new to log — last session already logged: {last}. 👍"
