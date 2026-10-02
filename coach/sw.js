@@ -19,8 +19,8 @@
 // APP_VERSION is what the athlete sees in Settings; CACHE is the precache key.
 // Bump BOTH on every deploy that changes a precached file - the visible number
 // exists so Jamie can tell current from syncing from stale at a glance.
-const APP_VERSION = '3.27';
-const CACHE = 'peak-v87';
+const APP_VERSION = '3.28';
+const CACHE = 'peak-v88';
 
 // SHELL paths are relative to /coach/, where this worker actually lives - the app moved
 // out of /coach/app/ and these entries were left pointing at the old tree. addAll's
@@ -37,6 +37,7 @@ const SHELL = [
   './icons/icon-512.png',
   './icons/apple-touch-icon.png',
   './icons/favicon-32.png',
+  './icons/badge-96.png',
   './icons/dpc-mark.png',
   // Training data still lives under ClaudeCoach/public/ on disk, not under /coach/ -
   // this is the one SHELL entry that reaches outside the worker's own directory.
@@ -162,6 +163,10 @@ self.addEventListener('message', (event) => {
 // A chat reply ("kind": "reply") while Peak is on screen is shown silently and closed
 // at once: phones require every push to show something, and the reply is already in
 // front of the athlete. Open windows are told to refresh the chat either way.
+// 2 Oct 2026 (Jamie): every notification shares one tag, so a new one replaces the last
+// instead of stacking; renotify still buzzes for the replacement. The badge is the
+// diamond on a clear background - Android draws only the badge's shape, so the opaque
+// favicon showed as a plain square.
 self.addEventListener('push', (event) => {
   let d = {};
   try { d = event.data ? event.data.json() : {}; } catch (e) { d = { body: event.data && event.data.text() }; }
@@ -171,11 +176,13 @@ self.addEventListener('push', (event) => {
     const opts = {
       body: d.body || 'New message',
       icon: './icons/icon-192.png',
-      badge: './icons/favicon-32.png',
+      badge: './icons/badge-96.png',
+      tag: 'peak-coach',
+      renotify: true,
       data: { url: d.url || './app.html#chat' },
     };
     if (d.kind === 'reply' && onScreen) {
-      return self.registration.showNotification(d.title || 'Coach', Object.assign(opts, { silent: true, tag: 'peak-on-screen' }))
+      return self.registration.showNotification(d.title || 'Coach', Object.assign(opts, { silent: true, renotify: false, tag: 'peak-on-screen' }))
         .then(() => self.registration.getNotifications({ tag: 'peak-on-screen' }))
         .then((ns) => ns.forEach((n) => n.close()));
     }
