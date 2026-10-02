@@ -41,8 +41,10 @@ class TestFlagResolution:
         assert pp.since("calum", path=paused_file) == "2026-09-06"
 
     def test_unpausing_is_deleting_or_setting_false(self, paused_file):
-        assert pp.is_paused("kathryn", path=paused_file) is False
-        assert pp.is_paused("jamie", path=paused_file) is False
+        # cfg={} (no athletes.json override): without it this read the REAL Kathryn's
+        # config, switched to tracking only on 30 Sep 2026, and failed from that day.
+        assert pp.is_paused("kathryn", cfg={}, path=paused_file) is False
+        assert pp.is_paused("jamie", cfg={}, path=paused_file) is False
 
     def test_readme_key_is_not_an_athlete(self, paused_file):
         assert pp.paused_slugs(path=paused_file) == ["calum"]

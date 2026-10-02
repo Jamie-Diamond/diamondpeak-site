@@ -539,12 +539,14 @@ class TestCountdown:
     TODAY = date(2026, 9, 6)
 
     def test_counts_down_to_an_upcoming_race(self):
+        # A made-up athlete: "jamie" picked up the real race list on the VM, where IM
+        # Cervia is long done, and this failed from the day it was raced (2 Oct 2026).
         cfg = {"race_date": "2026-09-19", "race_name": "IM Cervia"}
-        assert races.countdown("jamie", cfg, self.TODAY) == (13, "IM Cervia")
+        assert races.countdown("zz-countdown", cfg, self.TODAY) == (13, "IM Cervia")
 
     def test_race_day_is_zero_not_absent(self):
         cfg = {"race_date": "2026-09-06", "race_name": "IM Cervia"}
-        assert races.countdown("jamie", cfg, self.TODAY) == (0, "IM Cervia")
+        assert races.countdown("zz-countdown", cfg, self.TODAY) == (0, "IM Cervia")
 
     def test_a_race_in_the_past_produces_no_countdown(self):
         cfg = {"race_date": "2026-07-05", "race_name": "La Marmotte"}
