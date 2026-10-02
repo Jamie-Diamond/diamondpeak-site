@@ -5308,20 +5308,38 @@
 
   }
 
+  // A refused sign-in shows no names and keeps nothing (Jamie, 2 Oct 2026: "if I log in
+  // with the email that isn't matched it shouldn't show any names"): forget the athlete
+  // list and remembered profile, and drop any private data cached for offline use.
+  function forgetDevice() {
+    ATHLETES = [];
+    try { localStorage.removeItem(ATHLETES_KEY); localStorage.removeItem(KEY); } catch (e) { /* fine */ }
+    if (!window.caches) return;
+    caches.keys().then(function (names) {
+      names.forEach(function (n) {
+        caches.open(n).then(function (c) {
+          c.keys().then(function (reqs) {
+            reqs.forEach(function (r) {
+              if (/training-data-|nutrition-|\/api\//.test(r.url)) c.delete(r);
+            });
+          });
+        });
+      });
+    }).catch(function () { /* nothing cached */ });
+  }
+
   // Signed in to Cloudflare, but not as anyone Peak knows (403), or the sign-in has
   // lapsed (401). Say which email, and offer the way out, rather than a stale list.
   function signInProblem(me) {
     var known = me.denied === 403;
+    forgetDevice();
     $('#gateList').innerHTML = '<div class="gate-msg"><b>' +
       (known && me.email ? 'Signed in as ' + esc(me.email) : 'Your sign-in has expired') + '</b><p>' +
       (known ? 'That email isn\u2019t registered with Peak. Log out, then sign in with the email ' +
                'your coach invited.' : 'Log out and sign in again.') + '</p>' +
       '<button type="button" class="gate-out" id="gateLogout">Log out</button></div>';
     $('#gateList').onclick = null;
-    $('#gateLogout').onclick = function () {
-      try { localStorage.removeItem(ATHLETES_KEY); } catch (e) { /* fine */ }
-      location.href = '/cdn-cgi/access/logout';
-    };
+    $('#gateLogout').onclick = function () { location.href = '/cdn-cgi/access/logout'; };
     var sub = document.querySelector('.gate-sub');
     if (sub) sub.textContent = 'Peak couldn\u2019t confirm who you are.';
     openGate();
