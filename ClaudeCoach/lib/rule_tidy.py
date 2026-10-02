@@ -53,7 +53,8 @@ Rewrite it as the current instruction:
   still applies today
 - drop past-event dates, superseded values ("was X, now Y" becomes just Y), quotes,
   evidence and the story of how it came about
-- plain and direct, at most about 60 words; do not add anything new
+- plain and direct, as short as it can be while keeping every instruction that still
+  applies (usually well under half the original); do not add anything new
 
 Put everything you dropped into "backstory". It is kept in a notes file, so nothing is lost.
 
@@ -68,9 +69,10 @@ CHECK_PROMPT = """Original coaching rule:
 Shortened rule:
 {new}
 
-Does the shortened rule keep EVERY instruction from the original that still applies today
-- limits, numbers, days, products, thresholds, preferences, things to never do? Details
-that are clearly historical or superseded may be dropped. Reply with JSON only:
+Did the shortened rule lose any INSTRUCTION - something the coach must or must not do,
+or a limit, number, day, product or preference it must apply - that still applies today?
+Examples, evidence, rationale, costs and history may be dropped; do not list those. Only
+list an instruction that is now missing or has changed. Reply with JSON only:
 {{"ok": true or false, "missing": ["..."]}}"""
 
 DIGEST_PROMPT = """For each coaching rule below, give a topic and a one-line summary the
