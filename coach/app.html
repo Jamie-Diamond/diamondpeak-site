@@ -673,6 +673,11 @@ body.in-chat main{padding-bottom:calc(var(--tab-h) + 86px + env(safe-area-inset-
   background:#fff;font:500 11.5px 'DM Sans',system-ui,sans-serif;color:var(--accent);cursor:pointer;
   text-align:center;text-decoration:none}
 .btns button:disabled{opacity:.45;cursor:default}
+.setup{padding:12px 15px 14px;font-size:13.5px;line-height:1.45}
+.setup p{margin:0 0 8px}
+.setup ol{margin:0 0 10px;padding-left:20px}
+.setup .msg-img{max-width:100%;border-radius:10px;margin:4px 0}
+.setup .btns button{flex:0 0 auto;padding:8px 16px;font-size:14px}
 .indoor{padding:12px 15px 14px}
 .indoor p{margin:0;font-size:13.5px;line-height:1.45}
 .indoor .btns{margin-top:10px}
@@ -1230,6 +1235,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=74" defer></script>
+<script src="app.js?v=75" defer></script>
 </body>
 </html>

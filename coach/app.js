@@ -514,6 +514,27 @@
     if (el) { el.hidden = !el.hidden; }
   }
 
+  /* Set up Peak (Jamie, 2 Oct 2026: "you never showed him how to pin the app, or
+     notifications"). The install question at the end of sign-up was buried by the
+     approval messages a few seconds later, so Today carries it instead, on a phone,
+     until Peak is on the home screen and notifications are on (or blocked). */
+  function setupCard() {
+    if (!state.me || !/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) return '';
+    var inst = standalone(), ps = pushState();
+    if (inst && ps !== 'ask') return '';
+    var kind = isIOS() ? 'iphone' : 'android', g = INSTALL[kind];
+    var btn = '<div class="btns"><button type="button" class="notify-go">Turn on notifications</button></div>';
+    if (!inst) {
+      return card('Put Peak on your home screen', '<div class="setup"><p>It then opens like an app ' +
+        'and can tell you when your plan or a reply from your coach arrives.</p><ol>' +
+        g.steps.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ol>' +
+        g.imgs.map(function (src) { return '<img class="msg-img" src="' + src + '" alt="">'; }).join('') +
+        (kind === 'android' ? btn : '') + '</div>');
+    }
+    return card('Turn on notifications', '<div class="setup"><p>So you hear when your plan or a ' +
+      'reply from your coach arrives.</p>' + btn + '</div>');
+  }
+
   function renderToday() {
     var d = state.data, k = d.kpi || {};
     var t = todayISO();
@@ -611,7 +632,9 @@
         ' or pull down</p>';
     }
 
-    $('#v-today').innerHTML = h;
+    $('#v-today').innerHTML = setupCard() + h;
+    var sgo = $('#v-today').querySelector('.notify-go');
+    if (sgo) sgo.onclick = function () { turnOnFromGuide(sgo); setTimeout(renderToday, 2500); };
     var rb = $('#refreshNow');
     if (rb) rb.onclick = refreshNow;
     var th = $('#v-today');

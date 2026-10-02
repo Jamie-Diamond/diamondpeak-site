@@ -178,6 +178,8 @@ check("/approve runs baseline-week.py start for the athlete",
       any("baseline-week.py" in " ".join(map(str, r)) and "start" in r and "sam" in r for r in RUNS), RUNS)
 check("admin is told the baseline week was scheduled",
       any(c == "999" and "Baseline week scheduled" in t for c, t, _ in SENT), SENT)
+check("/approve records when coaching began (history before it is never debriefed)",
+      bool(json.loads(B.ATHLETES_CONFIG.read_text())["sam"].get("activated")))
 
 # ── 3. a marathon runner: no bike or swim questions at all ───────────────────
 fake_icu({"ftp_watts": None, "run_threshold_pace_per_km": "4:30", "swim_css_per_100m": None,

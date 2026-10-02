@@ -705,6 +705,53 @@ def _same_session(a: dict, b: dict) -> bool:
         return False
 
 
+_HISTORY_SPORT = {"VirtualRide": "Ride", "GravelRide": "Ride", "MountainBikeRide": "Ride",
+                  "TrailRun": "Run", "VirtualRun": "Run", "WeightTraining": "Strength"}
+
+
+def _log_pre_activation_history(slug: str, athlete_cfg: dict, session_log_f: Path) -> int:
+    """Sessions from BEFORE the athlete was approved are history, not news (Fred, 1 Oct
+    2026: approved at 20:32, his Garmin history landed in Intervals.icu, and the 29 and
+    30 Sep strength sessions were debriefed with "Quick log - RPE" and asked about again
+    at the evening check-in). Each one inside the watcher's window is written to the
+    session log as a quiet history entry, so the gate never sees it as new. Athletes with
+    no `activated` time (onboarded before 2 Oct 2026) are untouched. Returns the count."""
+    activated = str(athlete_cfg.get("activated") or "")
+    if not activated:
+        return 0
+    try:
+        from icu_api import IcuClient
+        acts = IcuClient(athlete_cfg["icu_athlete_id"],
+                         athlete_cfg["icu_api_key"]).get_training_history(days=3) or []
+    except Exception:
+        return 0
+    old = [a for a in acts if str(a.get("start_date_local") or "")[:19] < activated[:19]]
+    if not old:
+        return 0
+    try:
+        log = json.loads(session_log_f.read_text()) if session_log_f.exists() else []
+    except (json.JSONDecodeError, OSError):
+        return 0
+    have = {str(e.get("activity_id", "")) for e in log}
+    added = []
+    for a in old:
+        aid = str(a.get("id") or "")
+        if not aid or aid in have:
+            continue
+        added.append({"activity_id": aid, "date": str(a.get("start_date_local"))[:10],
+                      "name": a.get("name") or "", "sport": _HISTORY_SPORT.get(a.get("type"), a.get("type")),
+                      "tss": int(a.get("icu_training_load") or 0),
+                      "duration_min": round((a.get("moving_time") or 0) / 60),
+                      "rpe": None, "feel": None, "notes": None,
+                      "logged_at": datetime.now().isoformat(timespec="seconds"),
+                      "stub": True, "history": True})
+    if added:
+        session_log_f.write_text(json.dumps(added + log, indent=2))
+        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] {len(added)} session(s) from "
+              f"before approval logged as history, not debriefed")
+    return len(added)
+
+
 def _has_new_activity(slug: str, existing_ids: set) -> bool:
     """Cheap, LLM-free pre-gate: True if ICU history shows any activity whose id
     is not already in session-log.json. This lets the expensive analysis LLM be
@@ -1000,6 +1047,8 @@ def _send_followup_nudge(state, session_log_f, chat_id, injuries=None, state_fil
     has_injury = bool(injuries)
 
     for e in log_entries:
+        if e.get("history"):            # from before approval: never asked about
+            continue
         if not e.get("stub", False):
             continue
         sport = e.get("sport", "session")
@@ -1545,6 +1594,8 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     _check_test_reminders(adir, chat_id, state, state_file)
     _strava_refresh_updated(slug, state, state_file)
     _baseline_tick(slug, chat_id)
+
+    _log_pre_activation_history(slug, athlete_cfg, session_log_f)
 
     # Snapshot existing IDs before Claude runs
     existing_ids: set = set()

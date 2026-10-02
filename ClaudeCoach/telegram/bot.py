@@ -5567,13 +5567,20 @@ def handle_admin_command(token, chat_id, text, config):
             send(token, chat_id, f"No athlete found with handle `{slug_to_approve}`.")
             return True
         athletes_data[slug_to_approve]["active"] = True
+        # When coaching began: a session from before it (history arriving as they link
+        # their watch) is logged quietly, never debriefed (activity-watcher, 2 Oct 2026).
+        athletes_data[slug_to_approve].setdefault(
+            "activated", datetime.now().isoformat(timespec="seconds"))
         ATHLETES_CONFIG.write_text(json.dumps(athletes_data, indent=2))
         approved_cid = str(athletes_data[slug_to_approve].get("chat_id", ""))
         approved_name = athletes_data[slug_to_approve]["name"].split()[0]
         if approved_cid:
             send(token, approved_cid,
                  f"Welcome aboard, *{approved_name}*! ClaudeCoach is now active for you.\n\n"
-                 f"Try: _how am I looking?_ or _what's today's session?_")
+                 + ("*First:* put Peak on your home screen and turn on notifications, so you "
+                    "hear from me. The card at the top of *Today* shows how.\n\n"
+                    if approved_cid.startswith("web-") else "")
+                 + "Try: _how am I looking?_ or _what's today's session?_")
         # Baseline block: schedule it and push it now; baseline-week.py then messages the
         # athlete with their test days (after the welcome above). Only for an athlete
         # onboarded with one; a failure is reported to the admin, never swallowed.
