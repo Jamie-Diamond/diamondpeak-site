@@ -26,6 +26,28 @@ Cache writes were 54-72% of every job's cost: each run writes its whole prompt o
 Re-measure after Fri 9 Oct with the job profile (per job: runs, calls per run, context
 per call, $ per run) and compare with the table above.
 
+## Status at 2 Oct 2026 (end of session)
+
+| Item | Status | Saves / athlete / month |
+|---|---|---|
+| Activity watcher called Claude every 5 min for a run logged under its Strava id | Done (ce7009a9) | ~3% of the weekly Max limit a day |
+| Watcher skips a second copy of a logged session | Done (1ea90a53) | stops the same loop |
+| Duplicate cleanup: one message with Delete / Merge buttons (`lib/duplicates.py`) | Done (836a6786) | data quality |
+| Zwift note in the shared rules for every athlete; Fred's correction sent | Done | - |
+| Watchdog triggers in Python | Done (2325ddde) | ~$2.5-3 |
+| Chat: one resumable session per model | Done (059eda9d) | ~$4-5 |
+| Chat: calendar + activities with ids in the live-data block | Done (059eda9d) | ~$2-4 |
+| Daily prescription: no model when there is nothing to judge | Done (0ff5e92c) | ~$3.5 |
+| Peak usage page: "Bug fixes in chat" row | Done (c92d4373) | reporting (~$20/mo of Jamie's ~$280) |
+| Calum: reconnect Garmin in Intervals.icu (no activities since 1 Aug) | Waiting on Calum; asked in Peak, his notifications are off | - |
+| Re-measure the savings above | To do after Fri 9 Oct | - |
+| Weekly plan + summary cost | To do after Sun 4 Oct | - |
+| Daily messages as Python + Haiku (also BLOCKED / swap prescription days) | On hold until Haiku 5.5 | ~$8 |
+| Opus routing in chat | On hold: show Jamie ~20 replies side by side first | ~$6-8 |
+| Chat replies after an hour's gap | Parked: cheaper, but drops earlier detail | ~$4 |
+
+Expected: a coached athlete goes from ~$50 to ~$35/month with the done items, ~$20 with the held ones.
+
 ## On hold (Jamie, 2 Oct 2026)
 
 **Daily messages as Python + Haiku - wait for Haiku 5.5.** Morning card, night-before brief and evening
