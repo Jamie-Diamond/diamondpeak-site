@@ -93,7 +93,12 @@ RULE_COUNT_CEILING = 90
 # proceeds - each block of reference data or methodology moved out of prose to a file or a
 # function should be followed by lowering this. The honest long-run floor is
 # shared + system_prompt, and both of those are themselves prunable.
-SURFACE_TOKEN_BUDGET = 24_000
+# RAISED to 48,000 on 2 Oct 2026 (Jamie): after the first rule tidy and the move of his
+# general methods into the shared rules his surface was still ~41,600, so every new rule
+# he gave in chat was refused. Temporary, until the athlete-brief clean-up (one shared
+# operating brief instead of a copy in every athlete's system_prompt.txt) brings everyone
+# down - then ratchet it back.
+SURFACE_TOKEN_BUDGET = 48_000
 
 # A single standing rule may not exceed this. The corpus average is ~260 tokens and the
 # longest are case notes carrying dates, quotes and recurrence history; the instruction
