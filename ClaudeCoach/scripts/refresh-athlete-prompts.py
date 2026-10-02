@@ -30,8 +30,25 @@ def build_block(slug: str, cfg: dict) -> str:
     lines = [BEGIN,
              "These values come from config/athletes.json and OVERRIDE any number stated "
              "elsewhere in this prompt. Injected per-prompt live data (CTL/ATL/plan) still "
-             "overrides these for fitness state.",
-             f"- Race: {cfg.get('race_name', '?')} on {cfg.get('race_date', '?')}"]
+             "overrides these for fitness state."]
+    # A goal without a race (lib/goals.py, 2 Oct 2026): race, deload-cadence and taper
+    # lines are wrong for it ("Race:  on ", "taper the final 2 weeks") - its weeks come
+    # from goal blocks of build weeks then one easier week.
+    g = cfg.get("goal") if isinstance(cfg.get("goal"), dict) else None
+    if g and not cfg.get("race_date"):
+        try:
+            import goals
+            label, n = goals.GOALS[g["type"]]["label"], goals.block_weeks(cfg)
+        except Exception:
+            label, n = g.get("type", "goal"), 4
+        lines.append(f"- No race booked. Goal: {label}, trained in {n}-week goal blocks "
+                     f"({n - 1} build weeks, then one easier week with the test)")
+        ramp = cfg.get("max_ctl_ramp_per_week")
+        if ramp:
+            lines.append(f"- CTL ramp cap: +{ramp} CTL points/week (NOT a percentage)")
+        lines.append(END)
+        return "\n".join(lines)
+    lines.append(f"- Race: {cfg.get('race_name', '?')} on {cfg.get('race_date', '?')}")
     ramp = cfg.get("max_ctl_ramp_per_week")
     if ramp:
         lines.append(f"- CTL ramp cap: +{ramp} CTL points/week (NOT a percentage)")
