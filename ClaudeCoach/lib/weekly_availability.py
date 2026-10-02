@@ -1118,6 +1118,11 @@ def parse_day_shape_message(text: str) -> dict:
             m = _DAY_TOKEN_RE.search(t, end)
             seg_end = m.start() if m else nxt[1]
         seg = t[end:seg_end]
+        # A day's sport comes from ITS clause only: stop at the sentence end, so a trailing
+        # "I might ride the turbo if I can" is not read as the last day's sport.
+        stop = re.search(r"[.;!\n](?=\s|$)", seg)
+        if stop:
+            seg = seg[:stop.start()]
         for d in days:
             if d not in named:
                 named.append(d)
