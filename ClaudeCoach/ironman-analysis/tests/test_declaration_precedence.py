@@ -81,6 +81,12 @@ class TestTheParserDidNotInventASport:
         # "(will be tired after run)" sits inside Wednesday's segment.
         assert _parsed()["run_days"] == ["Tue", "Fri", "Sat"]
 
+    def test_a_sport_in_a_later_sentence_is_not_given_to_the_last_day(self):
+        # The 1 Aug message plus a trailing remark: Sunday is rest, not a ride.
+        p = wa.parse_day_shape_message(DECL + " I might ride the turbo if I can.")
+        assert p["bike_days"] == ["Thu"]
+        assert p["unavailable_days"] == ["Mon", "Sun"]
+
 
 class TestDeclarationOutranksDayRules:
     """(b) Every named day comes from the declaration."""
