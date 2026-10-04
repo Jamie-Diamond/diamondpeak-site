@@ -556,7 +556,8 @@ def test_settings_follow_the_athlete_on_screen(env, monkeypatch):
     dev(monkeypatch, "kat@example.com")
     assert env.get("/api/settings/jamie").status_code == 403
     assert env.post("/api/settings/kathryn", json={"heat": False}, headers=h).json()["prefs"]["heat"] is False
-    assert env.post("/api/settings/kathryn", json={"tracking_only": False}, headers=h).status_code == 403
+    r = env.post("/api/settings/kathryn", json={"tracking_only": False}, headers=h)
+    assert r.status_code == 200 and r.json()["tracking_only"] is False
 
 
 def test_disconnect_strava_only_for_a_peak_link(env, monkeypatch):

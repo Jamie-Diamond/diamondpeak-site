@@ -5166,8 +5166,8 @@
         optsH = card('Coaching options', '<div class="body-flush" id="prefPick">' +
           opt('heat', pr.heat, 'Heat training', 'heat sessions before hot races', 'no heat sessions') +
           opt('fuelling', pr.fuelling, 'Fuelling coaching', 'carbs, salt and fluid targets', 'no fuelling targets or questions') +
-          (state.me.coach ? opt('tracking_only', as.tracking_only, 'Tracking only',
-            'no plan: logs, write-ups and chat only', 'coached: plan, daily card, check-ins') : '') +
+          opt('tracking_only', as.tracking_only, 'Tracking only',
+            'no plan: logs, write-ups and chat only', 'coached: plan, daily card, check-ins') +
           '</div>', { flush: true });
         optsHint = as.tracking_only ? 'tracking only' :
           'heat ' + (pr.heat ? 'on' : 'off') + ' · fuelling ' + (pr.fuelling ? 'on' : 'off');

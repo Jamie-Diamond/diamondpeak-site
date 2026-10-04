@@ -669,7 +669,7 @@ def athlete_settings(slug: str, request: Request):
 
 @app.post("/api/settings/{slug}")
 async def athlete_settings_set(slug: str, request: Request):
-    """Heat / fuelling switches: the athlete, or the coach. Tracking only: coach only."""
+    """Heat / fuelling / tracking-only switches: the athlete, or the coach."""
     if request.headers.get("x-peak") != "1":
         raise HTTPException(400, "missing app header")
     require_slug(request, slug)
@@ -681,14 +681,12 @@ async def athlete_settings_set(slug: str, request: Request):
         coaching_prefs.set_prefs(slug, heat=None if heat is None else bool(heat),
                                  fuelling=None if fuel is None else bool(fuel))
     if "tracking_only" in body:
-        if not is_coach(email):
-            raise HTTPException(403, "only your coach can change that")
         athletes = _load(ATHLETES_CONFIG)
         if not isinstance(athletes.get(slug), dict):
             raise HTTPException(404, "no such athlete")
         athletes[slug]["planning_paused"] = bool(body["tracking_only"])
         if body["tracking_only"]:
-            athletes[slug]["planning_paused_reason"] = f"coach-set in Peak on {time.strftime('%Y-%m-%d')}: tracking only"
+            athletes[slug]["planning_paused_reason"] = f"{'coach' if is_coach(email) else 'athlete'}-set in Peak on {time.strftime('%Y-%m-%d')}: tracking only"
         _write_json(ATHLETES_CONFIG, athletes)
     return JSONResponse(_settings(slug), headers=NO_STORE)
 
