@@ -540,19 +540,23 @@ def _turn_stream(chat_id: str, label: str, **turn) -> StreamingResponse:
 
 
 @app.get("/api/chat/history")
-def chat_history(request: Request, slug: str = ""):
+def chat_history(request: Request, slug: str = "", limit: int = 80):
     email = request_email(request)
+    limit = max(1, min(limit, 5000))     # "Show earlier messages" asks for 80 more each tap
+    meta: dict = {}
     if slug and slug != own_slug(email):
         # The coach reading an athlete's chat (Jamie, 30 Sep 2026). Read only.
         require_slug(request, slug)
         if not is_coach(email):
             raise HTTPException(403, "not your chat")
+        hist = chat.timeline(slug, limit, meta=meta)
         return JSONResponse({"slug": slug, "state": "active", "readonly": True,
-                             "history": chat.timeline(slug)}, headers=NO_STORE)
+                             "history": hist, "more": bool(meta.get("more"))}, headers=NO_STORE)
     cid, slug, state = own_chat(email)
     if not cid:
         raise HTTPException(403, "this email has no athlete")
-    return JSONResponse({"slug": slug, "state": state, "history": chat.timeline(slug, chat_id=cid)},
+    hist = chat.timeline(slug, limit, chat_id=cid, meta=meta)
+    return JSONResponse({"slug": slug, "state": state, "history": hist, "more": bool(meta.get("more"))},
                         headers=NO_STORE)
 
 

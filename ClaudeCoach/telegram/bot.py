@@ -581,6 +581,9 @@ def save_history(history, history_file=None):
     f = Path(history_file) if history_file else HISTORY_FILE
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(json.dumps(history[-MAX_HISTORY_PAIRS:], indent=2))
+    # Archive BEFORE the trim loses anything: Peak shows the whole chat from it.
+    import chat_archive
+    chat_archive.sync_file(f)
 
 
 # RETIRED 13 Aug 2026: _extract_plan_override / _write_plan_override.

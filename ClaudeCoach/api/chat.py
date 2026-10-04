@@ -462,11 +462,32 @@ _DRILL_PREFIXES = ("Analyse the interval structure of activity", "Review the nut
                    "Analyse the heart rate data for activity", "Find the 3 most similar past sessions to activity")
 
 
-def timeline(slug: str | None, limit: int = 80, chat_id: str | None = None) -> list[dict]:
+def _archive():
+    bot()                                   # puts lib/ on sys.path
+    import chat_archive
+    return chat_archive
+
+
+def _with_archive(slug: str, hist: list) -> list:
+    """history.json keeps only the last 30 exchanges; older ones come from the
+    permanent archive (lib/chat_archive.py), oldest first, then history.json itself."""
+    ca = _archive()
+    hist = hist if isinstance(hist, list) else []
+    ca.sync(slug, hist)
+    live = set(ca.identities([e for e in hist if isinstance(e, dict)]))
+    arch = ca.load(slug)
+    older = [e for e, k in zip(arch, ca.identities(arch)) if k not in live]
+    return older + hist
+
+
+def timeline(slug: str | None, limit: int = 80, chat_id: str | None = None,
+             meta: dict | None = None) -> list[dict]:
     """The chat as Peak shows it, oldest first: the shared Telegram/web conversation
-    (history.json) merged with every scheduled coach message (web-outbox.jsonl, which
-    carries buttons and photos). A scheduled message is ALSO in history.json with no
-    user side; that copy is dropped when the outbox has the same text."""
+    (the chat archive + history.json) merged with every scheduled coach message
+    (web-outbox.jsonl, which carries buttons and photos). A scheduled message is ALSO
+    in history.json with no user side; that copy is dropped when the outbox has the
+    same text. The newest `limit` items are returned; meta["more"] says whether older
+    ones exist (Peak's "Show earlier messages")."""
     if not slug:
         return _signup_timeline(chat_id, limit) if chat_id else []
     adir = CC / "athletes" / slug
@@ -474,9 +495,13 @@ def timeline(slug: str | None, limit: int = 80, chat_id: str | None = None) -> l
         hist = json.loads((adir / "telegram" / "history.json").read_text())
     except (OSError, ValueError):
         hist = []
+    try:
+        hist = _with_archive(slug, hist)
+    except Exception:
+        pass
     out = []
     try:
-        for line in (adir / "web-outbox.jsonl").read_text().splitlines()[-limit:]:
+        for line in (adir / "web-outbox.jsonl").read_text().splitlines():
             try:
                 out.append(json.loads(line))
             except ValueError:
@@ -527,6 +552,8 @@ def timeline(slug: str | None, limit: int = 80, chat_id: str | None = None) -> l
                       "form": log_form(o), "logged": o.get("logged"), "drills": o.get("drills"),
                       "id": o.get("id")})
     items.sort(key=lambda i: i["ts"] or "")     # stable: equal times keep history order
+    if meta is not None:
+        meta["more"] = len(items) > limit
     return items[-limit:]
 
 
@@ -593,11 +620,26 @@ def delete_message(chat_id: str, slug: str | None, key: str, by: str = "") -> bo
                                  e.get("ts") or "", by)
                 e[side] = True
                 hit = True
+        side = "hide_user" if parts[2] == "u" else "hide_coach"
         if not hit:
-            return False
+            # Older than history.json's 30 exchanges: hide it in the archive instead.
+            def change(e):
+                if not e.get(side):
+                    _log_deleted(chat_id, key, "me" if parts[2] == "u" else "coach",
+                                 (e.get("user") if parts[2] == "u" else e.get("assistant")) or "",
+                                 e.get("ts") or "", by)
+                e[side] = True
+            try:
+                return _archive().patch(slug, lambda e: history_key(e) == "h:" + parts[1], change)
+            except Exception:
+                return False
         tmp = hf.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(hist, indent=2))
         tmp.replace(hf)
+        try:
+            _archive().sync(slug, hist)
+        except Exception:
+            pass
         for f in (CC / "athletes" / slug).glob(".chat_session*.json"):   # one per model
             f.unlink(missing_ok=True)
     return True

@@ -774,7 +774,8 @@
      (the reply as it is written), message (the checked reply, which replaces the
      draft), error, done. History is shared with Telegram. */
 
-  var chatState = { loaded: false, busy: false };
+  var chatState = { loaded: false, busy: false, limit: 80, slug: null };
+  var CHAT_PAGE = 80;          // messages per "Show earlier messages" tap
 
   /* ── unread coach messages: a count on the chat button (and the app icon) ──
      "Seen" is the newest message time Peak has shown in Chat, kept on this device.
@@ -1231,9 +1232,14 @@
     return state.me && state.me.coach && state.slug && state.slug !== state.me.own ? state.slug : '';
   }
 
-  function loadChatHistory() {
+  // earlier = true when "Show earlier messages" was tapped: keep the reader's place
+  // instead of jumping to the newest message.
+  function loadChatHistory(earlier) {
     var other = chatSlug();
-    fetch('/api/chat/history' + (other ? '?slug=' + encodeURIComponent(other) : ''), { cache: 'no-store' })
+    if (chatState.slug !== other) { chatState.slug = other; chatState.limit = CHAT_PAGE; }
+    var q = ['limit=' + chatState.limit];
+    if (other) q.push('slug=' + encodeURIComponent(other));
+    fetch('/api/chat/history?' + q.join('&'), { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : { history: [] }; })
       .then(function (j) {
         chatState.loaded = true;
@@ -1248,7 +1254,20 @@
         var nb = $('#v-chat .notify-bar');
         if (nb) nb.hidden = !!j.readonly;
         var mq = other ? '?slug=' + encodeURIComponent(other) : '';
+        var fromBottom = document.body.scrollHeight - window.scrollY;
         $('#chatLog').innerHTML = '';
+        // history.json keeps 30 exchanges; the rest come from the chat archive, a page
+        // at a time (Jamie, 4 Oct 2026: Fred's older messages could not be reached).
+        if (j.more) {
+          var mb = document.createElement('button');
+          mb.type = 'button'; mb.className = 'chat-more'; mb.textContent = 'Show earlier messages';
+          mb.onclick = function () {
+            mb.disabled = true; mb.textContent = 'Loading\u2026';
+            chatState.limit += CHAT_PAGE;
+            loadChatHistory(true);
+          };
+          $('#chatLog').appendChild(mb);
+        }
         (j.history || []).forEach(function (m) {
           var el = m.who === 'me' ? bubble('me', m.text)
             : coachItem(m.text, j.readonly ? [] : m.buttons,
@@ -1261,7 +1280,8 @@
             ? 'Welcome to Peak. Send any message to start setting up your coaching.'
             : 'No messages yet') + '</div>';
         }
-        chatScroll();
+        if (earlier) window.scrollTo(0, document.body.scrollHeight - fromBottom);
+        else chatScroll();
       })
       .catch(function () { /* stays empty; sending still works */ });
   }

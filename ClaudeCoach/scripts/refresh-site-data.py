@@ -2143,6 +2143,14 @@ def refresh_one(slug):
 
 def main():
     one = sys.argv[2] if len(sys.argv) == 3 and sys.argv[1] == "--athlete" else None
+    # Every 15 min: copy each chat into its permanent archive, so the scripts that write
+    # history.json without save_history can't trim a message away unrecorded.
+    try:
+        import chat_archive
+        for s in ([one] if one else chat_archive.all_slugs()):
+            chat_archive.sync(s)
+    except Exception as e:
+        log(f"chat archive sync failed: {e}")
     if not acquire_lock():
         log("Already running — skipping")
         sys.exit(3 if one else 0)  # 3 tells the app "busy, try shortly"
