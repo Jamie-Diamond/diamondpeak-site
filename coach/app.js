@@ -1820,8 +1820,13 @@
     (d.weekCalendar || []).forEach(function (s) {
       (by[s.date] = by[s.date] || []).push(s);
     });
+    // Skip only dates weekCalendar already owns. Checking by[r.date] dropped every
+    // activity after the first on a multi-activity day (Kathryn's 70.3 showed as its
+    // run leg alone, and her race week as 3h06).
+    var planned = {};
+    Object.keys(by).forEach(function (k) { planned[k] = true; });
     (d.recent || []).forEach(function (r) {
-      if (by[r.date]) return;
+      if (planned[r.date]) return;
       (by[r.date] = by[r.date] || []).push({
         date: r.date, name: r.name, sport: r.sport, duration_min: r.dur,
         tss: r.tss, status: 'completed',
