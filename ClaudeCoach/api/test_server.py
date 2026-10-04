@@ -1,4 +1,8 @@
-"""Tests for the Peak backend: who can read what. Run: pytest ClaudeCoach/api/test_server.py"""
+"""Tests for the Peak backend: who can read what.
+
+Run with the API's own Python (the system python3 has no fastapi):
+    /opt/claudecoach-api/venv/bin/python3 -m pytest ClaudeCoach/api
+"""
 import json
 import time
 from pathlib import Path
@@ -42,6 +46,10 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(server, "PUBLIC_DIR", cc / "public")
     monkeypatch.setattr(server, "ATHLETES_CONFIG", cc / "config" / "athletes.json")
     monkeypatch.setattr(server, "ACCESS_CONFIG", access)
+    # The chat archive resolves athletes/ itself: without this, a test run on the VM
+    # writes its fake messages into the real athletes' chats (4 Oct 2026).
+    import chat_archive                     # lib/, on sys.path once server is imported
+    monkeypatch.setattr(chat_archive, "CC", cc)
     monkeypatch.setenv("CC_PUSH_WATCH", "0")
     for k in ("CF_ACCESS_TEAM", "CF_ACCESS_AUD", "CC_API_DEV_EMAIL"):
         monkeypatch.delenv(k, raising=False)

@@ -192,6 +192,12 @@ is **masked** on the VM: never start, restart or unmask it. After a deploy, rest
 `scripts/telegram-inbox.py` passes any message sent to the old Telegram coach into
 Jamie's Peak chat.
 
+## ClaudeCoach API tests - use the API's Python
+
+FastAPI lives in the API's venv, not the system `python3`. Run the API tests with
+`/opt/claudecoach-api/venv/bin/python3 -m pytest ClaudeCoach/api` on the VM. Never
+`pip install` into the system Python to get round it.
+
 ## ClaudeCoach ops alerts - developer inbox, never Jamie's chat
 
 Ops alerts ("did not deliver", missing heartbeats, plan-audit findings) are a log for
