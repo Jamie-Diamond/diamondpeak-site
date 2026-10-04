@@ -310,6 +310,24 @@ def record(slug: str, week_start: date | str, *, hours=None, constraints: str = 
     return rec
 
 
+def clear_week(slug: str, week_start: date | str,
+               base: Path | str | None = None) -> dict | None:
+    """Remove the declaration for one week, when the athlete says it is wrong. Returns
+    the removed record, or None when there was nothing for that week."""
+    ws = date.fromisoformat(week_start) if isinstance(week_start, str) else week_start
+    ws = _monday(ws).isoformat()
+    raw = load_raw(slug, base)
+    gone = next((d for d in _declarations(raw) if str(d.get("week_start")) == ws), None)
+    if gone is None or not isinstance(raw, dict):
+        return None
+    out = {k: v for k, v in raw.items() if k != "declarations"}
+    out["declarations"] = [d for d in _declarations(raw) if str(d.get("week_start")) != ws]
+    _atomic_write(path_for(slug, base), out)
+    _audit(slug, {"week_start": ws, "source": "cleared", "cleared": True,
+                  "declared_at": datetime.now().isoformat(timespec="seconds")}, gone, base)
+    return gone
+
+
 def _audit(slug: str, rec: dict, replaced: dict | None,
            base: Path | str | None) -> None:
     """Write one ops-alerts line per declaration write. Best-effort, never raises.

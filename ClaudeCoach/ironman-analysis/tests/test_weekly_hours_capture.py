@@ -250,13 +250,16 @@ class TestTargetWeekIsTheWeekThatWasASKED:
         # "I build this evening" about a week that already exists.
         bot = (Path(__file__).resolve().parents[2] / "telegram/bot.py").read_text()
         assert "def _hours_week_is_built(week_start, now=None)" in bot
-        assert "after_build=_hours_week_is_built(week_start)" in bot
+        # Since 4 Oct 2026 the read-back is built per saved week (lib/availability_reader).
+        assert "built = _hours_week_is_built(ws)" in bot
 
     def test_the_bot_handler_does_not_compute_the_week_itself(self):
-        # The handler must go through target_week; a local "Monday after today" is the
-        # defect above.
+        # The handler must not compute "the Monday after today" itself - the defect above.
+        # Since 4 Oct 2026 the model picks the week from a calendar the code builds, and
+        # is told which week the outstanding ask was about.
         bot = (Path(__file__).resolve().parents[2] / "telegram/bot.py").read_text()
-        assert "weekly_availability.target_week(slug, text)" in bot
+        assert "availability_reader.week_mondays(today)" in bot
+        assert "asked = weekly_availability.outstanding_ask_week(slug)" in bot
         assert "def _next_monday(" not in bot
 
 

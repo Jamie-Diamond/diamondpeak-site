@@ -1,5 +1,7 @@
 # Weekly available hours — asked, not configured
 
+> **4 Oct 2026: the reply is now read by the model, not regexes.** `lib/availability_reader.py` reads each availability-looking message (and every message while the Sunday ask is open) with the calendar and the last few turns, and returns JSON; `telegram/bot.py:_handle_hours_capture` validates it, merges it with what is saved, writes it and sends a read-back built from the stored record. Unclear messages save nothing and the chat model asks. The regex tiers and the bare-number Yes/No keyboard described below are retired from the chat path (they read Fred's "the week starting the 12 october" as 12 hours and James's "swim Monday, cycle Wednesday" as "bike Mon; rest Wed").
+
 **Status:** mechanism landed on `feat/weekly-hours-capture` (28 Jul 2026); the reply
 capture landed on `feat/bot-capture-handlers` (29 Jul 2026). The ask is appended to the
 Sunday morning card, the reply is parsed automatically, and the ceiling derives from the

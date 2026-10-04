@@ -51,6 +51,7 @@ sys.path.insert(0, str(BASE))
 sys.path.insert(0, str(BASE.parent / "lib"))
 import races as races_lib
 import weekly_availability     # per-week declared hours (Sunday ask + reply capture)
+import availability_reader     # the model reads availability messages (4 Oct 2026)
 import open_actions            # the single open-actions store (close/defer/drop)
 import day_overrides           # fail-closed register of directed day-rule deviations
 import claude_call
@@ -762,6 +763,7 @@ _CAPTURE_KINDS = {
     "race":    "a race",
     "hours":   "a weekly-hours declaration",
     "dayshape": "a day-shape declaration for a week",
+    "availability": "the athlete's availability for a week (hours, days, travel)",
     "dayrule": "a day-rule override (a note that an off-pattern session is deliberate)",
     "action":  "an open-action status change",
 }
@@ -3469,40 +3471,30 @@ def _handle_race_priority(token, chat_id, data, message_id, athletes):
     return True
 
 
-# Weekly hours capture. The Sunday morning card asks how many hours the athlete has for
-# the week starting tomorrow (weekly_availability.sunday_hours_ask, appended in
-# scripts/morning-checkin.py); until this handler existed nothing read the answer and a
-# declaration had to be hand-written by an agent. The figure sets the week's Load ceiling
-# at the 18:00 Sunday build, so a wrong capture is expensive and a missed one is not.
+# Weekly availability capture. The Sunday morning card asks how many hours the athlete has
+# for the week starting tomorrow (weekly_availability.sunday_hours_ask, appended in
+# scripts/morning-checkin.py), and athletes volunteer travel, rest days and which sport
+# goes on which day at any time. stage1-plan.py builds the week from what is stored in
+# this-week-availability.json, so this handler is the write.
 #
-# TWO TIERS, because a bare number on that card is ambiguous. The same card asks "Ankle
-# score this morning? (0-10)" and "Weight this morning?", so "7" is at least as likely a
-# pain score as a seven-hour week. lib/weekly_availability draws the line:
-#   * looks_like_hours_declaration — the message frames itself as being about a week
-#     ("14h next week", "20, big week"). Written immediately, then read back.
-#   * looks_like_hours_reply       — a figure with no such framing ("12 max, nothing long
-#     midweek"). Only considered while `ask_outstanding` is true, and NEVER written on
-#     sight: the athlete gets a confirm keyboard and the write happens on the tap.
-# Nothing is inferred from silence, and no branch here can persist last week's figure —
-# `record` is keyed on the Monday being declared.
-_PENDING_HOURS: dict[str, dict] = {}
-_HOURS_CAPTURE_TTL = 3600        # 1 h to confirm an ambiguous figure
-
-# The Sunday build (`0 18 * * 0`). A declaration recorded after it is still worth having —
-# it is the athlete correcting the week — but the week has already been generated and
-# pushed, so the confirmation offers a rebuild instead of promising one, and this handler
-# never triggers a rebuild itself (docs/weekly-hours-capture.md, follow-up item 5).
-_WEEKLY_BUILD_HOUR = 18
+# READ BY THE MODEL since 4 Oct 2026 (lib/availability_reader.py). Before that, regex
+# tiers decided what a message meant, and that morning saved Fred's "do you mean the week
+# starting the 12 october" as 12 hours and James's "swim on Monday cycle on Wednesday" as
+# "bike Mon; rest Wed". Jamie: cutting corners on AI usage gives a shit UX. The model now
+# reads the message with the calendar and the last few turns; code keeps the date maths,
+# the sanity band, the merge with what is already saved, and the read-back, which is built
+# from what was STORED rather than from the model's paraphrase.
+_WEEKLY_BUILD_HOUR = 18          # the Sunday build (`0 18 * * 0`)
+_READER_TIMEOUT = 60
 
 
 def _hours_week_is_built(week_start, now=None) -> bool:
     """True once the build for the week beginning `week_start` has already run.
 
-    Keyed on the TARGET week rather than on "is it Sunday evening", because
-    weekly_availability.target_week resolves a mid-week "14 hours this week" to the
-    CURRENT Monday — a week generated the previous Sunday. Promising to build that week
-    this evening would be wrong; it needs the offer-a-rebuild wording instead. The build
-    for week W is the 18:00 cron on the Sunday before W.
+    Keyed on the TARGET week rather than on "is it Sunday evening": a mid-week "14 hours
+    this week" is about the CURRENT Monday, a week generated the previous Sunday, and
+    promising to build it this evening would be wrong. The build for week W is the 18:00
+    cron on the Sunday before W.
     """
     n = now or datetime.now()
     ws = date.fromisoformat(week_start) if isinstance(week_start, str) else week_start
@@ -3511,232 +3503,127 @@ def _hours_week_is_built(week_start, now=None) -> bool:
     return n >= build_at
 
 
-def _write_hours(slug, week_start, hours, constraints, coaching_level):
-    """Record the declaration and build the read-back. Returns (reply, ok)."""
-    try:
-        weekly_availability.record(slug, week_start, hours=hours,
-                                   constraints=constraints, source="telegram-reply")
-    except ValueError as e:
-        # Out of the sanity band. record() refuses rather than storing a figure that
-        # becomes a training ceiling, so say so instead of pretending it landed.
-        log(f"[{slug}] hours capture refused: {e}")
-        return (f"That came out as {hours:g} hours, which I don't think is right — "
-                f"nothing saved. Give me the number again?"), False
-    except Exception as e:
-        log(f"[{slug}] hours capture failed: {e}")
-        return "Couldn't save that — nothing written. Try again?", False
-    return weekly_availability.confirmation(
-        hours, constraints, coaching_level=coaching_level,
-        after_build=_hours_week_is_built(week_start)), True
+def _availability_model_call(slug):
+    def call(prompt):
+        r = claude_call.run_claude(prompt, model=claude_call.SONNET, allowed_tools="",
+                                   cwd=str(PROJECT_DIR), timeout=_READER_TIMEOUT,
+                                   label=f"availability:{slug}")
+        if r.returncode != 0 or r.limited or r.auth_failed:
+            raise RuntimeError(f"availability read failed ({r.model}, rc {r.returncode})")
+        return r.stdout or ""
+    return call
+
+
+def _availability_readback(ws, rec, level) -> str:
+    """What the athlete is told was saved, built from the stored record."""
+    built = _hours_week_is_built(ws)
+    if rec.get("hours") is not None and not any(
+            rec.get(k) for k in ("swim_days", "bike_days", "run_days", "unavailable_days",
+                                 "excluded_sports")):
+        return weekly_availability.confirmation(rec["hours"], rec.get("constraints") or "",
+                                                coaching_level=level, after_build=built)
+    line = f"👍 Saved for w/c {ws:%a} {ws.day} {ws:%b} - *{availability_reader.describe(rec)}*"
+    if rec.get("constraints"):
+        line += f", noted: _{rec['constraints']}_"
+    tail = ("That week is already built, so say if you want it rebuilt to this."
+            if built else "That is what the plan will be built to; tell me if any of it is wrong.")
+    return f"{line}. {tail}"
 
 
 def _handle_hours_capture(token, chat_id, text, athletes):
-    """Turn "14h next week" into a declaration the Sunday build reads. Returns a capture
-    note when it fired, else False; a note claims the message against the other captures
-    but does NOT stop it reaching the model.
-
-    Deliberately placed AFTER race capture and BEFORE the generative reply: a
-    deterministic read-back of what was stored beats a model's paraphrase of it for the
-    one figure the week's ceiling derives from."""
+    """Read a message for hours / days / travel for a week, and save what it declares.
+    Returns a capture note when it fired, else False; a note claims the message against
+    the other captures but does NOT stop it reaching the model."""
     athlete = athletes.get(chat_id)
     if not athlete:
         return False
     slug = athlete["slug"]
-    # WHICH week this reply is about. Resolved by weekly_availability, not computed here:
-    # an outstanding ask names the week that was actually asked, which beats any inference
-    # from today's date. Computing "the Monday after today" locally would send a Monday
-    # morning reply — well inside the answer window — to the FOLLOWING week, leaving the
-    # week the athlete was asked about on the config fallback.
-    ws = weekly_availability.target_week(slug, text)
+    today = date.today()
+    asked = weekly_availability.outstanding_ask_week(slug)
+    # A LOG ("heat 30", "ankle 3") goes to its fast path, and the hours ask stays open.
+    if logs_via_fast_path(text) or not availability_reader.worth_reading(text, bool(asked)):
+        return False
+    weeks = availability_reader.week_mondays(today)
+    try:
+        baseline_weeks = {m for m in weeks if baseline_lib.blocks_week(slug, m)}
+    except Exception:
+        baseline_weeks = set()
+    try:
+        recent = load_history(athlete_files(slug)["history"])[-4:]
+    except Exception:
+        recent = []
+    try:
+        sports = goals_lib.sports_for(athlete, json.loads(
+            (_athlete_dir(slug) / "profile.json").read_text()))
+    except Exception:
+        sports = None
+    r = availability_reader.read(
+        text, today=today, call=_availability_model_call(slug), recent=recent,
+        asked_week=asked, baseline_weeks=baseline_weeks,
+        saved=availability_reader.saved_for(slug, today), sports=sports)
+    if r is None:
+        log(f"[{slug}] availability read failed - nothing saved, the model turn handles it")
+        return False
+    log(f"[{slug}] availability read: {r['kind']} - {r['reason']}")
+    if r["kind"] == "none":
+        return False
+    if r["kind"] == "unclear":
+        return _availability_unsaved(
+            f"it is unclear what to save ({r['reason']}). Ask the athlete, in your own "
+            f"words: {r['question']}")
+
     level = _profile_coaching_level(slug)
-
-    # TIER 1 — self-framing, unambiguous, write now.
-    if weekly_availability.looks_like_hours_declaration(text):
-        parsed = weekly_availability.parse_hours_message(text)
-        reply, _ok = _write_hours(slug, ws, parsed["hours"], parsed["constraints"], level)
-        send(token, chat_id, reply, reply_markup=build_keyboard(slug))
-        return _capture(
-            "hours",
-            (f"{parsed['hours']:g} h for w/c {ws.isoformat()}" if _ok
-             else f"nothing — the figure ({parsed['hours']:g} h) was refused"),
-            reply)
-
-    # TIER 1b — a DAY-SHAPE declaration: which sports fall on which days, with no hours
-    # figure anywhere in it. Added 2026-08-03. This is the write that was missing: Jamie's
-    # 1 Aug "Monday rest Tuesday swim morning long run evening ... Thursday long ride.
-    # Friday/Saturday run Sunday rest" matched no capture path, went only into
-    # current-state.md prose, and stage1-plan.py reads THIS file - so the generator used
-    # default day_rules and built a Friday-threshold / Saturday-long-ride week. He then
-    # restated his availability on 27 Jul, 1 Aug, 2 Aug and 3 Aug.
-    if weekly_availability.looks_like_day_shape_declaration(text):
-        p = weekly_availability.parse_day_shape_message(text)
-        # WHICH WEEK a day shape is about is NOT the same question as which week an hours
-        # reply is about, so it gets its own resolver. `target_week` falls through an
-        # unframed message to the NEXT Monday, which is right for a reply to the Sunday
-        # hours ask and wrong here: Jamie restated this week's availability on Monday
-        # 10 Aug, it landed on w/c 17 Aug, day_shape() for the current week then returned
-        # None and the week was rebuilt off day_rules - the whole 10 Aug argument.
-        ws_shape = weekly_availability.day_shape_target_week(
-            slug, text, named_days=p["named_days"])
+    sent, notes = [], []
+    for w in r["weeks"]:
+        ws = w["week_start"]
+        if ws in baseline_weeks:
+            notes.append(f"nothing for w/c {ws.isoformat()}: it is the athlete's baseline "
+                         "(test) week, already on their calendar. If what they said changes "
+                         "it, edit those calendar sessions directly and tell them")
+            continue
+        if r["kind"] == "clear":
+            gone = weekly_availability.clear_week(slug, ws)
+            msg = (f"Cleared what I had saved for w/c {ws:%a} {ws.day} {ws:%b}. "
+                   "Tell me what that week looks like when you know.") if gone else ""
+            if msg:
+                sent.append(msg)
+            notes.append(f"w/c {ws.isoformat()} declaration "
+                         f"{'cleared' if gone else 'was already empty'}")
+            continue
+        rec = availability_reader.merged(weekly_availability.for_week(slug, ws), w)
         try:
-            # record() REPLACES the week's declaration, so an hours figure already
-            # declared for this week must be carried forward or it is silently dropped.
-            prior_hours = weekly_availability.hours_for_week(slug, ws_shape)
-            prior_cons  = weekly_availability.constraints_for_week(slug, ws_shape) or ""
-            # A whole-week sport exclusion already recorded for this week survives, unless
-            # the new shape names a day for that sport - in which case he has just
-            # contradicted it and the shape is the later word.
-            prior_excl = [k for k in ((weekly_availability.day_shape(slug, ws_shape) or {})
-                                      .get("excluded_sports") or []) if not p.get(k)]
-            weekly_availability.record(
-                slug, ws_shape, source="chat-day-shape",
-                hours=prior_hours, constraints=prior_cons, excluded_sports=prior_excl,
-                swim_days=p["swim_days"], bike_days=p["bike_days"],
-                run_days=p["run_days"], unavailable_days=p["unavailable_days"],
-                # The days the athlete NAMED, which is what makes day_rules yield per day
-                # rather than per sport. Without it "Wednesday swim" leaves the standing
-                # Wednesday run in place and the plan carries a run he did not ask for.
-                declared_days=p["named_days"])
+            weekly_availability.record(slug, ws, source="chat-ai-read", **rec)
+        except ValueError as e:
+            log(f"[{slug}] availability write refused: {e}")
+            notes.append(f"NOTHING saved for w/c {ws.isoformat()}: {e}. Ask them again")
+            continue
         except Exception as e:
-            log(f"day-shape capture failed for {slug}: {e}")
-            return False
-        # Write first, then restate what was saved in one line (shared rule S38). The week
-        # is named because day_shape_target_week can still read it wrong: a wrong week is
-        # then one message away from being fixed instead of silently planned.
-        msg = (f"Recorded for w/c {ws_shape.isoformat()} - "
-               f"*{weekly_availability.day_shape_summary(p)}*. "
-               f"That is what the plan will be built to; tell me if any of it is wrong.")
-        send(token, chat_id, msg, reply_markup=build_keyboard(slug))
-        # "what the plan WILL be built to" — the declaration steers the NEXT build; it does
-        # not rewrite sessions already on the calendar, so the note keeps that distinction.
-        return _capture(
-            "dayshape",
-            f"w/c {ws_shape.isoformat()} — {weekly_availability.day_shape_summary(p)}. "
-            "This steers the next build; sessions already on the calendar are unchanged",
-            msg)
-
-    # TIER 1c — a whole-week SPORT EXCLUSION ("no cycling this week"). The negative form
-    # of 1b, which needs 3+ named days and so cannot see this. Kathryn, 12 Jul 2026:
-    # auto-sync overwrote an explicitly-agreed locked week and put cycling on Thu and Sat.
-    # Her STANDING bike_days are ["Tue","Thu","Sat"], so the sync was right about the
-    # standing shape - what it never saw was the week-specific agreement to drop cycling,
-    # because that lived only in conversation. stage1-plan.py flexes day_rules from
-    # weekly_availability.day_shape() for the week it is planning, so a recorded
-    # declaration holds; nothing wrote one.
-    if weekly_availability.looks_like_sport_exclusion(text):
-        p = weekly_availability.parse_sport_exclusion_message(text)
-        try:
-            # record() REPLACES the week, so merge over what is already declared -
-            # otherwise "no cycling" silently erases a swim/run shape or an hours figure
-            # captured earlier in the same week.
-            shape = dict(weekly_availability.day_shape(slug, ws) or {})
-            shape.update(p["excluded"])
-            # NAME the excluded sports. An empty day list cannot carry that meaning on its
-            # own: parse_day_shape_message emits all four day keys every time, so a week
-            # that simply names no bike day also arrives with bike_days=[].
-            shape["excluded_sports"] = sorted(
-                set(shape.get("excluded_sports") or []) | set(p["excluded"]))
-            weekly_availability.record(
-                slug, ws, source="chat-sport-exclusion",
-                hours=weekly_availability.hours_for_week(slug, ws),
-                constraints=weekly_availability.constraints_for_week(slug, ws) or "",
-                # `declared_days` travels with the shape: dropping it here would demote an
-                # earlier per-day declaration back to per-sport precedence, so "no cycling
-                # this week" would quietly hand the athlete's named days back to day_rules.
-                **{k: v for k, v in shape.items()
-                   if k in weekly_availability.DAY_SHAPE_KEYS})
-        except Exception as e:
-            log(f"sport-exclusion capture failed for {slug}: {e}")
-            return False
-        msg = (f"Recorded for w/c {ws.isoformat()} — "
-               f"*{weekly_availability.sport_exclusion_summary(p['excluded'])}*. "
-               f"The plan for that week will be built without it; tell me if that is wrong.")
-        send(token, chat_id, msg, reply_markup=build_keyboard(slug))
-        return _capture(
-            "dayshape",
-            f"w/c {ws.isoformat()} — "
-            f"{weekly_availability.sport_exclusion_summary(p['excluded'])}. "
-            "This steers the next build; sessions already on the calendar are unchanged",
-            msg)
-
-    # TIER 2 — ambiguous figure, and only while the ask is genuinely outstanding (sent,
-    # unanswered, inside its window). `ask_outstanding` is a recorded fact, not an
-    # inference from the calendar: sunday_hours_ask sends nothing while the illness flag
-    # is up, and offering to record an unrelated number as hours in that state would be
-    # the bot inventing a conversation it never had.
-    if not weekly_availability.ask_outstanding(slug, ws):
+            log(f"[{slug}] availability write failed: {e}")
+            notes.append(f"NOTHING saved for w/c {ws.isoformat()} (write failed)")
+            continue
+        if asked and ws == asked:
+            weekly_availability.consume_ask(slug, ws)
+        sent.append(_availability_readback(ws, rec, level))
+        notes.append(f"w/c {ws.isoformat()} - {availability_reader.describe(rec) or 'constraints only'}"
+                     + (f" (constraints: {rec['constraints']})" if rec.get("constraints") else "")
+                     + ". This steers the next build; sessions already on the calendar are "
+                       "unchanged")
+    if not notes:
         return False
-    # A message that is really a LOG ("heat 30", "ankle 3") is not an answer to the hours
-    # ask. Stand down WITHOUT consuming the ask: the fast path below logs it, and the ask
-    # stays live for the real answer. Deliberately before consume_ask for that reason.
-    if logs_via_fast_path(text):
-        return False
-    if not weekly_availability.looks_like_hours_reply(text):
-        # The athlete has spoken since the ask went out and this was not an hours figure,
-        # so the free-scan window closes HERE. Without this the ask stayed live for 36
-        # hours and every one-or-two-digit number in any later message was a candidate:
-        # "came off at 15-20k" became 15 hours, "you told me 10 mins ago" became 10, and
-        # two single-day figures became weeks - four times in 24h on 3 Aug 2026.
-        # A genuine later declaration still lands via the self-framing tier above
-        # ("14 hours next week"), which needs no outstanding ask.
-        weekly_availability.consume_ask(slug, ws)
-        return False
-    parsed = weekly_availability.parse_hours_message(text)
-    # The offer itself is the one shot: whether they tap Yes, No, or ignore it, the
-    # window is spent and a later stray number must not reopen it.
-    weekly_availability.consume_ask(slug, ws)
-    _PENDING_HOURS[chat_id] = {"hours": parsed["hours"],
-                               "constraints": parsed["constraints"],
-                               "week_start": ws.isoformat(),
-                               "expiry": time.time() + _HOURS_CAPTURE_TTL}
-    cons = f" ({parsed['constraints']})" if parsed["constraints"] else ""
-    msg = (f"Just so I've got this right — is that *{parsed['hours']:g} hours* of training "
-           f"for next week{cons}?")
-    send(token, chat_id, msg,
-         reply_markup={"inline_keyboard": [[
-             {"text": "Yes, that's my week", "callback_data": "__HOURS_YES__"},
-             {"text": "No", "callback_data": "__HOURS_NO__"},
-         ]]})
-    # Nothing written on this tier — the tap writes. And this is the tier that fires on a
-    # BARE figure, so the reply must not assume the number was about hours at all.
-    return _capture(
-        "hours",
-        f"nothing yet — {parsed['hours']:g} h for w/c {ws.isoformat()} is only a guess at "
-        "what an ambiguous figure meant, and is written when the athlete confirms",
-        msg)
+    msg = "\n".join(sent)
+    if not msg:
+        return _availability_unsaved("; ".join(notes))
+    send(token, chat_id, msg, reply_markup=build_keyboard(slug))
+    return _capture("availability", "; ".join(notes), msg)
 
 
-def _handle_hours_confirm(token, chat_id, data, message_id, athletes):
-    """The yes/no answer to the ambiguous-figure question above. Returns True if handled.
-
-    A "No" writes NOTHING and says so — the fallback to the standing figure is a stated,
-    visible outcome, and is strictly better than a ceiling built from a misread number."""
-    if data not in ("__HOURS_YES__", "__HOURS_NO__"):
-        return False
-    athlete = athletes.get(chat_id)
-    pending = _PENDING_HOURS.pop(chat_id, None)
-    if not athlete or not pending or time.time() > pending["expiry"]:
-        if message_id:
-            edit_keyboard_confirm(token, chat_id, message_id,
-                                  "That one timed out — tell me the hours again.")
-        return True
-    if data == "__HOURS_NO__":
-        if message_id:
-            edit_keyboard_confirm(token, chat_id, message_id, "Nothing saved.")
-        msg = ("No problem — nothing saved. Tell me the number when you have it "
-               "(_\"14 hours next week\"_ works), or I'll use your usual week.")
-        send(token, chat_id, msg, reply_markup=build_keyboard(athlete["slug"]))
-        _append_capture_history(chat_id, athlete["slug"], "[tapped: No]", msg)
-        return True
-    slug = athlete["slug"]
-    reply, ok = _write_hours(slug, pending["week_start"], pending["hours"],
-                             pending["constraints"], _profile_coaching_level(slug))
-    if message_id:
-        edit_keyboard_confirm(token, chat_id, message_id,
-                              f"✅ {pending['hours']:g} h" if ok else "Not saved")
-    send(token, chat_id, reply, reply_markup=build_keyboard(slug))
-    _append_capture_history(chat_id, slug, "[tapped: Yes, that's my week]", reply)
-    return True
+def _availability_unsaved(why: str) -> dict:
+    """The note for the model turn when a message was about availability but NOTHING was
+    saved. Claims the message against the other captures; the model does the talking."""
+    return {"msg": "", "note": (
+        "## Availability in the message below\n"
+        f"The availability reader read this message and saved NOTHING: {why}.\n"
+        "Nothing on the athlete's calendar has moved either.")}
 
 
 # Open-action capture. lib/open_actions.py has been the single store since 28 Jul, with the
@@ -7380,7 +7267,7 @@ def _route_text(token, chat_id, text, athletes, config):
     # capture nothing.
     capture = None
     for _cap in (_handle_race_capture,      # "I'm racing X on Saturday" -> the race registry
-                 _handle_hours_capture,     # "14h next week" -> the week's Load ceiling
+                 _handle_hours_capture,     # hours / days / travel -> the week's declaration
                  _handle_dayrule_capture,   # "swim Wednesday" -> the fail-closed register
                  _handle_action_capture):   # "sweat test is booked" -> the actions store
         capture = _cap(token, chat_id, text, athletes) or None
@@ -7697,8 +7584,6 @@ def dispatch_callback(token, chat_id, text, msg_id, athletes, config):
     if _handle_did_happen(token, chat_id, text, msg_id, athletes):
         return True
     if _handle_replan_confirm(token, chat_id, text, msg_id, athletes):
-        return True
-    if _handle_hours_confirm(token, chat_id, text, msg_id, athletes):
         return True
     if _handle_action_confirm(token, chat_id, text, msg_id, athletes):
         return True
