@@ -230,7 +230,7 @@ def ramp_trail(breaches: list[dict]) -> str:
 # window. If any of this fails the prompt falls back to the old fetch-it-yourself
 # instructions, so a data hiccup costs money, never a missed trigger.
 PRELOAD_DAYS = 14
-HISTORY_DAYS = 21     # T11 counts the last 2 COMPLETED weeks, up to 20 days back
+HISTORY_DAYS = 35     # T10 averages the 4 weeks before this one, up to 34 days back
 _ACT_FIELDS = ("id", "start_date_local", "type", "name", "moving_time", "distance",
                "icu_training_load", "icu_intensity", "decoupling", "average_heartrate")
 _SESSION_FIELDS = ("date", "sport", "name", "duration_min", "tss", "rpe", "notes",
@@ -430,7 +430,7 @@ def build_prompt(slug: str, name: str, race_name: str, race_date: str, chat_id: 
 Pull live data via Bash (use today's date {today} for all calculations):
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint profile
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint fitness --days 14
-  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint history --days 14
+  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint history --days 35
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint wellness --days 14
 """
         t6_how = (f"  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint activity_detail "
@@ -460,7 +460,9 @@ T6 (Tier 1): Aerobic decoupling >5% on any Z2 ride in last 7 days (rides with IF
 T10 (Tier 2): Run weekly km increase >10% week-on-week
   - Sum run distance (km) from history endpoint for Mon–today (current week)
   - Sum run distance for the 7 days prior (last week)
-{t10_ankle}  - Fire if this_week_km > last_week_km * 1.10 AND last_week_km > 0
+  - baseline = the higher of last_week_km and the average weekly km of the 4 weeks before
+    this Monday (a recovery week after a race is not a baseline)
+{t10_ankle}  - Fire if this_week_km > baseline * 1.10 AND baseline > 0
   - Fire message: "warning T10: run km +X% week-on-week ([this]km vs [last]km) — 10% cap applies"
 {t11}
 If NO triggers fire: output nothing. Silent run.

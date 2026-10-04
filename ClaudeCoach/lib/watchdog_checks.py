@@ -191,16 +191,25 @@ def t7_t8_heat(heat: dict, heat_log: list, today: date, maintenance_floor: float
 
 
 def t10_run_km(acts: list, today: date) -> dict | None:
-    """Run km this week (Mon-today) more than 10% over last week, when last week > 0."""
+    """Run km this week (Mon-today) more than 10% over the higher of last week and the
+    4-week average before this week, when that baseline > 0.
+
+    Last week alone is not a baseline: James's week after Ironman Cervia was 6.5 km
+    (recovery), so 12.1 km the week after fired "+86%" two weeks after a 41 km marathon
+    (3 Oct 2026). The 4-week average (21 km for him) carries the race week."""
     mon = today - timedelta(days=today.weekday())
     def km(lo, hi):
         return sum((a.get("distance") or 0) for a in acts if "Run" in str(a.get("type"))
                    and lo <= (_d(a.get("start_date_local")) or date.min) <= hi) / 1000
     this, last = km(mon, today), km(mon - timedelta(days=7), mon - timedelta(days=1))
-    if last <= 0 or this <= last * 1.10:
+    chronic = km(mon - timedelta(days=28), mon - timedelta(days=1)) / 4
+    base = max(last, chronic)
+    if base <= 0 or this <= base * 1.10:
         return None
+    vs = (f"{last:.1f} km" if base == last
+          else f"{chronic:.1f} km 4-week average, {last:.1f} km last week")
     return _fire("T10", 2, [f"week of {mon}"],
-                 f"run km +{(this / last - 1) * 100:.0f}% week-on-week ({this:.1f} km vs {last:.1f} km) "
+                 f"run km +{(this / base - 1) * 100:.0f}% week-on-week ({this:.1f} km vs {vs}) "
                  f"- 10% cap applies")
 
 

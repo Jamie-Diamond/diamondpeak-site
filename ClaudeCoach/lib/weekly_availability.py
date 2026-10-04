@@ -417,9 +417,9 @@ def sunday_hours_ask(slug: str, week_start: date | str, *, coaching_level: str =
     """The one-per-week hours question, or "" when it must not be asked.
 
     Returns "" when (a) the athlete has ALREADY declared for that week — the answer is
-    in, do not ask twice; or (b) the illness flag is active. The caller owns the
-    Sunday-only gate and the send; this function owns the copy and the two content
-    gates, so a future caller cannot forget them.
+    in, do not ask twice; (b) the illness flag is active; or (c) the week belongs to the
+    onboarding baseline block. The caller owns the Sunday-only gate and the send; this
+    function owns the copy and the content gates, so a future caller cannot forget them.
     """
     b = Path(base or BASE)
     if has_declaration(slug, week_start, b):
@@ -431,6 +431,18 @@ def sunday_hours_ask(slug: str, week_start: date | str, *, coaching_level: str =
             return ""
     except Exception:
         pass                                    # a missing illness module must not gag the ask
+    # A baseline week is already built (the test block) and stage1-plan stands down for
+    # it, so an hours answer changes nothing. Fred was asked about w/c 5 Oct 2026, his
+    # baseline week, and his puzzled reply was then logged as 12 hours (4 Oct 2026).
+    try:
+        import baseline as _baseline
+        bp = b / "athletes" / slug / _baseline.STATE_NAME
+        if bp.exists():
+            ws = date.fromisoformat(week_start) if isinstance(week_start, str) else week_start
+            if _baseline.blocks_week(slug, ws, st=json.loads(bp.read_text())):
+                return ""
+    except Exception:
+        pass                                    # an unreadable baseline must not gag the ask
     ask = _ASK.get(coaching_level, _ASK["mid"])
     try:
         prof = json.loads((b / "athletes" / slug / "profile.json").read_text())
@@ -498,6 +510,26 @@ _BARE_NON_HOURS = (r"(?!\s*(?:[-–/:]|k\b|km|m\b|mi\b|mile|%|s\b|sec|min|bpm|w\
                    r"kg|lb|°|C\b))")
 _BARE_NUM_RE = re.compile(r"\b(\d{1,2}(?:\.\d)?)\b" + _BARE_NON_HOURS)
 
+# A calendar DATE is never an hours figure. Fred's "By next week do you mean the week
+# starting the 12 october" was logged as 12 hours (4 Oct 2026). Dates are masked before
+# any figure is read: their digits are swapped for private-use characters, which no \d or
+# \b matches, so offsets stay valid for _clause_containing and the constraints text can
+# be restored to the athlete's own words afterwards.
+_MONTH = (r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|"
+          r"aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)")
+_DATE_RE = re.compile(
+    rf"\b\d{{1,2}}(?:st|nd|rd|th)?\s+(?:of\s+)?{_MONTH}\b(?!\s+be\b)"   # 12 october, 12th of oct
+    rf"|\b{_MONTH}\.?\s+\d{{1,2}}(?:st|nd|rd|th)?\b"                    # october 12, oct 12th
+    r"|\b\d{1,2}(?:st|nd|rd|th)\b"                                      # the 12th
+    r"|\b(?:starting|beginning|commencing|week\s+of|w/?c)\s+"           # w/c 12, starting the 12
+    r"(?:the\s+)?(?:mon(?:day)?\s+)?\d{1,2}\b", re.I)
+_DIGIT_MASK = str.maketrans("0123456789", "".join(chr(0xE000 + i) for i in range(10)))
+_DIGIT_UNMASK = {v: k for k, v in _DIGIT_MASK.items()}
+
+
+def _mask_dates(text: str) -> str:
+    return _DATE_RE.sub(lambda m: m.group(0).translate(_DIGIT_MASK), text)
+
 # "…this week", "next week", "big week". NB `\bweek\b` deliberately does NOT match
 # "midweek", so "nothing long midweek" is a CONSTRAINT and not weekly framing — which is
 # what puts "12 max, nothing long midweek" in the contextual tier where it belongs.
@@ -513,7 +545,8 @@ _NEXT_WEEK_RE = re.compile(r"\bnext\s+week\b", re.I)
 # an interrogative opener catches the unpunctuated form — "how many hours should I do".
 _QUESTION_RE = re.compile(
     r"^\s*(?:how|what|when|which|why|should|shall|can|could|would|do|does|did|is|are|am)\b"
-    r"|\bhow\s+(?:many|much|long)\b|\bshould\s+i\b|\bdo\s+i\s+(?:have|need)\b", re.I)
+    r"|\bhow\s+(?:many|much|long)\b|\bshould\s+i\b|\bdo\s+i\s+(?:have|need)\b"
+    r"|\b(?:do|did)\s+you\b|\byou\s+mean\b", re.I)
 
 # A REPORT of training already done, not a declaration of time available. "I did 14
 # hours last week", "managed 12", "slept 7 hours", "ended up with 9".
@@ -616,6 +649,7 @@ def parse_hours_message(text: str) -> dict:
     if not t:
         out["refused"] = "empty"
         return out
+    t = _mask_dates(t)
     if t.endswith("?") or _QUESTION_RE.search(t):
         out["refused"] = "question"
         return out
@@ -699,7 +733,7 @@ def parse_hours_message(text: str) -> dict:
 
     out["hours"] = h
     out["framed"] = framed
-    out["constraints"] = _strip_hours_phrase(t)
+    out["constraints"] = _strip_hours_phrase(t).translate(_DIGIT_UNMASK)
     return out
 
 

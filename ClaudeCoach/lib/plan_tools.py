@@ -74,6 +74,7 @@ from rpe_context import SPORT_FAMILY                             # noqa: E402
 import replan_gate                                               # noqa: E402
 import race_fitness as rf                                        # noqa: E402
 import goals as _goals                                           # noqa: E402
+import baseline as _baseline                                     # noqa: E402
 
 # The three subcommands lib/icu_fetch.py's push_workout/edit_workout gate on (the
 # ad-hoc-replan fix, 24 Aug 2026 — see replan_gate.py). Running one of these for the
@@ -577,7 +578,7 @@ _RACE_WEEK_MIN = 0.15        # openers floor, as a fraction of the 7 x CTL maint
 #   - "this week being light is not evidence of a MISSED week" (the miss-trigger and the
 #     return-to-load step cap below), which must not cascade a recovery week off a week
 #     that was prescribed light on purpose.
-DOWN_WEEK_TYPES = ("deload", "taper", "race", "post_race")
+DOWN_WEEK_TYPES = ("deload", "taper", "race", "post_race", "baseline")
 
 
 # Race intensity, per event, for the OPENERS guidance below. Long-course racing is done
@@ -941,6 +942,11 @@ def _goal_week(cfg: dict, ctl_today, today: date, last_week_tss=None,
     nwk = _goals.block_weeks(cfg)
     pos = _goals.position(start, today, nwk)
     prev = _goals.position(start, today - timedelta(days=7), nwk)
+    # Last week's load is evidence of a missed week only if last week was a load week. The
+    # sign-up baseline week is light on purpose (tests plus easy), but position() reads it
+    # as the lead-in, i.e. block 1 week 1 "load".
+    prev_load = prev["kind"] == "load" and not (
+        slug and _baseline.blocks_week(slug, _monday(today) - timedelta(days=7)))
     kind, why = pos["kind"], ""
     # This week's goal test (from the same start as `pos`), plus any hand-booked tests /
     # PB attempts that fall this week.
@@ -966,7 +972,7 @@ def _goal_week(cfg: dict, ctl_today, today: date, last_week_tss=None,
     ctl = float(ctl_today)
     maint = int(round(7.0 * ctl))
     out["maintenance_weekly_tss"] = maint
-    if (kind == "load" and prev["kind"] == "load" and last_week_tss is not None
+    if (kind == "load" and prev_load and last_week_tss is not None
             and float(last_week_tss) < _MISS_TRIGGER * maint):
         kind, why = "easy", (f"last week's executed load ({int(last_week_tss)} TSS) was under "
                              f"{int(_MISS_TRIGGER * 100)}% of maintenance")
@@ -989,7 +995,7 @@ def _goal_week(cfg: dict, ctl_today, today: date, last_week_tss=None,
             target = compute_required_tss(ctl, ctl + ramp, 1)
             floor = maint
             out["goal_ramp_per_week"] = ramp
-        if (last_week_tss is not None and prev["kind"] == "load"
+        if (last_week_tss is not None and prev_load
                 and float(last_week_tss) <= _DEFACTO_DELOAD_AT * maint):
             step = max(maint, int(round(float(last_week_tss) * _RETURN_STEP)))
             if step < target:
@@ -1378,6 +1384,32 @@ def _run_led(cfg: dict, profile: dict | None, slug: str | None, phase: str,
                  "running the caps will not allow - a short week is better.")}
 
 
+# The sign-up baseline week: the tests plus easy training by feel. A down-week's load,
+# but not a rest week - Jamie: a 0 floor is wrong (4 Oct 2026). Half of maintenance keeps
+# Fitness from sliding while the tests are still done fresh.
+_BASELINE_TARGET = 0.70
+_BASELINE_FLOOR = 0.50
+
+
+def _baseline_week(ctl_today) -> dict:
+    out = {"phase": "baseline", "week_type": "baseline", "ctl_today": ctl_today,
+           "needs_next_race": False, "bookings": []}
+    if not ctl_today:
+        out.update({"required_weekly_tss": None, "recommended_weekly_tss": None,
+                    "weekly_tss_floor": None,
+                    "note": ("BASELINE WEEK: the sign-up tests plus easy training by feel. "
+                             "No Fitness (CTL) is available yet, so there is no load target.")})
+        return out
+    maint = int(round(7.0 * float(ctl_today)))
+    target, floor = int(round(maint * _BASELINE_TARGET)), int(round(maint * _BASELINE_FLOOR))
+    out.update({"maintenance_weekly_tss": maint, "required_weekly_tss": target,
+                "recommended_weekly_tss": target, "weekly_tss_floor": floor,
+                "note": (f"BASELINE WEEK: the sign-up tests plus easy training by feel. "
+                         f"Aim for ~{target} TSS, not under ~{floor} (half of maintenance, "
+                         f"so Fitness holds while the tests are done fresh).")})
+    return out
+
+
 def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
                  last_week_tss: float | None = None,
                  profile: dict | None = None, slug: str | None = None) -> dict:
@@ -1391,6 +1423,12 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
     athlete executed under 70% of prescription, this week becomes a recovery
     week (blueprint: "missed >30% -> next week is recovery")."""
     today = today or date.today()
+    # SIGN-UP BASELINE WEEK (lib/baseline.py). Checked first: the week is built by
+    # baseline.schedule, not by phase logic, and without this branch it fell through to a
+    # goal week, was demoted to "easy" off James's post-Ironman week and the coach told him
+    # "the floor for this baseline week is 0" (4 Oct 2026).
+    if slug and _baseline.blocks_week(slug, _monday(today)):
+        return _baseline_week(ctl_today)
     # GOAL BLOCK (lib/goals.py): no A race ahead and a goal set, so the week is planned
     # toward the goal. Checked first: such an athlete has no race CTL targets at all.
     if goal_active(cfg, today):

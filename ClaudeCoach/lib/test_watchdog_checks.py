@@ -103,6 +103,19 @@ def test_t10_run_km_week_on_week():
     assert wc.t10_run_km([act(1, "Run", distance=5000)], TODAY) is None     # no runs last week
 
 
+def test_t10_a_post_race_recovery_week_is_not_the_baseline():
+    # James, 3 Oct 2026: 6.5 km recovery week after a 41.3 km Ironman marathon. 12.1 km
+    # this week fired "+86%"; against the 4-week average (21.3 km) it is a step down.
+    acts = [act(1, "Run", distance=7000), act(4, "Run", distance=5100),          # this week
+            act(7, "Run", distance=6500),                                        # recovery
+            act(13, "Run", distance=41300), act(16, "Run", distance=5400),       # race week
+            act(22, "Run", distance=15600), act(29, "Run", distance=16400)]
+    assert wc.t10_run_km(acts, TODAY) is None
+    # A real jump over the 4-week average still fires, and says what it was measured against.
+    f = wc.t10_run_km(acts + [act(2, "Run", distance=20000)], TODAY)
+    assert f and "4-week average" in f["signal"]
+
+
 def test_t11_both_completed_weeks_below_target():
     acts = [act(8, "WeightTraining"), act(15, "WeightTraining")]
     assert wc.t11_strength(acts, TODAY, 2)["signal"].startswith("strength 1 and 1")

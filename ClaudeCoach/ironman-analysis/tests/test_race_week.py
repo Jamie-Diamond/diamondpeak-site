@@ -175,7 +175,7 @@ class TestDownWeekTypesAreOneDefinition:
     """
 
     def test_the_list_covers_every_light_by_design_week(self):
-        assert set(pt.DOWN_WEEK_TYPES) == {"deload", "taper", "race", "post_race"}
+        assert set(pt.DOWN_WEEK_TYPES) == {"deload", "taper", "race", "post_race", "baseline"}
 
     def test_stage1_uses_the_shared_list_everywhere(self):
         src = (REPO / "scripts" / "stage1-plan.py").read_text()
