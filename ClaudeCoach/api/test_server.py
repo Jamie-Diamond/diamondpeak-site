@@ -51,6 +51,7 @@ def env(tmp_path, monkeypatch):
     import chat_archive                     # lib/, on sys.path once server is imported
     monkeypatch.setattr(chat_archive, "CC", cc)
     monkeypatch.setattr(server.dev_chat, "CC", cc)
+    server.chat.bot()                       # imported from the real tree, then cached
     monkeypatch.setattr(server.chat, "CC", cc)
     monkeypatch.setenv("CC_PUSH_WATCH", "0")
     for k in ("CF_ACCESS_TEAM", "CF_ACCESS_AUD", "CC_API_DEV_EMAIL"):
