@@ -110,8 +110,8 @@
     { id: 'zones', label: 'Zones' }
   ];
 
-  var SPORT = { Swim: 'swim', Ride: 'bike', VirtualRide: 'bike', GravelRide: 'bike',
-                Run: 'run', Brick: 'run', WeightTraining: 'strength', Workout: 'strength' };
+  var SPORT = { Swim: 'swim', OpenWaterSwim: 'swim', Ride: 'bike', VirtualRide: 'bike', GravelRide: 'bike',
+                Run: 'run', VirtualRun: 'run', TrailRun: 'run', Brick: 'run', WeightTraining: 'strength', Workout: 'strength' };
 
   var C = { ink: '#14181d', ink2: '#3d4650', muted: '#8b949e', rule: '#d8dce1',
             accent: '#10656b', blue: '#1d4e73', amber: '#a86a12', red: '#b3241f',
