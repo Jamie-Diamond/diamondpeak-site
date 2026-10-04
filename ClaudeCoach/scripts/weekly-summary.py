@@ -507,7 +507,7 @@ def run_summary(slug: str = "jamie") -> str:
             f"Score: {score}/100 — {label}. {rec}\n"
             f"Signals: {', '.join(parts) if parts else 'no data'}. "
             f"Available: {avail}. Missing: {missing}.\n"
-            f"Use this for T1/T8 evaluation — it is already derived from the wellness data below.\n"
+            f"Use this for the fatigue and recovery-signal checks in Step 3 — it is already derived from the wellness data below.\n"
         )
 
     coaching_level = profile.get("coaching_level", "mid")
@@ -766,52 +766,55 @@ omit this section entirely and leave no trace of it.]
 
 ---
 
-## Step 3 — Decision triggers (⚡)
+## Step 3 — Things that need a decision
 
-Evaluate each trigger using the computed metrics. Output only the ones that FIRE. If none fire, output the all-clear line.
+Check each condition below against the computed metrics. Write up ONLY the ones that are
+true. If none are, write nothing for this step: no heading, no "all clear" line.
 
-**T1 RECOVERY** — fires if end-of-week TSB < {tsb_overreach_thr}:
-⚡ *T1 RECOVERY*: Form at [X] — accumulated fatigue is high.
+Each one is written for the athlete: a bold plain-English headline that states the finding
+(e.g. *Fuelling on long rides is short of target*), then the lines shown. NEVER print a
+code, a number label or a category name for these checks (no "T7", no "NUTRITION", no "⚡"):
+they are internal, and the athlete cannot know what they mean.
+
+Fatigue is deep — if end-of-week TSB < {tsb_overreach_thr}:
+*[Headline, e.g. "Form is at [X], deeper than this phase should go"]*
 Options: A) 2-day recovery block (Mon–Tue easy only) | B) Continue as planned | C) Reduce Monday volume 40%
 
-**T2 OVERREACH** — fires if 4-week CTL ramp > {ctl_ramp_thr}/wk:
-⚡ *T2 OVERREACH*: 4-week Fitness ramp at [X]/wk — approaching overreach threshold.
+Fitness is climbing too fast — if 4-week CTL ramp > {ctl_ramp_thr}/wk:
+*[Headline, e.g. "Fitness is rising [X] a week, close to the safe limit"]*
 Options: A) Cap next week at current Load | B) Insert recovery week now | C) Continue (accept fatigue risk)
 
-**T3 UNDERLOAD** — fires if week compliance < 60%:
-⚡ *T3 UNDERLOAD*: Week compliance [X]% — well below minimum threshold.
-Availability issue or training fatigue? Reply to clarify and I'll adjust next week's plan.
+Most of the week was missed — if week compliance < 60%:
+*[Headline, e.g. "Only [X]% of the planned week got done"]*
+Was it time, or were you tired? Reply and I'll adjust next week's plan.
 
-**T4 FRESH** — fires if end-of-week TSB > {tsb_fresh} AND days to race > 42:
-⚡ *T4 FRESH*: Form at [X] with {days_to_race} days to race — you're fresher than the phase requires.
+Fresher than the phase needs — if end-of-week TSB > {tsb_fresh} AND days to race > 42:
+*[Headline, e.g. "Form is at [X], fresher than this phase needs"]*
 Options: A) Add an extra session | B) Increase intensity on planned sessions | C) Hold (life/fatigue reason)
 
-**T5 PHASE TRANSITION** — fires if current phase (from blueprint) ends within 7 days:
-⚡ *T5 PHASE TRANSITION*: [phase name] ends [date] — entering [next phase] next week.
+Phase change — if current phase (from blueprint) ends within 7 days:
+*[Headline, e.g. "[phase name] ends [date]: [next phase] starts next week"]*
 Readiness: [one line on whether athlete is prepared to step up]
 
-**T6 INJURY** — fires if ankle pain avg > 3 this week OR last 3 pain scores are trending up:
-⚡ *T6 INJURY*: Ankle pain avg [X]/10 this week [or: trending up — scores X→Y→Z].
+Injury — if ankle pain avg > 3 this week OR last 3 pain scores are trending up:
+*[Headline, e.g. "Ankle pain averaged [X]/10 this week" or "Ankle pain is creeping up: X→Y→Z"]*
 Options: A) Drop all runs this week | B) Reduce run volume 50% | C) Continue protocol (accept risk)
 
-**T7 NUTRITION** — fires if this-week avg g/hr < {nutrition_alert} on rides >90 min AND at least 1 such session was logged:
-⚡ *T7 NUTRITION*: Avg fuelling [X]g/hr on long rides — [Y]g/hr short of the {nutrition_target}g/hr race target. Trend: [improving / declining / flat] over last 6 sessions.
+Fuelling — if this-week avg g/hr < {nutrition_alert} on rides >90 min AND at least 1 such session was logged:
+*[Headline, e.g. "Long-ride fuelling is [Y]g/hr short of target"]*: averaged [X]g/hr against {nutrition_target}g/hr; [improving / declining / flat] over the last 6 sessions.
 Race consequence: {nutrition_consequence}
 Fix: Eat at 15 min and every 25 min after. This week's long ride target: {nutrition_target}g/hr. Use Maurten 320 + chews if GI allows.
 
-**T8 HRV** — fires if the pre-computed recovery score HRV ratio < 0.90 OR 3+ consecutive days with HRV below the 7-day rolling average in the wellness data:
-⚡ *T8 HRV*: HRV ratio [X] vs baseline — accumulated fatigue signal (recovery score: [score]/100 [label]).
+Recovery signal — if the pre-computed recovery score HRV ratio < 0.90 OR 3+ consecutive days with HRV below the 7-day rolling average in the wellness data:
+*[Headline, e.g. "HRV has been low for [N] days"]*: ratio [X] against your normal (recovery score [score]/100, [label]).
 Options: A) Flip tomorrow to easy | B) Prioritise sleep tonight | C) Continue (trust your Form)
-
-If no triggers fire:
-✅ No decision triggers this week.
 
 ---
 
 ## Step 4 — Open actions review
 
 {open_actions_block}
-Append the section after the decision triggers and before the sign-off, under a bold
+Append the section after Step 3 and before the sign-off, under a bold
 **Open actions** heading, in the order given.
 
 ## Step 5 — Update current-state.md

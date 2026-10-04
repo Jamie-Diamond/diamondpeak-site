@@ -127,7 +127,7 @@ different fixes are needed, because there are three different leak mechanisms.
 | `grey-zone drift` | `realised_tid.py:63` | "easy days creeping into medium effort" |
 | `TID` / `intensity distribution` | `weekly-summary.py:140` | "the easy/medium/hard split" |
 | `T1`–`T11` (watchdog codes) | `scripts/watchdog.py:100, 125–160` | Drop the code. State the signal: "run volume is up 14% on last week". |
-| `⚡ T1 RECOVERY`, `T2 OVERREACH`, `T3 UNDERLOAD`, `T4 FRESH`, `T5 PHASE TRANSITION`, `T6 INJURY`, `T7 NUTRITION`, `T8 HRV` | `weekly-summary.py:610–641` | Drop the code and the ⚡. Lead with the finding: "Form is at −31 — that's deeper than a build week should go." |
+| `⚡ T1 RECOVERY`, `T2 OVERREACH`, `T3 UNDERLOAD`, `T4 FRESH`, `T5 PHASE TRANSITION`, `T6 INJURY`, `T7 NUTRITION`, `T8 HRV` | ~~`weekly-summary.py:610–641`~~ — **fixed 4 Oct 2026**: the codes had reached Jamie, Fred and James in that evening's summaries. Step 3 now has no codes to echo | Drop the code and the ⚡. Lead with the finding: "Form is at −31 — that's deeper than a build week should go." |
 | `L2 reasoning trail` / `R1 reason` | `daily-prescription.py:184, 168` | Coach-log only. Athlete gets the one-sentence `<telegram>` line. |
 | `BLOCKED:` prefix | `daily-prescription.py:168` | "Today's session is off — [reason]." |
 | `GO` / `MODIFIED` / `SWAPPED` / `BLOCKED` | `daily-prescription.py:174` | "as planned" / "changed" / "swapped to" / "pulled" |
