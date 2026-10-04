@@ -14,7 +14,12 @@ that never ends. Startup takes about a second.
 
 Success writes a heartbeat (coach_alert DELIVERABLES: "api-restart"). A restart
 that leaves the service down is an ops-alerts line, never an athlete message.
+
+Peak's Dev tab (api/dev_chat.py) runs this on demand too, from a transient systemd
+unit: `--max-wait 300` for a quicker restart, `--reboot` to reboot the VM instead
+(after the same wait for replies in flight).
 """
+import argparse
 import subprocess
 import sys
 import time
@@ -56,17 +61,18 @@ def busy_pids() -> list:
     return [p for p in pids if p != main]
 
 
-def wait_for_idle(sleep=time.sleep, clock=time.monotonic) -> bool:
-    """True once nothing is in flight, False if MAX_WAIT_SECS ran out first."""
-    deadline = clock() + MAX_WAIT_SECS
+def wait_for_idle(max_wait=MAX_WAIT_SECS, poll=POLL_SECS,
+                  sleep=time.sleep, clock=time.monotonic) -> bool:
+    """True once nothing is in flight, False if max_wait ran out first."""
+    deadline = clock() + max_wait
     while True:
         busy = busy_pids()
         if not busy:
             return True
         if clock() >= deadline:
             return False
-        log(f"reply in flight (pids {' '.join(busy)}), waiting {POLL_SECS}s")
-        sleep(POLL_SECS)
+        log(f"reply in flight (pids {' '.join(busy)}), waiting {poll}s")
+        sleep(poll)
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -97,10 +103,22 @@ def wait_until_up(sleep=time.sleep, clock=time.monotonic) -> bool:
     return is_up()
 
 
-def main() -> int:
-    idle = wait_for_idle()
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--max-wait", type=int, default=MAX_WAIT_SECS)
+    ap.add_argument("--reboot", action="store_true", help="reboot the VM, not just the API")
+    args = ap.parse_args(argv)
+    idle = wait_for_idle(args.max_wait, min(POLL_SECS, max(1, args.max_wait // 30)))
     if not idle:
-        log(f"still busy after {MAX_WAIT_SECS // 60} min, restarting anyway")
+        log(f"still busy after {args.max_wait // 60} min, going ahead anyway")
+    if args.reboot:
+        log("rebooting the VM (asked for in Peak's Dev tab)")
+        r = subprocess.run(["systemctl", "reboot"], capture_output=True, text=True)
+        if r.returncode != 0:
+            msg = f"systemctl reboot exited {r.returncode}: {r.stderr.strip()[:200]}"
+            log(msg)
+            ops_log.alert(SCRIPT, msg)
+        return r.returncode
     r = subprocess.run(["systemctl", "restart", SERVICE], capture_output=True, text=True)
     if r.returncode != 0:
         msg = f"systemctl restart {SERVICE} exited {r.returncode}: {r.stderr.strip()[:200]}"

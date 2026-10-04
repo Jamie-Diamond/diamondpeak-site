@@ -80,6 +80,7 @@ class Sink:
         self.edit_msg_id = None      # the tapped message, as the bot sees it
         self.edit_item = None        # ... and as Peak knows it (web-outbox id)
         self.drill = None            # (item, type): a drill answer goes inside its card
+        self.tab = ""                # "dev": a tap in the coach's Dev tab, kept there
 
     def put(self, kind, text="", **extra):
         self.q.put((kind, text, extra))
@@ -172,7 +173,7 @@ def _patch(b):
         sink.put("photo", base64.b64encode(photo_bytes).decode())
         try:
             import outbox
-            outbox.record(chat_id, "", photo=photo_bytes, source="web-turn")
+            outbox.record(chat_id, "", photo=photo_bytes, source="web-turn", tab=sink.tab)
         except Exception:
             pass
         return {"ok": True}
@@ -280,7 +281,7 @@ def _keep_unsaved(chat_id, sink, hist_before) -> None:
             core = _FOOTER_RE.sub("", text).strip()
             if core and not any(core == s or core.startswith(s) or s.startswith(core)
                                 for s in saved if s):
-                outbox.record(chat_id, text, markup, source="web-turn")
+                outbox.record(chat_id, text, markup, source="web-turn", tab=sink.tab)
     except Exception:
         pass
 
@@ -369,7 +370,7 @@ def log_session(chat_id: str, item: str, values: dict) -> dict:
 
 def start_turn(chat_id: str, label: str = "", text: str = "", audio: bytes | None = None,
                image: bytes | None = None, button: str | None = None,
-               item: str | None = None) -> Sink:
+               item: str | None = None, tab: str = "") -> Sink:
     """Run one web message through the Telegram coach on a background thread: text, a
     voice recording (transcribed first, and the reply spoken back), a photo with `text`
     as its caption, or a button tap (`button` = its callback data). `chat_id` is the
@@ -380,6 +381,7 @@ def start_turn(chat_id: str, label: str = "", text: str = "", audio: bytes | Non
     label = label or chat_id
     sink = Sink()
     sink.chat_id = chat_id
+    sink.tab = "dev" if tab == "dev" else ""
     if button is not None and item:
         sink.edit_msg_id, sink.edit_item = _TAPPED_MSG_ID, item
         if button.startswith("drill:"):
@@ -397,7 +399,8 @@ def start_turn(chat_id: str, label: str = "", text: str = "", audio: bytes | Non
         if surface is not None:
             surface.web = audio is None
         upload_id = None
-        hist_before = _history_texts(chat_id)[0]
+        hist_before, hist0 = _history_texts(chat_id)
+        keys0 = {history_key(e) for e in hist0 if isinstance(e, dict)}
         try:
             config = b.load_config()
             token = config["bot_token"]
@@ -440,6 +443,16 @@ def start_turn(chat_id: str, label: str = "", text: str = "", audio: bytes | Non
                 _keep_unsaved(chat_id, sink, hist_before)
             if upload_id:
                 _UPLOADS.pop(upload_id, None)
+            if sink.tab == "dev":
+                # Anything this Dev-tab turn wrote to history.json belongs in Dev too.
+                _, hist1 = _history_texts(chat_id)
+                try:
+                    import outbox
+                    move_to_dev(outbox.slug_for_chat(chat_id),
+                                [history_key(e) for e in hist1
+                                 if isinstance(e, dict) and history_key(e) not in keys0])
+                except Exception:
+                    pass
             _TURN.chat_id = None
             if surface is not None:
                 surface.web = False
@@ -480,16 +493,59 @@ def _with_archive(slug: str, hist: list) -> list:
     return older + hist
 
 
+# ── which tab a message belongs in (Jamie, 4 Oct 2026) ──
+# The coach has two chats: Coach and Dev. Messages from the system's own builders are
+# Dev by where they came from; anything else is Dev when tagged so: tab="dev" on an
+# outbox entry (a tap in the Dev tab), or its key in dev-chat/moved.json (history.json
+# exchanges, which are never rewritten for this; also how the existing chat was split).
+DEV_SOURCES = {"bug-fixer", "dev-session"}
+MOVED_FILE = "moved.json"
+
+
+def _moved_path(slug: str) -> Path:
+    return CC / "athletes" / slug / "dev-chat" / MOVED_FILE
+
+
+def moved(slug: str | None) -> set:
+    if not slug:
+        return set()
+    try:
+        return set(json.loads(_moved_path(slug).read_text()))
+    except (OSError, ValueError, TypeError):
+        return set()
+
+
+def move_to_dev(slug: str | None, keys) -> None:
+    """Show these messages ("h:<history key>" or "o:<outbox id>") in Dev, not Coach."""
+    keys = [k for k in keys if k]
+    if not slug or not keys:
+        return
+    f = _moved_path(slug)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    tmp = f.with_suffix(".tmp")
+    tmp.write_text(json.dumps(sorted(moved(slug) | set(keys))))
+    tmp.replace(f)
+
+
+def is_dev(o: dict | None, group: str, dev_keys: set) -> bool:
+    """o is the outbox entry (None for a history.json message); group its message key."""
+    if group in dev_keys:
+        return True
+    return bool(o) and (o.get("source") in DEV_SOURCES or o.get("tab") == "dev")
+
+
 def timeline(slug: str | None, limit: int = 80, chat_id: str | None = None,
-             meta: dict | None = None) -> list[dict]:
+             meta: dict | None = None, tab: str = "coach") -> list[dict]:
     """The chat as Peak shows it, oldest first: the shared Telegram/web conversation
     (the chat archive + history.json) merged with every scheduled coach message
     (web-outbox.jsonl, which carries buttons and photos). A scheduled message is ALSO
     in history.json with no user side; that copy is dropped when the outbox has the
     same text. The newest `limit` items are returned; meta["more"] says whether older
-    ones exist (Peak's "Show earlier messages")."""
+    ones exist (Peak's "Show earlier messages"). tab="dev" returns the coach's Dev
+    messages instead (is_dev); the default leaves them out."""
     if not slug:
-        return _signup_timeline(chat_id, limit) if chat_id else []
+        return _signup_timeline(chat_id, limit) if chat_id and tab != "dev" else []
+    want_dev, dev_keys = tab == "dev", moved(slug)
     adir = CC / "athletes" / slug
     try:
         hist = json.loads((adir / "telegram" / "history.json").read_text())
@@ -536,6 +592,8 @@ def timeline(slug: str | None, limit: int = 80, chat_id: str | None = None,
             user = ""                       # a button's own question, not something they wrote
             if coach.strip() in in_cards:
                 continue                    # shown inside its Log it card instead
+        if is_dev(None, hk, dev_keys) != want_dev:
+            continue
         if user:
             items.append({"who": "me", "text": ("📷 " if e.get("kind") == "image" else "") + user,
                           "ts": ts, "key": hk + ":u"})
@@ -544,7 +602,7 @@ def timeline(slug: str | None, limit: int = 80, chat_id: str | None = None,
         if coach and (e.get("kind") == "drill" or not _in_outbox(coach, ts, user, out_texts, out_at)):
             items.append({"who": "coach", "text": coach, "ts": ts, "key": hk + ":c"})
     for o in out:
-        if o.get("deleted"):
+        if o.get("deleted") or is_dev(o, "o:" + str(o.get("id") or ""), dev_keys) != want_dev:
             continue
         items.append({"who": o.get("who") or "coach", "text": o.get("text") or "", "ts": o.get("ts") or "",
                       "key": "o:" + str(o.get("id") or ""),

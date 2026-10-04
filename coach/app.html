@@ -891,6 +891,39 @@ button.crow:hover,a.crow:hover{background:rgba(20,24,29,.03)}
   background:none;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;
   color:var(--muted);cursor:pointer}
 .crow-x.armed{border-color:#c0392b;color:#c0392b}
+/* chat: the coach's Coach / Dev tabs and Dev's restart buttons (app.js applyChatTab, 4 Oct 2026) */
+.chat-tabs{margin:0 0 12px}
+.dev-tools{display:flex;justify-content:center;gap:8px;margin:-4px 0 12px}
+.dev-tools[hidden]{display:none}
+.dev-tools button{background:none;border:1px solid var(--rule);border-radius:999px;padding:5px 12px;
+  font:500 12px 'DM Sans',sans-serif;color:var(--ink-2);cursor:pointer}
+.dev-tools button.armed{border-color:var(--red);color:var(--red)}
+.dev-tools button:disabled{opacity:.6}
+/* Dev looks like a terminal so it can't be mistaken for coaching (Jamie, 4 Oct 2026) */
+#v-chat.dev .chat-log{background:#0d1117;border:1px solid #30363d;border-radius:10px;
+  padding:34px 14px 16px;min-height:55vh;gap:10px;position:relative;color:#c9d1d9}
+#v-chat.dev .chat-log::before{content:'\25CF  \25CF  \25CF    jamie@peak: ~/diamondpeak-site';position:absolute;top:9px;left:14px;
+  font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.06em;color:#6e7681;white-space:nowrap}
+#v-chat.dev .msg{max-width:100%;align-self:stretch;background:none;border:0;border-radius:0;padding:0;
+  font-family:'DM Mono',monospace;font-size:12.5px;line-height:1.6;color:#c9d1d9}
+#v-chat.dev .msg.me{color:#7ee787;margin-top:6px}
+#v-chat.dev .msg.me::before{content:'\276F  ';color:#3fb950}
+#v-chat.dev .msg.draft{color:#8b949e}
+#v-chat.dev .msg.err{color:#f0883e}
+#v-chat.dev .msg b{color:#f0f6fc;font-weight:500}
+#v-chat.dev .msg code,#v-chat.dev .msg pre{color:#79c0ff}
+#v-chat.dev .msg a{color:#58a6ff}
+#v-chat.dev .msg table.mdt th,#v-chat.dev .msg table.mdt td{border-bottom-color:#21262d}
+#v-chat.dev .msg table.mdt th{color:#8b949e}
+#v-chat.dev .btns button{background:none;border-color:#3fb950;color:#7ee787;font-family:'DM Mono',monospace}
+#v-chat.dev .btns button.picked{background:#238636;color:#fff}
+#v-chat.dev .empty{color:#6e7681}
+#v-chat.dev .chat-status{color:#d29922}
+#v-chat.dev .dev-tools button{font-family:'DM Mono',monospace;font-size:11px}
+body.dev-chat .composer{background:rgba(13,17,23,.97);border-top-color:#30363d}
+body.dev-chat .composer textarea{background:#161b22;border-color:#30363d;color:#e6edf3;caret-color:#3fb950;
+  font:400 13.5px/1.4 'DM Mono',monospace}
+body.dev-chat .composer .cb.go{background:#238636}
 /* chat: the model under a reply, and Delete (app.js splitMeta, toggleDelete) */
 .msg-meta{margin-top:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.1em;
   text-transform:uppercase;color:var(--muted);opacity:.8}
@@ -1255,6 +1288,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=82" defer></script>
+<script src="app.js?v=83" defer></script>
 </body>
 </html>

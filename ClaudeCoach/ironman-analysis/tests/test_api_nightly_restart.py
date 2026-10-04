@@ -85,9 +85,9 @@ def _systemctl(rc):
 def test_clean_restart_writes_the_heartbeat(rst, monkeypatch, logs):
     run, calls = _systemctl(0)
     monkeypatch.setattr(rst.subprocess, "run", run)
-    monkeypatch.setattr(rst, "wait_for_idle", lambda: True)
+    monkeypatch.setattr(rst, "wait_for_idle", lambda *a: True)
     monkeypatch.setattr(rst, "wait_until_up", lambda: True)
-    assert rst.main() == 0
+    assert rst.main([]) == 0
     assert ["systemctl", "restart", "claudecoach-api"] in calls
     d = next(d for d in coach_alert.DELIVERABLES if d["script"] == rst.SCRIPT)
     assert [r["detail"] for r in _runs(logs) if r["ok"]] == [d["detail"]]
@@ -97,18 +97,18 @@ def test_clean_restart_writes_the_heartbeat(rst, monkeypatch, logs):
 def test_restart_still_happens_when_never_idle(rst, monkeypatch, logs):
     run, calls = _systemctl(0)
     monkeypatch.setattr(rst.subprocess, "run", run)
-    monkeypatch.setattr(rst, "wait_for_idle", lambda: False)
+    monkeypatch.setattr(rst, "wait_for_idle", lambda *a: False)
     monkeypatch.setattr(rst, "wait_until_up", lambda: True)
-    assert rst.main() == 0
+    assert rst.main([]) == 0
     assert ["systemctl", "restart", "claudecoach-api"] in calls
 
 
 def test_api_not_back_is_an_ops_alert(rst, monkeypatch, logs):
     run, _ = _systemctl(0)
     monkeypatch.setattr(rst.subprocess, "run", run)
-    monkeypatch.setattr(rst, "wait_for_idle", lambda: True)
+    monkeypatch.setattr(rst, "wait_for_idle", lambda *a: True)
     monkeypatch.setattr(rst, "wait_until_up", lambda: False)
-    assert rst.main() == 1
+    assert rst.main([]) == 1
     assert "Peak is down" in (logs / "ops-alerts.log").read_text()
     assert [r["ok"] for r in _runs(logs)] == [False]
 
@@ -116,8 +116,8 @@ def test_api_not_back_is_an_ops_alert(rst, monkeypatch, logs):
 def test_failed_systemctl_is_an_ops_alert(rst, monkeypatch, logs):
     run, _ = _systemctl(1)
     monkeypatch.setattr(rst.subprocess, "run", run)
-    monkeypatch.setattr(rst, "wait_for_idle", lambda: True)
-    assert rst.main() == 1
+    monkeypatch.setattr(rst, "wait_for_idle", lambda *a: True)
+    assert rst.main([]) == 1
     assert "exited 1" in (logs / "ops-alerts.log").read_text()
 
 
@@ -126,3 +126,12 @@ def test_registered_as_a_quiet_daily_deliverable(rst):
     assert d["telegram"] is False and d["cron_cmd"] == "api-nightly-restart.py"
     assert d["cron"] == "0 0 * * *"
     assert coach_alert.OUTCOME_CLASS[rst.SCRIPT] == coach_alert.FAILURE
+
+
+def test_on_demand_reboot_reboots_and_does_not_restart_the_api(rst, monkeypatch, logs):
+    run, calls = _systemctl(0)
+    monkeypatch.setattr(rst.subprocess, "run", run)
+    waits = []
+    monkeypatch.setattr(rst, "wait_for_idle", lambda *a: waits.append(a) or True)
+    assert rst.main(["--reboot", "--max-wait", "300"]) == 0
+    assert calls == [["systemctl", "reboot"]] and waits[0][0] == 300

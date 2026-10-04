@@ -163,6 +163,10 @@ def notify(slug: str, body: str, title: str = "Coach", url: str = "/coach/app.ht
 _own_slug = None
 
 
+# The coach's Dev-tab messages (api/chat.py DEV_SOURCES), so the notification says so.
+DEV_SOURCES = {"bug-fixer", "dev-session"}
+
+
 def start(cc_home: Path, own_slug, athletes_file: Path, interval: float = 5.0) -> None:
     """Tail every athlete's web-outbox.jsonl and notify for each new line. Offsets are
     kept across restarts; an outbox never seen before starts at its end, so turning
@@ -200,7 +204,9 @@ def start(cc_home: Path, own_slug, athletes_file: Path, interval: float = 5.0) -
                             continue
                         if e.get("source") in QUIET_SOURCES:
                             continue
-                        notify(slug, plain(e.get("text") or "") or ("📷 Photo" if e.get("photo") else ""))
+                        dev = e.get("source") in DEV_SOURCES or e.get("tab") == "dev"
+                        notify(slug, plain(e.get("text") or "") or ("📷 Photo" if e.get("photo") else ""),
+                               title="Dev" if dev else "Coach")
                 if changed:
                     _save(OFFSETS_FILE, offsets)
             except Exception as e:

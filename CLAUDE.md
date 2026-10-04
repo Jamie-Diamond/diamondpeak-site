@@ -192,6 +192,13 @@ is **masked** on the VM: never start, restart or unmask it. After a deploy, rest
 `scripts/telegram-inbox.py` passes any message sent to the old Telegram coach into
 Jamie's Peak chat.
 
+## Peak's Dev tab - where dev messages to Jamie go
+
+Jamie's Peak chat has two tabs: **Coach** and **Dev** (`ClaudeCoach/api/dev_chat.py`).
+To message him about dev work, write to his web outbox with `source="dev-session"`
+(`lib/outbox.py record`): it shows in Dev, not his coaching chat, with a notification.
+Bug-fixer posts go to Dev automatically (`api/chat.py DEV_SOURCES`).
+
 ## ClaudeCoach API tests - use the API's Python
 
 FastAPI lives in the API's venv, not the system `python3`. Run the API tests with

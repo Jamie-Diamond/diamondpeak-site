@@ -126,10 +126,11 @@ def _from_html(text: str) -> str:
 
 
 def record(chat_id, text: str = "", reply_markup=None, photo: bytes | None = None,
-           source: str = "", parse_mode: str = "", who: str = "") -> str | None:
+           source: str = "", parse_mode: str = "", who: str = "", tab: str = "") -> str | None:
     """Append one outbound message for the athlete behind chat_id (who="me": one of
     their own sign-up answers). Returns its id, or None if the chat is not an
-    athlete's (or anything went wrong)."""
+    athlete's (or anything went wrong). tab="dev": shown in the coach's Dev tab, not
+    the coaching chat (api/chat.py is_dev)."""
     try:
         adir = _chat_dir(chat_id)
         if not adir:
@@ -149,6 +150,8 @@ def record(chat_id, text: str = "", reply_markup=None, photo: bytes | None = Non
                      os.environ.get("CC_OUTBOX_SOURCE", "") or "")}
         if who:
             entry["who"] = who
+        if tab:
+            entry["tab"] = tab
         f = adir / OUTBOX_NAME
         with open(f, "a") as fh:
             fh.write(json.dumps(entry) + "\n")

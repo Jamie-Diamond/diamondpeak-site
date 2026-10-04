@@ -60,6 +60,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 
 import chat
+import dev_chat
 import food
 import push
 
@@ -264,6 +265,7 @@ def _reply_while_away(chat_id, text):
 
 
 chat.on_reply_while_away = _reply_while_away
+dev_chat.on_reply = lambda slug, text: push.notify(slug, push.plain(text), title="Dev", kind="reply")
 
 
 @app.get("/api/me")
@@ -451,7 +453,8 @@ async def chat_button(request: Request):
         raise HTTPException(400, "no button")
     item = str((body or {}).get("item") or "")
     item = item if ITEM_RE.match(item) else None
-    return _turn_stream(cid, label, button=data, item=item)
+    dev = (body or {}).get("tab") == "dev" and is_coach(request_email(request))   # Dev tab tap
+    return _turn_stream(cid, label, button=data, item=item, **({"tab": "dev"} if dev else {}))
 
 
 ITEM_RE = re.compile(r"^[0-9]{14}-[0-9a-f]{6}$")
@@ -516,7 +519,11 @@ def _turn_stream(chat_id: str, label: str, **turn) -> StreamingResponse:
         sink = chat.start_turn(chat_id, label, **turn)
     except chat.Busy:
         raise HTTPException(409, "the coach is still answering your last message")
+    return _sink_stream(sink)
 
+
+def _sink_stream(sink) -> StreamingResponse:
+    """A turn's events as Server-Sent Events, until its 'done'."""
     def events():
         done = False
         try:
@@ -534,6 +541,7 @@ def _turn_stream(chat_id: str, label: str, **turn) -> StreamingResponse:
         finally:
             if not done:
                 sink.consumer_gone = True     # left mid-turn: the reply becomes a notification
+                                              # (dev_chat's Sink just carries on the same way)
 
     return StreamingResponse(events(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
@@ -981,6 +989,62 @@ def push_test(request: Request):
         raise HTTPException(409, "notifications work once your account is active")
     sent = push.notify(slug, "Notifications are working.")
     return JSONResponse({"sent": sent, "errors": list(push.LAST_ERRORS)})
+
+
+# ── dev chat: the coach's second chat tab (api/dev_chat.py, 4 Oct 2026) ──
+
+def _dev_slug(request: Request, post: bool = True) -> str:
+    if post and request.headers.get("x-peak") != "1":
+        raise HTTPException(400, "missing app header")
+    slug = own_slug(_require_coach(request))
+    if not slug:
+        raise HTTPException(403, "the coach has no athlete")
+    return slug
+
+
+@app.get("/api/dev/history")
+def dev_history(request: Request, limit: int = 200):
+    slug = _dev_slug(request, post=False)
+    return JSONResponse(dev_chat.state(slug, max(1, min(limit, 2000))), headers=NO_STORE)
+
+
+@app.post("/api/dev/chat")
+async def dev_send(request: Request):
+    slug = _dev_slug(request)
+    try:
+        body = await request.json() or {}
+    except ValueError:
+        body = {}
+    text = str(body.get("text") or "").strip()[:20000]
+    if not text:
+        raise HTTPException(400, "empty message")
+    cid, label = _chat_user(request)
+    if cid in getattr(chat.bot(), "_PENDING_BUG_EDIT", {}):
+        # The bug fixer's Edit button asked for "your change as your next message": it
+        # goes to the bot, as it would have from the Coach tab, and stays in Dev.
+        dev_chat._append(slug, "me", text)
+        return _turn_stream(cid, label, text=text, tab="dev")
+    try:
+        sink = dev_chat.start_turn(slug, text)
+    except dev_chat.Busy:
+        raise HTTPException(409, "still working on your last message")
+    return _sink_stream(sink)
+
+
+@app.post("/api/dev/restart")
+async def dev_restart(request: Request):
+    """Restart the API or reboot the VM, on a tap in the Dev tab."""
+    slug = _dev_slug(request)
+    try:
+        what = str((await request.json() or {}).get("what") or "")
+    except ValueError:
+        what = ""
+    if what not in ("api", "vm"):
+        raise HTTPException(400, "restart the api or the vm")
+    ok, msg = dev_chat.restart_now(slug, what)
+    if not ok:
+        raise HTTPException(500, msg)
+    return JSONResponse({"ok": True, "text": msg})
 
 
 # ── coach admin ──

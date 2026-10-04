@@ -337,6 +337,7 @@
     if (tab === 'chat') openChat();
     if (tab === 'food' && state.me && $('#foodLog')) loadFoodHistory();
     document.body.classList.toggle('in-chat', tab === 'chat');
+    document.body.classList.toggle('dev-chat', tab === 'chat' && chatState.dev && !!(state.me && state.me.coach));
   }
 
   /* ── shared bits ─────────────────────────────────────────────────────── */
@@ -774,8 +775,12 @@
      (the reply as it is written), message (the checked reply, which replaces the
      draft), error, done. History is shared with Telegram. */
 
-  var chatState = { loaded: false, busy: false, limit: 80, slug: null };
+  var chatState = { loaded: false, busy: false, limit: 80, slug: null, dev: false };
   var CHAT_PAGE = 80;          // messages per "Show earlier messages" tap
+  // The coach's second tab, Dev (Jamie, 4 Oct 2026): building Peak, kept apart from
+  // coaching. Its own history and Claude session (ClaudeCoach/api/dev_chat.py).
+  var CHAT_TAB_KEY = 'cc.chatTab';
+  function devTab() { return !!(state.me && state.me.coach && chatState.dev); }
 
   /* ── unread coach messages: a count on the chat button (and the app icon) ──
      "Seen" is the newest message time Peak has shown in Chat, kept on this device.
@@ -934,9 +939,19 @@
       return;
     }
     if (!$('#chatLog')) {
-      v.innerHTML = notifyBar() +
+      if (state.me.coach) {
+        try { chatState.dev = localStorage.getItem(CHAT_TAB_KEY) === 'dev'; } catch (e) { /* ok */ }
+      }
+      v.innerHTML = (state.me.coach
+        ? '<div class="seg chat-tabs" id="chatTabs" role="tablist">' +
+            '<button type="button" role="tab" data-ct="coach">Coach</button>' +
+            '<button type="button" role="tab" data-ct="dev">Dev</button></div>' : '') +
+        notifyBar() +
         '<p class="hint chat-k">' + (state.me.state === 'active'
           ? 'Your chat with the coach' : 'Setting up your coaching') + '</p>' +
+        '<div class="dev-tools" id="devTools" hidden>' +
+          '<button type="button" data-restart="api">Restart API</button>' +
+          '<button type="button" data-restart="vm">Restart VM</button></div>' +
         '<div class="chat-log" id="chatLog"></div>' +
         '<p class="chat-status" id="chatStatus"></p>' +
         '<form class="composer" id="composer">' +
@@ -963,6 +978,14 @@
       $('#chatCam').onclick = function () { if (!chatState.busy) $('#chatFile').click(); };
       $('#chatFile').onchange = function () { pickPhoto(this.files && this.files[0]); };
       $('#chatLog').addEventListener('click', onChatTap);
+      if ($('#chatTabs')) $('#chatTabs').onclick = function (e) {
+        var t = e.target.closest('button[data-ct]');
+        if (t) switchChatTab(t.getAttribute('data-ct'));
+      };
+      $('#devTools').onclick = function (e) {
+        var t = e.target.closest('button[data-restart]');
+        if (t) devRestart(t.getAttribute('data-restart'), t, false);
+      };
       wireNotifyBar();
       if (state.me.state !== 'active') { $('#chatCam').hidden = true; }
       if (state.me.state === 'waiting') {
@@ -970,7 +993,99 @@
         $('#chatStatus').textContent = 'Your coach is activating your account. You\u2019ll get a message here.';
       }
     }
+    applyChatTab();
     loadChatHistory();                     // every open: scheduled messages may have arrived
+  }
+
+  function applyChatTab() {
+    var tabs = $('#chatTabs');
+    if (!tabs) return;
+    Array.prototype.forEach.call(tabs.querySelectorAll('button'), function (b) {
+      b.setAttribute('aria-selected', String((b.getAttribute('data-ct') === 'dev') === chatState.dev));
+    });
+    $('#devTools').hidden = !chatState.dev;
+    $('#v-chat').classList.toggle('dev', chatState.dev);
+    document.body.classList.toggle('dev-chat', chatState.dev && state.tab === 'chat');
+    $('#chatCam').hidden = chatState.dev || state.me.state !== 'active';
+    $('#chatIn').placeholder = chatState.dev ? 'Message dev' : 'Message the coach';
+    if (chatState.dev) {
+      $('#composer').hidden = false;
+      $('#v-chat .chat-k').textContent = 'Dev chat \u00b7 separate from your coaching';
+    }
+    composerMode();
+  }
+
+  function switchChatTab(ct) {
+    var dev = ct === 'dev';
+    if (dev === chatState.dev) return;
+    // A reply still being written carries on on the server; it is there when you come back.
+    if (chatState.ctrl) { chatState.ctrl.abort(); chatState.ctrl = null; }
+    if (chatState.rec) stopRecord(false);
+    if (chatState.photo) clearPhoto();
+    clearTimeout(chatState.devPoll);
+    chatBusy(false);
+    chatState.dev = dev;
+    try { localStorage.setItem(CHAT_TAB_KEY, ct); } catch (e) { /* ok */ }
+    $('#chatLog').innerHTML = '';
+    applyChatTab();
+    loadChatHistory();
+  }
+
+  // Dev history, and the task still running if Peak was closed mid-reply: its live
+  // status shows and the chat checks back every few seconds until it is done.
+  function loadDevHistory() {
+    clearTimeout(chatState.devPoll);
+    fetch('/api/dev/history', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : { history: [] }; })
+      .then(function (j) {
+        if (!devTab() || chatState.busy) return;
+        var log = $('#chatLog');
+        log.innerHTML = '';
+        (j.history || []).forEach(function (m) {
+          if (m.who === 'me') bubble('me', m.text);
+          else coachItem(m.text, m.buttons, m.photo ? '/api/media/' + encodeURIComponent(m.photo) : null,
+                         m.error ? 'err' : '', m.id);
+        });
+        if (!(j.history || []).length && !j.busy) {
+          log.innerHTML = '<div class="empty">Ask for a fix or a feature. This chat works on the code, ' +
+            'separate from your coaching.</div>';
+        }
+        chatState.devBusy = !!j.busy;
+        $('#chatSend').disabled = !!j.busy;
+        if (j.busy) {
+          if (j.draft) bubble('coach', '', 'draft').innerHTML = md(j.draft);
+          chatSetStatus(j.status || 'Working\u2026');
+          chatState.devPoll = setTimeout(loadDevHistory, 4000);
+        } else chatSetStatus('');
+        chatScroll();
+      })
+      .catch(function () { chatState.devPoll = setTimeout(loadDevHistory, 8000); });
+  }
+
+  // Restart API / Restart VM: two taps on the Dev tab's own buttons; one on the confirm
+  // button a reply offers (the reply is the first tap).
+  function devRestart(what, btn, confirmed) {
+    if (btn.disabled) return;
+    var label = btn.getAttribute('data-label') || btn.textContent;
+    btn.setAttribute('data-label', label);
+    if (!confirmed && !btn.classList.contains('armed')) {
+      btn.classList.add('armed'); btn.textContent = 'Tap again to restart';
+      setTimeout(function () {
+        if (btn.isConnected && !btn.disabled) { btn.classList.remove('armed'); btn.textContent = label; }
+      }, 4000);
+      return;
+    }
+    btn.disabled = true; btn.classList.remove('armed'); btn.textContent = 'Restarting\u2026';
+    if (confirmed) btn.classList.add('picked');
+    postJSON('/api/dev/restart', { what: what }).then(function (j) {
+      var empty = $('#chatLog .empty'); if (empty) empty.remove();
+      coachItem(j.text); chatScroll();
+    }).catch(function (err) {
+      coachItem(err.message, null, null, 'err'); chatScroll();
+    }).then(function () {
+      if (confirmed) return;
+      setTimeout(function () { btn.disabled = false; btn.textContent = label; }, what === 'vm' ? 60000 : 10000);
+    });
   }
 
   function addButtons(el, rows) {
@@ -1235,6 +1350,7 @@
   // earlier = true when "Show earlier messages" was tapped: keep the reader's place
   // instead of jumping to the newest message.
   function loadChatHistory(earlier) {
+    if (devTab()) { loadDevHistory(); return; }
     var other = chatSlug();
     if (chatState.slug !== other) { chatState.slug = other; chatState.limit = CHAT_PAGE; }
     var q = ['limit=' + chatState.limit];
@@ -1242,6 +1358,7 @@
     fetch('/api/chat/history?' + q.join('&'), { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : { history: [] }; })
       .then(function (j) {
+        if (devTab()) return;                // switched to Dev while this loaded
         chatState.loaded = true;
         chatState.readonly = !!j.readonly;
         if (state.tab === 'chat' && !j.readonly) markSeen(newestTs(j.history));
@@ -1299,6 +1416,7 @@
     var b = e.target.closest('.btns button[data-cb]');
     if (!b || chatState.busy) return;
     var cb = b.getAttribute('data-cb') || '';
+    if (cb.indexOf('dev:restart:') === 0) { devRestart(cb.slice(12), b, true); return; }
     if (cb.indexOf('peak:install:') === 0) {          // handled here, not by the coach
       b.classList.add('picked');
       showInstall(cb.slice(13), b.closest('.msg'));
@@ -1310,7 +1428,7 @@
     b.classList.add('picked');
     var msg = b.closest('.msg');
     streamTurn('/api/chat/button', JSON.stringify({ data: b.getAttribute('data-cb'),
-      item: msg && msg.getAttribute('data-item') }), 'application/json');
+      item: msg && msg.getAttribute('data-item'), tab: devTab() ? 'dev' : '' }), 'application/json');
   }
 
   /* ── notifications ── */
@@ -1391,6 +1509,7 @@
   // Composer: typed text shows Send; an empty box shows the mic. A chosen photo sits
   // above the box as a thumbnail and the text becomes its caption.
   function composerMode() {
+    if (devTab()) { $('#chatSend').hidden = false; $('#chatMic').hidden = true; return; }
     var has = !!($('#chatIn').value.trim() || chatState.photo);
     $('#chatSend').hidden = !has || chatState.rec != null;
     $('#chatMic').hidden = has && chatState.rec == null;
@@ -1399,6 +1518,13 @@
   function sendChat() {
     if (chatState.busy) return;
     var ta = $('#chatIn'), text = (ta.value || '').trim();
+    if (devTab()) {
+      if (!text || chatState.devBusy) return;
+      bubble('me', text);
+      ta.value = ''; ta.style.height = 'auto';
+      streamTurn('/api/dev/chat', JSON.stringify({ text: text }), 'application/json');
+      return;
+    }
     if (chatState.photo) {
       var ph = chatState.photo;
       clearPhoto();
@@ -1420,6 +1546,8 @@
     chatSetStatus('Sending…');
     chatScroll();
     var draft = null, lastCoach = null;
+    var ctrl = window.AbortController ? new AbortController() : null;
+    chatState.ctrl = ctrl;
 
     function onEvent(kind, text, obj) {
       if (kind === 'status') { chatSetStatus(text); return; }
@@ -1447,7 +1575,7 @@
       if (kind === 'audio' && lastCoach) playReply(lastCoach, text);
     }
 
-    fetch(url, { method: 'POST', cache: 'no-store',
+    fetch(url, { method: 'POST', cache: 'no-store', signal: ctrl ? ctrl.signal : undefined,
       headers: { 'Content-Type': type, 'X-Peak': '1' }, body: body })
       .then(function (r) {
         if (!r.ok) {
@@ -1476,13 +1604,23 @@
         return pump();
       })
       .catch(function (e) {
+        if (e && e.name === 'AbortError') return;      // switched tab: the turn carries on
         var p = $('#chatLog .msg.me.pending'); if (p) p.remove();
-        bubble('coach', e.message === 'Failed to fetch' || e.message === 'network error' ||
-                        e.message === 'Load failed'
+        var lost = e.message === 'Failed to fetch' || e.message === 'network error' ||
+                   e.message === 'Load failed';
+        if (lost && url.indexOf('/api/dev/') === 0) {   // Dev keeps working: watch it finish
+          setTimeout(function () { if (devTab()) loadDevHistory(); }, 1500);
+          return;
+        }
+        bubble('coach', lost
           ? 'Connection lost. The coach keeps going - reopen chat in a minute to see the reply.'
           : e.message, 'err');
       })
-      .then(function () { chatBusy(false); });
+      .then(function () {
+        if (chatState.ctrl !== ctrl) return;           // a tab switch already reset it
+        chatState.ctrl = null;
+        chatBusy(false);
+      });
   }
 
   /* ── voice ── */
