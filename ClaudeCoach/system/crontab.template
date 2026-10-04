@@ -32,4 +32,5 @@
 0 9 * * 1 /root/.claude/cc-run /Users/diamondpeakconsulting/expense-bot/scripts/backup_staleness_alert.sh >> /root/backup-staleness.log 2>&1
 0 0 * * * /root/.claude/cc-run python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/bug-fixer.py --fix >> /root/Library/Logs/ClaudeCoach/bug-fixer.log 2>&1
 15 3 * * * /root/.claude/cc-run python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/claude-cli-update.py >> /root/Library/Logs/ClaudeCoach/claude-cli-update.log 2>&1
+0 0 * * * /root/.claude/cc-run python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/api-nightly-restart.py >> /root/Library/Logs/ClaudeCoach/api-restart.log 2>&1
 20 23 * * * /root/.claude/cc-run bash /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/sync-private-repo.sh >> ~/Library/Logs/ClaudeCoach/sync-private.log 2>&1

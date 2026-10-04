@@ -362,6 +362,15 @@ DELIVERABLES = [
      "per_athlete": False, "telegram": False, "detail": "checked ok",
      "cron": "15 3 * * *",       "cron_cmd": "claude-cli-update.py",
      "since": "2026-09-27T22:00:00"},
+    # 4 Oct 2026 (Jamie): restart Peak's API at least once a day, at midnight, so
+    # code cc-gitpull has pulled goes live without anyone bouncing it by hand. It
+    # waits for in-flight replies first (scripts/api-nightly-restart.py). A missed
+    # restart changes nothing an athlete sees tonight, so telegram=False; a restart
+    # that leaves the API down writes its own ops alert straight away.
+    {"script": "api-restart",        "label": "nightly API restart", "window": "daily",
+     "per_athlete": False, "telegram": False, "detail": "restarted ok",
+     "cron": "0 0 * * *",        "cron_cmd": "api-nightly-restart.py",
+     "since": "2026-10-04T22:18:00"},
 ]
 
 # The digest's own schedule. Declared so the crontab cross-check can prove what
@@ -949,6 +958,7 @@ OUTCOME_CLASS = {
                                      # "activity analysis timed out Nx in a row"
     "stage1-plan":        FAILURE,
     "claude-cli-update":  FAILURE,   # new CLI failed its smoke test / swap failed
+    "api-restart":        FAILURE,   # restart failed or the API did not come back
     "bot-watchdog":       FAILURE,   # the bot stopped answering
     "claude_call":        FAILURE,   # auth expired in production
     "cc-gitpull":         FAILURE,
