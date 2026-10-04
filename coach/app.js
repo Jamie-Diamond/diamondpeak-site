@@ -1000,6 +1000,8 @@
   function applyChatTab() {
     var tabs = $('#chatTabs');
     if (!tabs) return;
+    var mast = $('.masthead');
+    if (mast) tabs.style.setProperty('--mast', mast.offsetHeight + 'px');
     Array.prototype.forEach.call(tabs.querySelectorAll('button'), function (b) {
       b.setAttribute('aria-selected', String((b.getAttribute('data-ct') === 'dev') === chatState.dev));
     });

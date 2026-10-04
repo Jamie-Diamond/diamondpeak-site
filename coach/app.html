@@ -893,6 +893,9 @@ button.crow:hover,a.crow:hover{background:rgba(20,24,29,.03)}
 .crow-x.armed{border-color:#c0392b;color:#c0392b}
 /* chat: the coach's Coach / Dev tabs and Dev's restart buttons (app.js applyChatTab, 4 Oct 2026) */
 .chat-tabs{margin:0 0 12px}
+/* the tabs float under the masthead so switching never needs a scroll to the top (Jamie, 4 Oct 2026);
+   --mast is the masthead's measured height, set in app.js applyChatTab */
+#chatTabs{position:sticky;top:calc(var(--mast,48px) - 4px);z-index:55;box-shadow:0 2px 8px rgba(20,24,29,.12)}
 .dev-tools{display:flex;justify-content:center;gap:8px;margin:-4px 0 12px}
 .dev-tools[hidden]{display:none}
 .dev-tools button{background:none;border:1px solid var(--rule);border-radius:999px;padding:5px 12px;
