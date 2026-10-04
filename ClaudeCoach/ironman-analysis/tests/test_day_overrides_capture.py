@@ -205,7 +205,7 @@ class TestCrossFireWithOtherCaptures:
         # model, so the athlete's instruction gets carried out as well as recorded.
         bot = (Path(__file__).resolve().parents[2] / "telegram/bot.py").read_text()
         day_at = bot.index("_handle_dayrule_capture,   #")
-        act_at = bot.index("_handle_action_capture):   #")
+        act_at = bot.index("_handle_action_capture)    #")
         assert day_at < act_at, "day-rule capture must dispatch before action capture"
 
     def test_a_day_direction_with_no_deferral_verb_is_not_an_action_instruction(self):

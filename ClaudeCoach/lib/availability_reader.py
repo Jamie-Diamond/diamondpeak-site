@@ -176,8 +176,12 @@ def parse(raw: str, today: date) -> dict | None:
         obj = json.loads(m.group(0))
     except ValueError:
         return None
-    if not isinstance(obj, dict):
-        return None
+    return parse_obj(obj, today) if isinstance(obj, dict) else None
+
+
+def parse_obj(obj: dict, today: date) -> dict:
+    """Validate the availability object (also the `availability` part of capture_reader)."""
+    obj = obj if isinstance(obj, dict) else {}
     kind = obj.get("kind") if obj.get("kind") in KINDS else "none"
     allowed = set(week_mondays(today))
     weeks, bad_week = [], False
@@ -271,7 +275,11 @@ def read(text: str, *, today: date, call, **ctx) -> dict | None:
         raw = call(build_prompt(text, today=today, **ctx))
     except Exception:
         return None
-    r = parse(raw, today)
+    return drop_empty(parse(raw, today))
+
+
+def drop_empty(r: dict | None) -> dict | None:
+    """A declaration with nothing in it is not a declaration."""
     if r and r["kind"] == "declaration":
         r["weeks"] = [w for w in r["weeks"] if _has_content(w)]
         if not r["weeks"]:

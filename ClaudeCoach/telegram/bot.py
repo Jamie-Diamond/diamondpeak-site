@@ -52,6 +52,7 @@ sys.path.insert(0, str(BASE.parent / "lib"))
 import races as races_lib
 import weekly_availability     # per-week declared hours (Sunday ask + reply capture)
 import availability_reader     # the model reads availability messages (4 Oct 2026)
+import capture_reader          # one model read per message for all four captures
 import open_actions            # the single open-actions store (close/defer/drop)
 import day_overrides           # fail-closed register of directed day-rule deviations
 import claude_call
@@ -785,7 +786,7 @@ def capture_context_note(kind: str, detail: str, question: str = "") -> str:
     what = _CAPTURE_KINDS.get(kind, kind)
     lines = [
         "## Just recorded from the message below, before you were called",
-        f"A deterministic capture stored {what}: {detail}.",
+        f"The bot stored {what}: {detail}.",
         "",
         "This was a BOOKKEEPING write only: nothing on the athlete's calendar has moved, "
         "and no session has been created, changed or deleted by it. If their message asks "
@@ -3359,7 +3360,7 @@ _PENDING_RACE: dict[str, dict] = {}
 _RACE_CAPTURE_TTL = 900          # 15 min to answer the priority question
 
 
-def _handle_race_capture(token, chat_id, text, athletes):
+def _handle_race_capture(token, chat_id, text, athletes, reading):
     """Turn "I'm racing X on Saturday" into a registry entry. Returns a capture note (see
     capture_context_note) when it fired, else False — a note is NOT "message handled":
     routing continues to the model, which is what makes the athlete's actual request
@@ -3373,13 +3374,11 @@ def _handle_race_capture(token, chat_id, text, athletes):
     ABSOLUTE date is echoed back in the question, because a misread weekday is otherwise
     invisible to the athlete."""
     athlete = athletes.get(chat_id)
-    if not athlete:
+    race_read = reading["race"]
+    if not athlete or not race_read["found"]:
         return False
-    if not races_lib.looks_like_race_statement(text):
-        return False
-    parsed = races_lib.parse_race_message(text)
-    if not parsed["name"] or not parsed["date"]:
-        return False
+    parsed = {"name": race_read["name"], "date": race_read["date"],
+              "priority": race_read["priority"]}
 
     when = date.fromisoformat(parsed["date"]).strftime("%a %-d %b %Y")
     if parsed["priority"]:
@@ -3506,15 +3505,63 @@ def _hours_week_is_built(week_start, now=None) -> bool:
     return n >= build_at
 
 
-def _availability_model_call(slug):
+def _capture_model_call(slug):
     def call(prompt):
         r = claude_call.run_claude(prompt, model=claude_call.SONNET, allowed_tools="",
                                    cwd=str(PROJECT_DIR), timeout=_READER_TIMEOUT,
-                                   label=f"availability:{slug}")
+                                   label=f"capture-read:{slug}")
         if r.returncode != 0 or r.limited or r.auth_failed:
-            raise RuntimeError(f"availability read failed ({r.model}, rc {r.returncode})")
+            raise RuntimeError(f"capture read failed ({r.model}, rc {r.returncode})")
         return r.stdout or ""
     return call
+
+
+def _read_for_captures(chat_id, text, athletes):
+    """The ONE model read the four captures share, or None (nothing to read, or the read
+    failed: record nothing, the model turn still sees the message)."""
+    athlete = athletes.get(chat_id)
+    if not athlete:
+        return None
+    slug = athlete["slug"]
+    # A LOG ("heat 30", "ankle 3") goes to its fast path, and the hours ask stays open.
+    if logs_via_fast_path(text):
+        return None
+    today = date.today()
+    asked = weekly_availability.outstanding_ask_week(slug)
+    try:
+        actions = [it["action"] for it in open_actions.open_items(open_actions.evaluate(slug))]
+    except Exception:
+        actions = []
+    if not capture_reader.worth_reading(text, ask_outstanding=bool(asked),
+                                        has_actions=bool(actions)):
+        return None
+    weeks = availability_reader.week_mondays(today)
+    try:
+        baseline_weeks = {m for m in weeks if baseline_lib.blocks_week(slug, m)}
+    except Exception:
+        baseline_weeks = set()
+    try:
+        recent = load_history(athlete_files(slug)["history"])[-4:]
+    except Exception:
+        recent = []
+    try:
+        sports = goals_lib.sports_for(athlete, json.loads(
+            (_athlete_dir(slug) / "profile.json").read_text()))
+    except Exception:
+        sports = None
+    r = capture_reader.read(
+        text, today=today, call=_capture_model_call(slug), recent=recent,
+        asked_week=asked, baseline_weeks=baseline_weeks,
+        saved=availability_reader.saved_for(slug, today), sports=sports,
+        day_rules=_athlete_day_rules(slug), actions=actions)
+    if r is None:
+        log(f"[{slug}] capture read failed - nothing recorded, the model turn handles it")
+        return None
+    log(f"[{slug}] capture read: availability={r['availability']['kind']} "
+        f"race={r['race']['found']} day_change={r['day_change']['found']} "
+        f"action={r['action']['found']} - {r['availability']['reason']}")
+    r["ctx"] = {"asked": asked, "baseline_weeks": baseline_weeks, "actions": actions}
+    return r
 
 
 def _availability_readback(ws, rec, level) -> str:
@@ -3533,7 +3580,7 @@ def _availability_readback(ws, rec, level) -> str:
     return f"{line}. {tail}"
 
 
-def _handle_hours_capture(token, chat_id, text, athletes):
+def _handle_hours_capture(token, chat_id, text, athletes, reading):
     """Read a message for hours / days / travel for a week, and save what it declares.
     Returns a capture note when it fired, else False; a note claims the message against
     the other captures but does NOT stop it reaching the model."""
@@ -3541,33 +3588,9 @@ def _handle_hours_capture(token, chat_id, text, athletes):
     if not athlete:
         return False
     slug = athlete["slug"]
-    today = date.today()
-    asked = weekly_availability.outstanding_ask_week(slug)
-    # A LOG ("heat 30", "ankle 3") goes to its fast path, and the hours ask stays open.
-    if logs_via_fast_path(text) or not availability_reader.worth_reading(text, bool(asked)):
-        return False
-    weeks = availability_reader.week_mondays(today)
-    try:
-        baseline_weeks = {m for m in weeks if baseline_lib.blocks_week(slug, m)}
-    except Exception:
-        baseline_weeks = set()
-    try:
-        recent = load_history(athlete_files(slug)["history"])[-4:]
-    except Exception:
-        recent = []
-    try:
-        sports = goals_lib.sports_for(athlete, json.loads(
-            (_athlete_dir(slug) / "profile.json").read_text()))
-    except Exception:
-        sports = None
-    r = availability_reader.read(
-        text, today=today, call=_availability_model_call(slug), recent=recent,
-        asked_week=asked, baseline_weeks=baseline_weeks,
-        saved=availability_reader.saved_for(slug, today), sports=sports)
-    if r is None:
-        log(f"[{slug}] availability read failed - nothing saved, the model turn handles it")
-        return False
-    log(f"[{slug}] availability read: {r['kind']} - {r['reason']}")
+    r = reading["availability"]
+    asked = reading["ctx"]["asked"]
+    baseline_weeks = reading["ctx"]["baseline_weeks"]
     if r["kind"] == "none":
         return False
     if r["kind"] == "unclear":
@@ -3648,25 +3671,22 @@ _PENDING_ACTION: dict[str, dict] = {}
 _ACTION_CAPTURE_TTL = 900
 
 
-def _handle_action_capture(token, chat_id, text, athletes):
+def _handle_action_capture(token, chat_id, text, athletes, reading):
     """Close, defer or drop an open action from chat. Returns a capture note when it fired,
     else False; a note claims the message against the other captures but does NOT stop it
     reaching the model."""
     athlete = athletes.get(chat_id)
     if not athlete:
         return False
-    if not open_actions.looks_like_action_instruction(text):
+    act = reading["action"]
+    if not act["found"]:
         return False
     slug = athlete["slug"]
-    parsed = open_actions.parse_action_message(text)
-
-    items = open_actions.evaluate(slug)
-    if parsed["refused"] == "deferral with no new date":
+    cands = [{"action": reading["ctx"]["actions"][i]} for i in act["items"]]
+    parsed = {"status": act["status"], "defer_to": act["defer_to"], "note": text.strip()}
+    if act["status"] == "defer" and not act["defer_to"]:
         # A deferral with no date is how an item slips forever without anybody noticing,
         # which is what the escalation bands exist to expose. Ask for the date instead.
-        cands = open_actions.candidates(items, parsed["subject"])
-        if not cands:
-            return False
         msg = (f"Happy to push *{cands[0]['action']}* back — until when? "
                "Give me a date (or _next week_) and I'll move it.")
         send(token, chat_id, msg, reply_markup=build_keyboard(slug))
@@ -3675,14 +3695,6 @@ def _handle_action_capture(token, chat_id, text, athletes):
             f"nothing — the athlete asked to defer '{cands[0]['action']}' but named no new "
             "date, so they have been asked for one",
             msg)
-    if not parsed["status"]:
-        return False
-
-    cands = open_actions.candidates(items, parsed["subject"])
-    if not cands:
-        # Nothing matched. Say nothing and let the normal reply happen — picking the
-        # closest of fourteen entries on no evidence is the failure this avoids.
-        return False
 
     _PENDING_ACTION[chat_id] = {
         "status": parsed["status"], "defer_to": parsed["defer_to"],
@@ -3855,7 +3867,7 @@ DAYRULE_BUTTONS = {"inline_keyboard": [[
 ]]}
 
 
-def _handle_dayrule_capture(token, chat_id, text, athletes):
+def _handle_dayrule_capture(token, chat_id, text, athletes, reading):
     """Record a coach-directed off-pattern session. Returns a capture note when it fired,
     else False.
 
@@ -3871,9 +3883,10 @@ def _handle_dayrule_capture(token, chat_id, text, athletes):
     if not athlete:
         return False
     slug = athlete["slug"]
-    parsed = day_overrides.parse_directed_day(text)
-    if not (parsed["family"] and parsed["date"]):
+    dc = reading["day_change"]
+    if not dc["found"]:
         return False
+    parsed = {"family": dc["sport"], "date": dc["date"]}
     # The day must actually be off-pattern. An override for a day already in
     # `{sport}_days` excuses nothing and is not harmless: validate_plan counts entries per
     # sport+weekday for its `day_rules_drifted` alarm, so redundant ones would push a real
@@ -7268,12 +7281,16 @@ def _route_text(token, chat_id, text, athletes, config):
     # the day-rule handler demands a sport, an unambiguous date and a day that is genuinely
     # off-pattern, and declines silently on any doubt, so putting it first costs action
     # capture nothing.
+    # Since 4 Oct 2026 one model read (lib/capture_reader.py) decides what the message
+    # states for all four; the handlers validate, ask and write.
     capture = None
-    for _cap in (_handle_race_capture,      # "I'm racing X on Saturday" -> the race registry
-                 _handle_hours_capture,     # hours / days / travel -> the week's declaration
-                 _handle_dayrule_capture,   # "swim Wednesday" -> the fail-closed register
-                 _handle_action_capture):   # "sweat test is booked" -> the actions store
-        capture = _cap(token, chat_id, text, athletes) or None
+    _reading = _read_for_captures(chat_id, text, athletes)
+    for _cap in ((_handle_race_capture,      # "I'm racing X on Saturday" -> the race registry
+                  _handle_hours_capture,     # hours / days / travel -> the week's declaration
+                  _handle_dayrule_capture,   # "swim Wednesday" -> the fail-closed register
+                  _handle_action_capture)    # "sweat test is booked" -> the actions store
+                 if _reading else ()):
+        capture = _cap(token, chat_id, text, athletes, _reading) or None
         if capture:
             break
 
