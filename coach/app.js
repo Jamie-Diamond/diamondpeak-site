@@ -1060,7 +1060,7 @@
         var log = $('#chatLog');
         log.innerHTML = '';
         (j.history || []).forEach(function (m) {
-          if (m.who === 'me') bubble('me', m.text);
+          if (m.who === 'me') bubble('me', m.text).setAttribute('data-t', devStamp(m.ts));
           else coachItem(m.text, m.buttons, m.photo ? '/api/media/' + encodeURIComponent(m.photo) : null,
                          m.error ? 'err' : '', m.id);
         });
@@ -1409,7 +1409,6 @@
                         m.photo ? '/api/media/' + encodeURIComponent(m.photo) + mq : null, '', m.id,
                         { form: j.readonly ? null : m.form, logged: m.logged, drills: m.drills });
           if (m.key && !j.readonly) el.setAttribute('data-key', m.key);
-          if (m.who === 'me' && devTab()) el.setAttribute('data-t', devStamp(m.ts));
         });
         if (!(j.history || []).length) {
           $('#chatLog').innerHTML = '<div class="empty">' + (state.me && state.me.state === 'onboarding'
