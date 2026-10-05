@@ -55,7 +55,9 @@ def build_block(slug: str, cfg: dict) -> str:
     # lines are wrong for it ("Race:  on ", "taper the final 2 weeks") - its weeks come
     # from goal blocks of build weeks then one easier week.
     g = cfg.get("goal") if isinstance(cfg.get("goal"), dict) else None
-    if g and not cfg.get("race_date"):
+    # A race date already past counts as no race (jmccabe kept his Ironman date after it).
+    import fuel_basis
+    if g and fuel_basis.non_race(cfg):
         try:
             import goals
             label, n = goals.GOALS[g["type"]]["label"], goals.block_weeks(cfg)
