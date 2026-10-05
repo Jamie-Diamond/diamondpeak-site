@@ -933,6 +933,15 @@ button.crow:hover,a.crow:hover{background:rgba(20,24,29,.03)}
 #v-chat.dev .empty{color:#6e7681}
 #v-chat.dev .chat-status{color:#d29922}
 #v-chat.dev .dev-tools button{font-family:'DM Mono',monospace;font-size:11px}
+/* Dev: the whole screen dark, not just the log (Jamie, 5 Oct 2026). The palette is
+   re-pointed, so anything drawn from the variables follows; the few literal light
+   backgrounds are overridden below. Leaving Dev (body.dev-chat off) restores light. */
+body.dev-chat{--paper:#161b22;--paper-2:#0d1117;--ink:#e6edf3;--ink-2:#c9d1d9;--muted:#8b949e;
+  --rule:#30363d;--rule-soft:#21262d;--accent:#3fb950;background-image:none;color-scheme:dark}
+body.dev-chat .masthead{background:linear-gradient(#0d1117 72%, rgba(13,17,23,0))}
+body.dev-chat .tabs{background:rgba(13,17,23,.96)}
+body.dev-chat #chatTabs button[aria-selected=true]{background:#238636;color:#fff}
+body.dev-chat .wordmark .mark{filter:invert(1) brightness(1.6)}
 body.dev-chat .composer{background:#0d1117;border-top-color:#30363d}
 body.dev-chat .composer textarea{background:#161b22;border-color:#30363d;color:#e6edf3;caret-color:#3fb950;
   font:400 13.5px/1.4 'DM Mono',monospace}

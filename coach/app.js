@@ -337,7 +337,7 @@
     if (tab === 'chat') openChat();
     if (tab === 'food' && state.me && $('#foodLog')) loadFoodHistory();
     document.body.classList.toggle('in-chat', tab === 'chat');
-    document.body.classList.toggle('dev-chat', tab === 'chat' && chatState.dev && !!(state.me && state.me.coach));
+    setDevChat(tab === 'chat' && chatState.dev && !!(state.me && state.me.coach));
   }
 
   /* ── shared bits ─────────────────────────────────────────────────────── */
@@ -782,6 +782,13 @@
   var CHAT_TAB_KEY = 'cc.chatTab';
   function devTab() { return !!(state.me && state.me.coach && chatState.dev); }
 
+  // Dev darkens the whole screen (app.html body.dev-chat), the phone's status bar too.
+  function setDevChat(on) {
+    document.body.classList.toggle('dev-chat', on);
+    var m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute('content', on ? '#0d1117' : '#eceff2');
+  }
+
   /* ── unread coach messages: a count on the chat button (and the app icon) ──
      "Seen" is the newest message time Peak has shown in Chat, kept on this device.
      Times are the server's (history ts), except leaving Chat, which uses now. */
@@ -1023,7 +1030,7 @@
     });
     $('#devTools').hidden = !chatState.dev;
     $('#v-chat').classList.toggle('dev', chatState.dev);
-    document.body.classList.toggle('dev-chat', chatState.dev && state.tab === 'chat');
+    setDevChat(chatState.dev && state.tab === 'chat');
     $('#chatCam').hidden = chatState.dev || state.me.state !== 'active';
     $('#chatIn').placeholder = chatState.dev ? 'Message dev' : 'Message the coach';
     if (chatState.dev) {
