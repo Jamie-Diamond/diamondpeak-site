@@ -909,8 +909,16 @@ button.crow:hover,a.crow:hover{background:rgba(20,24,29,.03)}
   font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.06em;color:#6e7681;white-space:nowrap}
 #v-chat.dev .msg{max-width:100%;align-self:stretch;background:none;border:0;border-radius:0;padding:0;
   font-family:'DM Mono',monospace;font-size:12.5px;line-height:1.6;color:#c9d1d9}
-#v-chat.dev .msg.me{color:#7ee787;margin-top:6px}
-#v-chat.dev .msg.me::before{content:'\276F  ';color:#3fb950}
+/* each turn reads at a glance when scrolling back (Jamie, 5 Oct 2026): Jamie's message is
+   a solid green bar with its time, a faint rule above it; the reply sits in a lighter box */
+#v-chat.dev .msg.me{position:relative;margin-top:24px;padding:8px 86px 8px 12px;border-radius:6px;
+  background:#238636;color:#fff;font-weight:500}
+#v-chat.dev .msg.me::before{content:'';position:absolute;left:0;right:0;top:-13px;height:1px;background:#30363d}
+#v-chat.dev .msg.me:first-of-type{margin-top:4px}
+#v-chat.dev .msg.me:first-of-type::before{display:none}
+#v-chat.dev .msg.me::after{content:attr(data-t);position:absolute;right:12px;top:9px;
+  font-size:10px;letter-spacing:.04em;color:rgba(255,255,255,.75);font-weight:400}
+#v-chat.dev .msg.coach{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:10px 12px}
 #v-chat.dev .msg.draft{color:#8b949e}
 #v-chat.dev .msg.err{color:#f0883e}
 #v-chat.dev .msg b{color:#f0f6fc;font-weight:500}

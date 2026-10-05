@@ -917,9 +917,25 @@
     return { body: t.slice(0, m.index), meta: mm ? MODEL_NAMES[mm[1]] + ' ' + mm[2] : '' };
   }
 
+  // Dev shows the time of each of Jamie's messages in its green bar, so scrolling back
+  // finds a turn by when it was asked (Jamie, 5 Oct 2026). Server times are the VM's
+  // local clock with no zone; ones carrying a zone are converted to this device's.
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function devStamp(ts) {
+    var d = ts ? null : new Date();
+    if (ts && /(Z|[+-]\d\d:?\d\d)$/.test(ts)) d = new Date(ts);
+    if (d && !isNaN(d)) {
+      return d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' +
+        ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+    }
+    var m = /^\d{4}-(\d\d)-(\d\d)[T ](\d\d:\d\d)/.exec(ts || '');
+    return m ? (+m[2]) + ' ' + MONTHS[+m[1] - 1] + ' ' + m[3] : '';
+  }
+
   function bubble(who, text, cls) {
     var d = document.createElement('div');
     d.className = 'msg ' + who + (cls ? ' ' + cls : '');
+    if (who === 'me' && devTab()) d.setAttribute('data-t', devStamp());
     if (who === 'me') d.innerHTML = esc(text).replace(/\n/g, '<br>');
     else {
       var sp = splitMeta(text);
@@ -1393,6 +1409,7 @@
                         m.photo ? '/api/media/' + encodeURIComponent(m.photo) + mq : null, '', m.id,
                         { form: j.readonly ? null : m.form, logged: m.logged, drills: m.drills });
           if (m.key && !j.readonly) el.setAttribute('data-key', m.key);
+          if (m.who === 'me' && devTab()) el.setAttribute('data-t', devStamp(m.ts));
         });
         if (!(j.history || []).length) {
           $('#chatLog').innerHTML = '<div class="empty">' + (state.me && state.me.state === 'onboarding'
