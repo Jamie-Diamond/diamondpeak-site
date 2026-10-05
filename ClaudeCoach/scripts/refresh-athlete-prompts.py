@@ -26,6 +26,26 @@ BEGIN = "### AUTO-SYNC: live config (regenerated daily by refresh-athlete-prompt
 END   = "### AUTO-SYNC: end ###"
 
 
+def _non_race_fuel_line(slug: str, cfg: dict) -> str:
+    """Fuelling for an athlete with no race (lib/fuel_basis.py; Jamie, 5 Oct 2026: their
+    nutrition is relative to their training and theirs to work out, not his pushed onto
+    them)."""
+    import fuel_basis
+    head = ("- Fuelling (no race): talk about carbohydrate only in terms of TRAINING - "
+            "completing sessions at quality and recovering for the next one. Never race-day, "
+            "bonking in a race or gut training for a race, and never another athlete's "
+            "products or numbers. ")
+    fig = fuel_basis.agreed(cfg)
+    if fig:
+        return head + f"Agreed training figure on sessions over 90 min: {fig} g CHO/hr."
+    return head + (
+        f"No figure agreed yet; prescriptions use a {fuel_basis.TRAINING_CAP_G_HR} g/hr "
+        "training level meanwhile. At the next natural moment (a long-session debrief or "
+        "food talk), ask what they eat on long sessions and what their gut copes with, "
+        "agree a figure with them, then save it: plan_tools.py fuel-target --athlete "
+        f"{slug} --g-hr <n> --save")
+
+
 def build_block(slug: str, cfg: dict) -> str:
     lines = [BEGIN,
              "These values come from config/athletes.json and OVERRIDE any number stated "
@@ -46,6 +66,7 @@ def build_block(slug: str, cfg: dict) -> str:
         ramp = cfg.get("max_ctl_ramp_per_week")
         if ramp:
             lines.append(f"- CTL ramp cap: +{ramp} CTL points/week (NOT a percentage)")
+        lines.append(_non_race_fuel_line(slug, cfg))
         lines.append(END)
         return "\n".join(lines)
     lines.append(f"- Race: {cfg.get('race_name', '?')} on {cfg.get('race_date', '?')}")

@@ -39,6 +39,7 @@ sys.path.insert(0, str(BASE / "lib"))
 
 from primitives.planned_tss import render_workout, planned_session_tss  # noqa: E402
 import coaching_prefs  # noqa: E402
+import fuel_basis  # noqa: E402
 from primitives.nutrition import (fuel_target, last_ride_g_hr,           # noqa: E402
                                   last_run_g_hr, recent_avg_g_hr,
                                   recent_run_avg_g_hr, run_fuel_target,
@@ -84,10 +85,10 @@ def _fuel_for(slug, cfg):
     log = json.loads(sl.read_text()) if sl.exists() else []
     if isinstance(log, dict):
         log = log.get("sessions") or log.get("entries") or []
-    ride = fuel_target(recent_avg_g_hr(log), int(cfg.get("nutrition_target_g_hr") or 90),
+    ride = fuel_target(recent_avg_g_hr(log), fuel_basis.ceiling(cfg),
                       last_g_hr=last_ride_g_hr(log))
     run = run_fuel_target(recent_run_avg_g_hr(log),
-                          cfg.get("nutrition_run_target_g_hr"),
+                          fuel_basis.run_ceiling(cfg),
                           last_g_hr=last_run_g_hr(log))
     return ride, run
 
@@ -252,7 +253,7 @@ def build_sessions(slug: str, proposal: dict) -> dict:
             pass
         elif sport in _LONG_FUEL_SPORTS and dur >= 90:
             notes = (notes + f"\nFuel {fuel} g CHO/hr (progress toward "
-                     f"{int(cfg.get('nutrition_target_g_hr') or 90)} race target); "
+                     f"{fuel_basis.ceiling(cfg)} {fuel_basis.label(cfg)}); "
                      "eat from 15 min, every 25 min.").strip()
         # fuel note for long runs — deliberately makes NO reference to the race-day
         # figure. Jamie's rule states the 90 g/hr target is "NOT a training minimum -

@@ -79,8 +79,9 @@ For $race_distance — gains follow this priority order when weekly volume must 
 
 ## Fuelling guidelines
 
-To be populated after initial sessions. Target:
-- Sessions > 90 min: start at 60g CHO/hr, build toward 65-75g/hr in Build phase.
+Worked out WITH the athlete from what they eat and what their gut copes with, never copied from another athlete.
+- Sessions > 90 min: their agreed figure (config training_fuel_g_hr, or their race figure if racing); until agreed, ~60g CHO/hr.
+- No race booked: the reason to fuel is session quality and recovery, not race day.
 - Hydration: 500-700ml/hr in temperate conditions.
 
 ---

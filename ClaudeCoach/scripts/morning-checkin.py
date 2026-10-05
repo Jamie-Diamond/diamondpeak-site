@@ -15,6 +15,7 @@ LOG_DIR         = Path.home() / "Library/Logs/ClaudeCoach"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(BASE / "lib"))
 import coaching_prefs  # noqa: E402  heat / fuelling switches
+import fuel_basis      # noqa: E402  race vs non-race fuelling figure
 sys.path.insert(0, str(BASE / "telegram"))
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 import claude_call
@@ -39,7 +40,7 @@ TOOLS = "Read,Bash"
 CALLER = "morning-checkin"
 
 
-def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None, wellness_finalized=True, ask_morning_pain=False, race_block="", ask_weight=False, ask_ankle=True, prescription_note="", post_race_recovery=False):
+def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, nutrition_label="race target", heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None, wellness_finalized=True, ask_morning_pain=False, race_block="", ask_weight=False, ask_ankle=True, prescription_note="", post_race_recovery=False):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -241,7 +242,7 @@ Use the recovery score and signals ONLY to decide what to flag — do NOT show t
 [If watchdog flag active: ⚠️ [flag in plain English — one line]]
 [If the pre-verified 05:00 prescription check block above is present and says today's session was modified or swapped: 🔁 [what changed and why — one plain line, e.g. "Swapped to easy spin — HRV low". If it confirmed the session as planned, or the block is absent, say nothing]]
 {cycle_card_line}
-[If today's session is Ride or Brick >90 min: 🍌 Nutrition — target {fuel_target_g_hr}g/hr (progress toward {nutrition_race}g/hr race target) · eat at 15 min then every 25 min]
+[If today's session is Ride or Brick >90 min: 🍌 Nutrition — target {fuel_target_g_hr}g/hr (progress toward {nutrition_race}g/hr {nutrition_label}) · eat at 15 min then every 25 min]
 [If any travel block, race, or constraint from current-state.md "Travel & training blocks" starts within 5 days: 📌 [constraint name] in [N] days — [one-line impact]]
 [If open action is due within 3 days: 📌 [action] due [date]]
 {heat_card_line}
@@ -749,7 +750,7 @@ def run_athlete(slug, athlete_cfg):
     # Deterministic fuelling target (gap-closing ramp, never the old avg+10 guess).
     try:
         _sl = json.loads((adir / "session-log.json").read_text()) if (adir / "session-log.json").exists() else []
-        _fuel_target_g_hr = fuel_target(recent_avg_g_hr(_sl), int(athlete_cfg.get("nutrition_target_g_hr") or 90))
+        _fuel_target_g_hr = fuel_target(recent_avg_g_hr(_sl), fuel_basis.ceiling(athlete_cfg))
     except Exception:
         _fuel_target_g_hr = int(athlete_cfg.get("nutrition_alert_threshold_g_hr") or 60)
 
@@ -771,7 +772,8 @@ def run_athlete(slug, athlete_cfg):
                            race_block=races_lib.prompt_block(_races, date.today()),
                            cycle=cycle,
                            fuel_target_g_hr=_fuel_target_g_hr,
-                           nutrition_race=int(athlete_cfg.get("nutrition_target_g_hr") or 90),
+                           nutrition_race=fuel_basis.ceiling(athlete_cfg),
+                           nutrition_label=fuel_basis.label(athlete_cfg),
                            ask_morning_pain=needs_morning_pain_ask,
                            ask_weight=ask_weight, ask_ankle=ask_ankle,
                            heat_accl_pct=heat_accl_pct, heat_accl_trend=heat_accl_trend,

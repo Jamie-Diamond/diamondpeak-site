@@ -41,6 +41,7 @@ sys.path.insert(0, str(BASE / "lib"))
 
 from primitives.validate_plan import validate_week, escalate_repeats  # noqa: E402
 from primitives.blueprint import current_phase                # noqa: E402
+import fuel_basis                                               # noqa: E402
 import coaching_prefs  # noqa: E402
 from primitives.nutrition import fuel_target, recent_avg_g_hr  # noqa: E402
 from primitives.planned_tss import name_intensity_mismatch     # noqa: E402
@@ -175,7 +176,7 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
     ctl = round(float(wellness[-1].get("ctl") or 0), 1) if wellness else None
     sl_path = BASE / "athletes" / slug / "session-log.json"
     fuel = fuel_target(recent_avg_g_hr(json.loads(sl_path.read_text()) if sl_path.exists() else []),
-                       int(cfg.get("nutrition_target_g_hr") or 90))
+                       fuel_basis.ceiling(cfg))
     bike_min = (cfg.get("race_target_splits") or {}).get("bike_min")
     lr_ceiling = min(int(round(bike_min * 1.15 / 15) * 15), 300) if bike_min else None
 

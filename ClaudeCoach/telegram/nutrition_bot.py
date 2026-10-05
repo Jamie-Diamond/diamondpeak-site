@@ -50,6 +50,7 @@ BASE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE / "lib"))
 
 import nutrition_engine as NE       # noqa: E402
+import fuel_basis                   # noqa: E402
 import nutrition_gate as NG         # noqa: E402
 import nutrition_nlu as NLU         # noqa: E402
 import nutrition_reconcile as RC
@@ -1128,10 +1129,11 @@ class Context:
         if sport in ("Run", "VirtualRun", "TrailRun"):
             avg = recent_run_avg_g_hr(slog)
             avg = avg[0] if isinstance(avg, tuple) else avg
-            return float(run_fuel_target(avg, last_g_hr=last_run_g_hr(slog)))
+            return float(run_fuel_target(avg, fuel_basis.run_ceiling(self.athlete),
+                                         last_g_hr=last_run_g_hr(slog)))
         avg = recent_avg_g_hr(slog)
         avg = avg[0] if isinstance(avg, tuple) else avg
-        return float(fuel_target(avg, self.athlete.get("nutrition_target_g_hr") or 90,
+        return float(fuel_target(avg, fuel_basis.ceiling(self.athlete),
                                  last_g_hr=last_ride_g_hr(slog)))
 
     def weight_readings(self, day: date, days: int = 14) -> list:

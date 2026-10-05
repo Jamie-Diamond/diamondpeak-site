@@ -12,6 +12,7 @@ from pathlib import Path
 BASE = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE / "lib"))
 import coaching_prefs  # noqa: E402  heat / fuelling switches
+import fuel_basis      # noqa: E402  race vs non-race fuelling figure
 
 import claude_call
 import offplan_log
@@ -157,8 +158,13 @@ def run_summary(slug: str = "jamie") -> str:
 
     _cfg_all = json.loads(ATHLETES_CONFIG.read_text())
     _cfg = _cfg_all.get(slug, {})
-    nutrition_target   = int(_cfg.get("nutrition_target_g_hr", 90))
-    nutrition_alert    = int(_cfg.get("nutrition_alert_threshold_g_hr", 75))
+    # A non-race athlete is judged against their own training figure, never Jamie's
+    # 90 g/hr race rate (lib/fuel_basis.py). Alert 15 below the target, as 75 vs 90.
+    non_race_fuel      = fuel_basis.non_race(_cfg, date.today())
+    nutrition_target   = fuel_basis.ceiling(_cfg, date.today())
+    nutrition_label    = fuel_basis.label(_cfg, date.today())
+    nutrition_alert    = (nutrition_target - 15 if non_race_fuel
+                          else int(_cfg.get("nutrition_alert_threshold_g_hr") or nutrition_target - 15))
     tsb_fresh          = float(_cfg.get("tsb_fresh_threshold", 10))
     tsb_overreach_thr  = float(_cfg.get("tsb_overreach_threshold", -30))
     ctl_ramp_thr       = float(_cfg.get("ctl_ramp_overreach_threshold", 7))
@@ -451,7 +457,12 @@ def run_summary(slug: str = "jamie") -> str:
     prev_race = profile.get("prev_race", {})
     prev_race_notes = prev_race.get("notes", "")
     prev_race_name  = prev_race.get("name", "")
-    if prev_race_notes:
+    if non_race_fuel:
+        nutrition_consequence = (
+            "Long sessions short on carbohydrate are harder to complete at the intended "
+            "quality and slower to recover from, so the next key session suffers. "
+            "No race wording: this athlete has no race booked.")
+    elif prev_race_notes:
         nutrition_consequence = (
             f"{prev_race_name} post-race note: \"{prev_race_notes}\" — "
             f"underfuelling in training means the gut never adapts to high carb flux under load. "
@@ -683,7 +694,7 @@ From the data above, extract:
   - This week avg g/hr (rides >90 min): compute from nutrition_history entries this week
   - 4-week rolling avg g/hr: mean across all entries in nutrition_history
   - Trend direction: compare most recent 3 sessions vs previous 3 — improving / declining / flat
-  - Gap to race target: {nutrition_target} − this_week_avg (g/hr)
+  - Gap to {nutrition_label}: {nutrition_target} − this_week_avg (g/hr)
 - Injury pain: ankle_pain_during scores from session-log this week
 - Rule adherence: take the counts from the pre-computed "Rule adherence this week" block VERBATIM —
   do not recount the Off-plan log yourself, and do not judge a day the log did not judge. The only
@@ -718,7 +729,7 @@ way a coach would say it, not two facts welded together with a semicolon.]
 | Body comp | X.Xkg (Y.Y% fat) | toward [race target]kg |
 | VO2max | NN (trend ±N) | rising/stable |
 | Heat sessions | N | — |
-| Fuelling (rides >90 min) | Xg/hr this wk (4wk avg: Y) | {nutrition_target}g/hr race target — gap: Zg/hr |
+| Fuelling (rides >90 min) | Xg/hr this wk (4wk avg: Y) | {nutrition_target}g/hr {nutrition_label} — gap: Zg/hr |
 
 **Completed:** [discipline summaries — e.g. "3 rides, 2 runs, 1 swim"]
 **Missed:** [session names, or "none"]
@@ -802,8 +813,8 @@ Options: A) Drop all runs this week | B) Reduce run volume 50% | C) Continue pro
 
 Fuelling — if this-week avg g/hr < {nutrition_alert} on rides >90 min AND at least 1 such session was logged:
 *[Headline, e.g. "Long-ride fuelling is [Y]g/hr short of target"]*: averaged [X]g/hr against {nutrition_target}g/hr; [improving / declining / flat] over the last 6 sessions.
-Race consequence: {nutrition_consequence}
-Fix: Eat at 15 min and every 25 min after. This week's long ride target: {nutrition_target}g/hr. Use Maurten 320 + chews if GI allows.
+{"Why it matters" if non_race_fuel else "Race consequence"}: {nutrition_consequence}
+Fix: Eat at 15 min and every 25 min after. This week's long ride target: {nutrition_target}g/hr, using the foods and products this athlete already uses (from their session log); never name a product they have not used.
 
 Recovery signal — if the pre-computed recovery score HRV ratio < 0.90 OR 3+ consecutive days with HRV below the 7-day rolling average in the wellness data:
 *[Headline, e.g. "HRV has been low for [N] days"]*: ratio [X] against your normal (recovery score [score]/100, [label]).

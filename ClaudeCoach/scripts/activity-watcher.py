@@ -58,6 +58,7 @@ import illness as illness_lib   # structured illness/compromised flag (surfacing
 import acknowledgement as ack_lib   # §8.3 milestone triggers, evaluated in Python
 import ask_gate                    # asked-and-answered + one-question-per-message gate
 import coaching_prefs              # heat / fuelling switches (profile.json)
+import fuel_basis                  # race vs non-race fuelling figure
 import ops_log
 import write_verify            # read-back verdicts for the Strava writes below
 import heat as heat_lib
@@ -140,7 +141,7 @@ def _quick_log_keyboard(activity_id, slug, sport, has_injury, duration_min):
     return {"inline_keyboard": rows}
 
 
-def _build_prompt(slug, first_name, ftp, injuries, profile=None, run_hr_cap=150, nutrition_target=90, recent_chat="",
+def _build_prompt(slug, first_name, ftp, injuries, profile=None, run_hr_cap=150, nutrition_target=90, nutrition_label="race target", recent_chat="",
                   hr_note=""):
     """Build the per-athlete activity analysis prompt. `hr_note` is the code-side HR
     check for the recent activities (_hr_quality_pass); empty when every HR is fine."""
@@ -295,7 +296,7 @@ RIDE:
   Rep lines: Rep N: DUR · XXXw (X% FTP) · AVGbpm/MAXbpm
   Final line: completion note if intervals missed, else "Nutrition — g carbs/hr, bottles, and sodium?"
 - Unstructured ≤90 min: NP + IF | "Nutrition — g carbs/hr, bottles, and sodium?"
-- Unstructured >90 min: NP + IF | aerobic decoupling % | "Nutrition — g carbs/hr, bottles, and sodium? (recent avg: [avg g/hr from last 4 rides >90 min in session-log.json with nutrition_g_carb set] · race target {nutrition_target}g/hr)"
+- Unstructured >90 min: NP + IF | aerobic decoupling % | "Nutrition — g carbs/hr, bottles, and sodium? (recent avg: [avg g/hr from last 4 rides >90 min in session-log.json with nutrition_g_carb set] · {nutrition_label} {nutrition_target}g/hr)"
 
 RUN:
 {run_injury_ask}
@@ -1592,7 +1593,8 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     first_name = profile.get("name", slug).split()[0]
     injuries = [_i for _i in profile.get("injuries", []) if str(_i.get("status") or "").lower() not in ("cleared", "resolved")]   # cleared = not current
     run_hr_cap       = int(athlete_cfg.get("run_hr_cap", 150))
-    nutrition_target = int(athlete_cfg.get("nutrition_target_g_hr", 90))
+    nutrition_target = fuel_basis.ceiling(athlete_cfg)        # never Jamie's 90 for a non-racer
+    nutrition_label = fuel_basis.label(athlete_cfg)
 
     state = load_state(state_file)
 
@@ -1650,6 +1652,7 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     hr_note = _hr_quality_pass(slug, chat_id)
     prompt = _build_prompt(slug, first_name, ftp, injuries, profile,
                            run_hr_cap=run_hr_cap, nutrition_target=nutrition_target,
+                           nutrition_label=nutrition_label,
                            recent_chat=recent_chat, hr_note=hr_note)
     prompt += coaching_prefs.prompt_note(slug)
 

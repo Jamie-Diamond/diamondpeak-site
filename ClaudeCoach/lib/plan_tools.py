@@ -70,6 +70,7 @@ from primitives.load import (                                   # noqa: E402
 from primitives.validate_plan import validate_week              # noqa: E402
 from primitives.blueprint import current_phase                   # noqa: E402
 from primitives.nutrition import fuel_target, recent_avg_g_hr   # noqa: E402
+import fuel_basis                                               # noqa: E402
 from rpe_context import SPORT_FAMILY                             # noqa: E402
 import replan_gate                                               # noqa: E402
 import race_fitness as rf                                        # noqa: E402
@@ -2127,9 +2128,22 @@ def cmd_validate(args) -> dict:
 def cmd_fuel_target(args) -> dict:
     """Deterministic fuelling prescription (g/hr) for >90-min sessions — gap-closing
     ramp toward the athlete's race target (aggressive <60, careful >=60). Replaces
-    the old avg+10 guess."""
+    the old avg+10 guess.
+
+    --g-hr N --save records the training figure a NON-RACE athlete agreed with the coach
+    (training_fuel_g_hr, lib/fuel_basis.py): it becomes what every prescription, check-in
+    and weekly summary works toward instead of the default training level."""
     cfg = _load_cfg(args.athlete)
-    race_target = int(cfg.get("nutrition_target_g_hr") or 90)
+    saved = None
+    if getattr(args, "save", False):
+        if not args.g_hr or not 20 <= args.g_hr <= 120:
+            raise SystemExit(_err("--save needs --g-hr between 20 and 120"))
+        athletes = json.loads(ATHLETES_CONFIG.read_text())
+        athletes[args.athlete]["training_fuel_g_hr"] = int(args.g_hr)
+        ATHLETES_CONFIG.write_text(json.dumps(athletes, indent=2) + "\n")
+        cfg = athletes[args.athlete]
+        saved = int(args.g_hr)
+    race_target = fuel_basis.ceiling(cfg)       # a non-racer's own figure, never 90
     sl_path = BASE / "athletes" / args.athlete / "session-log.json"
     session_log = json.loads(sl_path.read_text()) if sl_path.exists() else []
     avg = recent_avg_g_hr(session_log)
@@ -2138,7 +2152,9 @@ def cmd_fuel_target(args) -> dict:
     return {"athlete": args.athlete,
             "recent_avg_g_hr": round(avg, 1) if avg is not None else None,
             "race_target_g_hr": race_target, "prescribed_g_hr": target,
-            "note": f"{zone}: prescribe {target} g/hr now (race target {race_target})"}
+            "non_race": fuel_basis.non_race(cfg),
+            "agreed_training_g_hr": fuel_basis.agreed(cfg), "saved": saved,
+            "note": f"{zone}: prescribe {target} g/hr now ({fuel_basis.label(cfg)} {race_target})"}
 
 
 def _fuelling_engine(cmd: str, params: dict) -> dict:
@@ -3080,6 +3096,8 @@ def main():
 
     pf = sub.add_parser("fuel-target", help="deterministic g/hr fuelling prescription for >90-min sessions")
     pf.add_argument("--athlete", required=True)
+    pf.add_argument("--g-hr", type=int, dest="g_hr", help="agreed training figure (non-race athletes)")
+    pf.add_argument("--save", action="store_true", help="save --g-hr as training_fuel_g_hr")
 
     prf = sub.add_parser("race-fuelling", help="evidence-based race carb/fluid/sodium/caffeine targets (shared engine)")
     prf.add_argument("--athlete", required=True)

@@ -46,6 +46,7 @@ sys.path.insert(0, str(BASE / "lib"))
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 
 import nutrition_engine as NE       # noqa: E402
+import fuel_basis                   # noqa: E402
 import nutrition_reconcile as RC    # noqa: E402
 import plants as PL                 # noqa: E402
 from nutrition_store import NutritionStore  # noqa: E402
@@ -80,10 +81,11 @@ def _prescribed_g_hr(sport: str, session_log, cfg: dict) -> float:
     if sport in RUN_SPORTS_FUEL:
         avg = recent_run_avg_g_hr(session_log)
         avg = avg[0] if isinstance(avg, tuple) else avg
-        return float(run_fuel_target(avg, last_g_hr=last_run_g_hr(session_log)))
+        return float(run_fuel_target(avg, fuel_basis.run_ceiling(cfg),
+                                     last_g_hr=last_run_g_hr(session_log)))
     avg = recent_avg_g_hr(session_log)
     avg = avg[0] if isinstance(avg, tuple) else avg
-    return float(fuel_target(avg, cfg.get("nutrition_target_g_hr") or 90,
+    return float(fuel_target(avg, fuel_basis.ceiling(cfg),
                              last_g_hr=last_ride_g_hr(session_log)))
 
 
