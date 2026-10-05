@@ -65,6 +65,16 @@ def build_block(slug: str, cfg: dict) -> str:
             label, n = g.get("type", "goal"), 4
         lines.append(f"- No race booked. Goal: {label}, trained in {n}-week goal blocks "
                      f"({n - 1} build weeks, then one easier week with the test)")
+        # The race they last did stays in view (James did IM Italy on 19 Sep; Jamie, 5 Oct
+        # 2026): "no race booked" must not read as "never raced".
+        done = sorted((r for r in (cfg.get("races") or [])
+                       if isinstance(r, dict) and str(r.get("date") or "")[:10] < date.today().isoformat()),
+                      key=lambda r: str(r.get("date")))
+        if done:
+            r = done[-1]
+            lines.append(f"- Last race: {r.get('name', '?')} on {str(r.get('date'))[:10]}"
+                         + (f" ({r['distance']})" if r.get("distance") else "")
+                         + (", completed" if r.get("status") == "completed" else ""))
         ramp = cfg.get("max_ctl_ramp_per_week")
         if ramp:
             lines.append(f"- CTL ramp cap: +{ramp} CTL points/week (NOT a percentage)")
