@@ -141,3 +141,31 @@ def test_ledger_prices_per_day_chat_separately_from_27_sep(tmp_path, monkeypatch
     assert s["avg_week"] == round(3.5 / 2 * 7, 2)
     assert s["avg_month"] == round(3.5 / 2 * 365.25 / 12, 2)
     usage_ledger._cache.clear()
+
+
+def test_ledger_books_the_dev_tab_to_dev_work_not_the_athlete_it_names(tmp_path, monkeypatch):
+    # 6 Oct 2026: a Dev-tab session about Kathryn was booked to Fred as "other", and the
+    # weekly summary fell to "other" too.
+    ur = usage_ledger._report()
+    proj = tmp_path / "-Users-diamondpeakconsulting-diamondpeak-site"
+    proj.mkdir()
+    (tmp_path / "athletes" / "jamie" / "dev-chat").mkdir(parents=True)
+    (tmp_path / "athletes" / "jamie" / "dev-chat" / "history.jsonl").write_text(
+        json.dumps({"who": "me", "text": "Why is Fred's card late?"}) + "\n")
+    monkeypatch.setattr(ur, "PROJECTS", tmp_path)
+    monkeypatch.setattr(ur, "BASE", tmp_path)
+    monkeypatch.setattr(ur, "PROJECT_GLOBS", ("-Users-diamondpeakconsulting-diamondpeak-site",))
+    usage_ledger._cache.clear()
+    ath = {"fred": {"name": "Fred Bloggs"}}
+    _transcript(proj / "a.jsonl", "Earlier in this Dev chat (for context):\n\nJamie: Fred ...",
+                [("2026-10-01T10:00:00Z", 100000)])
+    _transcript(proj / "b.jsonl", "Why is Fred's card late?",           # first Dev message
+                [("2026-10-01T11:00:00Z", 100000)])
+    _transcript(proj / "c.jsonl", "You are generating the weekly training summary for "
+                "Fred's goal (Raise my FTP) coaching system.", [("2026-10-01T12:00:00Z", 50000)])
+    s = usage_ledger.summary(ath, today=TODAY)["athletes"]
+    assert s["dev"]["total"] == 2.0 and s["fred"]["total"] == 0.5
+    assert ur.attribute("c.jsonl", "You are generating the weekly training summary for Fred",
+                        ath) == ("fred", "weekly summary")
+    assert ur.attribute("x.jsonl", "Reply with just: ok", ath) == ("system", "smoke test")
+    usage_ledger._cache.clear()

@@ -92,8 +92,13 @@ def cost(model: str, u: dict, writes_5m: bool = False) -> float:
 
 
 JOBS = [  # (label, regex on the first prompt) - first match wins. Checked against
-          # the real prompts of 28 Sep 2026, the first day every job was logged.
+          # the real prompts of 28 Sep 2026, the first day every job was logged, and
+          # again on 6 Oct 2026 against everything that had fallen to "other".
     ("chat",            r"^You are ClaudeCoach, "),
+    ("message read",    r"^You read ONE chat message"),       # lib/capture_reader.py
+    ("rule tidy",       r"^You are consolidating ClaudeCoach's STANDING RULES"),
+    ("smoke test",      r"^(Say OK|Reply with just: ok|Use the Bash tool to run: echo|"
+                        r"Remember the codeword)"),           # claude-cli-update.py checks
     ("session sync",    r"^Session sync|ClaudeCoach session sync"),
     ("voice rewrite",   r"^Rewrite the following coaching reply"),
     ("strava write-up", r"^Write a Strava activity description"),
@@ -103,11 +108,10 @@ JOBS = [  # (label, regex on the first prompt) - first match wins. Checked again
     ("daily prescription", r"daily session prescription"),
     ("watchdog",        r"daily watchdog"),
     ("night-before brief", r"night-before"),
-    ("weekly summary",  r"weekly summary"),
+    ("weekly summary",  r"weekly (training )?summary"),
     ("weekly plan",     r"Stage.?1|propos\w+ (the|a|next) week|weekly plan"),
     ("bug fixer",       r"bug-triage|bug.?fix"),
     ("nutrition",       r"nutrition|fuelling"),
-    ("smoke test",      r"^Say OK"),
 ]
 
 
@@ -155,8 +159,9 @@ def first_prompt(rows):
 # usage, add as another row"). A chat turn - an athlete message and every call it set
 # off - is a bug fix when it changed code: an Edit/Write to a file outside athletes/ and
 # config/, or a git commit that names a code file. Coaching edits to athlete files and
-# config (races, rules) stay coaching.
-DEV = "bug fixes (chat)"
+# config (races, rules) stay coaching. Peak's Dev tab (api/dev_chat.py, 4 Oct 2026) is
+# dev work by definition and goes here whole (see attribute()).
+DEV = "dev work"
 _CODE_FILE = re.compile(r"\.(py|js|html|css|sh|md)\b")
 _NOT_CODE = ("/athletes/", "/config/", "/tmp/")
 
@@ -190,6 +195,33 @@ def dev_message_ids(rows: list) -> set:
     return out | (turn if dev else set())
 
 
+def dev_tab_texts() -> set:
+    """Jamie's messages in Peak's Dev tab (athletes/<slug>/dev-chat/history.jsonl). A Dev
+    session that starts with no earlier Dev messages opens with his text as typed, which
+    names no job and often an athlete, so it is matched against the tab's own history."""
+    out = set()
+    for f in glob.glob(str(BASE / "athletes" / "*" / "dev-chat" / "history.jsonl")):
+        for line in open(f, errors="replace"):
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            if e.get("who") == "me" and (e.get("text") or "").strip():
+                out.add(e["text"].strip())
+    return out
+
+
+def attribute(path: str, prompt: str, athletes: dict, dev_texts: set = frozenset()) -> tuple:
+    """(athlete, job) of one transcript. Shared with lib/usage_ledger.py (Peak's page)."""
+    if "-tmp-cc-bugfix" in path:
+        return "system", "bug fixer"
+    # A fresh Dev session hands over the recent Dev messages (dev_chat._fresh_prompt).
+    if prompt.startswith("Earlier in this Dev chat") or prompt.strip() in dev_texts:
+        return DEV, DEV
+    job = classify(prompt)
+    return (athlete_of(prompt, athletes) if job != "smoke test" else "system"), job
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--days", type=int, default=30)
@@ -199,6 +231,7 @@ def main():
     args = ap.parse_args()
     athletes = json.loads((BASE / "config/athletes.json").read_text())
     since = datetime.now(timezone.utc) - timedelta(days=args.days)
+    dev_texts = dev_tab_texts()
 
     by_ath = defaultdict(float)
     by_job = defaultdict(float)
@@ -228,15 +261,12 @@ def main():
                 msgs[m.get("id") or r.get("requestId") or id(r)] = (m.get("model"), m["usage"], t)
             if not msgs:
                 continue
-            prompt = first_prompt(rows)
-            job = "bug fixer" if "-tmp-cc-bugfix" in f else classify(prompt)
-            ath = athlete_of(prompt, athletes) if job not in ("bug fixer", "smoke test") else "system"
-            session_cost = 0.0
+            ath, job = attribute(f, first_prompt(rows), athletes, dev_texts)
             # Priced as an API deployment would bill it: jobs on the 5-minute cache (the
             # API-key default), chat on the 1-hour cache (promptCacheTtl=1h - a person
-            # replies minutes apart, so the longer cache pays for itself there).
-            # --as-recorded prices every write exactly as the subscription recorded it.
-            five = (job != "chat") and not args.as_recorded
+            # replies minutes apart, so the longer cache pays for itself there; the Dev
+            # tab is a chat too). --as-recorded prices every write as the subscription did.
+            five = (job not in ("chat", DEV)) and not args.as_recorded
             dev = dev_message_ids(rows) if job == "chat" else set()
             for mid, (model, u, t) in msgs.items():
                 c = cost(model, u, writes_5m=five)

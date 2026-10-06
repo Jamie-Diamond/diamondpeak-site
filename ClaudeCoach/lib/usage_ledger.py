@@ -40,7 +40,7 @@ def _report():
     return _ur
 
 
-def _price_file(f: str, athletes: dict) -> tuple:
+def _price_file(f: str, athletes: dict, dev_texts: set) -> tuple:
     ur = _report()
     rows = []
     with open(f, errors="replace") as fh:
@@ -60,26 +60,27 @@ def _price_file(f: str, athletes: dict) -> tuple:
         msgs[m.get("id") or r.get("requestId") or id(r)] = (m.get("model"), m["usage"], ts[:10])
     if not msgs:
         return ("system", "none", {}, {})
-    prompt = ur.first_prompt(rows)
-    job = "bug fixer" if "-tmp-cc-bugfix" in f else ur.classify(prompt)
-    ath = ur.athlete_of(prompt, athletes) if job not in ("bug fixer", "smoke test") else "system"
-    # Chat turns that changed code are bug fixes, not coaching (usage-report.py DEV).
-    dev = ur.dev_message_ids(rows) if job == "chat" else set()
+    ath, job = ur.attribute(f, ur.first_prompt(rows), athletes, dev_texts)
+    # Chat turns that changed code, and the whole Dev tab, are dev work, not coaching
+    # (usage-report.py DEV).
+    dev = ur.dev_message_ids(rows) if job == "chat" else set(msgs) if job == ur.DEV else set()
     days, dev_days = defaultdict(float), defaultdict(float)
     for mid, (model, u, day) in msgs.items():
         # Priced as an API deployment would bill it (usage-report.py): jobs on the
-        # 5-minute cache, chat as recorded (1-hour; a person replies minutes apart).
-        (dev_days if mid in dev else days)[day] += ur.cost(model, u, writes_5m=(job != "chat"))
+        # 5-minute cache, chats as recorded (1-hour; a person replies minutes apart).
+        (dev_days if mid in dev else days)[day] += ur.cost(
+            model, u, writes_5m=(job not in ("chat", ur.DEV)))
     return (ath, job, dict(days), dict(dev_days))
 
 
 def daily(athletes: dict) -> dict:
     """{athlete: {"all": {day: usd}, "chat": {day: usd}}} since LOG_START. "system" holds
-    the shared jobs (bug fixer, rule prunes, smoke tests); "dev" the code work done
-    through the coach chat (Jamie's bug fixes), kept out of his coaching cost."""
+    the shared jobs (bug fixer, smoke tests); "dev" Jamie's dev work - the Dev tab, and
+    code changed through the coach chat - kept out of his coaching cost."""
     ur = _report()
     out: dict = defaultdict(lambda: {"all": defaultdict(float), "chat": defaultdict(float)})
     start = LOG_START.isoformat()
+    dev_texts = ur.dev_tab_texts()
     with _lock:
         for pat in ur.PROJECT_GLOBS:
             for f in glob.glob(str(ur.PROJECTS / pat / "*.jsonl")):
@@ -91,7 +92,7 @@ def daily(athletes: dict) -> dict:
                 hit = _cache.get(f)
                 if not hit or hit[0] != key:
                     try:
-                        hit = (key, _price_file(f, athletes))
+                        hit = (key, _price_file(f, athletes, dev_texts))
                     except OSError:
                         continue
                     _cache[f] = hit
