@@ -89,7 +89,7 @@ def test_order_is_coached_first_invited_last(tmp_path):
 def test_chat_and_cost_columns(tmp_path):
     r = _rows(tmp_path)
     j = r["Jamie Diamond"]
-    assert j["chat"] == {"replies": 12, "usd": 8.9, "allowance": 20.0, "exempt": True}
+    assert j["chat"] == {"replies": 12, "usd": 8.9, "allowance": 15.0, "exempt": True}
     assert j["cost"] == COSTS["jamie"]
     assert j["last_message"] == "2026-10-01T09:43"          # the athlete's line, not the 18:00 card
     assert r["Kat"]["chat"]["exempt"] is False and r["Kat"]["chat"]["replies"] == 0

@@ -88,3 +88,28 @@ Verdict at the check: a Python gate, with Sonnet only on days that need judgemen
 Some of Jamie's "chat" spend is development done through the coach chat on Opus ("Fix
 the bug", git commits). It inflates his per-athlete figure and is not what a paying
 athlete would cost.
+
+## 6 Oct 2026: measured, price ceiling, Sonnet review
+
+**Measured since the 2 Oct cuts** (4 days, API prices): Fred $31/month, James $38, so a
+typical coached athlete is ~$34, on this doc's ~$35. Chat ~$19 of it, at ~$0.18-0.25 per
+athlete message (~75% cache writes). A CLI "Say OK" job carries ~17-28k tokens of Claude
+Code's own prompt and tools.
+
+**Price ceiling (Jamie):** at most £45 a month including VAT, at a 50% margin, so £18.75
+(~$25 at 1.325 $/£) per athlete. Scheduled jobs are ~$15 today and ~$9 once the daily
+messages are on Haiku, which leaves ~$15 for chat: the default chat allowance is now $15
+(lib/chat_limits.py). Opus stays in chat (Jamie: Sonnet "isn't good enough at the logic
+and context"); the allowance caps what that costs. Direct API: not yet.
+
+**Sonnet review** (150 chat turns since 28 Sep, 99 Sonnet). No case of Sonnet getting a
+training number or verdict wrong in chat. The wrong numbers came from scheduled messages
+and readers (a 2:30-2:50/100m swim pace, "12th October" read as 12 hours). What Sonnet
+does get wrong, all behaviour, so prompt-fixable:
+
+| Failure | Seen in | Fix |
+|---|---|---|
+| Asks before doing what the athlete already said ("Want me to remove it?", 1/2 options) | Jamie 1 Oct ("shouldn't need this level of back and forth"), Fred 1 and 5 Oct, James 2-4 Oct | prompt: when the athlete states a change, make it and say so |
+| Hedges and caveats instead of answering ("I haven't checked", "I can't say") | Jamie's "better than Runna" took 4 messages | rebalance the "say what you didn't do" lines |
+| Missed the scheduled question it was answering | Jamie's "No", 2 Oct | fixed 2 Oct (engine._missed_since) |
+| Shallower digging on a debugging question | missing chat messages, 4 Oct: Opus found the 30-exchange trim next turn | dev work, Dev tab runs Opus |

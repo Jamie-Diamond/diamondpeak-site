@@ -31,9 +31,9 @@ def check(name, cond, detail=""):
 tmp = Path(tempfile.mkdtemp(prefix="chat-limits-"))
 cl.BASE = tmp
 D = date(2026, 9, 29)
-KATH = {"chat_id": "22", "name": "Kathryn"}
+KATH = {"chat_id": "22", "name": "Kathryn", "chat_allowance_usd": 20}   # the $ steps below are of $20
 
-check("default allowance is $20", cl.allowance(KATH) == 20.0)
+check("default allowance is $15", cl.allowance({"chat_id": "22"}) == 15.0)
 check("per-athlete override", cl.allowance({"chat_allowance_usd": 35}) == 35.0)
 check("step-down: opus->sonnet, sonnet->haiku, haiku stays",
       (cl.step_down("opus"), cl.step_down("sonnet"), cl.step_down("haiku")) == ("sonnet", "haiku", "haiku"))

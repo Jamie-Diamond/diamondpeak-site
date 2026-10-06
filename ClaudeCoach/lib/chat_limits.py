@@ -9,7 +9,10 @@ an allowance.
 Agreed behaviour:
   - Every chat reply's cost is metered per athlete per calendar month (the CLI's own
     total_cost_usd for that run, i.e. API list price). Resets on the 1st.
-  - Default allowance $20/month; athletes.json `chat_allowance_usd` overrides it.
+  - Default allowance $15/month; athletes.json `chat_allowance_usd` overrides it. Was $20;
+    6 Oct 2026, Jamie: price at most £45 a month including VAT, at a 50% margin, so an
+    athlete may cost £18.75 (~$25). Less ~$9 of scheduled jobs once the daily messages are
+    on Haiku leaves ~$15 for chat.
   - At 80%: chat steps DOWN one model (Opus -> Sonnet, Sonnet -> Haiku), and both the
     athlete and Jamie get a one-line warning, once that month.
   - At 100%: chat carries on, on the stepped-down model, capped at DAILY_CAP_OVER
@@ -32,7 +35,7 @@ from datetime import date
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent   # ClaudeCoach/
-DEFAULT_ALLOWANCE_USD = 20.0
+DEFAULT_ALLOWANCE_USD = 15.0
 STEP_DOWN_AT = 0.80
 DAILY_CAP_OVER = 5            # Jamie, 29 Sep 2026
 LEDGER = "chat-usage.json"
