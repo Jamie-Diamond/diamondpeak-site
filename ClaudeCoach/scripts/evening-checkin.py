@@ -33,6 +33,7 @@ LOG_DIR         = Path.home() / "Library/Logs/ClaudeCoach"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(BASE / "lib"))
 import coaching_prefs  # noqa: E402  heat / fuelling switches
+from strength_ask import strength_ask  # noqa: E402  strength debrief question
 from coaching_levels import level_block as _level_block
 import illness as illness_lib   # structured illness/compromised flag (surfacing gate)
 import ops_log
@@ -270,6 +271,7 @@ def _build_prompt(slug, first_name, injuries, pain_next_morning=0, coaching_leve
         )
     # Ask the injury question only if pain_next_morning > 0 — if last morning score
     # was 0, the ankle is fine and we don't ask every single run.
+    strength_q = strength_ask(injuries)
     if injuries and pain_next_morning > 0:
         injury_case = "  - Run: \"Good [X km] run done. Injury pain during today's run? (0-10)\""
     else:
@@ -301,8 +303,7 @@ Case A — A completed activity from TODAY exists NOT yet in session-log.json:
 {injury_case}
   - Ride (>90 min): "Solid [X km] ride done. Nutrition — roughly g carbs/hr and bottles?"
   - Swim: "Swim done — [X m] at [pace]. RPE and how did it feel?"
-  - Strength: "Strength session done. RPE?" - add "and main focus?" ONLY when neither the activity
-    name nor the planned session says what it worked (a session called "Quads" answers it)
+  - Strength: "Strength session done." then {strength_q}
 
 Case A2 — CAPTURE (this was the 20:10 capture-reminder's job; it is now yours, so that
 the athlete gets one evening push instead of two). A completed activity from {yesterday}

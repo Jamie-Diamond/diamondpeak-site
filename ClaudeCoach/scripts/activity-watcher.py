@@ -59,6 +59,7 @@ import acknowledgement as ack_lib   # §8.3 milestone triggers, evaluated in Pyt
 import ask_gate                    # asked-and-answered + one-question-per-message gate
 import coaching_prefs              # heat / fuelling switches (profile.json)
 import fuel_basis                  # race vs non-race fuelling figure
+from strength_ask import strength_ask   # strength debrief question (RPE only without HR)
 import ops_log
 import write_verify            # read-back verdicts for the Strava writes below
 import heat as heat_lib
@@ -167,6 +168,7 @@ def _build_prompt(slug, first_name, ftp, injuries, profile=None, run_hr_cap=150,
         " profile field itself — it is an internal note, not athlete-facing)"
         if profile_fields.is_provisional(_thr_raw) else ""
     )
+    strength_q = strength_ask(injuries)
     run_injury_ask = (
         f"- Run (walk-run): If Strava laps show alternating run/walk laps (walk laps: pace >8:00/km or duration ≤90s):"
         f" Your ANALYSIS must be formatted EXACTLY as multiple output lines — each on its own line:"
@@ -321,10 +323,7 @@ SWIM:
 - Else (OWS or neither): use interval_summary from activity detail if present, else distance + avg pace vs CSS +/- seconds.
   Final line: "RPE and how did it feel?"
 
-STRENGTH: duration | "RPE?" when the activity name or today's planned session already says what it
-  worked (e.g. "Quads", "Hamstring strength", "Core") - never ask what the name already answers
-  (Jamie, 7 Oct 2026: Fred was asked the main focus of a session called "Quads"). Only when
-  neither says: "RPE and what was the main focus?"
+STRENGTH: duration | {strength_q}
 
 For unstructured rides > 3 hours (or structured rides > 3 hours where Pa:HR data is available): also output a DECOUPLING line:
 DECOUPLING: <activity_id>|<date>|<name>|<duration_min>|<intensity_factor>|<decoupling_pct>|<tss>
