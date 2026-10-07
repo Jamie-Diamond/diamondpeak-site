@@ -321,7 +321,10 @@ SWIM:
 - Else (OWS or neither): use interval_summary from activity detail if present, else distance + avg pace vs CSS +/- seconds.
   Final line: "RPE and how did it feel?"
 
-STRENGTH: duration | "RPE and what was the main focus?"
+STRENGTH: duration | "RPE?" when the activity name or today's planned session already says what it
+  worked (e.g. "Quads", "Hamstring strength", "Core") - never ask what the name already answers
+  (Jamie, 7 Oct 2026: Fred was asked the main focus of a session called "Quads"). Only when
+  neither says: "RPE and what was the main focus?"
 
 For unstructured rides > 3 hours (or structured rides > 3 hours where Pa:HR data is available): also output a DECOUPLING line:
 DECOUPLING: <activity_id>|<date>|<name>|<duration_min>|<intensity_factor>|<decoupling_pct>|<tss>

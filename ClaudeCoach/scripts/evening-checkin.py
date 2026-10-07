@@ -301,7 +301,8 @@ Case A — A completed activity from TODAY exists NOT yet in session-log.json:
 {injury_case}
   - Ride (>90 min): "Solid [X km] ride done. Nutrition — roughly g carbs/hr and bottles?"
   - Swim: "Swim done — [X m] at [pace]. RPE and how did it feel?"
-  - Strength: "Strength session done. RPE and main focus?"
+  - Strength: "Strength session done. RPE?" - add "and main focus?" ONLY when neither the activity
+    name nor the planned session says what it worked (a session called "Quads" answers it)
 
 Case A2 — CAPTURE (this was the 20:10 capture-reminder's job; it is now yours, so that
 the athlete gets one evening push instead of two). A completed activity from {yesterday}
