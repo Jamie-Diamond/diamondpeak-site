@@ -2366,6 +2366,41 @@ def _strip_form_excuse(slug: str, clean: str) -> str:
     return "\n".join(out_lines).strip()
 
 
+# A past-tense RPE claim about the athlete ("your RPE was 7", "logged RPE of 6.5"). Prescriptions
+# ("keep RPE 6") are deliberately not matched: only a reported score can be fabricated.
+_REPORTED_RPE_RE = re.compile(
+    r"\b(?:your|logged|reported)\s+RPE(?:\s+(?:was|of|at|is))?\s*(?:a\s+)?(\d+(?:\.\d+)?)\b",
+    re.IGNORECASE)
+
+
+def _strip_fabricated_rpe(slug: str, clean: str, text: str = None) -> str:
+    """Deterministic backstop for a made-up RPE. A sentence that reports the athlete's RPE
+    is dropped unless that value is a non-null `rpe` in session-log.json or was stated in
+    the athlete's own message. Fails open if the log cannot be read."""
+    if not _REPORTED_RPE_RE.search(clean):
+        return clean
+    try:
+        entries = json.loads((_athlete_dir(slug) / "session-log.json").read_text())
+        known = {float(e["rpe"]) for e in entries
+                 if isinstance(e, dict) and e.get("rpe") is not None}
+    except Exception:
+        return clean
+    known |= {float(v) for v in re.findall(r"\d+(?:\.\d+)?", text or "")}
+    dropped = False
+    out_lines = []
+    for line in clean.split("\n"):
+        kept = []
+        for s in re.split(r"(?<=[.!?])\s+", line):
+            vals = [float(v) for v in _REPORTED_RPE_RE.findall(s)]
+            if vals and any(v not in known for v in vals):
+                log(f"[{slug}] RPE guard: dropped sentence stating an unlogged RPE: {s!r}")
+                dropped = True
+                continue
+            kept.append(s)
+        out_lines.append(" ".join(kept))
+    return "\n".join(out_lines).strip() if dropped else clean
+
+
 def _load_profile(slug: str) -> dict:
     f = _athlete_dir(slug) / "profile.json"
     try:
@@ -6940,6 +6975,7 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
                 over_cap=over_cap)
             clean = _verify_session_preview(slug, clean)
             clean = _strip_form_excuse(slug, clean)
+            clean = _strip_fabricated_rpe(slug, clean, text)
             clean = _strip_model_countdown(clean, athlete)
             final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
             # Send the text reply FIRST so the athlete sees the answer immediately —
@@ -7067,6 +7103,7 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
         gate_summary = summary if clean == pre_capture_guard else None
         clean = _verify_session_preview(slug, clean)
         clean = _strip_form_excuse(slug, clean)
+        clean = _strip_fabricated_rpe(slug, clean, text)
         clean = _strip_model_countdown(clean, athlete)
         final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
 
