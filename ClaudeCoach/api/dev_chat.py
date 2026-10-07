@@ -40,6 +40,11 @@ RESTART_WAIT = 300            # how long a restart waits for athletes' replies i
 
 _RESTART_RE = re.compile(r"\s*<restart>\s*(api|vm)\s*</restart>\s*", re.I)
 VM_BUTTON = [[{"text": "Restart the VM now", "data": "dev:restart:vm"}]]
+# A choice as buttons, not typing (Jamie, 7 Oct 2026: "give me buttons and an other
+# selection rather than making me type"). Peak sends a tapped option back as his message
+# (data "dev:say:<text>"); "Other" opens the keyboard.
+_OPTIONS_RE = re.compile(r"\s*<options>(.*?)</options>\s*", re.I | re.S)
+OTHER_BUTTON = {"text": "Other…", "data": "dev:other"}
 
 DEV_PROMPT = """\
 You are in the Dev tab of Peak, Jamie's coaching web app. This chat is for building and
@@ -52,7 +57,13 @@ restart the API (claudecoach-api), or agrees to it, end your reply with
 <restart>api</restart>. Peak restarts it a few seconds after your reply is delivered,
 once athletes' replies in flight have finished (about a second of downtime). When he asks
 to restart or reboot the VM, end your reply with <restart>vm</restart>: he gets a confirm
-button. Never emit either unless he asked or agreed in this conversation."""
+button. Never emit either unless he asked or agreed in this conversation.
+
+Choices: whenever you ask Jamie to pick between options, end the reply with
+<options>1. Short label|2. Short label|3. Short label</options> (2 to 5 options, each
+under 40 characters, matching the numbered options in your reply). Peak shows them as
+buttons plus an "Other" button, so he taps instead of typing; a tap arrives as that
+label as his message. Only for a real choice, never on a reply that asks nothing."""
 
 # Set by server.py: called (slug, reply_text) when a reply finishes, for a phone
 # notification (the service worker hides it while Peak is on screen).
@@ -158,6 +169,18 @@ def _fresh_prompt(slug: str, text: str) -> str:
             "\n\n---\n\nJamie's new message:\n\n" + text)
 
 
+def split_options(text: str) -> tuple[str, list]:
+    """(reply without the marker, button rows). The last marker wins; none -> []."""
+    found = _OPTIONS_RE.findall(text or "")
+    body = _OPTIONS_RE.sub("\n", text or "").strip()
+    if not found:
+        return body, []
+    opts = [o.strip()[:80] for o in found[-1].split("|") if o.strip()][:6]
+    if not opts:
+        return body, []
+    return body, [[{"text": o, "data": "dev:say:" + o}] for o in opts] + [[OTHER_BUTTON]]
+
+
 def split_restart(text: str) -> tuple[str, str | None]:
     """(reply without the marker, "api" / "vm" / None). The last marker wins."""
     found = _RESTART_RE.findall(text or "")
@@ -174,7 +197,7 @@ def _run(engine, prompt: str, sid: str | None, sink: Sink, run) -> tuple:
         except StopIteration as stop:
             return stop.value
         if ev[0] == "chunk" and ev[1]:
-            sink.put("draft", split_restart(ev[1])[0])
+            sink.put("draft", split_options(split_restart(ev[1])[0])[0])
         elif ev[0] == "status":
             sink.put("status", " · ".join(x for x in ev[1:] if x)[:140])
 
@@ -204,13 +227,15 @@ def start_turn(slug: str, text: str) -> Sink:
                 final, streamed, new_sid, rc, _, _ = _run(
                     engine, _fresh_prompt(slug, text), None, sink, run)
             reply, restart = split_restart(final or streamed or "")
+            reply, option_rows = split_options(reply)
             if run.cancelled:
                 reply = (reply + "\n\n" if reply else "") + \
                     f"_Stopped after {MAX_SECS // 60} minutes._"
             if not reply:
                 raise RuntimeError(f"no reply (exit {rc})")
             _save_session(slug, new_sid)
-            extra = {"buttons": VM_BUTTON} if restart == "vm" else {}
+            rows = option_rows + (VM_BUTTON if restart == "vm" else [])
+            extra = {"buttons": rows} if rows else {}
             _append(slug, "coach", reply, **extra)
             sink.put("message", reply, **extra)
             if restart == "api":

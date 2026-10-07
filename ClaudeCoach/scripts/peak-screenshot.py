@@ -14,6 +14,7 @@ message is sent: only GETs are forwarded.
 from __future__ import annotations
 
 import argparse
+import json
 import mimetypes
 import os
 import socket
@@ -71,6 +72,9 @@ def main() -> None:
     ap.add_argument("--height", type=int, default=844)
     ap.add_argument("--full", action="store_true", help="whole page, not one screen")
     ap.add_argument("--out", default="/tmp/peak.png")
+    ap.add_argument("--inject-dev", help="JSON file: items appended to the Dev history shown "
+                                         "(screenshot only, nothing is saved)")
+    ap.add_argument("--tap", help="CSS selector to click before the screenshot")
     a = ap.parse_args()
 
     from playwright.sync_api import sync_playwright
@@ -96,7 +100,12 @@ def main() -> None:
                         return route.fulfill(status=403, body="screenshot mode: read only")
                     try:
                         r = urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=30)
-                        return route.fulfill(status=r.status, body=r.read(),
+                        body = r.read()
+                        if a.inject_dev and path.startswith("/api/dev/history"):
+                            j = json.loads(body)
+                            j["history"] = j.get("history", []) + json.loads(Path(a.inject_dev).read_text())
+                            body = json.dumps(j).encode()
+                        return route.fulfill(status=r.status, body=body,
                                              headers={"content-type": r.headers.get("content-type", "")})
                     except urllib.error.HTTPError as e:
                         return route.fulfill(status=e.code, body=e.read())
@@ -116,6 +125,11 @@ def main() -> None:
             else:
                 page.evaluate(f"window.scrollTo(0, {int(a.scroll)})")
             page.wait_for_timeout(800)
+            if a.tap:
+                page.click(a.tap)
+                page.wait_for_timeout(1200)
+                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                page.wait_for_timeout(500)
             page.screenshot(path=a.out, full_page=a.full)
             b.close()
     finally:

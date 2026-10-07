@@ -1066,10 +1066,22 @@
         if (!devTab() || chatState.busy) return;
         var log = $('#chatLog');
         log.innerHTML = '';
-        (j.history || []).forEach(function (m) {
+        var hist = j.history || [], lastMe = -1;
+        hist.forEach(function (m, i) { if (m.who === 'me') lastMe = i; });
+        hist.forEach(function (m, i) {
           if (m.who === 'me') bubble('me', m.text).setAttribute('data-t', devStamp(m.ts));
-          else coachItem(m.text, m.buttons, m.photo ? '/api/media/' + encodeURIComponent(m.photo) : null,
-                         m.error ? 'err' : '', m.id);
+          else {
+            var el = coachItem(m.text, m.buttons, m.photo ? '/api/media/' + encodeURIComponent(m.photo) : null,
+                               m.error ? 'err' : '', m.id);
+            // options he has already answered (a later message of his) can't be tapped again
+            if (i < lastMe && el) {
+              var box = el.querySelector('.btns'), next = hist.slice(i + 1).filter(function (x) {
+                return x.who === 'me'; })[0];
+              var hit = box && next && Array.prototype.filter.call(box.querySelectorAll('button'),
+                function (x) { return x.getAttribute('data-cb') === 'dev:say:' + next.text; })[0];
+              lockOptions(box, hit || null);
+            }
+          }
         });
         if (!(j.history || []).length && !j.busy) {
           log.innerHTML = '<div class="empty">Ask for a fix or a feature. This chat works on the code, ' +
@@ -1111,6 +1123,13 @@
       if (confirmed) return;
       setTimeout(function () { btn.disabled = false; btn.textContent = label; }, what === 'vm' ? 60000 : 10000);
     });
+  }
+
+  // Dev options: once answered, every option greys out and the one he tapped stays marked.
+  function lockOptions(box, picked) {
+    if (!box || !box.querySelector('button[data-cb^="dev:say:"], button[data-cb="dev:other"]')) return;
+    Array.prototype.forEach.call(box.querySelectorAll('button'), function (x) { x.disabled = true; });
+    if (picked) picked.classList.add('picked');
   }
 
   function addButtons(el, rows) {
@@ -1442,6 +1461,14 @@
     if (!b || chatState.busy) return;
     var cb = b.getAttribute('data-cb') || '';
     if (cb.indexOf('dev:restart:') === 0) { devRestart(cb.slice(12), b, true); return; }
+    if (cb === 'dev:other') { $('#chatIn').focus(); return; }       // type an answer instead
+    if (cb.indexOf('dev:say:') === 0) {                              // a tapped option is his reply
+      if (chatState.devBusy) return;
+      lockOptions(b.closest('.btns'), b);
+      bubble('me', cb.slice(8)).setAttribute('data-t', devStamp());
+      streamTurn('/api/dev/chat', JSON.stringify({ text: cb.slice(8) }), 'application/json');
+      return;
+    }
     if (cb.indexOf('peak:install:') === 0) {          // handled here, not by the coach
       b.classList.add('picked');
       showInstall(cb.slice(13), b.closest('.msg'));
