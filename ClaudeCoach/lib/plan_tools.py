@@ -1611,7 +1611,20 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
     if phase == "taper" and race_d and (race_d - today).days > _STALE_TAPER_DAYS:
         # The week count ran off the end of the phases but the race is not close: the
         # plan_start belongs to an earlier race. Never taper on that (29 Sep 2026: a
-        # 27-weeks-out marathon read as taper). No target until the block is re-anchored.
+        # 27-weeks-out marathon read as taper). With a configured maintenance CTL the
+        # athlete is in the off-season before a far-off A race: hold that CTL (floor
+        # 7 x CTL), not the old race's phase milestones (Brighton, 9 Oct 2026).
+        mct, mct_source = maintenance_ctl(cfg)
+        if mct is not None and mct_source == "configured":
+            hold = int(round(7 * mct))
+            return {"phase": "base", "week_type": "offseason", "training_week": week_now,
+                    "ctl_today": ctl_today, "race_date": race_s,
+                    "maintenance_ctl": mct, "maintenance_ctl_source": mct_source,
+                    "weekly_tss_floor": hold, "required_weekly_tss": hold,
+                    "recommended_weekly_tss": hold,
+                    "note": f"OFF-SEASON BASE, {(race_d - today).days // 7} weeks to "
+                            f"{race_s}: hold CTL {mct:g} (~{hold} TSS/wk). This is NOT a "
+                            "taper."}
         return {"error": f"plan_start {cfg.get('plan_start')} predates the plan for the "
                          f"race on {race_s} ({(race_d - today).days // 7} weeks away): set "
                          "a new plan_start and phase_tss for this block before prescribing "
