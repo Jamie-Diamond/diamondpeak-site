@@ -611,7 +611,7 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
     try:
         result = claude_call.run_claude(
             open(prompt_file).read(),
-            model=claude_call.SONNET, allowed_tools=TOOLS,
+            model=claude_call.HAIKU, allowed_tools=TOOLS,   # Haiku 5.5, Sonnet fallback (9 Oct 2026)
             cwd=PROJECT_DIR, timeout=None, label=slug,
         )
         output = result.stdout.strip()

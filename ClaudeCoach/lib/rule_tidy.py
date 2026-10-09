@@ -94,7 +94,9 @@ Reply with JSON only: [{{"id": "...", "topic": "...", "summary": "..."}}]"""
 
 def _llm(prompt: str, label: str) -> str:
     import claude_call
-    r = claude_call.run_claude(prompt, model=claude_call.SONNET, fallback=[claude_call.OPUS],
+    # Haiku 5.5 (Jamie, 9 Oct 2026: behind-the-scenes jobs off Sonnet); the Opus sweep
+    # below still reviews the result.
+    r = claude_call.run_claude(prompt, model=claude_call.HAIKU, fallback=[claude_call.SONNET],
                                timeout=240, label=f"rule-tidy:{label}")
     return (r.stdout or "").strip() if r.returncode == 0 else ""
 
@@ -118,6 +120,15 @@ def _confirmation(text: str) -> str:
     return m[-1].group(0) if m else ""
 
 
+def _llm_check(prompt: str, label: str) -> str:
+    """The did-anything-get-lost check stays on Sonnet: it is the guard on a rewrite of a
+    rule the coach follows, so it is not moved to Haiku with the rest (9 Oct 2026)."""
+    import claude_call
+    r = claude_call.run_claude(prompt, model=claude_call.SONNET, fallback=[claude_call.OPUS],
+                               timeout=240, label=f"rule-tidy-check:{label}")
+    return (r.stdout or "").strip() if r.returncode == 0 else ""
+
+
 def tidy_one(text: str, label: str, llm=_llm) -> dict | None:
     """{"rule", "backstory"} for one rule's text (tag stripped), or None when it could not
     be shortened safely."""
@@ -130,7 +141,8 @@ def tidy_one(text: str, label: str, llm=_llm) -> dict | None:
         new = new.rstrip(". ") + f". ({conf})"           # stays locked for the capture guard
     if len(new) >= len(text) or not str(got.get("backstory") or "").strip():
         return None                                      # nothing that wasn't instruction
-    check = _json(llm(CHECK_PROMPT.format(orig=text, new=new), label) or "")
+    checker = _llm_check if llm is _llm else llm        # tests pass one fake for both
+    check = _json(checker(CHECK_PROMPT.format(orig=text, new=new), label) or "")
     if not isinstance(check, dict) or check.get("ok") is not True:
         return None
     return {"rule": new, "backstory": str(got.get("backstory") or "").strip()}

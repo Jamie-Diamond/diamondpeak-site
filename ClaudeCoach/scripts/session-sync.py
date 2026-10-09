@@ -50,7 +50,7 @@ BUGFIXER        = BASE / "scripts/bug-fixer.py"
 LOG_DIR         = Path.home() / "Library/Logs/ClaudeCoach"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-MODEL   = "sonnet"
+MODEL   = "haiku"     # Haiku 5.5 for behind-the-scenes jobs (Jamie, 9 Oct 2026)
 TOOLS   = "Read,Write,Edit"
 
 # Do not re-kick the reviewed consolidation more than once a day per athlete, even while the
@@ -507,10 +507,10 @@ def run_athlete(slug: str, athlete_cfg: dict, claude_pass: bool = False) -> None
     else:
         _log(f"nightly pass: running sync (rules={rule_count}/{CEILING})")
         with open(log_file, "a") as lf:
-            # Sonnet -> Haiku fallback (frequent, low-stakes): keeps sync alive when
-            # the Sonnet weekly bucket is maxed, without draining the all-models pool.
+            # Haiku 5.5 first (Jamie, 9 Oct 2026: behind-the-scenes jobs off Sonnet);
+            # claude_call falls back to Sonnet if Haiku fails.
             result = claude_call.run_claude(
-                prompt, model=claude_call.SONNET, allowed_tools=TOOLS,
+                prompt, model=claude_call.HAIKU, allowed_tools=TOOLS,
                 stderr=lf, cwd=PROJECT_DIR, timeout=300, label=slug,
             )
         model_ok = result.returncode == 0
