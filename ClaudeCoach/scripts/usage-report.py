@@ -50,10 +50,16 @@ PRICES = {
     "claude-opus-4-8":  (5.0, 25.0, 0.50),
     "claude-opus-4-7":  (5.0, 25.0, 0.50),
     "claude-opus-4-6":  (5.0, 25.0, 0.50),
-    "claude-sonnet-5-5": (2.0, 10.0, 0.20),   # checked on the live pricing page 28 Sep 2026
+    "claude-sonnet-5-5": (2.0, 10.0, 0.10),   # cache hits 0.05x input (pricing page, 9 Oct 2026)
     "claude-sonnet-5":  (2.0, 10.0, 0.20),
     "claude-sonnet-4-6": (3.0, 15.0, 0.30),
+    "claude-haiku-5-5": (0.10, 0.50, 0.01),   # prompts up to 100k tokens (pricing page, 9 Oct 2026)
     "claude-haiku-4-5": (1.0, 5.0, 0.10),
+}
+# Models priced higher once a prompt passes LONG_PROMPT tokens (input + cache reads + writes).
+LONG_PROMPT = 100_000
+LONG_PRICES = {
+    "claude-haiku-5-5": (0.50, 2.50, 0.05),
 }
 
 
@@ -77,6 +83,10 @@ def cost(model: str, u: dict, writes_5m: bool = False) -> float:
             UNPRICED.add(model)
         return 0.0
     p_in, p_out, p_read = PRICES[k]
+    prompt_tokens = ((u.get("input_tokens") or 0) + (u.get("cache_read_input_tokens") or 0)
+                     + (u.get("cache_creation_input_tokens") or 0))
+    if k in LONG_PRICES and prompt_tokens > LONG_PROMPT:
+        p_in, p_out, p_read = LONG_PRICES[k]
     cc = u.get("cache_creation") or {}
     w1h = cc.get("ephemeral_1h_input_tokens")
     w5m = cc.get("ephemeral_5m_input_tokens")
