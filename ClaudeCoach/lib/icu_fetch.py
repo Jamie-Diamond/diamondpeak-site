@@ -400,6 +400,13 @@ def main():
     if ep == "push_workout" and fields.get("date") and not fields.get("event_date"):
         fields["event_date"] = str(fields.pop("date"))
 
+    # CC_READ_ONLY=1: a test run (e.g. a model side-by-side, 9 Oct 2026) may read but
+    # never change the calendar or an activity.
+    if os.environ.get("CC_READ_ONLY") == "1" and ep in (
+            "push_workout", "edit_workout", "edit_activity", "delete_workout"):
+        print(f"ERROR: read-only run: {ep} is not allowed here.", file=sys.stderr)
+        sys.exit(2)
+
     _aviol = authority_violation(ep, args.authority, payload_date(fields))
     if _aviol:
         print(_aviol, file=sys.stderr)
