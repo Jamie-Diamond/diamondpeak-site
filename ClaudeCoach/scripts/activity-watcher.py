@@ -260,7 +260,7 @@ Step 3 — For the most recent activity that is NOT already in session-log.json:
   For WeightTraining / Strength:
     {{
       "activity_id": "<id>", "date": "<YYYY-MM-DD>", "name": "<name>", "sport": "Strength",
-      "tss": <tss or null>, "duration_min": <duration>,
+      "tss": <tss or null>, "duration_min": <duration>, "avg_hr": <avg_hr or null>,
       "rpe": null, "feel": null, "notes": null, "logged_at": "<current datetime as YYYY-MM-DDTHH:MM:SS>", "stub": true
     }}
 
@@ -1044,6 +1044,22 @@ def _chat_has_recent_feedback(slug, lookback_minutes=30):
     return False
 
 
+MIN_ASK_MIN = 15      # warm-up / cool-down bits: never asked about (Jamie's 3 and 10 min rides, 7 Oct)
+
+
+def _too_short_to_ask(e: dict) -> bool:
+    try:
+        return 0 < float((e or {}).get("duration_min") or 0) < MIN_ASK_MIN
+    except (TypeError, ValueError):
+        return False
+
+
+def _strength_with_hr(e: dict) -> bool:
+    """A strength session recorded with heart rate: its load comes from HR, so RPE is never
+    asked for it, by card or reminder (Jamie, 7 Oct 2026)."""
+    return (e or {}).get("sport") in ("Strength", "WeightTraining") and bool((e or {}).get("avg_hr"))
+
+
 def _send_followup_nudge(state, session_log_f, chat_id, injuries=None, state_file=None, slug=None):
     """If any stub from today is >2h old with rpe=null and hasn't been nudged, send one re-ping."""
     if not session_log_f.exists():
@@ -1069,6 +1085,8 @@ def _send_followup_nudge(state, session_log_f, chat_id, injuries=None, state_fil
             if e.get("injury_pain_during") is not None or e.get("rpe") is not None:
                 continue
         elif e.get("rpe") is not None:
+            continue
+        if _strength_with_hr(e) or _too_short_to_ask(e):   # never asked about at all
             continue
         # Only nudge for today's activities — don't nag about old stubs
         if e.get("date", "") != today_str:
@@ -1933,6 +1951,7 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
                                   since=ask_gate.entry_synced_at(new_entry))
         for _k in _kb_kinds)
     if (new_entry and not already_discussed and not _kb_known
+            and not _strength_with_hr(new_entry) and not _too_short_to_ask(new_entry)
             and new_entry.get("sport", "").lower() not in _WATER_SPORTS):
         sport = new_entry.get("sport", "")
         dur = new_entry.get("duration_min", 0) or 0
@@ -1947,6 +1966,13 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
             _log_to_history(slug, hdr)
         except Exception:
             pass
+        # The card IS the ask: it stays in the chat to tap, so the 2-hour reminder must not
+        # ask the same thing again in words (Jamie, 9 Oct 2026: "stop asking for the RPE
+        # twice" - every debrief got the card and then "RPE for the run? (1-10)").
+        _nudged = set(state.get("nudged_ids") or [])
+        _nudged.add(str(activity_id))
+        state["nudged_ids"] = list(_nudged)
+        save_state(state, state_file)
 
     _send_followup_nudge(state, session_log_f, chat_id, injuries=injuries, state_file=state_file, slug=slug)
 
