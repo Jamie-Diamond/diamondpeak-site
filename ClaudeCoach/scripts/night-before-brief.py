@@ -61,7 +61,50 @@ def _block_fact(athlete_cfg, today):
     return f"You have {weeks} weeks of work behind you for this one" if weeks >= 2 else ""
 
 
-def _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries, long_run_cap_km=None):
+def _pace_bands(events, run_threshold) -> list[str]:
+    """Each "NN-MM% Pace" in tomorrow's run steps as a /km band, worked out here so the model
+    quotes it rather than doing the sum (9 Oct 2026: two models gave 4:35-5:10 and
+    4:36-5:12 for the same 78-88% of 4:02). Pace = threshold / fraction."""
+    import re
+    m = re.match(r"\s*(\d+):(\d{2})", str(run_threshold or ""))
+    if not m:
+        return []
+    thr = int(m.group(1)) * 60 + int(m.group(2))
+
+    def fmt(sec):
+        sec = int(round(sec))
+        return f"{sec // 60}:{sec % 60:02d}"
+    out = []
+    for e in events or []:
+        if (e.get("category") or "WORKOUT").upper() != "WORKOUT":
+            continue
+        for lo, hi in re.findall(r"(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)%\s*Pace",
+                                 str(e.get("description") or "")):
+            band = f"{lo}-{hi}% Pace = {fmt(thr / (float(hi) / 100))}-{fmt(thr / (float(lo) / 100))}/km"
+            if band not in out:
+                out.append(band)
+    return out
+
+
+def _form_and_cap(client, today: date) -> tuple[str, str]:
+    """("+20.9 (Fresh)", "146") from Intervals.icu: today's Form (CTL - ATL) with the
+    morning card's bands (> +10 Fresh, < -20 Heavy, else In training), and the top of the
+    run Z2 HR zone. Worked out here so the brief quotes them: left to the model, two runs
+    of the same prompt gave Form +21 and +14.5, and one gave no HR cap at all."""
+    form = cap = ""
+    rows = [r for r in client.get_wellness(days=2) or [] if r.get("id") == today.isoformat()]
+    if rows and rows[0].get("ctl") is not None and rows[0].get("atl") is not None:
+        v = float(rows[0]["ctl"]) - float(rows[0]["atl"])
+        form = f"{v:+.1f} ({'Fresh' if v > 10 else 'Heavy' if v < -20 else 'In training'})"
+    for ss in client.get_sport_settings() or []:
+        if "Run" in (ss.get("types") or []) and len(ss.get("hr_zones") or []) > 1:
+            cap = str(ss["hr_zones"][1])
+            break
+    return form, cap
+
+
+def _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries, long_run_cap_km=None,
+                  pace_bands=None, form="", hr_cap=""):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -90,6 +133,17 @@ def _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries
         thresholds.append(f"swim CSS {css}/100m")
     threshold_line = f"{first_name}: " + ", ".join(thresholds) + "." if thresholds else ""
 
+    # Step 2 only for an ACTIVE injury: run unconditionally it pulled stale notes from
+    # current-state.json into the brief (an old Achilles line for Jamie, cleared ankle).
+    step2 = (f"Step 2 — Read ClaudeCoach/athletes/{slug}/current-state.json for the active "
+             "injury's last pain score only." if injuries else
+             "Step 2 — No active injury: say nothing about injuries.")
+    bands_line = ("Pace bands, already worked out (quote exactly): " + "; ".join(pace_bands)
+                  if pace_bands else "")
+    form_line = f"Form for the brief, already worked out (quote exactly): {form}" if form else ""
+    cap_line = (f"Run HR cap for easy/Z2 running: {hr_cap} bpm (top of Z2 in Intervals.icu)"
+                if hr_cap else "")
+
     # Run-specific notes for injury athletes
     run_note = ""
     if injuries:
@@ -105,7 +159,13 @@ Step 1 — Fetch data via Bash:
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint events --start {tomorrow} --end {tomorrow}
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint wellness --days 3
 
-Step 2 — Read ClaudeCoach/athletes/{slug}/current-state.json (last injury pain score, if any).
+{step2}
+
+Reference for working out targets (NEVER print these lines; they are not part of the brief):
+  {threshold_line or "no thresholds on file"}
+  {bands_line}
+  {form_line}
+  {cap_line}
 
 Step 3 — If no events tomorrow, or only events with planned Load < 30 AND duration < 40 min: output nothing. Stop.
 {long_run_cap_block}
@@ -118,14 +178,14 @@ Ride: • NP target [W] (IF [X.XX]) • HR cap [bpm]
 Run: • Target pace [/km] • HR cap [bpm]{run_note}
 Swim: • Target pace [/100m] vs CSS {css or '?'} • Main set structure
 Strength: • Main focus • Key movements
+Numbers (pace bands, power, HR caps, durations, Load) are copied EXACTLY as the planned
+event or the data gives them: never round, re-derive or tidy a figure.
 
 *Nutrition:* [g/hr carbs + ml/hr fluid — calibrated to session length and intensity. Zero if easy/recovery.]
 *Sleep:* ≥8h tonight
 *Form:* [value] ([Fresh / In training / Heavy]){injury_flag}
 
-{threshold_line}
-Race: {race_name}
-Keep the entire brief under 120 words. Never ask questions.
+The brief ends at the Form line. Keep the entire brief under 120 words. Never ask questions.
 Wrap your entire output in <telegram> and </telegram> tags. If Step 3 says output nothing, output empty tags: <telegram></telegram>. Output nothing outside those tags."""
 
 
@@ -183,6 +243,7 @@ def run_athlete(slug, athlete_cfg):
     # Pre-compute tomorrow's long-run distance cap the same way morning-checkin
     # does, so a long run can't be quoted past the progression ceiling here either.
     long_run_cap = None
+    events = []
     try:
         from primitives.modulation import classify_session_type as _lr_classify
         from icu_api import IcuClient as _Icu
@@ -219,8 +280,20 @@ def run_athlete(slug, athlete_cfg):
                            detail="silent (race day, by design)")
         return
 
+    try:
+        pace_bands = _pace_bands(events, run_threshold)
+    except Exception:
+        pace_bands = []
+    form = hr_cap = ""
+    try:
+        from icu_api import IcuClient as _Icu2
+        _c = json.loads(ATHLETES_CONFIG.read_text())[slug]
+        form, hr_cap = _form_and_cap(_Icu2(_c["icu_athlete_id"], _c["icu_api_key"]), date.today())
+    except Exception as exc:
+        print(f"[{slug}] form / HR cap pre-compute failed: {exc}", file=sys.stderr)
     prompt = _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries,
-                           long_run_cap_km=long_run_cap)
+                           long_run_cap_km=long_run_cap, pace_bands=pace_bands,
+                           form=form, hr_cap=hr_cap)
     prompt += coaching_prefs.prompt_note(slug)
 
     with open(log_file, "a") as lf:

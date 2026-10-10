@@ -11,7 +11,7 @@ import outbox   # noqa: E402
 import shadow   # noqa: E402
 
 from datetime import date, timedelta   # noqa: E402
-if date.today() != shadow.SHADOW_UNTIL + timedelta(days=1):   # the cron line is yearly
+if date.today() != shadow.SHADOW_UNTIL + timedelta(days=1):   # cron runs it daily; it posts once
     sys.exit(0)
 
 runs = list(shadow.SHADOW_DIR.glob("*/*.json"))
@@ -22,5 +22,6 @@ cid = json.loads((BASE / "config" / "athletes.json").read_text())["jamie"]["chat
 parts = ", ".join(f"{n} {k}" for k, n in sorted(by.items())) or "none"
 outbox.record(cid, f"*Haiku shadow week finished.* {len(runs)} messages written alongside "
                    f"Sonnet's ({parts}), none sent.\n\nAsk me here to *review the shadow week* "
-                   "and I'll compare them and recommend what can move to Haiku.",
+                   "and I'll trace each difference to the prompt that allowed it, fix the prompts, "
+                   "then recommend what can move to Haiku.",
               source="dev-session", tab="dev")

@@ -14,6 +14,14 @@ activity debrief, launch() starts a DETACHED Haiku run of the same prompt:
   - saved with Sonnet's output to SHADOW_DIR/<date>/<job>-<slug>-<time>.json
 
     python3 lib/shadow.py --report [--days 7]     the pairs, for review
+
+How to review (Jamie, 10 Oct 2026: "we need to not say it's Haiku that's the issue, it's
+probably our prompting"): a difference is a finding about the PROMPT first. For each one,
+find what in the prompt allowed it - an unlabelled data line printed as copy, a sum left to
+the model, a step that pulls stale notes, a value with no stated source - and fix that,
+so the message comes out right on any model. Only what survives a fixed prompt counts
+against the model. The 9-10 Oct night-before fixes (scripts/night-before-brief.py) are
+the worked example.
 """
 from __future__ import annotations
 
