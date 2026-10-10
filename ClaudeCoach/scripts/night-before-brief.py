@@ -13,6 +13,7 @@ LOG_DIR         = Path.home() / "Library/Logs/ClaudeCoach"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(BASE / "lib"))
 import coaching_prefs  # noqa: E402  heat / fuelling switches
+import shadow          # noqa: E402  shadow week (Haiku twin, never sent)
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 import claude_call
 import ops_log
@@ -230,6 +231,7 @@ def run_athlete(slug, athlete_cfg):
 
     import re as _re
     raw = (result.stdout or "").strip()
+    shadow.launch("night", slug, prompt, raw)       # Haiku twin, never sent (lib/shadow.py)
     m = _re.search(r"<telegram>(.*?)</telegram>", raw, _re.DOTALL)
     output = _strip_questions(m.group(1)) if m else ""
     # HEARTBEAT. Silence is a legitimate outcome here — the prompt is instructed to

@@ -3,7 +3,7 @@
 Check for new activities and send a brief analysis to Telegram.
 Run every 15 min via cron. Loops over all active athletes. Skips if already running.
 """
-import json, os, ssl, subprocess, sys, time, urllib.request
+import json, os, re, ssl, subprocess, sys, time, urllib.request
 from datetime import datetime, date, timedelta
 from pathlib import Path
 
@@ -59,6 +59,7 @@ import acknowledgement as ack_lib   # §8.3 milestone triggers, evaluated in Pyt
 import ask_gate                    # asked-and-answered + one-question-per-message gate
 import coaching_prefs              # heat / fuelling switches (profile.json)
 import fuel_basis                  # race vs non-race fuelling figure
+import shadow                      # shadow week: Haiku twin of the debrief, never sent
 from strength_ask import strength_ask   # strength debrief question (RPE only without HR)
 import ops_log
 import write_verify            # read-back verdicts for the Strava writes below
@@ -1738,6 +1739,13 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     if not output:
         print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Claude returned no output", file=sys.stderr)
         return
+    # Shadow week (lib/shadow.py): Haiku writes the same debrief, read-only, never sent.
+    _ids = re.findall(r"^ACTIVITY_ID:\s*(i?\d+)", output, re.M)
+    if _ids:
+        shadow.launch("debrief", slug, prompt, output, note=(
+            "TEST RE-RUN, READ-ONLY: the live run has just logged activity "
+            f"{', '.join(_ids)} to session-log.json. Analyse it as NEW, exactly as if it were "
+            "not logged yet. Do not write any file; output only."))
 
     activity_id = None
     decoupling_raw = None

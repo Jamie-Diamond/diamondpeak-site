@@ -16,6 +16,7 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(BASE / "lib"))
 import coaching_prefs  # noqa: E402  heat / fuelling switches
 import fuel_basis      # noqa: E402  race vs non-race fuelling figure
+import shadow          # noqa: E402  shadow week (Haiku twin, never sent)
 sys.path.insert(0, str(BASE / "telegram"))
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 import claude_call
@@ -794,6 +795,7 @@ def run_athlete(slug, athlete_cfg):
         )
 
     raw = (result.stdout or "").strip()
+    shadow.launch("morning", slug, prompt, raw)     # Haiku twin, never sent (lib/shadow.py)
     import re as _re
     m = _re.search(r"<telegram>(.*?)</telegram>", raw, _re.DOTALL)
     output = m.group(1).strip() if m else ""
