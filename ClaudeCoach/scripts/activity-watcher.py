@@ -187,10 +187,10 @@ def _build_prompt(slug, first_name, ftp, injuries, profile=None, run_hr_cap=150,
         f" Your ANALYSIS must be formatted EXACTLY as multiple output lines — each on its own line:"
         f" Line 1 (header): NxDUR / Xmin walk · avg GAP X:XX/km · +/-Xsec vs threshold ({threshold_pace}/km){_thr_note}"
         f" Lines 2..N+1 (one per run rep, use gap_pace if present else pace): Rep N: DUR · GAP X:XX/km · AVGbpm/MAXbpm"
-        f" Final lines: HR zone split · decoupling % if >40 min | RPE and how did it feel?"
+        f" Final lines: HR zone split · decoupling % if >40 min | How did it feel?"
         " Else (continuous run): Line 1 = distance + avg GAP pace vs threshold — state +/- sec/km."
         " Line 2 = HR zone distribution + aerobic decoupling % if >40 min."
-        " Line 3 = \"RPE and how did it feel?\""
+        " Line 3 = \"How did it feel?\" (never ask RPE in text: the Quick log card that follows asks it)"
     )
 
     coaching_level = (profile or {}).get("coaching_level", "mid")
@@ -304,7 +304,7 @@ RIDE:
 RUN:
 {run_injury_ask}
 Running power: if icu_average_watts is not null in activity_detail (Garmin running power configured), add one line after the HR line: "Running power: Xw avg · pace-power check: [brief note if pace and power effort level diverge — e.g. power high vs easy pace = headwind/elevation]". Skip entirely if icu_average_watts is null.
-Easy/Z2 verdict: When characterising run intensity use icu_average_hr (from activity_detail), Z2 ceiling = {run_hr_cap} bpm, zone time breakdown (icu_zone_times or extended_metrics), and total_ascent_m (from activity_detail). Apply deterministically: a run is EASY if avg_hr < {run_hr_cap} bpm AND (Z1+Z2 time) >= 75% of total run time. Do NOT flip to NOT EASY solely because Z3 exceeded 20% when avg_hr < {run_hr_cap} bpm AND total_ascent_m > 40m — terrain-driven HR spikes on climbs are expected in hilly sub-ceiling easy runs.
+Easy/Z2 verdict: When characterising run intensity use icu_average_hr (from activity_detail), Z2 ceiling = {run_hr_cap} bpm, zone time breakdown (icu_zone_times or extended_metrics), and total_ascent_m (from activity_detail). Apply deterministically: a run is EASY if avg_hr < {run_hr_cap} bpm AND (Z1+Z2 time) >= 75% of total run time. The ONE exception: when the TERRAIN CHECK above says terrain DOES explain the time above Z2 and avg_hr < {run_hr_cap} bpm, the run stays EASY and you may say the climbs account for it. Otherwise terrain is never the reason: not from total_ascent_m, not from the route name, and a run with no TERRAIN CHECK line gets no terrain explanation.
 Elevation source: total_elevation_gain / total_elevation_loss / total_ascent_m for a session ALWAYS come from the activity_detail root fields (whole-activity totals). NEVER read elevation from extended_metrics or icu_intervals entries — those are per-segment/per-interval values (often single-digit metres) and will misstate the session's actual terrain by an order of magnitude if quoted as the whole-activity gain.
 
 SWIM:
@@ -318,11 +318,11 @@ SWIM:
   CSS target from profile swim_css_per_100m. Delta = rep_pace_s - css_s (positive = slower than CSS).
   Header: Nx(distance)m · CSS X:XX/100m · avg rep X:XX/100m (+/-Xsec vs CSS)
   Rep lines (one per work lap): Rep N: X:XX/100m (+/-Xsec vs CSS) · AVGbpm
-  Final line: "RPE and how did it feel?"
+  Final line: "How did it feel?" (RPE is asked by the Quick log card, never in text)
 - Pool with NO Strava laps (no strava_id / fetch failed): fall back to icu_intervals WORK
   intervals (type="WORK"), same format, and append "(paces from ICU — read ~2-4s/100m pessimistic)".
 - Else (OWS or neither): use interval_summary from activity detail if present, else distance + avg pace vs CSS +/- seconds.
-  Final line: "RPE and how did it feel?"
+  Final line: "How did it feel?" (RPE is asked by the Quick log card, never in text)
 
 STRENGTH: duration | {strength_q}
 
@@ -521,6 +521,40 @@ def _run_durability_note(slug: str, activity_id: str) -> tuple[str, bool]:
     except Exception as exc:
         print(f"[run-durability:{slug}] {exc}", file=sys.stderr)
         return "", False
+
+
+def _terrain_pass(slug: str, session_log_f: Path) -> str:
+    """lib/terrain.py for each run in the last 2 days not yet in the session log: whether
+    real climbs explain its time above Z2. The debrief may only blame terrain where this
+    says so (Jamie, 10 Oct 2026: James's flat Seville run was told "the Z3 time fits the
+    terrain" off 145 m of summed altimeter noise). Fail-soft: "" on any error."""
+    try:
+        import terrain
+        from icu_api import IcuClient
+        cfg = json.loads(ATHLETES_CONFIG.read_text())[slug]
+        client = IcuClient(cfg["icu_athlete_id"], cfg["icu_api_key"])
+        logged = set()
+        if session_log_f.exists():
+            logged = {str(e.get("activity_id", "")) for e in json.loads(session_log_f.read_text())}
+        runs = [a for a in client.get_training_history(days=2) or []
+                if a.get("type") in ("Run", "TrailRun") and str(a.get("id")) not in logged]
+        if not runs:
+            return ""
+        ceiling = float(cfg.get("run_hr_cap") or 150)
+        for ss in client.get_sport_settings() or []:
+            if "Run" in (ss.get("types") or []) and len(ss.get("hr_zones") or []) > 1:
+                ceiling = float(ss["hr_zones"][1])
+                break
+        lines = []
+        for a in runs:
+            st = hr_quality.streams_by_type(client.get_activity_streams(str(a["id"])))
+            lines.append(terrain.note(a.get("name") or "Run", str(a["id"]),
+                                      terrain.check(st, ceiling), ceiling))
+        return ("TERRAIN CHECK (computed from the altitude and HR streams - authoritative):\n"
+                + "\n".join(lines))
+    except Exception as exc:
+        print(f"[terrain:{slug}] check failed: {exc}", file=sys.stderr)
+        return ""
 
 
 def _hr_quality_pass(slug: str, chat_id: str) -> str:
@@ -1671,6 +1705,9 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
             pass
 
     hr_note = _hr_quality_pass(slug, chat_id)
+    _terr = _terrain_pass(slug, session_log_f)
+    if _terr:
+        hr_note = (hr_note + "\n\n" + _terr).strip()
     prompt = _build_prompt(slug, first_name, ftp, injuries, profile,
                            run_hr_cap=run_hr_cap, nutrition_target=nutrition_target,
                            nutrition_label=nutrition_label,
