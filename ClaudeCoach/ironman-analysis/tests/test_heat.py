@@ -242,3 +242,25 @@ class TestDoseProvenance:
 
     def test_still_refuses_indoor_even_with_override(self):
         assert heat.exposure_entry(_act(temp=30.0, trainer=True, override=True)) is None
+
+
+class TestHeatAcclCli:
+    """heat_accl.py must fail loudly on a bad athlete, never print a plausible 0%."""
+
+    SCRIPT = REPO / "scripts" / "heat_accl.py"
+
+    def _run(self, *args):
+        import subprocess
+        return subprocess.run([sys.executable, str(self.SCRIPT), *args],
+                              capture_output=True, text=True)
+
+    @pytest.mark.parametrize("args", [
+        ("nobody-such",),
+        ("--athlete", "nobody-such"),
+        ("--athlete=nobody-such",),
+        ("--athlete",),
+    ])
+    def test_unknown_athlete_exits_nonzero(self, args):
+        r = self._run(*args)
+        assert r.returncode != 0
+        assert "Heat acclimation" not in r.stdout
