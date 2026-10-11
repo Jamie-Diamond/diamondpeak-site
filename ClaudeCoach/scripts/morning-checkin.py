@@ -41,7 +41,7 @@ TOOLS = "Read,Bash"
 CALLER = "morning-checkin"
 
 
-def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, nutrition_label="race target", heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None, wellness_finalized=True, ask_morning_pain=False, race_block="", ask_weight=False, ask_ankle=True, prescription_note="", post_race_recovery=False):
+def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, nutrition_label="race target", heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None, wellness_finalized=True, ask_morning_pain=False, race_block="", ask_weight=False, ask_ankle=True, prescription_note="", post_race_recovery=False, watchdog_flags=None):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -193,6 +193,10 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
         if prescription_note else ""
     )
 
+    flags_block = ("\n## Watchdog flags to show (pre-selected — authoritative; show each, no others)\n"
+                   + ("\n".join(f"- {f}" for f in watchdog_flags) if watchdog_flags else "- none today")
+                   + "\n")
+
     long_run_cap_block = ""
     if long_run_cap_km is not None:
         long_run_cap_block = (
@@ -205,7 +209,7 @@ You are generating the morning briefing for {first_name}'s training day.
 
 {_level_block(coaching_level)}
 {illness_lib.prompt_block(slug, first_name=first_name)}
-{recovery_block}{wellness_block}{cycle_block}{planned_section}{race_block}{long_run_cap_block}{heat_block}{prescription_block}
+{recovery_block}{wellness_block}{flags_block}{cycle_block}{planned_section}{race_block}{long_run_cap_block}{heat_block}{prescription_block}
 Step 1 — Fetch data via Bash. EVERY icu_fetch.py call you make must carry
 `--caller morning-checkin`. This job reads what is planned and asks how the athlete is; it
 does not write the calendar, and that flag is what makes the refusal automatic rather than a
@@ -215,7 +219,7 @@ rule you have to remember:
 Step 2 — Read:
 - ClaudeCoach/athletes/_shared/persistent-rules.md (GLOBAL coaching rules - apply to every athlete)
 - ClaudeCoach/athletes/{slug}/persistent-rules.md (permanent coaching rules — these override defaults and MUST be followed)
-- ClaudeCoach/athletes/{slug}/current-state.md (open actions, watchdog flags — only surface flags dated within the last 3 days)
+- ClaudeCoach/athletes/{slug}/current-state.md (open actions and travel blocks; watchdog flags are already chosen in the block below — do not pick others from this file)
 - ClaudeCoach/athletes/{slug}/current-state.json (weight_readings, injury pain scores)
 {"- ClaudeCoach/athletes/" + slug + "/heat-log.json (count entries in current ISO week to get sessions_this_week)" if heat_protocol else ""}
 - ClaudeCoach/athletes/{slug}/session-log.json — only if today's planned event is a Ride or Brick >90 min: extract the last 4 entries with sport Ride/GravelRide/Brick, duration_min ≥ 90, and nutrition_g_carb set. Compute each g_per_hr and the avg.
@@ -240,17 +244,20 @@ Use the recovery score and signals ONLY to decide what to flag — do NOT show t
 
 {form_line_rule}
 [If recovery ORANGE or RED: ⚠️ [one plain-English sentence on what to do differently — no scores]]
-[If watchdog flag active: ⚠️ [flag in plain English — one line]]
+[For EACH flag in the "Watchdog flags to show" block: ⚠️ [that flag in plain English, one line, keeping its numbers]. None listed: no flag line.]
 [If the pre-verified 05:00 prescription check block above is present and says today's session was modified or swapped: 🔁 [what changed and why — one plain line, e.g. "Swapped to easy spin — HRV low". If it confirmed the session as planned, or the block is absent, say nothing]]
 {cycle_card_line}
 [If today's session is Ride or Brick >90 min: 🍌 Nutrition — target {fuel_target_g_hr}g/hr (progress toward {nutrition_race}g/hr {nutrition_label}) · eat at 15 min then every 25 min]
-[If any travel block, race, or constraint from current-state.md "Travel & training blocks" starts within 5 days: 📌 [constraint name] in [N] days — [one-line impact]]
+[If any travel block, race, or constraint from current-state.md "Travel & training blocks" STARTS or ENDS within 5 days, or a training plan or goal block starts within 5 days: 📌 [what] in [N] days — [one-line impact], e.g. "Back from your trip in 2 days. Monday's hamstring strength starts the week."]
 [If open action is due within 3 days: 📌 [action] due [date]]
 {heat_card_line}
 
 [Question if applicable — one line]
 
 {countdown_line}
+
+ORDER is fixed: greeting, Today, the flag/📌/🍌 lines, then the question (if any), then the
+countdown line above, copied exactly, as the LAST line. It is always there; nothing goes after it.
 
 Rules:
 - Sleep/HRV/RHR: use ONLY the pre-fetched wellness line above — never infer or estimate values yourself.
@@ -431,6 +438,44 @@ def _race_focus(slug, profile, athlete_cfg):
     except Exception as exc:
         print(f"[{slug}] race focus derivation failed: {exc}", file=sys.stderr)
         return []
+
+
+_FLAG_RE = None
+
+
+def _recent_flags(adir: Path, today: date, days: int = 3, cap: int = 2) -> list[str]:
+    """Watchdog flags the card shows, chosen here (11 Oct 2026). "If watchdog flag active"
+    was left to the model: on the same card Haiku showed Kathryn's real T10 run-volume flag
+    and Sonnet left it out. Flags dated within `days`, minus any whose own text says no
+    action is needed (Jamie's paused-heat T7) and T9 (the open-actions list: internal
+    housekeeping, and the card has its own open-action line), newest first then Tier 1,
+    at most `cap`."""
+    import re
+    global _FLAG_RE
+    _FLAG_RE = _FLAG_RE or re.compile(
+        r"^- \*\*(\d{4}-\d{2}-\d{2}) — (T\d+) \(Tier (\d)\):\*\*\s*(.+)$")
+    try:
+        text = (adir / "current-state.md").read_text()
+    except OSError:
+        return []
+    sec = text.split("## Watchdog flags", 1)
+    if len(sec) < 2:
+        return []
+    body = sec[1].split("\n## ", 1)[0]
+    out = []
+    for line in body.splitlines():
+        m = _FLAG_RE.match(line.strip())
+        if not m:
+            continue
+        try:
+            age = (today - date.fromisoformat(m.group(1))).days
+        except ValueError:
+            continue
+        if not 0 <= age <= days or "no action" in m.group(4).lower() or m.group(2) == "T9":
+            continue
+        out.append((int(m.group(3)), m.group(1), f"{m.group(2)}: {m.group(4).strip()}"))
+    out.sort(key=lambda x: (x[1], -x[0]), reverse=True)     # newest date, then Tier 1
+    return [t for _, _, t in out[:cap]]
 
 
 def _post_race_recovery(athlete_cfg) -> bool:
@@ -781,7 +826,8 @@ def run_athlete(slug, athlete_cfg):
                            long_run_cap_km=_long_run_cap_km,
                            wellness_finalized=wellness_finalized,
                            prescription_note=prescription_note,
-                           post_race_recovery=_post_race_recovery(athlete_cfg))
+                           post_race_recovery=_post_race_recovery(athlete_cfg),
+                           watchdog_flags=_recent_flags(adir, date.today()))
     prompt += coaching_prefs.prompt_note(slug)
 
     with open(log_file, "a") as lf:
