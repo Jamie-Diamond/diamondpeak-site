@@ -9,6 +9,11 @@ asked about. The buttons are handled in telegram/bot.py (_handle_rule_check).
 Skips tracking-only athletes (they asked for a tracker, not a coach), inactive ones and
 anyone with `rule_check: false` in athletes.json.
 
+Only rules about the athlete are put to them (who == "athlete", lib/rule_tidy.classify_who).
+Rules about how the coach works go to Jamie instead, one a week across all athletes, in
+Peak's Dev tab (Jamie, 11 Oct 2026: "we can't have confusing stuff like that going to
+athletes. And if so it's a dev question in that context").
+
 Crontab (VM): Sunday 18:45, after the weekly plan.
     python3 ClaudeCoach/scripts/rule-check.py [--dry-run] [--athlete X]
 """
@@ -37,6 +42,37 @@ def message(c: dict) -> tuple[str, dict]:
     return text, markup
 
 
+def coach_message(slug: str, name: str, c: dict) -> tuple[str, dict]:
+    text = (f"*Rule check: how the coach works for {name}*\n\n{c['text']}\n\n"
+            "Still right? To change it, tell me here how it should read.")
+    markup = {"inline_keyboard": [[
+        {"text": "Still right", "callback_data": f"rulec:keep:{slug}:{c['id']}"},
+        {"text": "Drop it", "callback_data": f"rulec:drop:{slug}:{c['id']}"}]]}
+    return text, markup
+
+
+def run_coach(cfg: dict, dry_run: bool = False, base: Path | None = None) -> dict | None:
+    """The longest-unchecked coach rule across active athletes, to Jamie's Dev tab."""
+    base = base or BASE
+    best = None
+    for slug, a in cfg.items():
+        if not isinstance(a, dict) or not a.get("active"):
+            continue
+        c = athlete_rules.next_check(slug, base, who="coach")
+        if c and (best is None or (c.get("last") or "") < (best[2].get("last") or "")):
+            best = (slug, a, c)
+    if not best or "jamie" not in cfg:
+        return None
+    slug, a, c = best
+    text, markup = coach_message(slug, (a.get("name") or slug).split()[0], c)
+    if not dry_run:
+        import outbox
+        if outbox.record(str(cfg["jamie"]["chat_id"]), text, reply_markup=markup,
+                         source="dev-session", parse_mode="Markdown", tab="dev"):
+            athlete_rules.mark_asked(slug, c["id"], base)
+    return {"athlete": slug, "id": c["id"], "summary": c["text"][:120], "to": "dev"}
+
+
 def run(dry_run: bool = False, only: str | None = None, base: Path | None = None) -> list:
     base = base or BASE
     cfg = json.loads((base / "config" / "athletes.json").read_text())
@@ -59,6 +95,10 @@ def run(dry_run: bool = False, only: str | None = None, base: Path | None = None
                              parse_mode="Markdown"):
                 athlete_rules.mark_asked(slug, c["id"], base)
         sent.append({"athlete": slug, "id": c["id"], "summary": c["summary"]})
+    if not only:
+        co = run_coach(cfg, dry_run, base)
+        if co:
+            sent.append(co)
     return sent
 
 

@@ -3253,7 +3253,29 @@ def _handle_baseline_confirm(token, chat_id, data, message_id, athletes):
 def _handle_rule_check(token, chat_id, data, message_id, athletes):
     """rule:keep|change|drop:<slug>:<rule id> from the weekly rule check
     (scripts/rule-check.py, lib/athlete_rules.py). Keep resets its check clock, drop removes
-    it (archived first), change asks for the new wording, which the next chat turn writes."""
+    it (archived first), change asks for the new wording, which the next chat turn writes.
+    rulec:keep|drop:<slug>:<id> is the coach-rule check sent to Jamie's Dev tab: any
+    athlete's rule, tapped from Jamie's chat only."""
+    if data.startswith("rulec:"):
+        parts = data.split(":")
+        if len(parts) != 4 or parts[1] not in ("keep", "drop") \
+                or str(chat_id) != admin_chat_id(load_config()):
+            return False
+        _, verdict, slug, rid = parts
+        import athlete_rules
+        try:
+            if verdict == "keep":
+                athlete_rules.keep(slug, rid)
+                reply, done = f"Kept for {slug}.", "✅ Still right"
+            else:
+                athlete_rules.drop(slug, rid, who="coach")
+                reply, done = f"Dropped for {slug}. The coach stops applying it.", "🗑 Dropped"
+        except LookupError:
+            reply, done = "That rule has already changed since I asked, so nothing to do.", None
+        if message_id and done:
+            edit_keyboard_confirm(token, chat_id, message_id, done)
+        send(token, chat_id, reply)
+        return True
     if not data.startswith("rule:"):
         return False
     parts = data.split(":")

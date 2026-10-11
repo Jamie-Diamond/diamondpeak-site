@@ -143,18 +143,24 @@ def _active(slug: str, base: Path | None = None) -> list:
     return out
 
 
-def groups(slug: str, base: Path | None = None, today: date | None = None) -> dict:
+def groups(slug: str, base: Path | None = None, today: date | None = None,
+           include_coach: bool = False) -> dict:
     """The Your rules page: {"count", "groups": [{"topic", "label", "rules": [...]}],
-    "ended": [...]}. A rule: {id, summary, text, expires, checked}."""
+    "ended": [...]}. A rule: {id, summary, text, expires, checked, who}. Rules about how
+    the coach works (who == "coach", lib/rule_tidy.classify_who) are left off an athlete's
+    page and shown only to the coach (include_coach)."""
     today = today or date.today()
     by_topic = {k: [] for k in TOPIC_KEYS}
     for rid, e, raw in _active(slug, base):
+        if e.get("who") == "coach" and not include_coach:
+            continue
         _tag, expires, text = split_tag(raw)
         topic = e.get("topic") if e.get("topic") in TOPIC_KEYS else guess_topic(text)
         summary = (e.get("summary") if e.get("summary_hash") == e.get("hash") else None) \
             or fallback_summary(text)
         by_topic[topic].append({"id": rid, "summary": summary, "text": text,
-                                "expires": expires, "checked": e.get("confirmed")})
+                                "expires": expires, "checked": e.get("confirmed"),
+                                "who": e.get("who")})
     out = [{"topic": k, "label": label, "rules": by_topic[k]}
            for k, label in TOPICS if by_topic[k]]
     return {"count": sum(len(g["rules"]) for g in out), "groups": out,
@@ -259,23 +265,26 @@ def change(slug: str, rid: str, text: str, base: Path | None = None,
     return {"ok": True, "message": "Changed. That's the version I'll use from now on."}
 
 
-def next_check(slug: str, base: Path | None = None, today: date | None = None) -> dict | None:
+def next_check(slug: str, base: Path | None = None, today: date | None = None,
+               who: str = "athlete") -> dict | None:
     """The single rule most worth asking "still right?" about this week, or None.
 
     Only [perm] rules on a topic that goes out of date (VOLATILE), that have stood at
     least NEW_RULE_GRACE_DAYS, and that have not been confirmed or asked about in the last
     CHECK_AFTER_DAYS. The longest-unchecked one wins. Dated ([expires:]) rules end on their
-    own and are never asked about."""
+    own and are never asked about. Only rules sorted as `who` (lib/rule_tidy.classify_who):
+    an athlete is asked about their own rules, never how the coach works, and an unsorted
+    rule is asked about by no one until it is sorted."""
     today = today or date.today()
     cut = (today - timedelta(days=CHECK_AFTER_DAYS)).isoformat()
     grace = (today - timedelta(days=NEW_RULE_GRACE_DAYS)).isoformat()
     best = None
     for rid, e, raw in _active(slug, base):
         tag, expires, text = split_tag(raw)
-        if expires:
+        if expires or e.get("who") != who:
             continue
         topic = e.get("topic") if e.get("topic") in TOPIC_KEYS else guess_topic(text)
-        if topic not in VOLATILE:
+        if who == "athlete" and topic not in VOLATILE:
             continue
         if (e.get("first_seen") or "") > grace:
             continue
@@ -285,7 +294,8 @@ def next_check(slug: str, base: Path | None = None, today: date | None = None) -
         if best is None or last < best[0]:
             summary = (e.get("summary") if e.get("summary_hash") == e.get("hash") else None) \
                 or fallback_summary(text)
-            best = (last, {"id": rid, "summary": summary, "text": text, "topic": topic})
+            best = (last, {"id": rid, "summary": summary, "text": text, "topic": topic,
+                           "last": last})
     return best[1] if best else None
 
 

@@ -236,6 +236,52 @@ def digest(slug: str, base: Path | None = None, llm=_llm, batch: int = 25) -> in
     return n
 
 
+WHO_PROMPT = """Sort each coaching rule below by who it is for.
+
+athlete: something about THIS athlete they would recognise and could confirm or change -
+  their schedule, body, injuries, kit, places, preferences, goals, or something they asked for.
+coach: how the coach works - methods, calculations, Load/TSS estimation, data handling,
+  planning mechanics, message format - that the athlete would not know or need to judge.
+When unsure, say coach.
+
+Rules:
+{rules}
+
+Reply with JSON only: [{{"id": "...", "who": "athlete" or "coach"}}]"""
+
+
+def classify_who(slug: str, base: Path | None = None, llm=None, batch: int = 30,
+                 force: bool = False) -> int:
+    """Store `who` ("athlete" / "coach") on every rule without one (Jamie, 11 Oct 2026: an
+    internal Load-estimation rule was put to him as an athlete's "still right?" check, and
+    "we can't have confusing stuff like that going to athletes"). Only athlete rules are
+    put to the athlete or shown on their rules page; coach rules go to Jamie in Dev.
+    Sonnet, like the tidy check: a wrong "athlete" sends a coach rule to an athlete."""
+    import rule_registry as rr
+    base = base or BASE
+    llm = llm or _llm_check
+    todo = [(rid, e, raw) for rid, e, raw in ar._active(slug, base)
+            if force or e.get("who") not in ("athlete", "coach")]
+    if not todo:
+        return 0
+    reg = rr.load_registry(base, slug)
+    n = 0
+    for i in range(0, len(todo), batch):
+        chunk = todo[i:i + batch]
+        listing = "\n".join(f"- id {rid}: {ar.split_tag(raw)[2]}" for rid, _e, raw in chunk)
+        got = _json(llm(WHO_PROMPT.format(rules=listing), slug) or "")
+        if not isinstance(got, list):
+            continue
+        for g in got:
+            rid = str((g or {}).get("id"))
+            if rid in reg["rules"] and g.get("who") in ("athlete", "coach"):
+                reg["rules"][rid]["who"] = g["who"]
+                n += 1
+    rr.registry_path(base, slug).write_text(json.dumps(reg, indent=2, sort_keys=True) + "\n",
+                                            encoding="utf-8")
+    return n
+
+
 SWEEP_PROMPT = """Below are ONE athlete's standing coaching rules, and the SHARED rules every
 athlete already gets. Sort each athlete rule:
 - personal: about this athlete - their devices, body, injuries, schedule, races, places,
@@ -445,7 +491,7 @@ def main():
                f"{sum(x['after_words'] for x in t['tidied'])} words), "
                f"left {len(t['skipped'])} as they were")
         if slug != "_shared" and not a.no_digest and not a.dry_run:
-            msg += f", summarised {digest(slug)}"
+            msg += f", summarised {digest(slug)}, sorted who-for {classify_who(slug)}"
         print(msg + (" (dry run)" if a.dry_run else ""), flush=True)
 
 

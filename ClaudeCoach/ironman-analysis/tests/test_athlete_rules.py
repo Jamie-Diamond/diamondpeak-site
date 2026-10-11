@@ -83,11 +83,28 @@ def test_keep_sets_the_check_date_and_unknown_ids_are_refused(tmp_path):
         ar.keep("tess", "tess-999", base)
 
 
-def _age_all(base, first_seen):
+def _age_all(base, first_seen, who="athlete"):
     reg = rr.load_registry(base, "tess")
     for e in reg["rules"].values():
         e["first_seen"] = first_seen
+        if who:
+            e["who"] = who
     rr.registry_path(base, "tess").write_text(json.dumps(reg))
+
+
+def test_coach_rules_never_go_to_the_athlete(tmp_path):
+    """Jamie, 11 Oct 2026: an internal Load-estimation rule was put to him as "still
+    right?". A coach rule is never the athlete's check and is off their rules page; an
+    unsorted rule is asked about by no one."""
+    base = _base(tmp_path)
+    ar._active("tess", base)
+    _age_all(base, "2026-07-01", who=None)
+    assert ar.next_check("tess", base, TODAY) is None              # unsorted: nobody
+    _age_all(base, "2026-07-01", who="coach")
+    assert ar.next_check("tess", base, TODAY) is None              # not the athlete's
+    assert ar.next_check("tess", base, TODAY, who="coach")         # Jamie's, in Dev
+    assert ar.groups("tess", base, TODAY)["count"] == 0
+    assert ar.groups("tess", base, TODAY, include_coach=True)["count"] == 4
 
 
 def test_weekly_pick_one_volatile_unchecked_rule_never_a_dated_one(tmp_path):

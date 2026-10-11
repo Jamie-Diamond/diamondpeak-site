@@ -348,7 +348,8 @@ def rules_list(slug: str, request: Request):
     mind, grouped by topic, one line each, plus what ended recently."""
     require_slug(request, slug)
     import athlete_rules
-    return JSONResponse(athlete_rules.groups(slug), headers=NO_STORE)
+    return JSONResponse(athlete_rules.groups(slug, include_coach=is_coach(request_email(request))),
+                        headers=NO_STORE)
 
 
 @app.post("/api/rules/{slug}")
