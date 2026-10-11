@@ -1018,9 +1018,20 @@ def _run_once(prompt, model, extra_args, cwd, timeout=300, env=None):
     return text or (r.stderr or "").strip(), session_id, r.returncode
 
 
+def _with_sent(history, sp_file):
+    """History plus messages Peak showed the athlete that history.json never got (rule
+    checks, weekly summaries, some debrief cards): lib/outbox.with_sent. Prompt only."""
+    try:
+        import outbox
+        return outbox.with_sent(history or [], Path(sp_file).parent.name)
+    except Exception:
+        return history
+
+
 def call_claude(user_message, config, history, model=MODEL_OPUS,
                 system_prompt_file=None, athlete_name="Jamie", context=""):
     sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
+    history = _with_sent(history, sp_file)
     session_model = model
     extra, prompt, mode, st = _plan_session(user_message, config, history,
                                             sp_file, athlete_name, context, model)
@@ -1235,6 +1246,7 @@ def stream_claude(user_message, config, history, model=MODEL_OPUS,
     run = _register_run(run_id or new_run_id(), run_owner)
     try:
         sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
+        history = _with_sent(history, sp_file)
         session_model = model
         extra, prompt, mode, st = _plan_session(user_message, config, history,
                                                 sp_file, athlete_name, context, model)
@@ -1302,6 +1314,7 @@ def call_claude_with_image(img_path, caption, config, history, model=MODEL_OPUS,
     # anyway and the exchange reaches the athlete's session via the history
     # catch-up block on the next resume.
     sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
+    history = _with_sent(history, sp_file)
     system_prompt = system_prompt_with_level(sp_file)
     parts = [system_prompt, ""]
     global_rules = load_global_rules(sp_file)

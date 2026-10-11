@@ -297,3 +297,47 @@ def adopt(chat_id, slug: str) -> None:
         shutil.rmtree(src, ignore_errors=True)
     except OSError:
         pass
+
+
+# Sources that are not the coaching conversation: dev talk lives in the Dev tab, and a
+# sign-up's question-and-answer flow is not coaching.
+_NOT_CHAT_SOURCES = {"bug-fixer", "dev-session", "web-signup"}
+
+
+def with_sent(history: list, slug: str, days: int = 4) -> list:
+    """`history` plus every message Peak showed the athlete that history.json lacks, as
+    {"user": "", "assistant": text, "ts": ts, "kind": "sent"}, in time order. For the
+    PROMPT only: never save the result (Jamie, 11 Oct 2026: asked about the Sunday rule
+    check, the coach said "I didn't mention load estimates" - rule checks, weekly
+    summaries and some debrief cards are recorded here but never reached history.json,
+    so the coach could not see what it had sent). A copy; `history` is not changed."""
+    try:
+        p = BASE / "athletes" / slug / OUTBOX_NAME
+        if not p.exists():
+            return history
+        have = {re.sub(r"\s+", " ", (h.get("assistant") or ""))[:80] for h in history}
+        stamps = [h.get("ts") for h in history if h.get("ts")]
+        floor = min(stamps) if stamps else ""
+        cut = (datetime.now() - __import__("datetime").timedelta(days=days)).isoformat()
+        floor = max(floor, cut)
+        extra = []
+        for line in p.read_text(encoding="utf-8").splitlines():
+            try:
+                o = json.loads(line)
+            except ValueError:
+                continue
+            text = (o.get("text") or "").strip()
+            if (not text or o.get("deleted") or o.get("who") == "me" or o.get("tab") == "dev"
+                    or o.get("source") in _NOT_CHAT_SOURCES or (o.get("ts") or "") < floor):
+                continue
+            key = re.sub(r"\s+", " ", text)[:80]
+            if key in have:
+                continue
+            have.add(key)
+            extra.append({"user": "", "assistant": text, "ts": o.get("ts") or "", "kind": "sent"})
+        if not extra:
+            return history
+        return sorted(list(history) + extra, key=lambda h: h.get("ts") or "")
+    except Exception:
+        return history
+
