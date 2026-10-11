@@ -304,7 +304,7 @@ def adopt(chat_id, slug: str) -> None:
 _NOT_CHAT_SOURCES = {"bug-fixer", "dev-session", "web-signup"}
 
 
-def with_sent(history: list, slug: str, days: int = 4) -> list:
+def with_sent(history: list, slug: str, days: int = 8) -> list:
     """`history` plus every message Peak showed the athlete that history.json lacks, as
     {"user": "", "assistant": text, "ts": ts, "kind": "sent"}, in time order. For the
     PROMPT only: never save the result (Jamie, 11 Oct 2026: asked about the Sunday rule

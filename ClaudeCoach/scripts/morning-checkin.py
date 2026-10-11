@@ -382,6 +382,25 @@ def _build_load_chart_payload(today, wellness_rows, history_acts, events):
     }
 
 
+def _chart_note(payload) -> str:
+    """What the morning load chart shows, in words, for the coach's history (notify.py
+    --note): an athlete can ask about the chart, and the coach only saw "[chart sent]"."""
+    def day(d):
+        acts = d.get("activities") or []
+        tot = round(sum(a.get("tss") or 0 for a in acts))
+        sports = "+".join(sorted({a.get("sport") or "?" for a in acts}))
+        return f"{date.fromisoformat(d['date']).strftime('%a %d')} {tot} ({sports})" if acts else None
+    today = date.today().isoformat()
+    done = [x for x in (day(d) for d in payload["days"] if d["date"] < today) if x]
+    plan = [x for x in (day(d) for d in payload["days"] if d["date"] >= today) if x]
+    form = next((d.get("tsb") for d in reversed(payload["days"])
+                 if d["date"] <= today and d.get("tsb") is not None), None)
+    return ("Morning training-load chart: daily Load bars by sport, last 8 days done (solid) "
+            "and next 8 planned (faded), with a Form line. Done: " + ("; ".join(done) or "none")
+            + ". Planned: " + ("; ".join(plan) or "none")
+            + (f". Form today {form:+.1f}." if form is not None else "."))
+
+
 def _send_morning_load_chart(chat_id, slug, wellness_rows, coaching_level="mid"):
     """Generate and send the training load chart (±8 days) as part of the morning brief."""
     try:
@@ -409,7 +428,8 @@ def _send_morning_load_chart(chat_id, slug, wellness_rows, coaching_level="mid")
                 tmp_path = tf.name
             try:
                 subprocess.run(
-                    ["python3", str(NOTIFY), "--chat-id", str(chat_id), "--photo", tmp_path],
+                    ["python3", str(NOTIFY), "--chat-id", str(chat_id), "--note",
+                     _chart_note(payload), "--photo", tmp_path],
                     cwd=PROJECT_DIR, timeout=60,
                 )
             finally:

@@ -29,6 +29,14 @@ token   = config["bot_token"]
 
 # Parse --chat-id before any other arg processing
 _args = list(sys.argv[1:])
+# --note TEXT: what a photo shows, written to history.json for the coach only (Peak hides
+# history lines that start "[chart/photo sent]", api/chat.py). Without it the coach saw a
+# bare "[chart/photo sent]" and could not explain the morning chart (11 Oct 2026).
+_note = ""
+if "--note" in _args:
+    _ni = _args.index("--note")
+    _note = _args[_ni + 1] if _ni + 1 < len(_args) else ""
+    _args = _args[:_ni] + _args[_ni + 2:]
 if "--chat-id" in _args:
     _idx = _args.index("--chat-id")
     if _idx + 1 < len(_args):
@@ -135,7 +143,8 @@ def send_text(text, markup=None):
 def send_photo(photo_bytes, caption=""):
     if _web_only(caption, photo=photo_bytes):
         if log_history:
-            _append_history(("[chart/photo sent] " + caption).strip())
+            _append_history(("[chart/photo sent] " + caption).strip()
+                            + (f" [coach-only: what it shows] {_note}" if _note else ""))
         return
     boundary = "CCbound"
     parts = (
@@ -159,7 +168,8 @@ def send_photo(photo_bytes, caption=""):
         print(f"Telegram photo error: {e}", file=sys.stderr)
         sys.exit(1)
     if log_history:
-        _append_history(("[chart/photo sent] " + caption).strip())
+        _append_history(("[chart/photo sent] " + caption).strip()
+                            + (f" [coach-only: what it shows] {_note}" if _note else ""))
 
 
 if __name__ == "__main__":
