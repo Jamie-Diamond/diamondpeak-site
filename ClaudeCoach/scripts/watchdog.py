@@ -273,6 +273,20 @@ def preload_data(slug: str, today: date) -> dict:
         ("get_training_history", HISTORY_DAYS),
         ("get_events", (today - timedelta(days=7)).isoformat(), today.isoformat(), "WORKOUT"),
     )
+    # On-pedal drift for the rides T6 might flag (wc.on_pedal_decoupling): Intervals.icu's
+    # whole-ride figure counts coasting. Only candidates, so a quiet week fetches nothing.
+    lo = (today - timedelta(days=6)).isoformat()
+    for a in history or []:
+        if ("Ride" in str(a.get("type")) and (a.get("decoupling") or 0) > 5
+                and (a.get("moving_time") or 0) >= wc.Z2_MIN_S
+                and str(a.get("start_date_local") or "") >= lo):
+            try:
+                st = hr_quality.streams_by_type(client.get_activity_streams(str(a["id"])))
+                v = wc.on_pedal_decoupling(st.get("watts"), st.get("heartrate"))
+                if v is not None:
+                    a["decoupling_on_pedal"] = v
+            except Exception:
+                pass
     return {"wellness": wellness or [], "history": history or [], "events": events or [],
             "untrusted": {str(i) for i in hr_quality.untrusted_ids(slug)}}
 
@@ -575,6 +589,9 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
                 f.get("week_end") for f in cs.get("watchdog_flags") or []
                 if isinstance(f, dict) and f.get("trigger") == "T12"}],
             heat_floors=(heat_lib.MAINTENANCE_DOSE_14D, heat_lib.PROTOCOL_DOSE_14D))
+        _ctl = next((w.get("ctl") for w in reversed(data["wellness"]) if w.get("ctl") is not None), None)
+        if not wc.durability_phase(cfg, _ctl, today):
+            fired = [f for f in fired if f["trigger"] != "T6"]   # drift is no signal this week
         state = wc.load_state(slug)
         new = wc.new_only(fired, state, today)
         fp = wc.t9b_fingerprint(slug)

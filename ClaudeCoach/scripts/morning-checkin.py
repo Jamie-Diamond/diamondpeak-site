@@ -463,7 +463,8 @@ def _race_focus(slug, profile, athlete_cfg):
 _FLAG_RE = None
 
 
-def _recent_flags(adir: Path, today: date, days: int = 3, cap: int = 2) -> list[str]:
+def _recent_flags(adir: Path, today: date, days: int = 3, cap: int = 2,
+                  skip: frozenset = frozenset()) -> list[str]:
     """Watchdog flags the card shows, chosen here (11 Oct 2026). "If watchdog flag active"
     was left to the model: on the same card Haiku showed Kathryn's real T10 run-volume flag
     and Sonnet left it out. Flags dated within `days`, minus any whose own text says no
@@ -491,11 +492,26 @@ def _recent_flags(adir: Path, today: date, days: int = 3, cap: int = 2) -> list[
             age = (today - date.fromisoformat(m.group(1))).days
         except ValueError:
             continue
-        if not 0 <= age <= days or "no action" in m.group(4).lower() or m.group(2) == "T9":
+        if (not 0 <= age <= days or "no action" in m.group(4).lower() or m.group(2) == "T9"
+                or m.group(2) in skip):
             continue
         out.append((int(m.group(3)), m.group(1), f"{m.group(2)}: {m.group(4).strip()}"))
     out.sort(key=lambda x: (x[1], -x[0]), reverse=True)     # newest date, then Tier 1
     return [t for _, _, t in out[:cap]]
+
+
+def _flag_skip(athlete_cfg, wellness_rows) -> frozenset:
+    """Triggers the card must not show this week: T6 (drift) outside a durability-building
+    week, the same rule the watchdog applies (lib/watchdog_checks.durability_phase), so a
+    T6 logged before the rule existed is not shown either."""
+    try:
+        import watchdog_checks as wc
+        ctl = next((w.get("ctl") for w in reversed(wellness_rows or [])
+                    if w.get("ctl") is not None), None)
+        return frozenset() if wc.durability_phase(athlete_cfg, ctl, date.today()) \
+            else frozenset({"T6"})
+    except Exception:
+        return frozenset()
 
 
 def _post_race_recovery(athlete_cfg) -> bool:
@@ -847,7 +863,8 @@ def run_athlete(slug, athlete_cfg):
                            wellness_finalized=wellness_finalized,
                            prescription_note=prescription_note,
                            post_race_recovery=_post_race_recovery(athlete_cfg),
-                           watchdog_flags=_recent_flags(adir, date.today()))
+                           watchdog_flags=_recent_flags(adir, date.today(), skip=_flag_skip(
+                               athlete_cfg, wellness_rows)))
     prompt += coaching_prefs.prompt_note(slug)
 
     with open(log_file, "a") as lf:

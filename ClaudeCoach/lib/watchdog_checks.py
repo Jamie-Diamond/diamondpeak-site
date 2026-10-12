@@ -145,22 +145,64 @@ def t5_missed(events: list, acts: list, today: date) -> dict | None:
                  + "; ".join(f"{_d(e['start_date_local']):%a %d %b} {e.get('name')}" for e in missed))
 
 
+# T6 is a durability check: it means something only while the athlete is building
+# endurance. Jamie's bug, 12 Oct 2026: two weeks after Cervia, going into an off-season
+# that deliberately cuts volume, the card told him not to add ride volume because a gravel
+# ride drifted. These week types are not building durability, so T6 does not fire in them.
+NO_DURABILITY_WEEKS = {"post_race", "offseason", "baseline", "taper", "race"}
+
+
+def durability_phase(cfg: dict, ctl: float | None, today: date) -> bool:
+    """False in a week where aerobic drift is not a training signal (NO_DURABILITY_WEEKS).
+    True if the phase cannot be worked out, so a real build never loses the check."""
+    try:
+        import plan_tools
+        wt = plan_tools.required_tss(cfg, float(ctl or 0), today).get("week_type")
+        return wt not in NO_DURABILITY_WEEKS
+    except Exception:
+        return True
+
+
+def on_pedal_decoupling(watts: list, hr: list) -> float | None:
+    """Pa:HR decoupling (%) over pedalling samples only: first half vs second half of
+    power/HR. Intervals.icu's figure includes coasting, where power is 0 and HR is not:
+    Jamie's 4 Oct gravel ride coasted 30% of the time and read 14.9% whole-ride, 10.5%
+    on the pedals. None without enough pedalling data."""
+    pts = [(float(p), float(h)) for p, h in zip(watts or [], hr or [])
+           if p and h and p > 0 and h > 0]
+    if len(pts) < 600:
+        return None
+    n = len(pts) // 2
+    a, b = pts[:n], pts[n:]
+    ra = sum(p for p, _ in a) / sum(h for _, h in a)
+    rb = sum(p for p, _ in b) / sum(h for _, h in b)
+    return round((ra - rb) / ra * 100, 1) if ra else None
+
+
 def t6_decoupling(acts: list, today: date, untrusted: set = frozenset()) -> dict | None:
     """Aerobic decoupling over 5% on any Z2 ride (IF < 0.75, 45 min or more) in the last 7
-    days. Decoupling on a short errands ride is noise (Jamie's 27 Sep errands ride read 5.6%)."""
+    days. Decoupling on a short errands ride is noise (Jamie's 27 Sep errands ride read 5.6%).
+    Uses `decoupling_on_pedal` where the watchdog worked it out from the streams
+    (preload_data), else Intervals.icu's whole-ride figure."""
     lo = today - timedelta(days=6)
     rides = [a for a in acts if "Ride" in str(a.get("type"))
              and (a.get("moving_time") or 0) >= Z2_MIN_S
              and lo <= (_d(a.get("start_date_local")) or date.min) <= today
              and a.get("icu_intensity") is not None and a["icu_intensity"] < 75
-             and a.get("decoupling") is not None and a["decoupling"] > 5
+             and _dec(a) is not None and _dec(a) > 5
              and str(a.get("id")) not in untrusted]
     if not rides:
         return None
     return _fire("T6", 1, [a["id"] for a in rides],
                  "aerobic decoupling over 5% on Z2 rides: " + "; ".join(
-                     f"{_d(a['start_date_local']):%a %d %b} {a.get('name')} {a['decoupling']:.1f}% "
-                     f"(IF {a['icu_intensity'] / 100:.2f})" for a in rides))
+                     f"{_d(a['start_date_local']):%a %d %b} {a.get('name')} {_dec(a):.1f}% "
+                     + ("on the pedals " if a.get("decoupling_on_pedal") is not None else "")
+                     + f"(IF {a['icu_intensity'] / 100:.2f})" for a in rides))
+
+
+def _dec(a: dict):
+    v = a.get("decoupling_on_pedal")
+    return v if v is not None else a.get("decoupling")
 
 
 def t7_t8_heat(heat: dict, heat_log: list, today: date, maintenance_floor: float,

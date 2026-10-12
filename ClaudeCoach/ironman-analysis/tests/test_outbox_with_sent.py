@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import outbox  # noqa: E402
 
 
@@ -26,3 +27,4 @@ def test_unlogged_sent_messages_join_history_in_time_order(tmp_path, monkeypatch
     assert [h["assistant"] for h in out] == [
         "Good morning", "Quick check: still right?", "hello", "Week ending - MIXED"]
     assert len(hist) == 2                                        # the caller's list untouched
+
