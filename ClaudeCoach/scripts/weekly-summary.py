@@ -5,7 +5,7 @@ Replaces the MCP-dependent weekly-summary.sh flow.
 Run: python3 weekly-summary.py [--athlete jamie]
 Also called from weekly-summary.sh for cron compatibility.
 """
-import json, ssl, subprocess, sys, urllib.request, urllib.error
+import json, re, ssl, subprocess, sys, urllib.request, urllib.error
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -15,6 +15,7 @@ import coaching_prefs  # noqa: E402  heat / fuelling switches
 import fuel_basis      # noqa: E402  race vs non-race fuelling figure
 
 import claude_call
+import prompt_trim as pt   # under-100k prompt: recent log lines, used fields, compact JSON
 import offplan_log
 from icu_api import IcuClient
 import recovery_score as rs
@@ -30,13 +31,30 @@ TG_CONFIG       = BASE / "telegram/config.json"
 CLAUDE          = "/usr/bin/claude"
 PROJECT_DIR     = str(BASE.parent)
 LOG_DIR         = Path.home() / "Library/Logs/ClaudeCoach"
-TOOLS           = "Write,Bash"
+TOOLS           = ""     # no tools: every input is in the prompt, and current-state.md's
+                         # date stamp is written in code (12 Oct 2026, see Step 5 note)
 
 
 def _load_client(slug: str):
     cfg = json.loads(ATHLETES_CONFIG.read_text())
     a = cfg[slug]
     return IcuClient(a["icu_athlete_id"], a["icu_api_key"]), a["chat_id"]
+
+
+def _stamp_last_updated(path: Path, today: date) -> None:
+    """The one current-state.md edit the weekly summary still makes, in code. The model's
+    old Step 5 (date stamp, off-plan list, heat row, weight) re-read the whole file, which
+    doubled the prompt past 100k; it also left Jamie's stamp at 29 Sep through two
+    summaries. The off-plan log is kept daily elsewhere (lib/offplan_log.py) and no athlete
+    has a heat table, so only the stamp moves here."""
+    try:
+        t = path.read_text()
+        new = re.sub(r"^(#*\s*Last updated:\s*).*$", lambda m: m.group(1) + today.isoformat(),
+                     t, count=1, flags=re.M)
+        if new != t:
+            path.write_text(new)
+    except OSError:
+        pass
 
 
 def _tg_send(chat_id: str, text: str):
@@ -583,7 +601,7 @@ def run_summary(slug: str = "jamie") -> str:
     # Narrow exemption, not a demotion — the terse PRO voice is wanted everywhere
     # else in the card.
     prompt = f"""You are generating the weekly training summary for {first_name}'s {race_name} coaching system.
-All IcuSync data has been fetched and is embedded below. Do NOT call any fetch commands — work only from the data provided. Use Write and Bash only for the state-file update and git commit at the end.
+All IcuSync data has been fetched and is embedded below. Do NOT call any fetch commands or tools — work only from the data provided.
 
 ## DATE ANCHOR — Python-computed, authoritative
 Today     : {today} ({today_dow})
@@ -619,19 +637,19 @@ Race: {race_name} | Days to race: {days_to_race} | FTP: {ftp} W
 Week: {week_start} → {week_end}
 
 ## IcuSync — Wellness (14 days: CTL, ATL, TSB, HRV, sleep, weight, RHR)
-{json.dumps(wellness_14d, indent=2)}
+{pt.compact(pt.pick(wellness_14d, pt.WELLNESS_FIELDS))}
 
 ## IcuSync — Activities this week (7 days)
-{json.dumps(activities_7d, indent=2)}
+{pt.compact(pt.pick(activities_7d, pt.ACTIVITY_FIELDS))}
 
 ## IcuSync — Planned events this week ({week_start} → {week_end})
-{json.dumps(events_this_wk, indent=2)}
+{pt.compact(pt.pick(events_this_wk, pt.EVENT_FIELDS))}
 
 ## IcuSync — Athlete profile
-{json.dumps(athlete_profile, indent=2)}
+{pt.compact(pt.profile_summary(athlete_profile))}
 
-## Local — current-state.md
-{current_state}
+## Local — current-state.md (dated log entries older than 14 days omitted)
+{pt.recent_log(current_state, today)}
 
 ## Local — Session log (this week only)
 {json.dumps(week_sessions, indent=2)}
@@ -643,10 +661,10 @@ Week: {week_start} → {week_end}
 {blueprint}
 
 ## IcuSync — Fitness projection (last 7 days + next 28 days)
-{json.dumps(fitness_outlook, indent=2)}
+{pt.compact(pt.pick(fitness_outlook, pt.FITNESS_FIELDS))}
 
 ## IcuSync — Events next 28 days ({today} → {outlook_end})
-{json.dumps(events_4wk, indent=2)}
+{pt.compact(pt.pick(events_4wk, pt.EVENT_FIELDS))}
 
 ## Upcoming training plans
 {upcoming_plans}
@@ -831,25 +849,6 @@ Options: A) Flip tomorrow to easy | B) Prioritise sleep tonight | C) Continue (t
 Append the section after Step 3 and before the sign-off, under a bold
 **Open actions** heading, in the order given.
 
-## Step 5 — Update current-state.md
-
-Using the Write tool, update ClaudeCoach/athletes/{slug}/current-state.md:
-- Change "Last updated" line to today: {today}
-- Update or add "Off-plan in last 7 days" with missed sessions (or "none")
-- If heat sessions this week > 0: append a row to "Heat acclimation log" table
-- If any body weight readings in wellness data: note the latest weight
-- LEAVE THE "Open actions" SECTION EXACTLY AS IT IS. It is a pointer at
-  current-state.json open_actions[], not a list. Never re-add a table or a checkbox list of
-  actions there, never edit a status there, and never copy the rendered lines from Step 4
-  into it. That duplicate is the defect this section was rewritten to remove.
-- Do NOT change any action's status yourself. If the week's data shows an item is finished,
-  say so in one clause in Step 4 and leave the status alone — closing it is the athlete's
-  call, made with `lib/open_actions.py --set-status`.
-
-Do NOT commit or run any git command: ClaudeCoach/athletes/ is gitignored (athlete
-privacy) and the saved file is synced to the private repo nightly. (28 Sep 2026: the
-commit instruction here had been failing every week since that change, costing turns.)
-
 ## Output
 
 Wrap your entire output in <telegram> and </telegram> tags. Output nothing outside those tags — no preamble, no reasoning, no tool commentary.
@@ -877,6 +876,8 @@ Wrap your entire output in <telegram> and </telegram> tags. Output nothing outsi
     # out WITHOUT a balance finding read to the ops digest as "did not deliver"
     # (21, 22 and 26 Sep: false alarms sent to Jamie). Recorded only once the card
     # is actually sent; a card that never rendered or never sent stays a real gap.
+    if output:
+        _stamp_last_updated(adir / "current-state.md", today)
     if output and _tg_send(chat_id, output):
         try:
             import ops_log as _ops_sent
