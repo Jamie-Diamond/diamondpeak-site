@@ -73,11 +73,16 @@ ACTIVITY_FIELDS = ("id", "start_date_local", "type", "name", "moving_time", "ela
                    "icu_weighted_avg_watts", "average_heartrate", "max_heartrate",
                    "decoupling", "total_elevation_gain", "average_speed", "pace",
                    "gap", "icu_zone_times", "icu_hr_zone_times", "trainer", "race",
-                   "feel", "icu_rpe", "calories", "carbs_used", "description")
+                   "feel", "icu_rpe", "calories", "carbs_used", "description",
+                   # added back 12 Oct after an audit of what the cut lost: heat context,
+                   # what the session contained, its planned event, ride efficiency
+                   "average_temp", "max_temp", "interval_summary", "paired_event_id",
+                   "compliance", "icu_efficiency_factor", "icu_variability_index")
 EVENT_FIELDS = ("id", "start_date_local", "category", "type", "name", "moving_time",
                 "icu_training_load", "load_target", "description")
 WELLNESS_FIELDS = ("id", "ctl", "atl", "rampRate", "hrv", "restingHR", "sleepSecs",
-                   "sleepScore", "weight", "bodyFat", "vo2max", "steps", "wellness_finalized")
+                   "sleepScore", "sleepQuality", "weight", "bodyFat", "vo2max", "steps",
+                   "ctlLoad", "atlLoad", "sportInfo", "wellness_finalized")
 FITNESS_FIELDS = ("id", "date", "ctl", "atl", "rampRate", "load", "form")
 
 

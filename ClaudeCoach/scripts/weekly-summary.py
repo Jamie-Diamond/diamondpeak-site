@@ -706,10 +706,10 @@ From the data above, extract:
 - ATL at end of week
 - TSB at end of week (form field in wellness, or ATL - CTL)
 - 4-week CTL ramp: (end CTL - CTL 28 days ago) / 4 — use wellness data window available
-- Disciplines completed: count by sport_label from activities
+- Disciplines completed: count by type from activities
 - Sessions missed: planned events with no matching activity on same date and sport
 - Heat sessions this week: count from heat-log above
-- Average sleep: mean hrsSleep from wellness this week
+- Average sleep: mean sleepSecs / 3600 from wellness this week
 - Fuelling logged this week: sessions with nutrition_g_carb set vs total rides
 - Nutrition trend (from nutrition history above):
   - This week avg g/hr (rides >90 min): compute from nutrition_history entries this week
