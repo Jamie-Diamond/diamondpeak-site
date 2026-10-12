@@ -206,9 +206,12 @@ def test_each_model_resumes_its_own_session(athlete):
 
 def test_the_other_models_replies_reach_a_resumed_session(athlete):
     fp = engine._prompt_fingerprint(athlete)
+    from datetime import datetime, timedelta
+    now = datetime.now()                     # recent: an idle session starts fresh (SESSION_IDLE_S)
     engine._save_session(athlete, {"session_id": "s", "fp": fp, "turns": 1, "started": time.time(),
-                                   "last_seen": "2026-10-02T09:00:00"}, engine.MODEL_SONNET)
-    history = [{"ts": "2026-10-02T09:05:00", "user": "rebuild next week",
+                                   "last_seen": (now - timedelta(minutes=10)).isoformat()},
+                         engine.MODEL_SONNET)
+    history = [{"ts": (now - timedelta(minutes=5)).isoformat(), "user": "rebuild next week",
                 "assistant": "OPUS-REPLY-MARKER"}]
     _e, prompt, mode, _s = engine._plan_session("thanks", {}, history, athlete, "Tester", "",
                                                 engine.MODEL_SONNET)
