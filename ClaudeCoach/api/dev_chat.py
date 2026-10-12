@@ -110,6 +110,52 @@ def _append(slug: str, who: str, text: str, **extra) -> dict:
     return e
 
 
+MAX_PHOTOS = 6
+MAX_PHOTO_BYTES = 6 * 1024 * 1024
+_MEDIA_RE = re.compile(r"^[0-9]{14}-[0-9a-f]{6}\.jpg$")
+
+
+def save_photos(slug: str, data_urls: list) -> list[str]:
+    """Save the photos attached to a Dev message (Jamie, 12 Oct 2026: several per message)
+    as JPEG files beside the Dev history; returns their names. Raises ValueError on
+    anything that is not a JPEG or PNG data URL."""
+    import base64
+    import secrets
+    if not isinstance(data_urls, list) or len(data_urls) > MAX_PHOTOS:
+        raise ValueError(f"up to {MAX_PHOTOS} photos per message")
+    d = _dir(slug) / "media"
+    out = []
+    for u in data_urls:
+        m = re.match(r"^data:image/(jpeg|png);base64,(.+)$", str(u or ""), re.S)
+        if not m:
+            raise ValueError("that photo couldn't be read")
+        raw = base64.b64decode(m.group(2), validate=False)
+        if len(raw) > MAX_PHOTO_BYTES or not (raw[:3] == b"\xff\xd8\xff" or raw[:8] == b"\x89PNG\r\n\x1a\n"):
+            raise ValueError("that photo couldn't be read")
+        d.mkdir(parents=True, exist_ok=True)
+        name = datetime.now().strftime("%Y%m%d%H%M%S") + "-" + secrets.token_hex(3) + ".jpg"
+        (d / name).write_bytes(raw)
+        out.append(name)
+    return out
+
+
+def media_path(slug: str, name: str):
+    """The file for a Dev photo name, or None."""
+    if not _MEDIA_RE.match(name or ""):
+        return None
+    p = _dir(slug) / "media" / name
+    return p if p.is_file() else None
+
+
+def _with_photos(slug: str, text: str, photos: list) -> str:
+    """The message as the dev session sees it: the photos as files it can open."""
+    if not photos:
+        return text
+    paths = "\n".join(f"- {_dir(slug) / 'media' / n}" for n in photos)
+    return ((text or "(no message, just the photos)") +
+            f"\n\n[Jamie attached {len(photos)} photo(s). Look at each with the Read tool:\n{paths}]")
+
+
 def history(slug: str, limit: int = 200) -> list[dict]:
     """This chat's own messages, oldest first."""
     try:
@@ -202,14 +248,16 @@ def _run(engine, prompt: str, sid: str | None, sink: Sink, run) -> tuple:
             sink.put("status", " · ".join(x for x in ev[1:] if x)[:140])
 
 
-def start_turn(slug: str, text: str) -> Sink:
+def start_turn(slug: str, text: str, photos: list | None = None) -> Sink:
     import engine                          # lib/, on sys.path (server.py)
     sink = Sink()
     with _GUARD:
         if slug in _RUNNING:
             raise Busy(slug)
         _RUNNING[slug] = sink
-    _append(slug, "me", text)
+    photos = list(photos or [])
+    _append(slug, "me", text, **({"photos": photos} if photos else {}))
+    text = _with_photos(slug, text, photos)
 
     def work():
         run = engine._register_run(engine.new_run_id(), owner=f"dev:{slug}")

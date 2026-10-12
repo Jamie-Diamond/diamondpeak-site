@@ -999,7 +999,9 @@
       ta.addEventListener('input', composerMode);
       $('#chatMic').onclick = toggleRecord;
       $('#chatCam').onclick = function () { if (!chatState.busy) $('#chatFile').click(); };
-      $('#chatFile').onchange = function () { pickPhoto(this.files && this.files[0]); };
+      $('#chatFile').onchange = function () {
+        if (devTab()) pickDevPhotos(this.files); else pickPhoto(this.files && this.files[0]);
+      };
       $('#chatLog').addEventListener('click', onChatTap);
       if ($('#chatTabs')) $('#chatTabs').onclick = function (e) {
         var t = e.target.closest('button[data-ct]');
@@ -1031,7 +1033,8 @@
     $('#devTools').hidden = !chatState.dev;
     $('#v-chat').classList.toggle('dev', chatState.dev);
     setDevChat(chatState.dev && state.tab === 'chat');
-    $('#chatCam').hidden = chatState.dev || state.me.state !== 'active';
+    $('#chatCam').hidden = state.me.state !== 'active';
+    $('#chatFile').multiple = !!chatState.dev;           // Dev takes several (DEV_MAX_PHOTOS)
     $('#chatIn').placeholder = chatState.dev ? 'Message dev' : 'Message the coach';
     if (chatState.dev) {
       $('#composer').hidden = false;
@@ -1047,6 +1050,7 @@
     if (chatState.ctrl) { chatState.ctrl.abort(); chatState.ctrl = null; }
     if (chatState.rec) stopRecord(false);
     if (chatState.photo) clearPhoto();
+    clearDevPhotos();
     clearTimeout(chatState.devPoll);
     chatBusy(false);
     chatState.dev = dev;
@@ -1069,7 +1073,12 @@
         var hist = j.history || [], lastMe = -1;
         hist.forEach(function (m, i) { if (m.who === 'me') lastMe = i; });
         hist.forEach(function (m, i) {
-          if (m.who === 'me') bubble('me', m.text).setAttribute('data-t', devStamp(m.ts));
+          if (m.who === 'me') {
+            var mb = bubble('me', m.text);
+            mb.setAttribute('data-t', devStamp(m.ts));
+            if ((m.photos || []).length) mb.insertAdjacentHTML('afterbegin', devPhotoRow(m.photos.map(function (n) {
+              return '/api/dev/media/' + encodeURIComponent(n); })));
+          }
           else {
             var el = coachItem(m.text, m.buttons, m.photo ? '/api/media/' + encodeURIComponent(m.photo) : null,
                                m.error ? 'err' : '', m.id);
@@ -1571,10 +1580,14 @@
     if (chatState.busy) return;
     var ta = $('#chatIn'), text = (ta.value || '').trim();
     if (devTab()) {
-      if (!text || chatState.devBusy) return;
-      bubble('me', text);
+      var shots = chatState.devPhotos || [];
+      if ((!text && !shots.length) || chatState.devBusy) return;
+      var b = bubble('me', text);
+      if (shots.length) b.insertAdjacentHTML('afterbegin', devPhotoRow(shots.map(function (x) { return x.url; })));
       ta.value = ''; ta.style.height = 'auto';
-      streamTurn('/api/dev/chat', JSON.stringify({ text: text }), 'application/json');
+      var datas = shots.map(function (x) { return x.data; });
+      clearDevPhotos(true);
+      streamTurn('/api/dev/chat', JSON.stringify({ text: text, photos: datas }), 'application/json');
       return;
     }
     if (chatState.photo) {
@@ -1781,6 +1794,54 @@
     img.onerror = function () { bubble('coach', 'That photo couldn’t be read. Try another?', 'err'); };
     img.src = url;
   }
+  // Dev: several photos per message (Jamie, 12 Oct 2026), each resized like pickPhoto and
+  // kept as a data URL, since the API takes JSON. Shown as a row of thumbnails, each removable.
+  var DEV_MAX_PHOTOS = 6;
+  function pickDevPhotos(files) {
+    chatState.devPhotos = chatState.devPhotos || [];
+    Array.prototype.slice.call(files || [], 0, DEV_MAX_PHOTOS - chatState.devPhotos.length)
+      .forEach(function (file) {
+        var img = new Image(), url = URL.createObjectURL(file);
+        img.onload = function () {
+          var k = Math.min(1, 1600 / Math.max(img.width, img.height));
+          var c = document.createElement('canvas');
+          c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+          c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+          URL.revokeObjectURL(url);
+          var data = c.toDataURL('image/jpeg', 0.85);
+          if (chatState.devPhotos.length < DEV_MAX_PHOTOS) chatState.devPhotos.push({ data: data, url: data });
+          renderDevThumbs();
+        };
+        img.onerror = function () { bubble('coach', 'That photo couldn’t be read. Try another?', 'err'); };
+        img.src = url;
+      });
+    $('#chatFile').value = '';
+  }
+  function renderDevThumbs() {
+    var t = $('#chatThumb'), ps = chatState.devPhotos || [];
+    if (!t) return;
+    t.innerHTML = ps.map(function (x, i) {
+      return '<span class="th"><img src="' + x.url + '" alt=""><button type="button" data-rm="' + i +
+        '" aria-label="Remove photo">✕</button></span>';
+    }).join('') + (ps.length ? '<span class="th-n">' + ps.length + '/' + DEV_MAX_PHOTOS + '</span>' : '');
+    t.hidden = !ps.length;
+    t.onclick = function (e) {
+      var r = e.target.closest('button[data-rm]');
+      if (!r) return;
+      chatState.devPhotos.splice(+r.getAttribute('data-rm'), 1);
+      renderDevThumbs();
+    };
+  }
+  function clearDevPhotos(keepPlaceholder) {
+    chatState.devPhotos = [];
+    var t = $('#chatThumb'); if (t && devTab()) { t.hidden = true; t.innerHTML = ''; }
+  }
+  function devPhotoRow(srcs) {
+    return '<div class="dev-shots">' + srcs.map(function (u) {
+      return '<img class="msg-img" src="' + esc(u) + '" alt="">';
+    }).join('') + '</div>';
+  }
+
   function clearPhoto() {
     chatState.photo = null;
     var t = $('#chatThumb'); if (t) { t.hidden = true; t.innerHTML = ''; }

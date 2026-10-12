@@ -182,3 +182,24 @@ def test_the_bug_fixers_edit_reply_goes_to_the_bot_from_dev(env, monkeypatch, cl
     assert got == [("111", {"text": "keep the old wording", "tab": "dev"})]
     assert cli[0] == []                                   # the dev CLI never ran
     assert dev_chat.history("jamie")[-1]["text"] == "keep the old wording"
+
+
+def test_several_photos_per_dev_message(env, monkeypatch, cli, systemd):
+    """Jamie, 12 Oct 2026: photos in Dev, several per message. Saved beside the Dev
+    history, shown in it, served back, and handed to the session as files to open."""
+    import base64
+    calls, replies = cli
+    dev(monkeypatch, "coach@example.com")
+    replies += [("I can see both.", "s1")]
+    jpg = "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8\xff\xe0" + b"0" * 64).decode()
+    r = env.post("/api/dev/chat", json={"text": "look", "photos": [jpg, jpg]}, headers=H)
+    assert events(r.text)[-2:] == [("message", "I can see both."), ("done", "")]
+    me = env.get("/api/dev/history").json()["history"][0]
+    assert me["text"] == "look" and len(me["photos"]) == 2           # history keeps the clean text
+    assert "attached 2 photo(s)" in calls[0]["prompt"] and me["photos"][0] in calls[0]["prompt"]
+    assert env.get(f"/api/dev/media/{me['photos'][0]}").status_code == 200
+    assert env.get("/api/dev/media/..%2Fhistory.jsonl").status_code == 404
+    assert env.post("/api/dev/chat", json={"text": "x", "photos": ["data:text/html;base64,PGI+"]},
+                    headers=H).status_code == 400
+    assert env.post("/api/dev/chat", json={"text": "x", "photos": [jpg] * 7},
+                    headers=H).status_code == 400

@@ -1017,7 +1017,11 @@ async def dev_send(request: Request):
     except ValueError:
         body = {}
     text = str(body.get("text") or "").strip()[:20000]
-    if not text:
+    try:
+        photos = dev_chat.save_photos(slug, body.get("photos") or [])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not text and not photos:
         raise HTTPException(400, "empty message")
     cid, label = _chat_user(request)
     if cid in getattr(chat.bot(), "_PENDING_BUG_EDIT", {}):
@@ -1026,10 +1030,20 @@ async def dev_send(request: Request):
         dev_chat._append(slug, "me", text)
         return _turn_stream(cid, label, text=text, tab="dev")
     try:
-        sink = dev_chat.start_turn(slug, text)
+        sink = dev_chat.start_turn(slug, text, photos=photos)
     except dev_chat.Busy:
         raise HTTPException(409, "still working on your last message")
     return _sink_stream(sink)
+
+
+@app.get("/api/dev/media/{name}")
+def dev_media(name: str, request: Request):
+    """A photo Jamie attached in the Dev tab (dev_chat.save_photos)."""
+    slug = _dev_slug(request, post=False)
+    path = dev_chat.media_path(slug, name)
+    if not path:
+        raise HTTPException(404)
+    return FileResponse(path, media_type="image/jpeg", headers=NO_STORE)
 
 
 @app.post("/api/dev/restart")

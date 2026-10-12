@@ -75,6 +75,7 @@ def main() -> None:
     ap.add_argument("--inject-dev", help="JSON file: items appended to the Dev history shown "
                                          "(screenshot only, nothing is saved)")
     ap.add_argument("--tap", help="CSS selector to click before the screenshot")
+    ap.add_argument("--attach", nargs="+", help="image files to put in the chat's photo picker")
     a = ap.parse_args()
 
     from playwright.sync_api import sync_playwright
@@ -125,6 +126,9 @@ def main() -> None:
             else:
                 page.evaluate(f"window.scrollTo(0, {int(a.scroll)})")
             page.wait_for_timeout(800)
+            if a.attach:
+                page.set_input_files("#chatFile", a.attach)
+                page.wait_for_timeout(1500)
             if a.tap:
                 page.click(a.tap)
                 page.wait_for_timeout(1200)
