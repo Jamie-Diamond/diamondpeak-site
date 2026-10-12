@@ -385,3 +385,16 @@ class TestTurnIndexOrdering:
         assert logged["turns"] == 4
         assert _session_state(athlete)["turns"] == 4, \
             "st was mutated in place; the read above must have happened BEFORE this"
+
+
+def test_a_session_idle_past_the_cache_starts_fresh():
+    """12 Oct 2026: resuming after the 1-hour prompt cache expired rewrote the whole
+    session (avg 96k tokens); past SESSION_IDLE_S the chat starts fresh instead."""
+    import time
+    from datetime import datetime, timedelta
+    import engine
+    st = {"fp": "x", "turns": 2, "started": time.time() - 600}
+    st["last_seen"] = (datetime.now() - timedelta(minutes=20)).isoformat()
+    assert engine._session_usable(st, "x")
+    st["last_seen"] = (datetime.now() - timedelta(minutes=70)).isoformat()
+    assert not engine._session_usable(st, "x")

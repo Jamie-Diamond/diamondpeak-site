@@ -148,6 +148,12 @@ PROMPT_HISTORY_PAIRS = 12
 # deploy needed, and setting it back to 30 restores the old behaviour exactly.
 SESSION_MAX_TURNS = 12
 SESSION_MAX_AGE_S = 24 * 3600
+# Idle rotation (12 Oct 2026): the prompt cache lives an hour. Resuming a session after
+# that rewrites ALL of it into the cache at 2x the input price - measured over 14 days,
+# 26 such resumes averaged 96k tokens written and were 35% of chat's cache-write cost.
+# A fresh session writes the prompt plus recent exchanges (~50k) and carries the same
+# conversation, so past this gap a chat starts fresh instead.
+SESSION_IDLE_S = 55 * 60
 SESSION_CATCHUP_PAIRS = 6
 
 
@@ -572,7 +578,17 @@ def _session_usable(st, fp, max_turns: int | None = None) -> bool:
         st and fp and st.get("fp") == fp
         and st.get("turns", 0) < cap
         and time.time() - st.get("started", 0) < SESSION_MAX_AGE_S
+        and not _idle_past_cache(st)
     )
+
+
+def _idle_past_cache(st) -> bool:
+    """True when the session's last turn is older than SESSION_IDLE_S (its cache is gone)."""
+    try:
+        last = datetime.fromisoformat(str(st.get("last_seen") or "")[:19])
+    except ValueError:
+        return False
+    return (datetime.now() - last).total_seconds() > SESSION_IDLE_S
 
 
 def _missed_since(history, last_seen):
