@@ -243,8 +243,8 @@ Each surface has a job. A dashboard label and a Telegram message are not the sam
   coach, not a status readout.** No score, no label, no ratio, no internal metric.
 - **Wellness numbers: decided 12 Oct 2026 — only when off normal.** One `📉 Off your normal:`
   line, pre-computed in Python (`_off_normal_line`), naming only what is off this athlete's own
-  7-day normal, with the normal beside it: "HRV 38 (usual 42) · sleep 5.9h (usual 7.6h)". A
-  normal day shows no numbers. Off = HRV 10%+ below, resting HR 5+ bpm up, sleep 1h+ short
+  28-day normal, with the normal beside it: "HRV 38 (usual 42) · sleep 5.9h (usual 7.6h)". A
+  normal day shows no numbers. Off = HRV 10%+ below, resting HR 6%+ up, sleep 1h+ short
   and under 7h.
 - Every optional line must earn its place. If Form is between −1 and −20, say nothing about it.
 - Watchdog flags are translated to plain English before they appear — never the `T` code.

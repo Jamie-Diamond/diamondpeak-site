@@ -512,26 +512,41 @@ def _recent_flags(adir: Path, today: date, days: int = 3, cap: int = 2,
     return [t for _, _, t in out[:cap]]
 
 
+BASELINE_DAYS = 28
+
+
+def _baseline_rows(slug: str) -> list:
+    """BASELINE_DAYS + today of wellness, for _off_normal_line only: the recovery score
+    keeps its own short window (it reads every row it is given)."""
+    try:
+        from icu_api import IcuClient
+        a = json.loads(ATHLETES_CONFIG.read_text())[slug]
+        return IcuClient(a["icu_athlete_id"], a["icu_api_key"]).get_wellness(BASELINE_DAYS + 1)
+    except Exception:
+        return []
+
+
 def _off_normal_line(wellness_rows, today: date) -> str:
     """The wellness numbers the card shows: only those off THIS athlete's normal, with the
     normal beside them (Jamie, 12 Oct 2026: "show only when off normal"). Normal = the mean
-    of the previous 7 days with data (needs 4). Off = HRV 10%+ below, resting HR 5+ bpm up,
+    of the previous BASELINE_DAYS days with data (needs half of them; Jamie: "7 day isn't
+    enough for a normal baseline"). Off = HRV 10%+ below, resting HR 6%+ above (Jamie),
     sleep 1h+ short AND under 7h. "" on a normal day or before last night's sleep syncs."""
     rows = {(r.get("id") or "")[:10]: r for r in wellness_rows or []}
     t = rows.get(today.isoformat())
     if not t or t.get("sleepSecs") is None:
         return ""
-    prev = [rows[k] for k in sorted(rows) if k < today.isoformat()][-7:]
+    prev = [rows[k] for k in sorted(rows) if k < today.isoformat()][-BASELINE_DAYS:]
 
     def base(key, f=lambda v: v):
         vals = [f(r[key]) for r in prev if r.get(key) is not None]
-        return sum(vals) / len(vals) if len(vals) >= 4 else None
+        return sum(vals) / len(vals) if len(vals) >= BASELINE_DAYS // 2 else None
     out = []
     hrv, hb = t.get("hrv"), base("hrv")
     if hrv is not None and hb and hrv <= 0.90 * hb:
         out.append(f"HRV {hrv:.0f} (usual {hb:.0f})")
     rhr, rb = t.get("restingHR"), base("restingHR")
-    if rhr is not None and rb and rhr >= rb + 5:
+    if rhr is not None and rb and rhr >= rb * 1.06:
         out.append(f"resting HR {rhr:.0f} (usual {rb:.0f})")
     sl, sb = t["sleepSecs"] / 3600, base("sleepSecs", lambda v: v / 3600)
     if sb and sl <= sb - 1 and sl < 7:
@@ -904,7 +919,7 @@ def run_athlete(slug, athlete_cfg):
                            post_race_recovery=_post_race_recovery(athlete_cfg),
                            watchdog_flags=_recent_flags(adir, date.today(), skip=_flag_skip(
                                athlete_cfg, wellness_rows)),
-                           off_normal=_off_normal_line(wellness_rows, date.today()))
+                           off_normal=_off_normal_line(_baseline_rows(slug), date.today()))
     prompt += coaching_prefs.prompt_note(slug)
 
     with open(log_file, "a") as lf:

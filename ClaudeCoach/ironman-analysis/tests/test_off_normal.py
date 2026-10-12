@@ -15,7 +15,7 @@ T = date(2026, 10, 12)
 
 def rows(today, hrv=45, rhr=50, sleep_h=7.5):
     out = [{"id": (T - timedelta(days=i)).isoformat(), "hrv": 45, "restingHR": 50,
-            "sleepSecs": 7.5 * 3600} for i in range(1, 8)]
+            "sleepSecs": 7.5 * 3600} for i in range(1, 29)]
     out.append({"id": T.isoformat(), "hrv": hrv, "restingHR": rhr,
                 "sleepSecs": None if sleep_h is None else sleep_h * 3600})
     return out
