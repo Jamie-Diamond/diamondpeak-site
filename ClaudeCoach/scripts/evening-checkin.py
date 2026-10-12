@@ -425,7 +425,7 @@ def run_athlete(slug, athlete_cfg):
 
     with open(log_file, "a") as lf:
         result = subprocess.run(
-            [CLAUDE, "-p", "--allowedTools", TOOLS, "--model", "haiku"],
+            [CLAUDE, "-p", "--allowedTools", TOOLS, "--model", "haiku", "--effort", "high"],
             input=prompt,  # prompt on stdin, not argv (MAX_ARG_STRLEN)
             stdout=subprocess.PIPE, stderr=lf, text=True,
             cwd=PROJECT_DIR, timeout=180,

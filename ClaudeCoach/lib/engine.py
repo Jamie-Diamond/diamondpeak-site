@@ -465,6 +465,11 @@ def claude_cmd(model, extra_args=None):
     on Linux) and exec() fails with E2BIG once a built prompt crosses it."""
     cmd = [CLAUDE_BIN, "-p", "--allowedTools", TOOLS,
            "--disallowedTools", DISALLOWED_TOOLS, "--model", model]
+    try:
+        import claude_call
+        cmd += claude_call.effort_args(model)
+    except Exception:
+        pass
     if extra_args:
         cmd.extend(extra_args)
     return cmd

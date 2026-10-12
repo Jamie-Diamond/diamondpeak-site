@@ -31,6 +31,18 @@ SONNET = "sonnet"
 HAIKU  = "haiku"
 FABLE  = "fable"
 
+# Reasoning effort per model (Jamie, 12 Oct 2026: "set effort default to high for now",
+# asked about Haiku 5.5). Unset models keep the CLI default (medium). run_claude and
+# lib/engine.py claude_cmd pass effort_args(); the direct `claude -p --model haiku` call
+# sites (activity-watcher, evening-checkin, capture-reminder, strava-update, bot voice
+# rewrite) pass "--effort", "high" themselves - change them with this.
+EFFORT = {HAIKU: "high"}
+
+
+def effort_args(model: str) -> list:
+    e = EFFORT.get(str(model or "").lower())
+    return ["--effort", e] if e else []
+
 # Default fallback chains keyed by the starting model. Cheap/frequent automation
 # falls to Haiku (preserves the shared all-models pool the Opus chat needs);
 # quality-critical callers override with fallback=[OPUS].
@@ -215,7 +227,7 @@ def run_claude(prompt, model=SONNET, *, fallback=None, allowed_tools=None,
     last = None
 
     for i, m in enumerate(chain):
-        cmd = [CLAUDE, "-p", "--model", m]
+        cmd = [CLAUDE, "-p", "--model", m] + effort_args(m)
         if no_session_persistence:
             cmd.append("--no-session-persistence")
         if allowed_tools is not None:
