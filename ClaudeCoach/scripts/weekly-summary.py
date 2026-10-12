@@ -477,7 +477,10 @@ def run_summary(slug: str = "jamie") -> str:
     # -- Pre-compute recovery score --------------------------------------------
     recovery = None
     try:
-        hrv_t, hrv_b, tsb_v, sleep_v, sleep_score_v = rs._parse_wellness(wellness_14d)
+        # 28-day HRV baseline (rs.BASELINE_DAYS), ending on the same day as wellness_14d
+        _wb = client.get_wellness(rs.BASELINE_DAYS + 1, newest=(wellness_14d[-1].get("id") or "")[:10]
+                                  if wellness_14d else None) or wellness_14d
+        hrv_t, hrv_b, tsb_v, sleep_v, sleep_score_v = rs._parse_wellness(_wb)
         pain = 0
         state_json = adir / "current-state.json"
         if state_json.exists():

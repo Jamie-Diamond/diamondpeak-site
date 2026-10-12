@@ -693,6 +693,7 @@ def run_athlete(slug, athlete_cfg):
     recovery = None
     wellness_line = None
     wellness_rows = []
+    baseline_rows = []
     wellness_finalized = True  # False = today's CTL/ATL/Form still recalculating on ICU
     has_sleep_device = False  # True if athlete has ever had sleep data
     try:
@@ -738,7 +739,10 @@ def run_athlete(slug, athlete_cfg):
                         file=sys.stderr,
                     )
                     break
-        hrv_t, hrv_b, tsb, sleep, sleep_score = rs._parse_wellness(wellness_rows)
+        # 28-day HRV baseline (rs.BASELINE_DAYS): its own fetch, so everything else that
+        # reads wellness_rows keeps its 8 days. Same rows feed the off-normal line.
+        baseline_rows = _baseline_rows(slug) or wellness_rows
+        hrv_t, hrv_b, tsb, sleep, sleep_score = rs._parse_wellness(baseline_rows)
         pain = 0
         state_f = adir / "current-state.json"
         if state_f.exists():
@@ -919,7 +923,7 @@ def run_athlete(slug, athlete_cfg):
                            post_race_recovery=_post_race_recovery(athlete_cfg),
                            watchdog_flags=_recent_flags(adir, date.today(), skip=_flag_skip(
                                athlete_cfg, wellness_rows)),
-                           off_normal=_off_normal_line(_baseline_rows(slug), date.today()))
+                           off_normal=_off_normal_line(baseline_rows, date.today()))
     prompt += coaching_prefs.prompt_note(slug)
 
     with open(log_file, "a") as lf:

@@ -34,7 +34,7 @@ sys.path.insert(0, str(ROOT / "lib"))
 # ── Signal scorers ────────────────────────────────────────────────────────────
 
 def _score_hrv(today_hrv, baseline_hrv):
-    """HRV ratio vs 7-day baseline → 0-100."""
+    """HRV ratio vs the BASELINE_DAYS baseline → 0-100."""
     if today_hrv is None or baseline_hrv is None or baseline_hrv == 0:
         return None
     ratio = today_hrv / baseline_hrv
@@ -211,8 +211,13 @@ def in_taper(slug: str) -> bool:
 
 # ── CLI entry point ───────────────────────────────────────────────────────────
 
+BASELINE_DAYS = 28   # Jamie, 12 Oct 2026: "7 day isn't enough for a normal baseline"
+
+
 def _parse_wellness(rows):
-    """Extract HRV baseline (7d), today's HRV, TSB, sleep from wellness list."""
+    """Today's HRV, its baseline (mean of up to BASELINE_DAYS days before today), TSB and
+    sleep from a wellness list. Callers pass BASELINE_DAYS + 1 rows; a shorter list gives
+    a shorter baseline rather than none."""
     if not rows:
         # Five Nones — callers unpack 5 values (hrv_today, hrv_baseline, tsb,
         # sleep, sleep_score); the old 4-tuple raised ValueError on empty
@@ -230,10 +235,10 @@ def _parse_wellness(rows):
         sleep_val = sleep_val / 3600
     sleep_score_val = today_row.get("sleepScore")
 
-    # 7-day HRV baseline (exclude today)
+    # HRV baseline: the BASELINE_DAYS before today (today excluded)
     hrv_vals = [
         r.get("hrv") or r.get("hrvSDNN")
-        for r in sorted_rows[:-1]
+        for r in sorted_rows[:-1][-BASELINE_DAYS:]
         if (r.get("hrv") or r.get("hrvSDNN")) is not None
     ]
     hrv_baseline = round(mean(hrv_vals), 1) if hrv_vals else None
