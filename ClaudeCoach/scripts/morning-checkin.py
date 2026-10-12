@@ -41,7 +41,7 @@ TOOLS = "Read,Bash"
 CALLER = "morning-checkin"
 
 
-def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, nutrition_label="race target", heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None, wellness_finalized=True, ask_morning_pain=False, race_block="", ask_weight=False, ask_ankle=True, prescription_note="", post_race_recovery=False, watchdog_flags=None):
+def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, nutrition_label="race target", heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None, wellness_finalized=True, ask_morning_pain=False, race_block="", ask_weight=False, ask_ankle=True, prescription_note="", post_race_recovery=False, watchdog_flags=None, off_normal=""):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -148,8 +148,11 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
         )
 
     wellness_block = (
-        f"\n## Today's wellness (pre-fetched — for your judgement only; NEVER print these "
-        f"numbers: no sleep hours, HRV or resting HR on the card)\n{wellness_line}\n"
+        f"\n## Today's wellness (pre-fetched — for your judgement only; do not print these "
+        f"numbers: the only wellness numbers on the card are the 'Off your normal' line "
+        f"below, when there is one)\n{wellness_line}\n"
+        + (f"\n## Off your normal (pre-computed — copy EXACTLY as one card line)\n{off_normal}\n"
+           if off_normal else "")
         if wellness_line else
         "\n## Today's wellness\nNot yet synced — say nothing about sleep, HRV or resting HR.\n"
     )
@@ -251,6 +254,7 @@ Use the recovery score and signals ONLY to decide what to flag — do NOT show t
   Load part entirely rather than guessing.
 
 {form_line_rule}
+[If the "Off your normal" block above is present: 📉 that line, word for word]
 [If recovery ORANGE or RED: ⚠️ [one plain-English sentence on what to do differently — no scores]]
 [For EACH flag in the "Watchdog flags to show" block: ⚠️ [that flag in plain English, one line, keeping its numbers]. None listed: no flag line.]
 [If the pre-verified 05:00 prescription check block above is present and says today's session was modified or swapped: 🔁 [what changed and why — one plain line, e.g. "Swapped to easy spin — HRV low". If it confirmed the session as planned, or the block is absent, say nothing]]
@@ -506,6 +510,33 @@ def _recent_flags(adir: Path, today: date, days: int = 3, cap: int = 2,
         out.append((int(m.group(3)), m.group(1), f"{m.group(2)}: {m.group(4).strip()}"))
     out.sort(key=lambda x: (x[1], -x[0]), reverse=True)     # newest date, then Tier 1
     return [t for _, _, t in out[:cap]]
+
+
+def _off_normal_line(wellness_rows, today: date) -> str:
+    """The wellness numbers the card shows: only those off THIS athlete's normal, with the
+    normal beside them (Jamie, 12 Oct 2026: "show only when off normal"). Normal = the mean
+    of the previous 7 days with data (needs 4). Off = HRV 10%+ below, resting HR 5+ bpm up,
+    sleep 1h+ short AND under 7h. "" on a normal day or before last night's sleep syncs."""
+    rows = {(r.get("id") or "")[:10]: r for r in wellness_rows or []}
+    t = rows.get(today.isoformat())
+    if not t or t.get("sleepSecs") is None:
+        return ""
+    prev = [rows[k] for k in sorted(rows) if k < today.isoformat()][-7:]
+
+    def base(key, f=lambda v: v):
+        vals = [f(r[key]) for r in prev if r.get(key) is not None]
+        return sum(vals) / len(vals) if len(vals) >= 4 else None
+    out = []
+    hrv, hb = t.get("hrv"), base("hrv")
+    if hrv is not None and hb and hrv <= 0.90 * hb:
+        out.append(f"HRV {hrv:.0f} (usual {hb:.0f})")
+    rhr, rb = t.get("restingHR"), base("restingHR")
+    if rhr is not None and rb and rhr >= rb + 5:
+        out.append(f"resting HR {rhr:.0f} (usual {rb:.0f})")
+    sl, sb = t["sleepSecs"] / 3600, base("sleepSecs", lambda v: v / 3600)
+    if sb and sl <= sb - 1 and sl < 7:
+        out.append(f"sleep {sl:.1f}h (usual {sb:.1f}h)")
+    return ("Off your normal: " + " · ".join(out)) if out else ""
 
 
 def _flag_skip(athlete_cfg, wellness_rows) -> frozenset:
@@ -872,7 +903,8 @@ def run_athlete(slug, athlete_cfg):
                            prescription_note=prescription_note,
                            post_race_recovery=_post_race_recovery(athlete_cfg),
                            watchdog_flags=_recent_flags(adir, date.today(), skip=_flag_skip(
-                               athlete_cfg, wellness_rows)))
+                               athlete_cfg, wellness_rows)),
+                           off_normal=_off_normal_line(wellness_rows, date.today()))
     prompt += coaching_prefs.prompt_note(slug)
 
     with open(log_file, "a") as lf:
