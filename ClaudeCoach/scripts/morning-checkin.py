@@ -102,7 +102,14 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
             "ALREADY done — do not re-check it and do not skip the question because "
             "current-state.json looks recent to you)"
         )
-    injury_question = cycle_question + morning_pain_question + injury_question
+    # ONE question, picked here in priority order (12 Oct 2026: with the cycle question
+    # marked "FIRST PRIORITY" in a list beside weight, Sonnet asked Kathryn her weight and
+    # Haiku asked about her period). Only the winner reaches the prompt. The run-day ankle
+    # question still depends on today's run, so weight stays as its stated fallback.
+    if cycle_question:
+        injury_question = cycle_question.replace("FIRST PRIORITY question (overrides the ones below): ", "")
+    elif morning_pain_question:
+        injury_question = morning_pain_question.replace("FIRST PRIORITY (overrides the questions below): ", "")
 
     injuries_note = (
         "; ".join(
@@ -141,9 +148,10 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
         )
 
     wellness_block = (
-        f"\n## Today's wellness (pre-fetched)\n{wellness_line}\n"
+        f"\n## Today's wellness (pre-fetched — for your judgement only; NEVER print these "
+        f"numbers: no sleep hours, HRV or resting HR on the card)\n{wellness_line}\n"
         if wellness_line else
-        "\n## Today's wellness\nNot yet synced — omit Sleep, HRV, and RHR from the card entirely.\n"
+        "\n## Today's wellness\nNot yet synced — say nothing about sleep, HRV or resting HR.\n"
     )
 
     planned_section = (

@@ -267,9 +267,16 @@ Step 3 — For the most recent activity that is NOT already in session-log.json:
 
   - Write the updated array back to ClaudeCoach/athletes/{slug}/session-log.json.
 
-Step 4 — Respond in EXACTLY this format (no other text):
+Step 4 — Respond in EXACTLY this format (no other text). ALL FIVE line types, every time,
+each written "none" when it does not apply — the code reads them, so a missing line loses data:
 ACTIVITY_ID: <id or none>
-ANALYSIS: <coaching message — see rules below>
+ANALYSIS: <coaching message — see rules below; it ENDS with the session's question line>
+PLAN_DELTA: <see below, or none>
+DECOUPLING: <see below, or none>
+TEST_RESULT: <see below, or none>
+
+ALREADY DISCUSSED comes first: before writing ANALYSIS, apply the ALREADY-DISCUSSED CHECK at
+the end of this prompt. If it applies, ANALYSIS is exactly `discussed` and nothing else.
 
 {first_name}: FTP {ftp} W.{injury_line}
 
@@ -280,6 +287,8 @@ Interval source: prefer Strava laps when they give a cleaner breakdown than ICU 
 Rules for ANALYSIS — each logical line must be a separate output line (no semicolons to merge lines):
 
 Always lead with a one-sentence narrative verdict (e.g. "Solid Z2. Form held to the end.").
+Always END with the session's question line from its format below ("How did it feel?", or
+the strength question). Short easy-session messages keep it too.
 
 Every format below, regardless of session type, MUST state the session's actual Load (TSS) as a number. This is never dropped for brevity and does not depend on whether PLAN_DELTA fires later in this response — PLAN_DELTA is a separate "vs plan" comparison, not the athlete's only route to seeing what this session cost them.
 
@@ -348,9 +357,10 @@ If no activities at all: ACTIVITY_ID: none  ANALYSIS: none
 
 ALREADY-DISCUSSED CHECK — recent Telegram chat with this athlete (oldest first):
 {recent_chat}
-If THIS activity's RESULTS have already been discussed in the chat above — the athlete asked about
-how it went, or an analysis of the completed session was already given (match on sport,
-distance/duration, recency) — output exactly `ANALYSIS: discussed` instead of repeating it.
+If THIS activity's RESULTS have already been discussed in the chat above, output exactly
+`ANALYSIS: discussed`. The test: a coach line in the chat, sent AFTER the activity started,
+that already gives this activity's results (its distance, time, HR, pace or Load), or the
+athlete asking how this completed session went. Match on sport, distance/duration and date.
 Numbers the athlete has already seen (distance, pace, HR, Load, decoupling) are NOT new insight;
 only produce a normal ANALYSIS here if you have something material the chat did not cover.
 A PRE-SESSION message is NOT a discussion: a night-before brief, a morning card, a plan reminder,
@@ -362,7 +372,7 @@ When writing the session-log stub, if the chat above contains the athlete's feed
 activity (RPE, injury/ankle pain scores, nutrition), fill those fields from the chat instead of
 leaving them null — data the athlete already gave must never be re-asked by the evening jobs.
 
-CRITICAL: Your entire response must contain only the ACTIVITY_ID and ANALYSIS lines above. Do not output reasoning steps, file read confirmations, tool call summaries, or any other text. All processing is internal and silent.
+CRITICAL: Your entire response must contain only the five lines of Step 4 (ACTIVITY_ID, ANALYSIS, PLAN_DELTA, DECOUPLING, TEST_RESULT). Do not output reasoning steps, file read confirmations, tool call summaries, or any other text. All processing is internal and silent.
 ANALYSIS scope: describe only the activity being analysed. Do NOT mention other planned sessions from today's calendar, ask whether a different planned session happened, or comment on sessions that were not completed."""
 
 
@@ -1781,8 +1791,9 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     if _ids:
         shadow.launch("debrief", slug, prompt, output, note=(
             "TEST RE-RUN, READ-ONLY: the live run has just logged activity "
-            f"{', '.join(_ids)} to session-log.json. Analyse it as NEW, exactly as if it were "
-            "not logged yet. Do not write any file; output only."))
+            f"{', '.join(_ids)} to session-log.json. Treat it as not logged yet; every other "
+            "rule, including the ALREADY-DISCUSSED CHECK, applies as written. Do not write "
+            "any file; output only."))
 
     activity_id = None
     decoupling_raw = None
