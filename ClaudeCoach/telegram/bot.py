@@ -7202,15 +7202,23 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
 
 
 def _image_reply_worker(token, chat_id, file_id, caption, athlete_entry, config):
-    """Image analysis path, run off the poll loop on the reply pool."""
+    """Image analysis path, run off the poll loop on the reply pool. `file_id` is one id
+    or a list (Peak sends up to 6 photos in one message, 12 Oct 2026); the coach sees
+    them all and replies once."""
     import tempfile as _tempfile
     typing(token, chat_id)
-    raw = download_tg_file(token, file_id)
-    if not raw:
+    ids = list(file_id) if isinstance(file_id, (list, tuple)) else [file_id]
+    img_paths = []
+    for fid in ids:
+        raw = download_tg_file(token, fid)
+        if not raw:
+            continue
+        with _tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tf:
+            tf.write(raw)
+            img_paths.append(tf.name)
+    if not img_paths:
         return
-    with _tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tf:
-        tf.write(raw)
-        img_path = tf.name
+    img_path = img_paths[0] if len(img_paths) == 1 else img_paths
     try:
         # Silent status (Phase 3c): the "On it" note must not ping; the single push
         # lands on the final image reply below (sent notifying by default).
@@ -7241,13 +7249,17 @@ def _image_reply_worker(token, chat_id, file_id, caption, athlete_entry, config)
         # Caption stored bare (never the "[image]" placeholder) and tagged kind=image,
         # so a later lookup can't mistake this for a real text message with that literal
         # content, or a real text message for a photo.
-        history.append(_hist_entry(caption or "", clean, kind="image"))
+        _he = _hist_entry(caption or "", clean, kind="image")
+        if len(img_paths) > 1:
+            _he["images"] = len(img_paths)
+        history.append(_he)
         save_history(history, files["history"])
     finally:
-        try:
-            os.unlink(img_path)
-        except Exception:
-            pass
+        for _p in img_paths:
+            try:
+                os.unlink(_p)
+            except Exception:
+                pass
 
 
 def _raceplan_worker(token, chat_id, slug):

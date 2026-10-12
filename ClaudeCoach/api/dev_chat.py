@@ -115,15 +115,12 @@ MAX_PHOTO_BYTES = 6 * 1024 * 1024
 _MEDIA_RE = re.compile(r"^[0-9]{14}-[0-9a-f]{6}\.jpg$")
 
 
-def save_photos(slug: str, data_urls: list) -> list[str]:
-    """Save the photos attached to a Dev message (Jamie, 12 Oct 2026: several per message)
-    as JPEG files beside the Dev history; returns their names. Raises ValueError on
-    anything that is not a JPEG or PNG data URL."""
+def decode_photos(data_urls: list) -> list[bytes]:
+    """JPEG / PNG data URLs -> bytes, at most MAX_PHOTOS. Shared by the Dev tab and the
+    coaching chat's several-photo message. ValueError on anything else."""
     import base64
-    import secrets
     if not isinstance(data_urls, list) or len(data_urls) > MAX_PHOTOS:
         raise ValueError(f"up to {MAX_PHOTOS} photos per message")
-    d = _dir(slug) / "media"
     out = []
     for u in data_urls:
         m = re.match(r"^data:image/(jpeg|png);base64,(.+)$", str(u or ""), re.S)
@@ -132,6 +129,18 @@ def save_photos(slug: str, data_urls: list) -> list[str]:
         raw = base64.b64decode(m.group(2), validate=False)
         if len(raw) > MAX_PHOTO_BYTES or not (raw[:3] == b"\xff\xd8\xff" or raw[:8] == b"\x89PNG\r\n\x1a\n"):
             raise ValueError("that photo couldn't be read")
+        out.append(raw)
+    return out
+
+
+def save_photos(slug: str, data_urls: list) -> list[str]:
+    """Save the photos attached to a Dev message (Jamie, 12 Oct 2026: several per message)
+    as JPEG files beside the Dev history; returns their names. Raises ValueError on
+    anything that is not a JPEG or PNG data URL."""
+    import secrets
+    d = _dir(slug) / "media"
+    out = []
+    for raw in decode_photos(data_urls):
         d.mkdir(parents=True, exist_ok=True)
         name = datetime.now().strftime("%Y%m%d%H%M%S") + "-" + secrets.token_hex(3) + ".jpg"
         (d / name).write_bytes(raw)

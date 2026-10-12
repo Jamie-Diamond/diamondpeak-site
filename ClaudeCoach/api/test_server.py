@@ -697,3 +697,25 @@ def test_food_chat_is_only_for_athletes_with_food_tracking(env, monkeypatch):
     assert env.post("/api/food/button", json={"data": "confirm"}, headers=h).status_code == 200
     assert env.post("/api/food/button", json={"data": "rm -rf"}, headers=h).status_code == 400
     assert seen == [("jamie", {"text": "2 eggs"}), ("jamie", {"button": "confirm"})]
+
+
+def test_several_photos_in_one_coaching_message(env, monkeypatch):
+    """12 Oct 2026: up to 6 photos in one coaching message, one turn that sees them all."""
+    import base64
+    dev(monkeypatch, "coach@example.com")
+    got = []
+
+    def turn(cid, label="", **k):
+        got.append((cid, k.get("text"), k.get("image")))
+        return FakeSink([("done", "")])
+    monkeypatch.setattr(server.chat, "start_turn", turn)
+    jpg = "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8\xff\xe0" + b"1" * 64).decode()
+    h = {"x-peak": "1"}
+    assert env.post("/api/chat/photos", json={"caption": "dinner", "photos": [jpg] * 3},
+                    headers=h).status_code == 200
+    cid, text, image = got[0]
+    assert text == "dinner" and isinstance(image, list) and len(image) == 3
+    assert env.post("/api/chat/photos", json={"photos": [jpg]}, headers=h).status_code == 200
+    assert isinstance(got[1][2], bytes)                      # one photo: the old single path
+    assert env.post("/api/chat/photos", json={"photos": []}, headers=h).status_code == 400
+    assert env.post("/api/chat/photos", json={"photos": [jpg] * 7}, headers=h).status_code == 400

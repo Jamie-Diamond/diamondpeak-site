@@ -515,6 +515,26 @@ async def chat_photo(request: Request, caption: str = ""):
     return _turn_stream(cid, label, text=caption.strip()[:1000], image=await _upload(request, 12))
 
 
+@app.post("/api/chat/photos")
+async def chat_photos(request: Request):
+    """Several photos in one coaching message (12 Oct 2026), as JPEG/PNG data URLs with an
+    optional caption: the coach looks at them all and replies once. /api/chat/photo still
+    takes a single raw upload."""
+    cid, label = _chat_user(request, need_active=True)
+    try:
+        body = await request.json() or {}
+    except ValueError:
+        body = {}
+    try:
+        imgs = dev_chat.decode_photos(body.get("photos") or [])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not imgs:
+        raise HTTPException(400, "no photos")
+    return _turn_stream(cid, label, text=str(body.get("caption") or "").strip()[:1000],
+                        image=imgs if len(imgs) > 1 else imgs[0])
+
+
 def _turn_stream(chat_id: str, label: str, **turn) -> StreamingResponse:
     try:
         sink = chat.start_turn(chat_id, label, **turn)

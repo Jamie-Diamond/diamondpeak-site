@@ -1343,7 +1343,15 @@ def call_claude_with_image(img_path, caption, config, history, model=MODEL_OPUS,
         parts.extend(render_history(history[-PROMPT_HISTORY_PAIRS:], athlete_name))
         parts.append("")
     question = caption if caption else "analyse this"
-    user_msg = f"{athlete_name} sent an image. Read it from {img_path} then {question}."
+    paths = [img_path] if isinstance(img_path, (str, Path)) else list(img_path)
+    if len(paths) == 1:
+        user_msg = f"{athlete_name} sent an image. Read it from {paths[0]} then {question}."
+    else:
+        # Several photos in one message (12 Oct 2026): one reply that has seen them all.
+        listing = "\n".join(f"- {p}" for p in paths)
+        user_msg = (f"{athlete_name} sent {len(paths)} images in one message. Read EVERY one "
+                    f"of them first:\n{listing}\nThen {question}, answering once, about "
+                    "them together.")
     parts.append(user_msg)
     full_prompt = "\n".join(parts)
     t0 = time.time()

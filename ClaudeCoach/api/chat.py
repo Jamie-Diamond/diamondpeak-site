@@ -420,11 +420,15 @@ def start_turn(chat_id: str, label: str = "", text: str = "", audio: bytes | Non
                 if chat_id not in athletes:
                     sink.put("error", "Photos work once your account is active.")
                     return
-                upload_id = f"web:{next(_upload_ids)}"
-                _UPLOADS[upload_id] = image
-                b.log(f"[{label}] In (web photo): {said[:80]}")
+                imgs = image if isinstance(image, list) else [image]
+                upload_id = [f"web:{next(_upload_ids)}" for _ in imgs]
+                for _uid, _img in zip(upload_id, imgs):
+                    _UPLOADS[_uid] = _img
+                b.log(f"[{label}] In (web photo x{len(imgs)}): {said[:80]}")
                 with b._chat_lock(chat_id):
-                    b._image_reply_worker(token, chat_id, upload_id, said, athletes[chat_id], config)
+                    b._image_reply_worker(token, chat_id,
+                                          upload_id[0] if len(upload_id) == 1 else upload_id,
+                                          said, athletes[chat_id], config)
             else:
                 b.log(f"[{label}] In (web{' voice' if audio is not None else ''}): {said[:80]}")
                 b._route_text(token, chat_id, said, athletes, config)
@@ -441,8 +445,8 @@ def start_turn(chat_id: str, label: str = "", text: str = "", audio: bytes | Non
                 _save_drill(chat_id, sink.drill, sink.last_message)
             else:
                 _keep_unsaved(chat_id, sink, hist_before)
-            if upload_id:
-                _UPLOADS.pop(upload_id, None)
+            for _uid in (upload_id or []):
+                _UPLOADS.pop(_uid, None)
             if sink.tab == "dev":
                 # Anything this Dev-tab turn wrote to history.json belongs in Dev too.
                 _, hist1 = _history_texts(chat_id)
@@ -595,7 +599,8 @@ def timeline(slug: str | None, limit: int = 80, chat_id: str | None = None,
         if is_dev(None, hk, dev_keys) != want_dev:
             continue
         if user:
-            items.append({"who": "me", "text": ("📷 " if e.get("kind") == "image" else "") + user,
+            items.append({"who": "me", "text": (("📷×%d " % e["images"] if e.get("images") else "📷 ")
+                                                if e.get("kind") == "image" else "") + user,
                           "ts": ts, "key": hk + ":u"})
         if coach.startswith("[chart/photo sent]"):
             coach = ""                      # notify.py's stand-in for a chart; the chart is in the outbox

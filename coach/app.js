@@ -1000,7 +1000,7 @@
       $('#chatMic').onclick = toggleRecord;
       $('#chatCam').onclick = function () { if (!chatState.busy) $('#chatFile').click(); };
       $('#chatFile').onchange = function () {
-        if (devTab()) pickDevPhotos(this.files); else pickPhoto(this.files && this.files[0]);
+        pickDevPhotos(this.files);                       // Coach and Dev: up to 6 (12 Oct 2026)
       };
       $('#chatLog').addEventListener('click', onChatTap);
       if ($('#chatTabs')) $('#chatTabs').onclick = function (e) {
@@ -1034,7 +1034,7 @@
     $('#v-chat').classList.toggle('dev', chatState.dev);
     setDevChat(chatState.dev && state.tab === 'chat');
     $('#chatCam').hidden = state.me.state !== 'active';
-    $('#chatFile').multiple = !!chatState.dev;           // Dev takes several (DEV_MAX_PHOTOS)
+    $('#chatFile').multiple = true;                      // both tabs take several (DEV_MAX_PHOTOS)
     $('#chatIn').placeholder = chatState.dev ? 'Message dev' : 'Message the coach';
     if (chatState.dev) {
       $('#composer').hidden = false;
@@ -1571,7 +1571,7 @@
   // above the box as a thumbnail and the text becomes its caption.
   function composerMode() {
     if (devTab()) { $('#chatSend').hidden = false; $('#chatMic').hidden = true; return; }
-    var has = !!($('#chatIn').value.trim() || chatState.photo);
+    var has = !!($('#chatIn').value.trim() || chatState.photo || (chatState.devPhotos || []).length);
     $('#chatSend').hidden = !has || chatState.rec != null;
     $('#chatMic').hidden = has && chatState.rec == null;
   }
@@ -1588,6 +1588,16 @@
       var datas = shots.map(function (x) { return x.data; });
       clearDevPhotos(true);
       streamTurn('/api/dev/chat', JSON.stringify({ text: text, photos: datas }), 'application/json');
+      return;
+    }
+    if ((chatState.devPhotos || []).length) {
+      var shots2 = chatState.devPhotos;
+      var b2 = bubble('me', text || '');
+      b2.insertAdjacentHTML('afterbegin', devPhotoRow(shots2.map(function (x) { return x.url; })));
+      ta.value = ''; ta.style.height = 'auto';
+      var datas2 = shots2.map(function (x) { return x.data; });
+      clearDevPhotos(); composerMode();
+      streamTurn('/api/chat/photos', JSON.stringify({ caption: text, photos: datas2 }), 'application/json');
       return;
     }
     if (chatState.photo) {
@@ -1825,6 +1835,8 @@
         '" aria-label="Remove photo">✕</button></span>';
     }).join('') + (ps.length ? '<span class="th-n">' + ps.length + '/' + DEV_MAX_PHOTOS + '</span>' : '');
     t.hidden = !ps.length;
+    if (!devTab()) $('#chatIn').placeholder = ps.length ? 'Add a message (optional)' : 'Message the coach';
+    composerMode();
     t.onclick = function (e) {
       var r = e.target.closest('button[data-rm]');
       if (!r) return;
@@ -1834,7 +1846,8 @@
   }
   function clearDevPhotos(keepPlaceholder) {
     chatState.devPhotos = [];
-    var t = $('#chatThumb'); if (t && devTab()) { t.hidden = true; t.innerHTML = ''; }
+    var t = $('#chatThumb'); if (t) { t.hidden = true; t.innerHTML = ''; }
+    $('#chatIn').placeholder = devTab() ? 'Message dev' : 'Message the coach';
   }
   function devPhotoRow(srcs) {
     return '<div class="dev-shots">' + srcs.map(function (u) {
