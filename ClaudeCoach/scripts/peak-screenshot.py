@@ -75,6 +75,9 @@ def main() -> None:
     ap.add_argument("--inject-dev", help="JSON file: items appended to the Dev history shown "
                                          "(screenshot only, nothing is saved)")
     ap.add_argument("--tap", help="CSS selector to click before the screenshot")
+    ap.add_argument("--element", help="screenshot only this element (CSS selector)")
+    ap.add_argument("--tap2", help="a second selector to click after --tap")
+    ap.add_argument("--eval", dest="js", help="JS expression to print after loading (debugging)")
     ap.add_argument("--inject-chat", help="JSON file: items appended to the coaching chat shown")
     ap.add_argument("--attach", nargs="+", help="image files to put in the chat's photo picker")
     a = ap.parse_args()
@@ -142,7 +145,19 @@ def main() -> None:
                 page.wait_for_timeout(1200)
                 page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                 page.wait_for_timeout(500)
-            page.screenshot(path=a.out, full_page=a.full)
+            if a.tap2:
+                page.wait_for_timeout(600)
+                try:
+                    page.click(a.tap2, timeout=3000)
+                except Exception:
+                    page.evaluate("s => document.querySelector(s) && document.querySelector(s).click()", a.tap2)
+                page.wait_for_timeout(1200)
+            if a.js:
+                print("EVAL:", page.evaluate(a.js))
+            if a.element:
+                page.locator(a.element).first.screenshot(path=a.out)
+            else:
+                page.screenshot(path=a.out, full_page=a.full)
             b.close()
     finally:
         api.terminate()

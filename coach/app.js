@@ -175,6 +175,71 @@
   function sportClass(s) { return 'sp-' + (SPORT[s] || 'other'); }
   // The sport in words for a session sheet's top line (13 Oct 2026: "Tempo 2x25" said
   // nothing about being a ride until the indoor card further down).
+  /* ── workout profiles (lib/workout_profile.py, 13 Oct 2026) ─────────────────
+     A session as zone-coloured blocks: width = time, height = % of threshold (FTP,
+     threshold pace or LTHR), colour = the athlete's own zone. Drawn as one SVG so it
+     scales from the session sheet down to a calendar thumbnail. */
+  var ZONE_COL = ['#9aa7b4', '#22b3a6', '#f2c14e', '#f5913e', '#ec5a5a', '#c04de0', '#6f5cf0'];
+  function profFor(x) {
+    if (!x) return null;
+    if (x.prof && x.prof.length) return x.prof;
+    var d = state.data || {};
+    var r = (d.recent || []).filter(function (a) {
+      return a.date === x.date && a.prof && (!x.sport || family(a.sport) === family(x.sport));
+    })[0];
+    return r ? r.prof : null;
+  }
+  var profSeq = 0;
+  function profSvg(blocks, o) {
+    o = o || {};
+    if (!blocks || !blocks.length) return '';
+    // Gradient ids are per SVG: a shared id resolves to the first copy in the page, and
+    // when that one sits in a hidden view the bars paint with nothing.
+    var uid = 'pz' + (++profSeq) + '_';
+    var W = 1000, H = 100, CAP = 160, gap = o.mini ? 0 : 3;
+    var tot = blocks.reduce(function (a, b) { return a + (b[0] || 0); }, 0) || 1;
+    var x = 0, rects = '';
+    blocks.forEach(function (b) {
+      var w = W * (b[0] || 0) / tot;
+      var hgt = Math.max(6, Math.min(CAP, b[1] || 0) / CAP * H);
+      var z = Math.max(1, Math.min(7, b[2] || 1));
+      rects += '<rect x="' + (x + gap / 2).toFixed(1) + '" y="' + (H - hgt).toFixed(1) +
+        '" width="' + Math.max(1, w - gap).toFixed(1) + '" height="' + hgt.toFixed(1) +
+        '" rx="' + (o.mini ? 0 : 4) + '" fill="url(#' + uid + z + ')"/>';
+      x += w;
+    });
+    var defs = '<defs>' + ZONE_COL.map(function (c, i) {
+      return '<linearGradient id="' + uid + (i + 1) + '" x1="0" y1="0" x2="0" y2="1">' +
+        '<stop offset="0" stop-color="' + c + '"/><stop offset="1" stop-color="' + c +
+        '" stop-opacity="' + (o.mini ? '.85' : '.55') + '"/></linearGradient>';
+    }).join('') + '</defs>';
+    var thr = o.mini ? '' : '<line x1="0" x2="' + W + '" y1="' + (H - 100 / CAP * H).toFixed(1) +
+      '" y2="' + (H - 100 / CAP * H).toFixed(1) + '" class="pf-thr"/>';
+    var plan = '';
+    if (o.plan && o.plan.length && !o.mini) {
+      var pt = o.plan.reduce(function (a, b) { return a + (b[0] || 0); }, 0) || 1, px = 0, path = '';
+      o.plan.forEach(function (b, i) {
+        var y = (H - Math.max(6, Math.min(CAP, b[1] || 0) / CAP * H)).toFixed(1);
+        var w = W * (b[0] || 0) / pt;
+        path += (i ? ' L' : 'M') + px.toFixed(1) + ' ' + y + ' L' + (px + w).toFixed(1) + ' ' + y;
+        px += w;
+      });
+      plan = '<path d="' + path + '" class="pf-plan"/>';
+    }
+    return '<svg class="pf' + (o.mini ? ' pf-mini' : '') + '" viewBox="0 0 ' + W + ' ' + H +
+      '" preserveAspectRatio="none" aria-hidden="true">' + defs + thr + rects + plan + '</svg>';
+  }
+  var SPORT_ICON = {
+    bike: '<circle cx="6" cy="17" r="3.6"/><circle cx="18" cy="17" r="3.6"/><path d="M6 17l4-7h5l3 7M10 10l-1.5-3H6M15 10l1-3h2"/>',
+    run: '<circle cx="15" cy="4.5" r="2"/><path d="M8 21l3-6 3 2v5M11 15l-1-5 4-2 2 3 3 1M7 10l3-2"/>',
+    swim: '<circle cx="17" cy="7" r="2"/><path d="M3 18c2 0 2-1.5 4-1.5s2 1.5 4 1.5 2-1.5 4-1.5 2 1.5 4 1.5M5 14l5-4 3 2 3-2"/>',
+    strength: '<path d="M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10"/>'
+  };
+  function sportIcon(sp) {
+    var k = SPORT[sp] || family(sp);
+    return '<svg class="sp-ic" viewBox="0 0 24 24" aria-hidden="true">' + (SPORT_ICON[k] || SPORT_ICON.run) + '</svg>';
+  }
+
   function sportWord(s) {
     return { swim: 'Swim', bike: 'Bike', run: 'Run', strength: 'Strength' }[SPORT[s] || family(s)] || '';
   }
@@ -392,7 +457,9 @@
       '<span class="tick">' + (done ? '✓' : '○') + '</span>' +
       '<span class="body"><span class="nm"><span class="sp ' + sportClass(s.sport) + '"></span>' +
       esc(s.name || s.sport) + (s.key ? '<span class="keymark">KEY</span>' : '') + '</span>' +
-      (s.detail ? '<span class="meta">' + esc(s.detail) + '</span>' : '') + '</span>' +
+      (s.detail ? '<span class="meta">' + esc(s.detail) + '</span>' : '') +
+      (profFor(s) ? '<span class="pfm">' + profSvg(profFor(s), { mini: true }) + '</span>' : '') +
+      '</span>' +
       '<span class="rt"><b>' + hhmm(s.duration_min) + '</b>' +
       (s.tss != null ? Math.round(s.tss) + ' tss' : '') + '</span></div>';
   }
@@ -2243,6 +2310,16 @@
         }).join('') + '</span>' +
         '<span class="wksum"><b>' + (wk.mins ? hhmm(wk.mins) : '—') + '</b>' +
         (wk.tss ? Math.round(wk.tss) + ' tss' : '') + '</span></div>' +
+        // Tiny workout profiles for the current week, or the week of the selected day
+        // (13 Oct 2026). Same three boxes as the row above, so each sits under its day.
+        (wk.days.some(function (dy) { return dy.iso === (state.calDay || t); }) &&
+         wk.days.some(function (dy) { return dy.items.some(profFor); })
+          ? '<div class="wkprof"><span class="wkn"></span><span class="wkdays">' +
+            wk.days.map(function (dy) {
+              return '<span class="cell">' + dy.items.slice(0, 2).map(function (x) {
+                return profSvg(profFor(x), { mini: true });
+              }).join('') + '</span>';
+            }).join('') + '</span><span class="wksum"></span></div>' : '') +
         (split ? '<div class="wkrow-s">' + split +
           (future ? '<span class="wk-tag">planned</span>' : '') + '</div>' : '') +
         '</div>';
@@ -4341,6 +4418,30 @@
 
     h += '<div class="dr-b">';
 
+    // The session card (13 Oct 2026, after Intervals.icu's activity card): sport band with
+    // duration and distance, the headline figures, then the zone-coloured profile, with
+    // the plan's outline dotted over a completed session that had one.
+    var prof = done ? profFor({ date: dateISO, sport: sport, prof: a.prof }) || (a.prof || null) : (pl.prof || null);
+    var fam2 = SPORT[pl.sport || a.type || sport] || family(pl.sport || a.type || sport);
+    var durMin = a.dur != null ? a.dur : (pl.duration_min != null ? pl.duration_min : lg.duration_min);
+    var dist = a.dist || lg.distance_km;
+    var tssV = a.tss != null ? a.tss : (lg.tss != null ? lg.tss : pl.tss);
+    var figs = [];
+    if (done && (a.hr || lg.avg_hr)) figs.push('<span class="sx-hr">' + (a.hr || lg.avg_hr) + '<i>bpm</i></span>');
+    if (done && (a.powAvg || lg.avg_power)) figs.push('<span class="sx-w">' + (a.powAvg || lg.avg_power) + '<i>w</i></span>');
+    else if (done && a.pace && fam2 !== 'bike') figs.push('<span class="sx-w">' + esc(a.pace) + '</span>');
+    h += '<section class="sx sx-' + esc(fam2 || 'other') + '">' +
+      '<div class="sx-band">' + sportIcon(pl.sport || a.type || sport) +
+      '<b>' + (durMin != null ? hhmm(durMin) : '') + '</b>' +
+      '<b>' + (dist ? Number(dist).toFixed(dist >= 10 ? 0 : 1) + ' km' : '') + '</b></div>' +
+      '<div class="sx-body">' +
+      (figs.length ? '<div class="sx-figs">' + figs.join('') + '</div>' : '') +
+      (tssV != null ? '<div class="sx-load">' + (done ? 'Load ' : 'Planned load ') + Math.round(tssV) + '</div>' : '') +
+      (prof && prof.length ? '<div class="sx-pf">' + profSvg(prof, { plan: done ? pl.plan_prof : null }) + '</div>' +
+        (done && pl.plan_prof && pl.plan_prof.length ? '<p class="sx-k"><i class="sx-dash"></i>planned</p>' : '')
+        : '') +
+      '</div></section>';
+
     // Route outline. A unit-box shape (no coordinates - see lib/route_shape.py), so it
     // draws straight into a 0..1 viewBox with no projection work here.
     if (a.shape && a.shape.length > 3) {
@@ -4356,18 +4457,15 @@
         '</span></div>';
     }
 
-    h += card('Summary', kvRows([
-      ['Duration', hhmm(a.dur != null ? a.dur : (pl.duration_min != null ? pl.duration_min : lg.duration_min)), true],
-      (a.dist || lg.distance_km) ? ['Distance', Number(a.dist || lg.distance_km).toFixed(1) + ' km'] : null,
-      (a.pace || lg.pace_per_100m) ? ['Pace', a.pace || lg.pace_per_100m] : null,
-      (a.hr || lg.avg_hr) ? ['Avg HR', (a.hr || lg.avg_hr) + ' bpm'] : null,
+    // The figures the session card above already shows are not repeated here.
+    var det = kvRows([
+      !done && lg.pace_per_100m ? ['Pace', lg.pace_per_100m] : null,
       (a.powNp || lg.norm_power) ? ['Normalised power', (a.powNp || lg.norm_power) + ' w'] : null,
-      (a.powAvg || lg.avg_power) ? ['Average power', (a.powAvg || lg.avg_power) + ' w'] : null,
-      (a.tss != null || pl.tss != null || lg.tss != null)
-        ? ['Training load', Math.round(a.tss != null ? a.tss : (lg.tss != null ? lg.tss : pl.tss)) + ' tss', true] : null,
+      done && fam2 === 'bike' && a.pace ? ['Speed', a.pace] : null,
       lg.rpe != null ? ['RPE', lg.rpe + ' / 10'] : null,
-      pl.detail ? ['Prescription', pl.detail] : null
-    ]) || '<div class="empty">No summary recorded</div>', { flush: true });
+      pl.detail && !done ? ['Prescription', pl.detail] : null    // done: it repeats the figures
+    ]);
+    if (det) h += card('Details', det, { flush: true });
 
     // The workout, step by step, with the athlete's own watts / paces (lib/workout_steps.py,
     // 13 Oct 2026: "Tempo 2x25" alone didn't say what to do).

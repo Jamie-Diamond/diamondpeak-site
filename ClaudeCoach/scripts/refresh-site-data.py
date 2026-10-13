@@ -568,13 +568,27 @@ def _steps_fn(client, slug: str):
         ss = client.get_sport_settings() or []
         prof = json.loads((BASE / "athletes" / slug / "profile.json").read_text())
     except Exception:
-        return lambda ev: []
+        def none(ev):
+            return []
+        none.prof, none.sport_settings, none.profile = none, [], {}
+        return none
 
     def steps(ev):
         try:
             return _ws.lines(ev.get("workout_doc"), _ws.thresholds_for(ss, ev.get("type"), prof))
         except Exception:
             return []
+
+    def plan_prof(ev):
+        """Zone-coloured blocks for the planned workout (lib/workout_profile.py)."""
+        try:
+            import workout_profile as _wp
+            return _wp.planned(ev.get("workout_doc"), _wp.settings_for(ss, ev.get("type")))
+        except Exception:
+            return []
+    steps.prof = plan_prof
+    steps.sport_settings = ss
+    steps.profile = prof
     return steps
 
 
@@ -682,13 +696,14 @@ def _build_jamie_data(client) -> dict:
             # than losing the plan the moment a session is done.
             if ev_tss:
                 same_day_completed[0]["planned_tss"] = int(ev_tss)
+            same_day_completed[0]["plan_prof"] = _steps.prof(ev)
             continue
         ev_dur = ev.get("moving_time") or ev.get("duration")
         week_calendar.append({"date":ev_date,"sport":ev_sport,"name":ev.get("name",""),
                                "tss":int(ev_tss) if ev_tss else None,
                                "duration_min":round(int(ev_dur)/60) if ev_dur else None,
                                "status":"planned","key":bool(ev_tss and int(ev_tss)>=60),"detail":"",
-                               "steps":_steps(ev),
+                               "steps":_steps(ev), "prof":_steps.prof(ev),
                                # Peak's Ride indoors button (lib/indoor.py) acts on this event.
                                "event_id":ev.get("id"),
                                "indoor":(ev.get("type") or "") == "VirtualRide"})
@@ -739,6 +754,13 @@ def _build_jamie_data(client) -> dict:
     # Route outlines. Shape only, normalised into a unit box - see lib/route_shape.py
     # for why nothing positional is published.
     try:
+        try:                                  # workout profiles first: shapes remove _aid
+            import workout_profile as _wp
+            _wp.attach(client, BASE, "jamie", recent, _steps.sport_settings,
+                       since=(date.today() - timedelta(days=_wp.PROFILE_DAYS)).isoformat(),
+                       profile=_steps.profile, log=log)
+        except Exception as _e:
+            log(f"workout profiles (non-fatal): {_e}")
         from route_shape import attach_shapes
         _n = attach_shapes(client, BASE, "jamie", recent, log=log)
         if _n:
@@ -1759,6 +1781,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
         if same_day_completed:
             if ev_tss:
                 same_day_completed[0]["planned_tss"] = int(ev_tss)
+            same_day_completed[0]["plan_prof"] = _steps.prof(ev)
             continue
         ev_dur = ev.get("moving_time") or ev.get("duration")
         week_calendar.append({
@@ -1766,7 +1789,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
             "tss": int(ev_tss) if ev_tss else None,
             "duration_min": round(int(ev_dur) / 60) if ev_dur else None,
             "status": "planned", "key": bool(ev_tss and int(ev_tss) >= 60), "detail": "",
-            "steps": _steps(ev),
+            "steps": _steps(ev), "prof": _steps.prof(ev),
             # Peak's Ride indoors button (lib/indoor.py) acts on this event.
             "event_id": ev.get("id"), "indoor": (ev.get("type") or "") == "VirtualRide",
         })
@@ -1827,6 +1850,13 @@ def _build_athlete_training_data(slug, athlete_cfg):
 
     # Route outlines, shape only (see lib/route_shape.py).
     try:
+        try:                                  # workout profiles first: shapes remove _aid
+            import workout_profile as _wp
+            _wp.attach(client, BASE, slug, recent, _steps.sport_settings,
+                       since=(date.today() - timedelta(days=_wp.PROFILE_DAYS)).isoformat(),
+                       profile=_steps.profile, log=log)
+        except Exception as _e:
+            log(f"workout profiles (non-fatal): {_e}")
         from route_shape import attach_shapes
         _n = attach_shapes(client, BASE, slug, recent, log=log)
         if _n:

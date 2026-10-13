@@ -955,6 +955,35 @@ body.dev-chat .composer textarea{background:#161b22;border-color:#30363d;color:#
   font:400 13.5px/1.4 'DM Mono',monospace}
 body.dev-chat .composer .cb.go{background:#238636}
 /* chat: the model under a reply, and Delete (app.js splitMeta, toggleDelete) */
+/* session card + workout profiles (app.js profSvg / openDetail, 13 Oct 2026) */
+.sx{margin:0 0 14px;border-radius:16px;overflow:hidden;background:var(--paper);
+  box-shadow:0 1px 2px rgba(20,24,29,.06),0 8px 24px rgba(20,24,29,.08);border:1px solid var(--rule-soft)}
+.sx-band{display:flex;align-items:center;gap:14px;padding:12px 16px;color:#fff;
+  background:linear-gradient(120deg,var(--sx-a,#3a4a5c),var(--sx-b,#5b6b7d))}
+.sx-band b{font:600 19px/1 'DM Sans',sans-serif;letter-spacing:-.01em;flex:1;text-align:center}
+.sx-band b:last-child{text-align:right}
+.sx-bike{--sx-a:#0d5c61;--sx-b:#17888f}
+.sx-run{--sx-a:#8a560e;--sx-b:#c47d1c}
+.sx-swim{--sx-a:#163e5c;--sx-b:#2a6a97}
+.sx-strength{--sx-a:#2c333b;--sx-b:#505b66}
+.sp-ic{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+.sx-body{padding:12px 16px 14px;text-align:center}
+.sx-figs{display:flex;justify-content:center;gap:16px;font:600 22px/1.1 'DM Sans',sans-serif;letter-spacing:-.02em}
+.sx-figs i{font-style:normal;font-size:13px;font-weight:500;margin-left:2px;opacity:.75}
+.sx-hr{color:#c63b4b}.sx-w{color:#5b45d6}
+.sx-load{margin-top:4px;font:500 15px 'DM Sans',sans-serif;color:var(--ink)}
+.sx-pf{margin-top:10px;height:78px;border-radius:10px;background:linear-gradient(var(--paper-2),var(--paper));padding:4px 2px 0}
+.pf{width:100%;height:100%;display:block;overflow:visible}
+.pf-thr{stroke:var(--muted);stroke-width:1.2;stroke-dasharray:6 6;opacity:.6;vector-effect:non-scaling-stroke}
+.pf-plan{fill:none;stroke:var(--ink);stroke-width:1.6;stroke-dasharray:4 3;opacity:.7;vector-effect:non-scaling-stroke}
+.sx-k{margin:6px 0 0;font:500 10px 'DM Mono',monospace;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+.sx-dash{display:inline-block;width:16px;border-top:1.6px dashed var(--ink);opacity:.7;vertical-align:middle;margin-right:6px}
+/* calendar: tiny profiles for the current / selected week, and on session rows */
+.wkprof{display:flex;align-items:flex-end;gap:8px;margin:2px 0 6px}
+.wkprof .wkdays{align-items:end}
+.wkprof .cell{display:flex;flex-direction:column;gap:2px;padding:0 3px}
+.pf.pf-mini{height:16px;border-radius:3px;overflow:hidden}
+.sesh .pfm{display:block;width:72px;height:18px;margin-top:5px}
 /* session sheet: the planned workout's steps (app.js openDetail, 13 Oct 2026) */
 .wk-steps{margin:0;padding:4px 18px 12px 48px;font-size:14.5px;line-height:1.5}
 .wk-steps li{padding:6px 0;border-bottom:1px solid var(--rule-soft)}
