@@ -639,7 +639,15 @@ _WEB_NOTE = (
     "<telegram> tags) with <options>1. Short label|2. Short label</options>: 2 to 5 "
     "options, each under 40 characters, matching the choices in your reply. Peak shows "
     "them as buttons plus an Other button, so they tap instead of typing. Only for a real "
-    "choice, never on a reply that asks nothing.]")
+    "choice, never on a reply that asks nothing. "
+    "LENGTH (Jamie, 13 Oct 2026: replies to athletes were too verbose): answer first, in the "
+    "first line. A simple question gets 1-3 short sentences. Use a table or a list only when "
+    "it IS the answer (a session's blocks, a week); never add a list of side tips or caveats "
+    "they did not ask for. About 120 words at most unless they asked for detail or a plan. "
+    "NO NUMBER RECONCILIATION: quote the current number once (Intervals.icu's Load, the "
+    "calendar's figure). Never tell the athlete that your estimate, draft or earlier figure "
+    "differs from Intervals.icu or from what you said before (\"I said 72, it's 74\", \"a "
+    "bit higher than my draft's 228\") unless the difference changes what they should do.]")
 
 
 def _plan_session(user_message, config, history, sp_file, athlete_name, context,
