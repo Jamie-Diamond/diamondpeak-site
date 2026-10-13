@@ -2599,7 +2599,10 @@ def fast_path(text, slug: str = "", athlete_cfg: dict | None = None):
     if m and slug:
         kg = float(m.group(1))
         state = _load_state_json(slug)
-        state.setdefault("weight_readings", []).append({"date": today, "kg": kg})
+        # One reading per day, the latest wins (13 Oct 2026: no duplicate stats). Sending
+        # the weight twice used to log it twice and weight the trend towards that day.
+        _wr = [w for w in state.get("weight_readings") or [] if w.get("date") != today]
+        state["weight_readings"] = _wr + [{"date": today, "kg": kg}]
         state["last_updated"] = today
         _save_state_json(slug, state)
         _git_commit(f"auto: weight {kg} kg {slug} {today}")

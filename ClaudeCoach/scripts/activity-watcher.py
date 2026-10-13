@@ -1663,8 +1663,12 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
 
     state = load_state(state_file)
 
-    # Dedup session log before any processing to catch merge-conflict duplicates
+    # Dedup session log before any processing to catch merge-conflict duplicates, and the
+    # other one-entry-per-activity logs the analysis appends to (13 Oct 2026: Jamie's
+    # swim-log held 26 Aug twice, which double-counts it in the swim trends).
     _dedup_session_log(session_log_f)
+    for _log in ("swim-log.json", "decoupling-log.json", "run-durability-log.json"):
+        _dedup_session_log(adir / _log)
 
     # Test reminders and Strava refresh run every cycle regardless of new activity
     _check_test_reminders(adir, chat_id, state, state_file)
