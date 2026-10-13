@@ -135,7 +135,10 @@ def main() -> None:
                 page.set_input_files("#chatFile", a.attach)
                 page.wait_for_timeout(1500)
             if a.tap:
-                page.click(a.tap)
+                try:
+                    page.click(a.tap, timeout=3000)
+                except Exception:                    # off screen or hidden: click it directly
+                    page.evaluate("s => document.querySelector(s) && document.querySelector(s).click()", a.tap)
                 page.wait_for_timeout(1200)
                 page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                 page.wait_for_timeout(500)

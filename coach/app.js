@@ -173,6 +173,11 @@
            '-' + String(d.getDate()).padStart(2, '0');
   }
   function sportClass(s) { return 'sp-' + (SPORT[s] || 'other'); }
+  // The sport in words for a session sheet's top line (13 Oct 2026: "Tempo 2x25" said
+  // nothing about being a ride until the indoor card further down).
+  function sportWord(s) {
+    return { swim: 'Swim', bike: 'Bike', run: 'Run', strength: 'Strength' }[SPORT[s] || family(s)] || '';
+  }
 
   // The published blocks label a sport for display ('Bike'), while an activity carries
   // the intervals.icu name ('Ride'). SPORT knows the second set only, so the fallback is
@@ -4328,6 +4333,7 @@
     var h = '<header class="dr-h"><div><p class="dr-k">' +
       esc(dow(dateISO) + ' ' + dnum(dateISO) + ' ' +
           new Date(dateISO + 'T12:00:00').toLocaleDateString('en-GB', { month: 'long' })) +
+      (sportWord(pl.sport || a.type || sport) ? ' · ' + sportWord(pl.sport || a.type || sport) : '') +
       (done ? ' · completed' : ' · planned' + (pl.indoor ? ' · indoors' : '')) + '</p>' +
       '<h2 class="dr-t"><span class="sp ' + sportClass(sport) + '"></span>' +
       esc(name || pl.name || a.name || sport || 'Session') + '</h2></div>' +
@@ -4377,9 +4383,10 @@
         '<p class="indoor-msg" id="indoorMsg"></p></div>');
     }
 
-    // Fuelling. Every row is shown even when empty: a blank is information (it says
-    // log it), whereas hiding the row makes a gap look like a feature that is missing.
-    h += card('Fuelling', kvRows([
+    // Fuelling and heat: only once the session is done (13 Oct 2026: a planned session
+    // showed a card of "not logged" rows for something that hadn't happened yet). After it,
+    // every row shows even when empty: a blank then says "log it".
+    if (done) h += card('Fuelling', kvRows([
       ['Carbohydrate', x.carb ? Number(x.carb.g_per_hr).toFixed(0) + ' g/hr' : 'not logged',
        !!x.carb],
       ['Water', lg.hydration_ml != null ? lg.hydration_ml + ' ml' : 'not logged'],
@@ -4388,10 +4395,9 @@
       (x.carb && x.carb.dur) ? ['Over', hhmm(x.carb.dur)] : null,
       (x.carb && x.carb.dur && x.carb.g_per_hr != null)
         ? ['Total carbohydrate', Math.round(x.carb.g_per_hr * x.carb.dur / 60) + ' g'] : null
-    ]), { foot: 'Sodium is captured from your reply to the post-session question. ' +
-                'Sweat sodium concentration is a separate test, still to be booked.' });
+    ]), { foot: 'Sodium comes from your reply to the after-session question.' });
 
-    h += card('Heat', x.heat
+    if (done || x.heat) h += card('Heat', x.heat
       ? kvRows([
           ['Exposure', x.heat[3] || 'logged', true],
           x.heat[1] != null ? ['Dose', Number(x.heat[1]).toFixed(2)] : null,
