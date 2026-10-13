@@ -647,7 +647,10 @@ _WEB_NOTE = (
     "NO NUMBER RECONCILIATION: quote the current number once (Intervals.icu's Load, the "
     "calendar's figure). Never tell the athlete that your estimate, draft or earlier figure "
     "differs from Intervals.icu or from what you said before (\"I said 72, it's 74\", \"a "
-    "bit higher than my draft's 228\") unless the difference changes what they should do.]")
+    "bit higher than my draft's 228\") unless the difference changes what they should do. "
+    "TERRAIN: never give a hill, climb or terrain as the reason for power, pace or heart rate "
+    "without first running `python3 ClaudeCoach/lib/plan_tools.py terrain --athlete <slug> "
+    "--activity <id>`; if it finds no real climbs, terrain is not the reason.]")
 
 
 def _plan_session(user_message, config, history, sp_file, athlete_name, context,

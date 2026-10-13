@@ -2978,6 +2978,35 @@ def goal_setup(slug: str, goal: str | None = None, apply: bool = False, today=No
     return out
 
 
+def cmd_terrain(args) -> dict:
+    """Did real climbs explain an activity's hard parts? (lib/terrain.py; Jamie, 13 Oct
+    2026: chat told Fred "the climb in block 3 pushed the power up" on a ride with no rise
+    over 8 m). Climbs (15 m+), biggest climb, altitude range, and for a ride or run the time
+    above Z2 heart rate on climbs. The only basis for saying terrain caused anything."""
+    import hr_quality
+    import terrain
+    cfg = _load_cfg(args.athlete)
+    cl = _client(cfg)
+    st = hr_quality.streams_by_type(cl.get_activity_streams(args.activity))
+    alt = [a for a in (st.get("altitude") or []) if a is not None]
+    cls = terrain.climbs(st.get("altitude") or [])
+    out = {"activity": args.activity, "climbs_15m_plus": len(cls),
+           "biggest_climb_m": max((m for *_, m in cls), default=0.0),
+           "altitude_range_m": [round(min(alt), 1), round(max(alt), 1)] if alt else None}
+    ceiling = None
+    for ss in cl.get_sport_settings() or []:
+        types = ss.get("types") or []
+        sport = cl.get_activity_detail(args.activity).get("type") or ""
+        if any(t in sport for t in types) and len(ss.get("hr_zones") or []) > 1:
+            ceiling = float(ss["hr_zones"][1])
+            break
+    if ceiling:
+        out["above_z2_on_climbs"] = terrain.check(st, ceiling)
+    out["verdict"] = ("real climbs: terrain may be named, with the numbers" if cls else
+                      "no real climbs: never give hills, climbs or terrain as a reason")
+    return out
+
+
 def cmd_goal_setup(args) -> dict:
     return goal_setup(args.athlete, args.goal, apply=args.apply, sports=args.sports,
                       start=args.start, clear=args.clear, block_weeks=args.block_weeks,
@@ -3241,6 +3270,10 @@ def main():
     pgs.add_argument("--by", help="the target date, YYYY-MM-DD")
     pgs.add_argument("--apply", action="store_true")
 
+    pter = sub.add_parser("terrain", help="did real climbs explain an activity's hard parts (lib/terrain.py)")
+    pter.add_argument("--athlete", required=True)
+    pter.add_argument("--activity", required=True)
+
     prl = sub.add_parser("race-level", help="the athlete's level for their race and its numbers (blueprint §4.5)")
     prl.add_argument("--athlete", required=True)
 
@@ -3274,7 +3307,7 @@ def main():
                "fitness-choice": cmd_fitness_choice,
                "bespoke-event": cmd_bespoke_event, "race-level": cmd_race_level,
                "race-prompt": cmd_race_prompt, "race-setup": cmd_race_setup,
-               "goal-setup": cmd_goal_setup}[args.cmd]
+               "goal-setup": cmd_goal_setup, "terrain": cmd_terrain}[args.cmd]
     try:
         result = handler(args)
     except SystemExit:

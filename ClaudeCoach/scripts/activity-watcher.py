@@ -314,6 +314,7 @@ RUN:
 {run_injury_ask}
 Running power: if icu_average_watts is not null in activity_detail (Garmin running power configured), add one line after the HR line: "Running power: Xw avg · pace-power check: [brief note if pace and power effort level diverge — e.g. power high vs easy pace = headwind/elevation]". Skip entirely if icu_average_watts is null.
 Easy/Z2 verdict: When characterising run intensity use icu_average_hr (from activity_detail), Z2 ceiling = {run_hr_cap} bpm, zone time breakdown (icu_zone_times or extended_metrics), and total_ascent_m (from activity_detail). Apply deterministically: a run is EASY if avg_hr < {run_hr_cap} bpm AND (Z1+Z2 time) >= 75% of total run time. The ONE exception: when the TERRAIN CHECK above says terrain DOES explain the time above Z2 and avg_hr < {run_hr_cap} bpm, the run stays EASY and you may say the climbs account for it. Otherwise terrain is never the reason: not from total_ascent_m, not from the route name, and a run with no TERRAIN CHECK line gets no terrain explanation.
+For ANY session (rides too): never name a hill, climb or terrain as the reason for power, pace or heart rate unless its TERRAIN CHECK line says terrain DOES explain it (13 Oct 2026: a ride's power creep was put down to a "climb" that did not exist).
 Elevation source: total_elevation_gain / total_elevation_loss / total_ascent_m for a session ALWAYS come from the activity_detail root fields (whole-activity totals). NEVER read elevation from extended_metrics or icu_intervals entries — those are per-segment/per-interval values (often single-digit metres) and will misstate the session's actual terrain by an order of magnitude if quoted as the whole-activity gain.
 
 SWIM:
@@ -547,16 +548,18 @@ def _terrain_pass(slug: str, session_log_f: Path) -> str:
         if session_log_f.exists():
             logged = {str(e.get("activity_id", "")) for e in json.loads(session_log_f.read_text())}
         runs = [a for a in client.get_training_history(days=2) or []
-                if a.get("type") in ("Run", "TrailRun") and str(a.get("id")) not in logged]
+                if a.get("type") in ("Run", "TrailRun", "Ride", "GravelRide", "MountainBikeRide")
+                and str(a.get("id")) not in logged]
         if not runs:
             return ""
-        ceiling = float(cfg.get("run_hr_cap") or 150)
+        zones = {}
         for ss in client.get_sport_settings() or []:
-            if "Run" in (ss.get("types") or []) and len(ss.get("hr_zones") or []) > 1:
-                ceiling = float(ss["hr_zones"][1])
-                break
+            if len(ss.get("hr_zones") or []) > 1:
+                for t in ss.get("types") or []:
+                    zones[t] = float(ss["hr_zones"][1])
         lines = []
         for a in runs:
+            ceiling = zones.get(a.get("type")) or float(cfg.get("run_hr_cap") or 150)
             st = hr_quality.streams_by_type(client.get_activity_streams(str(a["id"])))
             lines.append(terrain.note(a.get("name") or "Run", str(a["id"]),
                                       terrain.check(st, ceiling), ceiling))
