@@ -215,16 +215,22 @@
     }).join('') + '</defs>';
     var thr = o.mini ? '' : '<line x1="0" x2="' + W + '" y1="' + (H - 100 / CAP * H).toFixed(1) +
       '" y2="' + (H - 100 / CAP * H).toFixed(1) + '" class="pf-thr"/>';
+    // The plan over a done session. plan_fit (lib/workout_profile.fit_plan) is the plan
+    // re-timed onto what was done - efforts pinned to the efforts, easy parts stretched or
+    // cut - with a flag per block; a block whose length changed is drawn red (13 Oct 2026).
     var plan = '';
     if (o.plan && o.plan.length && !o.mini) {
-      var pt = o.plan.reduce(function (a, b) { return a + (b[0] || 0); }, 0) || 1, px = 0, path = '';
+      var pt = o.plan.reduce(function (a, b) { return a + (b[0] || 0); }, 0) || 1, px = 0;
+      var yOf = function (b) { return (H - Math.max(6, Math.min(CAP, b[1] || 0) / CAP * H)).toFixed(1); };
+      var risers = '';
       o.plan.forEach(function (b, i) {
-        var y = (H - Math.max(6, Math.min(CAP, b[1] || 0) / CAP * H)).toFixed(1);
-        var w = W * (b[0] || 0) / pt;
-        path += (i ? ' L' : 'M') + px.toFixed(1) + ' ' + y + ' L' + (px + w).toFixed(1) + ' ' + y;
+        var w = W * (b[0] || 0) / pt, y = yOf(b);
+        if (i) risers += 'M' + px.toFixed(1) + ' ' + yOf(o.plan[i - 1]) + ' L' + px.toFixed(1) + ' ' + y + ' ';
+        plan += '<path d="M' + px.toFixed(1) + ' ' + y + ' L' + (px + w).toFixed(1) + ' ' + y +
+          '" class="pf-plan' + (b[2] ? ' pf-plan-x' : '') + '"/>';
         px += w;
       });
-      plan = '<path d="' + path + '" class="pf-plan"/>';
+      plan = '<path d="' + risers + '" class="pf-plan"/>' + plan;
     }
     return '<svg class="pf' + (o.mini ? ' pf-mini' : '') + '" viewBox="0 0 ' + W + ' ' + H +
       '" preserveAspectRatio="none" aria-hidden="true">' + defs + thr + rects + plan + '</svg>';
@@ -4446,8 +4452,10 @@
       '<header class="card-h">' + sportIcon(pl.sport || a.type || sport) +
       '<h2>' + esc(sportWord(pl.sport || a.type || sport) || 'Session') + (done ? '' : ' · planned') + '</h2></header>' +
       '<div class="sx-figs">' + figRow.join('') + '</div>' +
-      (prof && prof.length ? '<div class="sx-pf">' + profSvg(prof, { plan: done ? pl.plan_prof : null }) + '</div>' +
-        (done && pl.plan_prof && pl.plan_prof.length ? '<p class="sx-k"><i class="sx-dash"></i>planned</p>' : '')
+      (prof && prof.length ? '<div class="sx-pf">' + profSvg(prof, { plan: done ? (pl.plan_fit || pl.plan_prof) : null }) + '</div>' +
+        (done && pl.plan_prof && pl.plan_prof.length ? '<p class="sx-k"><i class="sx-dash"></i>planned' +
+          ((pl.plan_fit || []).some(function (b) { return b[2]; })
+            ? '<i class="sx-dash x"></i>longer or shorter than planned' : '') + '</p>' : '')
         : '') +
       '</section>';
 
@@ -4479,9 +4487,10 @@
     // The workout, step by step, with the athlete's own watts / paces (lib/workout_steps.py,
     // 13 Oct 2026: "Tempo 2x25" alone didn't say what to do).
     if (!done && (pl.steps || []).length) {
-      h += card('Workout', '<ol class="wk-steps">' + pl.steps.map(function (st) {
-        return '<li>' + esc(st) + '</li>';
-      }).join('') + '</ol>');
+      h += card('Workout', '<div class="wk-steps">' + pl.steps.map(function (st) {
+        var parts = String(st).split(' · ');
+        return '<div class="wk-s"><b>' + esc(parts.shift()) + '</b><span>' + esc(parts.join(' · ')) + '</span></div>';
+      }).join('') + '</div>', { flush: true });
     }
 
     // Ride indoors (lib/indoor.py, 1 Oct 2026): a planned ride under 2 hours can move to

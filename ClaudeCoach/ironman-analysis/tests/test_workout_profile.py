@@ -35,3 +35,13 @@ def test_intervals_come_out_as_blocks_not_minutes():
     b = wp.completed({"watts": w, "time": list(range(len(w)))}, SS, "Ride")
     hard = [x for x in b if x[1] > 85]
     assert len(hard) == 3 and all(540 <= x[0] <= 660 for x in hard)
+
+
+def test_plan_is_retimed_onto_the_efforts_and_changes_flagged():
+    """Jamie, 13 Oct 2026: a 5-min-longer warm-up must not push every target out of sync."""
+    plan = [[600, 65, 2], [480, 98, 4], [240, 50, 1], [480, 98, 4], [600, 65, 2]]
+    done = [[900, 66, 2], [480, 99, 4], [240, 55, 1], [480, 97, 4], [600, 62, 2]]
+    fit = wp.fit_plan(plan, done)
+    assert [b[0] for b in fit] == [900, 480, 240, 480, 600]          # efforts pinned
+    assert [b[2] for b in fit] == [1, 0, 0, 0, 0]                    # warm-up extended
+    assert wp.fit_plan(plan, [[900, 66, 2], [480, 99, 4], [600, 62, 2]]) is None  # a skipped effort

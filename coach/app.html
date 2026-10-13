@@ -968,8 +968,10 @@ body.dev-chat .composer .cb.go{background:#238636}
 .pf{width:100%;height:100%;display:block;overflow:visible}
 .pf-thr{stroke:var(--muted);stroke-width:1.2;stroke-dasharray:6 6;opacity:.6;vector-effect:non-scaling-stroke}
 .pf-plan{fill:none;stroke:var(--ink);stroke-width:1.6;stroke-dasharray:4 3;opacity:.7;vector-effect:non-scaling-stroke}
+.pf-plan-x{stroke:#d1323f;stroke-width:2;opacity:.95}
 .card.sx > .sx-k{margin:-8px 0 12px;padding:0;text-align:center;font:500 10px 'DM Mono',monospace;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
 .sx-dash{display:inline-block;width:16px;border-top:1.6px dashed var(--ink);opacity:.7;vertical-align:middle;margin-right:6px}
+.sx-dash.x{border-top-color:#d1323f;opacity:1;margin-left:14px}
 /* calendar: tiny profiles for the current / selected week, and on session rows */
 .wkprof{display:flex;align-items:flex-end;gap:8px;margin:2px 0 6px}
 .wkprof .wkdays{align-items:end}
@@ -977,9 +979,11 @@ body.dev-chat .composer .cb.go{background:#238636}
 .pf.pf-mini{height:16px;border-radius:3px;overflow:hidden}
 .sesh .pfm{display:block;width:72px;height:18px;margin-top:5px}
 /* session sheet: the planned workout's steps (app.js openDetail, 13 Oct 2026) */
-.wk-steps{margin:0;padding:4px 18px 12px 48px;font-size:14.5px;line-height:1.5}
-.wk-steps li{padding:6px 0;border-bottom:1px solid var(--rule-soft)}
-.wk-steps li:last-child{border-bottom:0}
+.card > .wk-steps{padding:0}
+.wk-s{display:flex;gap:12px;align-items:baseline;padding:10px 15px;border-bottom:1px solid var(--rule-soft)}
+.wk-s:last-child{border-bottom:0}
+.wk-s b{flex:0 0 auto;min-width:64px;font-family:'Libre Baskerville',serif;font-weight:400;font-size:15px;color:var(--ink)}
+.wk-s span{flex:1;min-width:0;font-size:14px;line-height:1.45;color:var(--ink-2)}
 .msg-meta{margin-top:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.1em;
   text-transform:uppercase;color:var(--muted);opacity:.8}
 .msg[data-key]{cursor:pointer}
@@ -1056,6 +1060,7 @@ body.dev-chat .composer .cb.go{background:#238636}
 }
 .wk-n{margin-left:auto;font-family:'Libre Baskerville',serif;font-size:16px;letter-spacing:-.02em}
 .wk-t{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)}
+.card > .wk-steps{padding:0}
 .wk-s{display:flex;flex-wrap:wrap;gap:4px 11px;margin-top:6px}
 .wk-s span{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.05em;color:var(--ink-2)}
 .wk-s .sp{width:4px;height:4px;margin-right:4px}
@@ -1345,6 +1350,6 @@ body.drawn{overflow:hidden}
      broken launch. A new URL cannot hit that cache entry. It always equals the
      number in sw.js CACHE (peak-vN): bump both on every release, enforced by
      ClaudeCoach/ironman-analysis/tests/test_peak_release.py. -->
-<script src="app.js?v=106" defer></script>
+<script src="app.js?v=107" defer></script>
 </body>
 </html>

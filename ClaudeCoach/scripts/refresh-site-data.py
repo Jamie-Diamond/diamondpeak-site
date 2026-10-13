@@ -759,6 +759,15 @@ def _build_jamie_data(client) -> dict:
             _wp.attach(client, BASE, "jamie", recent, _steps.sport_settings,
                        since=(date.today() - timedelta(days=_wp.PROFILE_DAYS)).isoformat(),
                        profile=_steps.profile, log=log)
+            # the plan re-timed onto what was done (wp.fit_plan): efforts pinned, easy
+            # parts stretched or cut, changed parts flagged
+            for _wc in week_calendar:
+                if _wc.get("status") == "completed" and _wc.get("plan_prof"):
+                    _done = next((r.get("prof") for r in recent if r.get("date") == _wc["date"]
+                                  and r.get("prof") and r.get("sport") == _wc.get("sport")), None)
+                    _fit = _wp.fit_plan(_wc["plan_prof"], _done) if _done else None
+                    if _fit:
+                        _wc["plan_fit"] = _fit
         except Exception as _e:
             log(f"workout profiles (non-fatal): {_e}")
         from route_shape import attach_shapes
@@ -1855,6 +1864,15 @@ def _build_athlete_training_data(slug, athlete_cfg):
             _wp.attach(client, BASE, slug, recent, _steps.sport_settings,
                        since=(date.today() - timedelta(days=_wp.PROFILE_DAYS)).isoformat(),
                        profile=_steps.profile, log=log)
+            # the plan re-timed onto what was done (wp.fit_plan): efforts pinned, easy
+            # parts stretched or cut, changed parts flagged
+            for _wc in week_calendar:
+                if _wc.get("status") == "completed" and _wc.get("plan_prof"):
+                    _done = next((r.get("prof") for r in recent if r.get("date") == _wc["date"]
+                                  and r.get("prof") and r.get("sport") == _wc.get("sport")), None)
+                    _fit = _wp.fit_plan(_wc["plan_prof"], _done) if _done else None
+                    if _fit:
+                        _wc["plan_fit"] = _fit
         except Exception as _e:
             log(f"workout profiles (non-fatal): {_e}")
         from route_shape import attach_shapes

@@ -276,3 +276,61 @@ def attach(client, base: Path, slug: str, recent: list, sport_settings: list,
     except OSError:
         pass
     return fetched
+
+
+# ── the plan, laid over what was done (Jamie, 13 Oct 2026) ───────────────────────
+# "For completed activities let's say the warm up is 5 mins longer it's annoying when all
+# the target lines are out of sync. So we should move where the intervals are in the plan
+# and add a red dotted line where the duration is extended or cut."
+WORK_PCT = 85            # a block at or above this % of threshold is an effort
+CHANGED_S = 60           # a part counts as extended / cut beyond this...
+CHANGED_FRAC = 0.15      # ...and this share of its planned length
+
+
+def _groups(blocks: list) -> list:
+    """[(is_work, [blocks])] runs of effort / not-effort, in order."""
+    out = []
+    for b in blocks:
+        w = (b[1] or 0) >= WORK_PCT
+        if out and out[-1][0] == w:
+            out[-1][1].append(b)
+        else:
+            out.append((w, [b]))
+    return out
+
+
+def fit_plan(plan: list, done: list) -> list | None:
+    """The planned blocks re-timed onto the done session: [[seconds, pct, flag], ...]
+    summing to the done session's length, flag 0 as planned, 1 extended, -1 cut. Each
+    planned effort is pinned to the matching done effort (in order); the easier parts
+    between stretch or shrink to fit. None when the efforts don't pair up (a skipped or
+    added interval), so the caller falls back to the plain proportional outline."""
+    if not plan or not done:
+        return None
+    pg, dg = _groups(plan), _groups(done)
+    if [w for w, _ in pg] != [w for w, _ in dg]:
+        # same efforts but the done session starts or ends with a part the plan lacks
+        # (or vice versa) - pad the shorter with an empty easy part so they line up
+        if [w for w, _ in pg if w] != [w for w, _ in dg if w] or \
+                sum(1 for w, _ in pg if w) != sum(1 for w, _ in dg if w):
+            return None
+        if pg and dg and pg[0][0] != dg[0][0]:
+            (pg if pg[0][0] else dg).insert(0, (False, [[0, 0, 1]]))
+        if pg and dg and pg[-1][0] != dg[-1][0]:
+            (pg if pg[-1][0] else dg).append((False, [[0, 0, 1]]))
+        if [w for w, _ in pg] != [w for w, _ in dg]:
+            return None
+    out = []
+    for (pw, pbs), (dw, dbs) in zip(pg, dg):
+        p_s = sum(b[0] for b in pbs)
+        d_s = sum(b[0] for b in dbs)
+        if not d_s:
+            continue
+        changed = abs(d_s - p_s) > max(CHANGED_S, CHANGED_FRAC * p_s)
+        flag = 0 if not changed else (1 if d_s > p_s else -1)
+        if not p_s:                                  # done but not planned
+            out.append([d_s, 0, 1])
+            continue
+        for b in pbs:
+            out.append([round(b[0] * d_s / p_s), b[1], flag])
+    return out
