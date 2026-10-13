@@ -4430,17 +4430,26 @@
     if (done && (a.hr || lg.avg_hr)) figs.push('<span class="sx-hr">' + (a.hr || lg.avg_hr) + '<i>bpm</i></span>');
     if (done && (a.powAvg || lg.avg_power)) figs.push('<span class="sx-w">' + (a.powAvg || lg.avg_power) + '<i>w</i></span>');
     else if (done && a.pace && fam2 !== 'bike') figs.push('<span class="sx-w">' + esc(a.pace) + '</span>');
-    h += '<section class="sx sx-' + esc(fam2 || 'other') + '">' +
-      '<div class="sx-band">' + sportIcon(pl.sport || a.type || sport) +
-      '<b>' + (durMin != null ? hhmm(durMin) : '') + '</b>' +
-      '<b>' + (dist ? Number(dist).toFixed(dist >= 10 ? 0 : 1) + ' km' : '') + '</b></div>' +
-      '<div class="sx-body">' +
-      (figs.length ? '<div class="sx-figs">' + figs.join('') + '</div>' : '') +
-      (tssV != null ? '<div class="sx-load">' + (done ? 'Load ' : 'Planned load ') + Math.round(tssV) + '</div>' : '') +
+    // Styled like every other card (13 Oct 2026: the coloured band "doesn't quite match
+    // the page format"): a quiet header with the sport, the figures in the serif face.
+    var sxFig = function (v, u, cls) {
+      return '<div class="sx-f' + (cls ? ' ' + cls : '') + '"><b>' + v + '</b><span>' + u + '</span></div>';
+    };
+    var figRow = [];
+    if (durMin != null) figRow.push(sxFig(hhmm(durMin), done ? 'time' : 'planned'));
+    if (dist) figRow.push(sxFig(Number(dist).toFixed(dist >= 10 ? 0 : 1), 'km'));
+    if (done && (a.hr || lg.avg_hr)) figRow.push(sxFig(a.hr || lg.avg_hr, 'bpm', 'hr'));
+    if (done && (a.powAvg || lg.avg_power)) figRow.push(sxFig(a.powAvg || lg.avg_power, 'watts', 'w'));
+    else if (done && a.pace && fam2 !== 'bike') figRow.push(sxFig(esc(a.pace.replace(/\/(km|100m)$/, '')), a.pace.indexOf('100m') > 0 ? '/100m' : '/km', 'w'));
+    if (tssV != null) figRow.push(sxFig(Math.round(tssV), 'load'));
+    h += '<section class="card sx sx-' + esc(fam2 || 'other') + '">' +
+      '<header class="card-h">' + sportIcon(pl.sport || a.type || sport) +
+      '<h2>' + esc(sportWord(pl.sport || a.type || sport) || 'Session') + (done ? '' : ' · planned') + '</h2></header>' +
+      '<div class="sx-figs">' + figRow.join('') + '</div>' +
       (prof && prof.length ? '<div class="sx-pf">' + profSvg(prof, { plan: done ? pl.plan_prof : null }) + '</div>' +
         (done && pl.plan_prof && pl.plan_prof.length ? '<p class="sx-k"><i class="sx-dash"></i>planned</p>' : '')
         : '') +
-      '</div></section>';
+      '</section>';
 
     // Route outline. A unit-box shape (no coordinates - see lib/route_shape.py), so it
     // draws straight into a 0..1 viewBox with no projection work here.

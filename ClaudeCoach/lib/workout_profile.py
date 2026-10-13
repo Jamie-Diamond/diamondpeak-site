@@ -192,10 +192,32 @@ def _segment(segs: list) -> list:
     return segs
 
 
+def from_intervals(intervals: list, ss: dict, threshold_pace_s=None) -> list:
+    """Blocks for a pool swim from Intervals.icu's intervals: each rep its own bar, each
+    rest a low grey one (Jamie, 13 Oct 2026: "10x100 swim sets should be 10 bars"; 30 s
+    slices could not separate reps with 25 s rests). Speed vs CSS / threshold pace; the
+    reps run ~2-4 s long into the rest (velocity-smoothed boundaries), which a picture can
+    carry but a rep time must not - those come from laps, not from here."""
+    thr_v = (100.0 / threshold_pace_s) if threshold_pace_s else float(ss.get("threshold_pace") or 0)
+    out = []
+    for iv in intervals or []:
+        dur = int(iv.get("moving_time") or iv.get("elapsed_time") or
+                  ((iv.get("end_time") or 0) - (iv.get("start_time") or 0)))
+        if dur <= 0:
+            continue
+        v = iv.get("average_speed")
+        if iv.get("type") == "WORK" and v and thr_v:
+            pct = 100.0 * float(v) / thr_v
+            out.append([dur, round(pct), _zone(pct, ss.get("pace_zones"))])
+        else:
+            out.append([dur, 0, 1])
+    return out if sum(1 for b in out if b[1]) >= 2 else []
+
+
 def _cache_path(base: Path, slug: str) -> Path:
-    # v2: blocks of steady effort (_segment), not 1-minute bins - a new file so every
+    # v3: swims from intervals; v2: blocks of steady effort (_segment), not 1-minute bins - a new file so every
     # activity is rebuilt once rather than mixing the two
-    return base / "athletes" / slug / "profile-cache-v2.json"
+    return base / "athletes" / slug / "profile-cache-v3.json"
 
 
 def attach(client, base: Path, slug: str, recent: list, sport_settings: list,
@@ -234,7 +256,14 @@ def attach(client, base: Path, slug: str, recent: list, sport_settings: list,
             sport = str(row.get("sport") or "")
             icu_sport = {"Bike": "Ride", "Run": "Run", "Swim": "Swim"}.get(sport, sport)
             ss = settings_for(sport_settings, icu_sport)
-            prof = completed(st, ss, icu_sport, css_s if "Swim" in icu_sport else None)
+            prof = []
+            if "Swim" in icu_sport:                  # reps and rests from the intervals
+                try:
+                    ivs = (client.get_extended_metrics(aid) or {}).get("icu_intervals") or []
+                    prof = from_intervals(ivs, ss, css_s)
+                except Exception:
+                    prof = []
+            prof = prof or completed(st, ss, icu_sport, css_s if "Swim" in icu_sport else None)
             cache[aid] = prof or None
             fetched += 1
             if prof:
