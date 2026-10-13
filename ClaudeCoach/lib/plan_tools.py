@@ -909,11 +909,14 @@ def goal_test_bookings(cfg: dict, slug: str | None = None, today=None,
     the weeks from ~6 weeks back to `weeks` ahead in which the goal is running. [] for a
     goal with no test, or whose sport the plan does not cover."""
     g = _goals.goal_cfg(cfg)
-    test = _goals.GOALS[g["type"]].get("test") if g else None
-    if not test:
+    if not g:
         return []
-    focus = _goals.GOALS[g["type"]].get("sport")
-    if focus and focus not in _goals.sports_for(cfg):
+    covered = _goals.sports_for(cfg)
+    # the main goal's test, then each extra's (main + extras, 13 Oct 2026)
+    tests = [_goals.GOALS[t].get("test") for t in [g["type"]] + [e["type"] for e in _goals.extras(g)]
+             if _goals.GOALS[t].get("test")
+             and (not _goals.GOALS[t].get("sport") or _goals.GOALS[t]["sport"] in covered)]
+    if not tests:
         return []
     base = _goals.block_start(cfg, slug)
     if not base:
@@ -924,7 +927,7 @@ def goal_test_bookings(cfg: dict, slug: str | None = None, today=None,
         if goal_active(cfg, w):
             pos = _goals.position(goal_start(cfg, slug, w), w, _goals.block_weeks(cfg))
             if pos["kind"] == "test":
-                out.append(_goal_test_booking(test, pos))
+                out += [_goal_test_booking(t, pos) for t in tests]
         w += timedelta(days=7)
     return out
 
@@ -955,10 +958,13 @@ def _goal_week(cfg: dict, ctl_today, today: date, last_week_tss=None,
     focus = gd.get("sport")
     test = (_goal_test_booking(gtest, pos) if gtest and kind == "test"
             and (not focus or focus in _goals.sports_for(cfg, profile)) else None)
+    extra_tests = [_goal_test_booking(_goals.GOALS[e["type"]]["test"], pos)
+                   for e in _goals.extras(g) if kind == "test"
+                   and _goals.GOALS[e["type"]]["sport"] in _goals.sports_for(cfg, profile)]
     books = [b for b in week_bookings(cfg, today) if not b.get("goal_test")] + (
-        [test] if test else [])
+        [test] if test else []) + extra_tests
     out = {"phase": "goal", "week_type": "goal", "goal": g["type"],
-           "goal_label": gd["label"], "goal_block": pos["block"], "goal_week": pos["week"],
+           "goal_label": _goals.label(g), "goal_emphasis": _goals.emphasis(g), "goal_block": pos["block"], "goal_week": pos["week"],
            "goal_week_kind": kind, "goal_distribution": _goals.distribution(cfg, profile),
            "goal_sports": _goals.sports_for(cfg, profile),
            "training_week": pos["training_week"], "ctl_today": ctl_today,
@@ -2873,7 +2879,8 @@ def cmd_race_setup(args) -> dict:
 def goal_setup(slug: str, goal: str | None = None, apply: bool = False, today=None,
                path=None, sports=None, start=None, clear: bool = False,
                ctl=None, block_weeks: int | None = None, target: str | None = None,
-               target_value=None, by: str | None = None) -> dict:
+               target_value=None, by: str | None = None, extras=None,
+               keep=None) -> dict:
     """Set (or with clear, remove) the athlete's goal without a race (lib/goals.py).
     target / target_value / by make it SMART (goals.realistic / assess judge the target);
     the same goal type with a target only updates the target, so a running block goes on.
@@ -2912,7 +2919,8 @@ def goal_setup(slug: str, goal: str | None = None, apply: bool = False, today=No
     first = start if isinstance(start, date) else (
         date.fromisoformat(start) if start else today + timedelta(days=(7 - today.weekday()) % 7 or 7))
     old = _goals.goal_cfg(cfg)
-    same = bool(old and old.get("type") == goal and (target or target_value or by)
+    same = bool(old and old.get("type") == goal and (target or target_value or by
+                                                     or extras is not None or keep is not None)
                 and not sports and not start and not block_weeks)
     g = dict(old) if same else _goals.make(goal, today=today, start=first, sports=sports,
                                            ctl=ctl, profile=profile)
@@ -2923,6 +2931,14 @@ def goal_setup(slug: str, goal: str | None = None, apply: bool = False, today=No
             target_value) else float(target_value)
     if by:
         g["by"] = date.fromisoformat(str(by)[:10]).isoformat()
+    if extras is not None:                  # main + extras (13 Oct 2026)
+        ex = json.loads(extras) if isinstance(extras, str) else extras
+        g["extras"] = [{k: v for k, v in e.items() if k in ("type", "target", "target_value", "by")}
+                       for e in ex or [] if isinstance(e, dict)
+                       and e.get("type") in _goals.EXTRA_TYPES and e.get("type") != goal]
+    if keep is not None:
+        g["keep"] = [s.strip() for s in (keep.split(",") if isinstance(keep, str) else keep)
+                     if s.strip() in ("swim", "bike", "run")]
     if block_weeks:                      # 5 = 4 build weeks + 1 easier, for an experienced athlete
         g["block_weeks"] = max(_goals.MIN_BLOCK_WEEKS, min(_goals.MAX_BLOCK_WEEKS, int(block_weeks)))
     trial = dict(cfg, goal=g)
@@ -2940,7 +2956,12 @@ def goal_setup(slug: str, goal: str | None = None, apply: bool = False, today=No
              "missing": _goals.smart_missing(g)}
     if g.get("target_value") not in (None, ""):
         smart["assessment"] = _goals.assess(goal, g["target_value"], _sv, _weeks, ctl)
-    out = {"athlete": slug, "goal": goal, "label": gd["label"], "smart": smart,
+    for e in _goals.extras(g):
+        r = {"realistic": _goals.realistic(e["type"], _sv, _weeks, ctl)}
+        if e.get("target_value") not in (None, ""):
+            r["assessment"] = _goals.assess(e["type"], e["target_value"], _sv, _weeks, ctl)
+        smart.setdefault("extras", {})[e["type"]] = r
+    out = {"athlete": slug, "goal": goal, "label": _goals.label(g), "smart": smart,
            "keeps_running_block": same,
            "sports": _goals.sports_for(trial, profile),
            "week_shape": list(_goals.shape(_goals.block_weeks(trial))),
@@ -3010,7 +3031,8 @@ def cmd_terrain(args) -> dict:
 def cmd_goal_setup(args) -> dict:
     return goal_setup(args.athlete, args.goal, apply=args.apply, sports=args.sports,
                       start=args.start, clear=args.clear, block_weeks=args.block_weeks,
-                      target=args.target, target_value=args.target_value, by=args.by)
+                      target=args.target, target_value=args.target_value, by=args.by,
+                      extras=args.extras, keep=args.keep)
 
 
 # Chat side of the choice: only the bot hears the athlete answer the Sunday question.
@@ -3268,6 +3290,9 @@ def main():
     pgs.add_argument("--target-value", dest="target_value",
                      help="the measure: FTP watts, threshold or CSS pace M:SS, or Fitness")
     pgs.add_argument("--by", help="the target date, YYYY-MM-DD")
+    pgs.add_argument("--extras", help='extra sport goals as JSON: [{"type":"ftp","target":"FTP 290 W",'
+                                      '"target_value":290,"by":"2027-01-31"}] ("[]" clears)')
+    pgs.add_argument("--keep", help="sports held easy with a touch, e.g. swim")
     pgs.add_argument("--apply", action="store_true")
 
     pter = sub.add_parser("terrain", help="did real climbs explain an activity's hard parts (lib/terrain.py)")

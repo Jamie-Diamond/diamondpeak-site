@@ -70,6 +70,11 @@ _MAINTAIN_ROW = {"bike": "80% Z1–2 / 12% Z3 / 8% Z4–5",
                  "run": "85% Z1–2 / 8% Z3 / 7% Z4–5",
                  "swim": "75% Z1–2 / 12% Z3 / 13% Z4–5"}
 _LIB_SPORT = {"bike": "Bike", "run": "Run", "swim": "Swim"}
+# An EXTRA goal's sport (main + extras, Jamie 13 Oct 2026): one quality session a week, so
+# between the main focus (two) and a support sport (easy with touches).
+_EXTRA_ROW = {"bike": "78% Z1–2 / 10% Z3 / 12% Z4–5",
+              "run": "80% Z1–2 / 8% Z3 / 12% Z4–5",
+              "swim": "72% Z1–2 / 10% Z3 / 18% Z4–5"}
 
 GOALS = {
     "maintain": {
@@ -207,6 +212,44 @@ def block_start(cfg: dict, slug: str | None = None) -> date | None:
     return _on_or_after_monday(set_d) if set_d else None
 
 
+# ── main + extras (Jamie, 13 Oct 2026) ──────────────────────────────────────────
+# "Why can't James aim to have 3 goals at once? There's nothing in them which is
+# contradictory." A goal is a MAIN type (its sport gets two quality sessions a week, its
+# ramp and block shape) plus optional EXTRAS - other sport goals, each with one quality
+# session a week, its own test in the block's test week and its own SMART target - and
+# KEEP sports held easy with touches. goal["extras"] = [{"type", "target", "target_value",
+# "by"}], goal["keep"] = ["swim"].
+EXTRA_TYPES = ("ftp", "run", "swim")
+
+
+def extras(g: dict | None) -> list:
+    """The goal's valid extras: sport goals other than the main one, one per type."""
+    out, seen = [], {(g or {}).get("type")}
+    for e in (g or {}).get("extras") or []:
+        t = (e or {}).get("type")
+        if t in EXTRA_TYPES and t not in seen:
+            seen.add(t)
+            out.append(e)
+    return out
+
+
+def label(g: dict | None) -> str:
+    """"Run faster + Raise my FTP" - the main goal then its extras."""
+    if not g or g.get("type") not in GOALS:
+        return ""
+    return " + ".join([GOALS[g["type"]]["label"]] + [GOALS[e["type"]]["label"] for e in extras(g)])
+
+
+def emphasis(g: dict | None) -> list:
+    """Session emphasis for the menu: the main goal's, then each extra's."""
+    out = []
+    for t in [(g or {}).get("type")] + [e["type"] for e in extras(g)]:
+        for x in GOALS.get(t, {}).get("emphasis", []):
+            if x not in out:
+                out.append(x)
+    return out
+
+
 def block_weeks(cfg: dict | None) -> int:
     """This athlete's block length: goal.block_weeks (3-6), else BLOCK_WEEKS."""
     try:
@@ -228,8 +271,17 @@ def position(start: date | None, day: date, weeks: int = BLOCK_WEEKS) -> dict:
 
 
 def sports_for(cfg: dict, profile: dict | None = None) -> list:
-    """What the plan covers: the goal's own list, else the profile's, else the sports with
-    standing days in day_rules, else the goal sport, else all three."""
+    """What the plan covers, plus every extra's and keep sport (an athlete with an FTP extra
+    trains bike whatever else is listed)."""
+    g = goal_cfg(cfg) or {}
+    base = _sports_base(cfg, profile)
+    add = [GOALS[e["type"]]["sport"] for e in extras(g)] + list(g.get("keep") or [])
+    return [s for s in ("swim", "bike", "run") if s in base or s in add]
+
+
+def _sports_base(cfg: dict, profile: dict | None = None) -> list:
+    """The goal's own list, else the profile's, else the sports with standing days in
+    day_rules, else the goal sport, else all three."""
     g = goal_cfg(cfg) or {}
     sp = [s for s in (g.get("sports") or (profile or {}).get("sports") or [])
           if s in _LIB_SPORT]
@@ -250,10 +302,15 @@ def distribution(cfg: dict, profile: dict | None = None) -> dict:
         return g["distribution"]                     # a per-athlete override
     gd = GOALS[g.get("type", "maintain")]
     focus = gd.get("sport")
+    extra_sports = {GOALS[e["type"]]["sport"] for e in extras(g)}
     out = {}
     for sp in sports_for(cfg, profile):
-        if focus:
-            row = _FOCUS_ROW[sp] if sp == focus else _SUPPORT_ROW[sp]
+        if focus and sp == focus:
+            row = _FOCUS_ROW[sp]
+        elif sp in extra_sports:
+            row = _EXTRA_ROW[sp]
+        elif focus:
+            row = _SUPPORT_ROW[sp]
         else:
             row = gd["rows"][sp]
         out[_LIB_SPORT[sp]] = row
@@ -280,8 +337,16 @@ def week_note(g: dict, pos: dict, kind: str, target, floor, ctl, why: str = "",
               band_lo_hi=None, test_name: str | None = None) -> str:
     """The planner's instruction for the week (the LLM reads it; never shown verbatim)."""
     gd = GOALS[g["type"]]
-    head = (f"GOAL BLOCK (no race): \"{gd['label']}\". Block {pos['block']}, week "
+    head = (f"GOAL BLOCK (no race): \"{label(g)}\". Block {pos['block']}, week "
             f"{pos['week']} of {pos.get('weeks', BLOCK_WEEKS)}. ")
+    ex = extras(g)
+    extra_load = "".join(
+        f" ALSO ({GOALS[e['type']]['label']}"
+        + (f", target {e['target']}" if e.get("target") else "") + "): exactly ONE quality "
+        f"{GOALS[e['type']]['sport']} session this week, on a different day from the main "
+        "goal's quality sessions." for e in ex)
+    keep = [s for s in (g.get("keep") or []) if s in _LIB_SPORT]
+    keep_txt = (f" KEEP {', '.join(keep)}: easy, with a short quality touch." if keep else "")
     tail = (" There is no race: never mention a countdown, race prep or race pace. "
             "Call it their goal block, not an off-season.")
     if kind == "load":
@@ -289,16 +354,19 @@ def week_note(g: dict, pos: dict, kind: str, target, floor, ctl, why: str = "",
         if band_lo_hi:
             bit += (f"Keep Fitness (CTL) between {band_lo_hi[0]:g} and {band_lo_hi[1]:g} "
                     f"(now {float(ctl):g}). ")
-        return (head + bit + f"Focus: {gd['focus']}. This is a TRAINING week: the quality "
-                "goes where the goal is, everything else genuinely easy, no two hard "
-                "sessions on consecutive days." + (" " + why if why else "") + tail)
+        return (head + bit + f"Focus: {gd['focus']}.{extra_load}{keep_txt} This is a TRAINING "
+                "week: the quality goes where the goals are, everything else genuinely easy, "
+                "no two hard sessions on consecutive days." + (" " + why if why else "") + tail)
     if kind == "test":
         tn = test_name or "test"
         return (head + f"TEST WEEK, end of block {pos['block']}: ~{target} TSS, an easier week "
                 f"built around the {tn}. Book it mid-to-late week on fresh legs, named with "
                 f"'{(gd.get('test') or {}).get('match', '')}', with nothing hard the day "
                 "before; everything else easy. The result sets the zones for the next "
-                "block." + tail)
+                "block." + "".join(
+                    f" Also book the {GOALS[e['type']]['test']['name']} this week (named with "
+                    f"'{GOALS[e['type']]['test']['match']}'), at least two days from the main "
+                    "test." for e in ex if GOALS[e["type"]].get("test")) + tail)
     return (head + f"EASIER WEEK{(' (' + why + ')') if why else ''}: ~{target} TSS. Keep "
             "session frequency and one short quality touch in the goal sport; cut volume. "
             "Adaptation happens in the unload." + tail)
@@ -412,10 +480,17 @@ def assess(goal_type: str, target_value, start_values: dict, weeks: int, ctl=Non
 
 
 def smart_missing(g: dict | None) -> list:
-    """What the goal still lacks to be SMART: "target", "date". Open-ended goals lack nothing."""
-    if not g or g.get("type") in OPEN_ENDED:
+    """What the goal still lacks to be SMART: "target", "date" for the main goal, then
+    "<extra label> target" / "<extra label> date" per extra. Open-ended mains lack nothing
+    themselves, but their extras still need targets."""
+    if not g:
         return []
-    return [k for k, f in (("target", "target"), ("date", "by")) if not g.get(f)]
+    out = [] if g.get("type") in OPEN_ENDED else [
+        k for k, f in (("target", "target"), ("date", "by")) if not g.get(f)]
+    for e in extras(g):
+        lab = GOALS[e["type"]]["label"]
+        out += [f"{lab} {k}" for k, f in (("target", "target"), ("date", "by")) if not e.get(f)]
+    return out
 
 
 def make(goal_type: str, *, today: date | None = None, start: date | None = None,
@@ -489,14 +564,14 @@ def progress(cfg: dict, profile: dict, ctl_now=None) -> list:
         rows.append({"label": label, "start": start, "now": now, "unit": unit,
                      "better": better})
 
-    t = g.get("type")
-    if t == "ftp":
-        row("FTP", sv.get("ftp"), profile.get("ftp_watts"), True, "W")
-    elif t == "run":
-        row("Threshold pace", sv.get("run_threshold"),
-            profile.get("run_threshold_pace_per_km"), False, "/km")
-    elif t == "swim":
-        row("CSS", sv.get("css"), profile.get("swim_css_per_100m"), False, "/100m")
+    for t in [g.get("type")] + [e["type"] for e in extras(g)]:
+        if t == "ftp":
+            row("FTP", sv.get("ftp"), profile.get("ftp_watts"), True, "W")
+        elif t == "run":
+            row("Threshold pace", sv.get("run_threshold"),
+                profile.get("run_threshold_pace_per_km"), False, "/km")
+        elif t == "swim":
+            row("CSS", sv.get("css"), profile.get("swim_css_per_100m"), False, "/100m")
     if ctl_now is not None:
         row("Fitness", sv.get("ctl"), round(float(ctl_now), 1), True)
     return rows
@@ -521,7 +596,10 @@ def view(cfg: dict, profile: dict, slug: str | None = None, today: date | None =
             next_test = {"name": gd["test"]["name"], "week_start": b["week_start"]}
             break
     lo_hi = band(cfg, None) if g["type"] == "maintain" else None
-    return {"type": g["type"], "label": gd["label"],
+    return {"type": g["type"], "label": label(g),
+            "extras": [{"label": GOALS[e["type"]]["label"], "target": e.get("target"),
+                        "by": e.get("by")} for e in extras(g)],
+            "keep": [s for s in (g.get("keep") or []) if s in _LIB_SPORT],
             "started": start.isoformat() if start else None,
             "notStarted": bool(start and today < start),
             "block": pos["block"], "week": pos["week"], "blockWeeks": pos["weeks"],
@@ -554,7 +632,13 @@ _SETUP = (
     "coming down, \"get fitter\" (more Fitness) is unrealistic unless they mean to keep "
     "building duration; a speed goal (FTP, 5k, CSS) or holding fitness fits better. If the "
     "goal is vague or unrealistic, say why in one line and offer 2-3 SMART alternatives as "
-    "option buttons. Keep it to one short exchange; never lecture.")
+    "option buttons. Keep it to one short exchange; never lecture."
+    "\nSEVERAL GOALS: an athlete may have a MAIN goal plus EXTRAS (other sport goals: ftp, "
+    "run, swim) and KEEP sports. Never tell them it's one goal at a time. The main goal's "
+    "sport gets two quality sessions a week, each extra one, keep sports stay easy with a "
+    "touch; each extra has its own test in the test week and its own SMART target. Set them "
+    "with goal-setup --goal <main> --extras '[{{\"type\":\"ftp\",\"target\":\"FTP 290 W\","
+    "\"target_value\":290,\"by\":\"2027-01-31\"}}]' --keep swim (preview, then --apply).")
 
 
 def prompt_block(slug: str, first_name: str = "", path=None, today: date | None = None) -> str:
@@ -580,15 +664,15 @@ def prompt_block(slug: str, first_name: str = "", path=None, today: date | None 
             v = view(cfg, {}, slug, today) or {}
             nt = v.get("nextTest")
             test = (f"; next test: {nt['name']}, week of {nt['week_start']}" if nt else "")
-            out = _PROMPT.format(name=name, label=GOALS[g["type"]]["label"],
+            out = _PROMPT.format(name=name, label=label(g),
                                  weeks=pos["weeks"], builds=pos["weeks"] - 1,
                                  block=pos["block"], week=pos["week"], test=test)
     if g and smart_missing(g):
         r = realistic(g["type"], g.get("start_values") or {}, 12)
         rng = (f" A realistic 12-week target from their start ({r['measure']} {r['from']}"
                f"{r['unit']}) is {r['range'][0]}-{r['range'][1]}{r['unit']}." if r else "")
-        out += (f"\nGOAL NEEDS A TARGET: {name}'s goal \"{GOALS[g['type']]['label']}\" has no "
-                f"{' or '.join(smart_missing(g))} yet.{rng} At the next natural moment in chat "
+        out += (f"\nGOAL NEEDS A TARGET: {name}'s goal \"{label(g)}\" still lacks: "
+                f"{', '.join(smart_missing(g))}.{rng} At the next natural moment in chat "
                 "(not in the middle of a session question), agree a SMART target and date with "
                 "them, offering 2-3 options as buttons, and save it with goal-setup "
                 f"--goal {g['type']} --target-value ... --target \"...\" --by ... --apply "

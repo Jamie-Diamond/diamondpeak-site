@@ -28,3 +28,18 @@ def test_only_open_ended_goals_may_skip_a_target():
     assert goals.smart_missing({"type": "maintain"}) == []
     assert goals.smart_missing({"type": "run"}) == ["target", "date"]
     assert goals.smart_missing({"type": "run", "target": "5k in 21:30", "by": "2027-01-10"}) == []
+
+
+def test_main_plus_extras():
+    """13 Oct 2026: James wants run speed, a higher FTP and to keep swimming. The main goal's
+    sport gets the focus row, each extra the one-quality-session row, keep sports support."""
+    g = {"type": "run", "extras": [{"type": "ftp", "target": "FTP 290 W"}, {"type": "run"},
+                                   {"type": "maintain"}], "keep": ["swim"]}
+    assert [e["type"] for e in goals.extras(g)] == ["ftp"]       # no duplicate or non-sport
+    assert goals.label(g) == "Run faster + Raise my FTP"
+    cfg = {"goal": g}
+    dist = goals.distribution(cfg)
+    assert dist["Run"] == goals._FOCUS_ROW["run"] and dist["Bike"] == goals._EXTRA_ROW["bike"]
+    assert dist["Swim"] == goals._SUPPORT_ROW["swim"]
+    assert goals.smart_missing(g) == ["target", "date", "Raise my FTP date"]
+    assert "sweetspot" in goals.emphasis(g) and "threshold" in goals.emphasis(g)

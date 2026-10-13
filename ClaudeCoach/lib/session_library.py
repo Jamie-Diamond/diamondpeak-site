@@ -630,7 +630,8 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
             _ZONE_BANDS),
         "intensity_weights": intensity_weights(
             ph.get("distribution") or _phase_distribution(bp, "peak"), ekey),
-        "emphasis": (_goals.GOALS.get(req.get("goal"), {}).get("emphasis", []) if goal_mode
+        "emphasis": ((req.get("goal_emphasis")
+                      or _goals.GOALS.get(req.get("goal"), {}).get("emphasis", [])) if goal_mode
                      else ((pt.offseason_cfg(cfg) or {}).get("emphasis")
                            or ["threshold", "vo2", "reps", "css", "speed"])
                      if offseason else event.get("emphasis", [])),

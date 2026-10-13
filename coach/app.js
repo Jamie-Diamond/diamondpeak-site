@@ -4124,6 +4124,12 @@
     // SMART target (lib/goals.py, 13 Oct 2026): "Keep my fitness" may stay open-ended.
     var tgt = g.target ? 'Target: ' + g.target + (g.by ? ', by ' + fmt(g.by) : '') + '.'
       : (g.type === 'maintain' ? '' : 'No target yet. Your coach will agree one with you.');
+    // Main + extras (13 Oct 2026): each extra's own target, then the sports kept ticking over.
+    (g.extras || []).forEach(function (e) {
+      tgt += (tgt ? ' ' : '') + 'Also: ' + e.label + (e.target ? ', ' + e.target : '') +
+        (e.by ? ' by ' + fmt(e.by) : '') + (e.target ? '.' : ' (target to agree).');
+    });
+    if ((g.keep || []).length) tgt += (tgt ? ' ' : '') + 'Keeping ' + g.keep.join(' and ') + ' ticking over.';
     var h = '<section class="hero"><p class="hero-k">Goal · no race booked</p>' +
       '<h2 class="hero-t">' + esc(g.label) + '</h2><p class="hero-m">' + esc(sub) + '</p>' +
       (tgt ? '<p class="hero-m"><b>' + esc(tgt) + '</b></p>' : '') + '</section>';
