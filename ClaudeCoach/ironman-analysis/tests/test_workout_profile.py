@@ -20,7 +20,18 @@ def test_completed_ride_by_power_run_by_pace():
     n = 600
     ride = {"watts": [200] * n, "time": list(range(n))}
     b = wp.completed(ride, SS, "Ride")
-    assert b and all(x[1] == 100 and x[2] == 4 for x in b)
+    assert len(b) == 1 and b[0][1] == 100 and b[0][2] == 4      # one steady block
     run = {"watts": [400] * n, "velocity_smooth": [3.4] * n, "time": list(range(n))}
     b = wp.completed(run, dict(SS, ftp=452), "Run")
     assert b and b[0][1] == 85 and b[0][2] == 2          # by pace (Z2), not running power
+
+
+def test_intervals_come_out_as_blocks_not_minutes():
+    """Jamie, 13 Oct 2026: obvious intervals should be one block each."""
+    import random
+    random.seed(1)
+    w = ([120] * 600 + ([190] * 600 + [120] * 300) * 3 + [120] * 600)
+    w = [x + random.randint(-15, 15) for x in w]           # road-style noise
+    b = wp.completed({"watts": w, "time": list(range(len(w)))}, SS, "Ride")
+    hard = [x for x in b if x[1] > 85]
+    assert len(hard) == 3 and all(540 <= x[0] <= 660 for x in hard)

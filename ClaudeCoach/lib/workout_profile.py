@@ -23,7 +23,7 @@ from pathlib import Path
 
 MAX_BLOCKS = 90
 MIN_BIN_S = 60
-MAX_NEW_FETCHES = 25         # per refresh, so a first run can't stall the data job
+MAX_NEW_FETCHES = 60         # per refresh, so a first run can't stall the data job
 FETCH_PAUSE_S = 0.3
 PROFILE_DAYS = 60            # completed sessions this recent get a profile
 
@@ -124,31 +124,78 @@ def completed(streams: dict, ss: dict, sport: str, threshold_pace_s=None) -> lis
         kind, src, ref = "hr", hr, float(ss["lthr"])
     if not kind:
         return []
-    total = (t[-1] - t[0]) if t and len(t) == n else n
-    bin_s = max(MIN_BIN_S, int(total / MAX_BLOCKS) + 1)
-    out, i = [], 0
     times = t if t and len(t) == n else list(range(n))
+    # 30-second slices, then merged into blocks of steady effort (see _segment).
+    segs, i = [], 0
     while i < n:
         j = i
-        while j < n and times[j] - times[i] < bin_s:
+        while j < n and times[j] - times[i] < SLICE_S:
             j += 1
         vals = [float(v) for v in src[i:j] if v is not None]
         if vals:
-            m = sum(vals) / len(vals)
-            pct = 100.0 * m / ref
-            if kind == "power":
-                z = _zone(pct, ss.get("power_zones"))
-            elif kind == "pace":
-                z = _zone(pct, ss.get("pace_zones"))
-            else:
-                z = _hr_zone(m, ss.get("hr_zones"))
-            out.append([int(times[min(j, n - 1)] - times[i]) or bin_s, round(pct), z])
+            dur = int(times[min(j, n - 1)] - times[i]) or SLICE_S
+            segs.append([dur, 100.0 * (sum(vals) / len(vals)) / ref])
         i = max(j, i + 1)
+    out = []
+    for dur, pct in _segment(segs):
+        if kind == "power":
+            z = _zone(pct, ss.get("power_zones"))
+        elif kind == "pace":
+            z = _zone(pct, ss.get("pace_zones"))
+        else:
+            z = _hr_zone(pct * ref / 100, ss.get("hr_zones"))
+        out.append([int(dur), round(pct), z])
     return out
 
 
+SLICE_S = 30
+MERGE_PCT = 9.0          # neighbours closer than this (% of threshold) are one effort
+MIN_SEG_S = 90           # anything shorter is folded into its closer neighbour
+MAX_SEGS = 16            # at most this many blocks in a session's profile
+
+
+def _segment(segs: list) -> list:
+    """Bottom-up merge of [seconds, pct] slices into blocks of steady effort (Jamie, 13 Oct
+    2026: "where there are obvious intervals it should display as one block, not lots of
+    little blocks"). Always merges the adjacent pair that distorts the picture least
+    (cost = gap^2 x ab / (a + b): a short piece next to a long one, or two near-equal
+    efforts, go first), until at most MAX_SEGS blocks remain AND every neighbour differs by
+    MERGE_PCT or more, and nothing is under MIN_SEG_S. The biggest changes of effort - an
+    interval against its recovery - are the last to go, so they survive: Jamie's treadmill
+    5-4-3-2-1 stays five efforts, an easy run is one block."""
+    segs = [list(x) for x in segs if x[0] > 0]
+
+    def cost(k):
+        a, b = segs[k], segs[k + 1]
+        return (a[1] - b[1]) ** 2 * a[0] * b[0] / (a[0] + b[0])
+
+    while len(segs) > 1:
+        gaps = [abs(segs[k][1] - segs[k + 1][1]) for k in range(len(segs) - 1)]
+        if len(segs) <= MAX_SEGS and min(gaps) >= MERGE_PCT:
+            # The blocks are distinct: only a piece too short to read is folded now, into
+            # its own nearer neighbour - never by merging two real blocks.
+            shorts = [i for i, x in enumerate(segs) if x[0] < MIN_SEG_S]
+            if not shorts:
+                break
+            i = min(shorts, key=lambda i: segs[i][0])
+            if i == 0:
+                k = 0
+            elif i == len(segs) - 1:
+                k = i - 1
+            else:
+                k = i - 1 if gaps[i - 1] <= gaps[i] else i
+        else:
+            k = min(range(len(segs) - 1), key=cost)
+        a, b = segs[k], segs[k + 1]
+        d = a[0] + b[0]
+        segs[k:k + 2] = [[d, (a[1] * a[0] + b[1] * b[0]) / d]]
+    return segs
+
+
 def _cache_path(base: Path, slug: str) -> Path:
-    return base / "athletes" / slug / "profile-cache.json"
+    # v2: blocks of steady effort (_segment), not 1-minute bins - a new file so every
+    # activity is rebuilt once rather than mixing the two
+    return base / "athletes" / slug / "profile-cache-v2.json"
 
 
 def attach(client, base: Path, slug: str, recent: list, sport_settings: list,
