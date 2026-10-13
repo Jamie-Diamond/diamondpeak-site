@@ -510,6 +510,30 @@ def build_keyboard(slug=None):
     return MENU_KEYBOARD
 
 
+# Option buttons in the coaching chat, as in Dev (Jamie, 13 Oct 2026: "the normal chat has
+# the ability to give option buttons for quick answering"). The coach ends a choice with
+# <options>a|b|c</options> (lib/engine.py _WEB_NOTE); each becomes a button whose tap is
+# the athlete's answer ("opt:<label>", dispatch_callback), plus Other, which opens the
+# keyboard in Peak.
+_OPTIONS_RE = re.compile(r"\s*<options>(.*?)</options>\s*", re.S | re.I)
+
+
+def _split_options(text: str) -> tuple[str, list]:
+    """(reply without the marker, button rows). Labels are cut to fit Telegram's 64-byte
+    callback limit; no marker, no rows."""
+    found = _OPTIONS_RE.findall(text or "")
+    body = _OPTIONS_RE.sub("\n", text or "").strip()
+    if not found:
+        return body, []
+    opts = [o.strip() for o in found[-1].split("|") if o.strip()][:5]
+    rows = []
+    for o in opts:
+        label = o[:40]
+        data = "opt:" + label.encode("utf-8")[:58].decode("utf-8", "ignore")
+        rows.append([{"text": label, "callback_data": data}])
+    return body, (rows + [[{"text": "Other…", "callback_data": "opt-other"}]] if rows else [])
+
+
 def _reply_inline(slug=None):
     """Inline keyboard for a conversational reply: any contextual buttons from
     build_keyboard PLUS a 🔊 Speak button that re-renders the reply as a voice note
@@ -7130,6 +7154,7 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
         clean = _strip_form_excuse(slug, clean)
         clean = _strip_fabricated_rpe(slug, clean, text)
         clean = _strip_model_countdown(clean, athlete)
+        clean, _opt_rows = _split_options(clean)
         final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
 
         # msg2: the FINAL, COMPLETE reply, sent ONCE as a NEW NOTIFYING message only
@@ -7140,7 +7165,10 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
         # (clean == "") sends no msg2; the charts already went out as their own messages.
         msg2_id = None
         if clean:
-            msg2_id = send(token, chat_id, final, reply_markup=_reply_inline(slug))
+            _kb = _reply_inline(slug)
+            if _opt_rows:
+                _kb = {"inline_keyboard": _opt_rows + _kb.get("inline_keyboard", [])}
+            msg2_id = send(token, chat_id, final, reply_markup=_kb)
 
         # Tidy msg1 AFTER the reply is sent: ALWAYS collapse it to the one-line summary
         # (tool summary if tools ran, else "Thought for Ns"); NEVER delete it, so a
@@ -7244,10 +7272,14 @@ def _image_reply_worker(token, chat_id, file_id, caption, athlete_entry, config)
         )
         clean = process_charts(token, chat_id, response, slug=slug)
         clean = _strip_model_countdown(clean, athlete_entry)
+        clean, _opt_rows = _split_options(clean)
         if clean:
+            _kb = build_keyboard(slug)
+            if _opt_rows:
+                _kb = {"inline_keyboard": _opt_rows + ((_kb or {}).get("inline_keyboard") or [])}
             send(token, chat_id,
                  clean + response_footer(MODEL_OPUS, slug=slug, athlete_cfg=athlete_entry),
-                 reply_markup=build_keyboard(slug))
+                 reply_markup=_kb)
         log(f"[{slug}] Out (image): {clean[:80]}")
         # Caption stored bare (never the "[image]" placeholder) and tagged kind=image,
         # so a later lookup can't mistake this for a real text message with that literal
@@ -7630,6 +7662,13 @@ def dispatch_callback(token, chat_id, text, msg_id, athletes, config):
     # finished. This branch is un-locked and, on the two live paths, does no
     # network: it names a run id to the engine and returns.
     if _handle_stop(token, chat_id, text, msg_id):
+        return True
+    # An option button (_split_options): the label is the athlete's answer, as if typed.
+    if text.startswith("opt:"):
+        _route_text(token, chat_id, text[4:], athletes, config)
+        return True
+    if text == "opt-other":
+        send(token, chat_id, "Go ahead and type your answer.")
         return True
     # Sign-up question buttons (Intervals.icu yes/no, coaching level...): the person
     # tapping is not an athlete yet, so nothing below applies to them.

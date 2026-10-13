@@ -75,6 +75,7 @@ def main() -> None:
     ap.add_argument("--inject-dev", help="JSON file: items appended to the Dev history shown "
                                          "(screenshot only, nothing is saved)")
     ap.add_argument("--tap", help="CSS selector to click before the screenshot")
+    ap.add_argument("--inject-chat", help="JSON file: items appended to the coaching chat shown")
     ap.add_argument("--attach", nargs="+", help="image files to put in the chat's photo picker")
     a = ap.parse_args()
 
@@ -102,6 +103,10 @@ def main() -> None:
                     try:
                         r = urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=30)
                         body = r.read()
+                        if a.inject_chat and path.startswith("/api/chat/history"):
+                            j = json.loads(body)
+                            j["history"] = j.get("history", []) + json.loads(Path(a.inject_chat).read_text())
+                            body = json.dumps(j).encode()
                         if a.inject_dev and path.startswith("/api/dev/history"):
                             j = json.loads(body)
                             j["history"] = j.get("history", []) + json.loads(Path(a.inject_dev).read_text())

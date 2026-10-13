@@ -194,7 +194,7 @@ def _patch(b):
         sink = _sink_for(getattr(_TURN, "chat_id", None))
         for ev in orig_stream(*a, **k):
             if sink and ev and ev[0] == "chunk" and ev[1]:
-                visible = b._telegram_visible(ev[1])
+                visible = b._split_options(b._telegram_visible(ev[1]))[0]
                 if visible.strip():
                     sink.put("draft", visible)
             yield ev

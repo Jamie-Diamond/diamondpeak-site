@@ -1136,7 +1136,8 @@
 
   // Dev options: once answered, every option greys out and the one he tapped stays marked.
   function lockOptions(box, picked) {
-    if (!box || !box.querySelector('button[data-cb^="dev:say:"], button[data-cb="dev:other"]')) return;
+    if (!box || !box.querySelector('button[data-cb^="dev:say:"], button[data-cb="dev:other"], ' +
+                                   'button[data-cb^="opt:"], button[data-cb="opt-other"]')) return;
     Array.prototype.forEach.call(box.querySelectorAll('button'), function (x) { x.disabled = true; });
     if (picked) picked.classList.add('picked');
   }
@@ -1438,12 +1439,22 @@
           };
           $('#chatLog').appendChild(mb);
         }
-        (j.history || []).forEach(function (m) {
+        var hist = j.history || [], lastMe = -1;
+        hist.forEach(function (m, i) { if (m.who === 'me') lastMe = i; });
+        hist.forEach(function (m, i) {
           var el = m.who === 'me' ? bubble('me', m.text)
             : coachItem(m.text, j.readonly ? [] : m.buttons,
                         m.photo ? '/api/media/' + encodeURIComponent(m.photo) + mq : null, '', m.id,
                         { form: j.readonly ? null : m.form, logged: m.logged, drills: m.drills });
           if (m.key && !j.readonly) el.setAttribute('data-key', m.key);
+          // option buttons already answered (a later message from the athlete) lock
+          if (m.who !== 'me' && i < lastMe && el) {
+            var nx = hist.slice(i + 1).filter(function (x) { return x.who === 'me'; })[0];
+            var box = el.querySelector('.btns');
+            var hit = box && nx && Array.prototype.filter.call(box.querySelectorAll('button'),
+              function (x) { return x.getAttribute('data-cb') === 'opt:' + nx.text; })[0];
+            lockOptions(box, hit || null);
+          }
         });
         if (!(j.history || []).length) {
           $('#chatLog').innerHTML = '<div class="empty">' + (state.me && state.me.state === 'onboarding'
@@ -1470,7 +1481,13 @@
     if (!b || chatState.busy) return;
     var cb = b.getAttribute('data-cb') || '';
     if (cb.indexOf('dev:restart:') === 0) { devRestart(cb.slice(12), b, true); return; }
-    if (cb === 'dev:other') { $('#chatIn').focus(); return; }       // type an answer instead
+    if (cb === 'dev:other' || cb === 'opt-other') { $('#chatIn').focus(); return; }   // type instead
+    if (cb.indexOf('opt:') === 0 && !devTab()) {                     // a coaching-chat option
+      lockOptions(b.closest('.btns'), b);
+      bubble('me', cb.slice(4));
+      streamTurn('/api/chat', JSON.stringify({ text: cb.slice(4) }), 'application/json');
+      return;
+    }
     if (cb.indexOf('dev:say:') === 0) {                              // a tapped option is his reply
       if (chatState.devBusy) return;
       lockOptions(b.closest('.btns'), b);

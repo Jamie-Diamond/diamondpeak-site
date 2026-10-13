@@ -634,7 +634,12 @@ _WEB_NOTE = (
     "as real tables: use one when comparing 3 or more things (sessions, splits, options), "
     "5 columns at most so it fits a phone. You can link to Peak's own screens with "
     "[label](peak:today), peak:cal (the calendar), peak:trends, peak:goals or peak:set "
-    "(settings), e.g. [see Thursday in your calendar](peak:cal). Only those screens.]")
+    "(settings), e.g. [see Thursday in your calendar](peak:cal). Only those screens. "
+    "When you ask the athlete to choose between options, end the reply (inside the "
+    "<telegram> tags) with <options>1. Short label|2. Short label</options>: 2 to 5 "
+    "options, each under 40 characters, matching the choices in your reply. Peak shows "
+    "them as buttons plus an Other button, so they tap instead of typing. Only for a real "
+    "choice, never on a reply that asks nothing.]")
 
 
 def _plan_session(user_message, config, history, sp_file, athlete_name, context,
