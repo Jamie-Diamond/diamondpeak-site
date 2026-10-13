@@ -302,9 +302,9 @@ def _groups(blocks: list) -> list:
 def fit_plan(plan: list, done: list) -> list | None:
     """The planned blocks re-timed onto the done session: [[seconds, pct, flag], ...]
     summing to the done session's length. flag 0: as planned. A part that ran OVER keeps
-    its planned length and is followed by a flag 2 piece for the extra time only (Jamie:
-    "red only for the overrun, not the full interval"); a part CUT short is scaled to what
-    was done and its last block carries flag -1 (the chart marks where it stopped). Each
+    its planned length and is followed by a flag 2 piece for the extra time only, drawn red
+    (Jamie: red when too long, yellow when too short); a part CUT short is scaled to what
+    was done and its blocks carry flag -1 (drawn yellow). Each
     planned effort is pinned to the matching done effort (in order); the easier parts
     between stretch or shrink to fit. None when the efforts don't pair up (a skipped or
     added interval), so the caller falls back to the plain proportional outline."""
@@ -337,8 +337,5 @@ def fit_plan(plan: list, done: list) -> list | None:
             out += [[b[0], b[1], 0] for b in pbs]
             out.append([d_s - p_s, pbs[-1][1], 2])
             continue
-        scaled = [[round(b[0] * d_s / p_s), b[1], 0] for b in pbs]
-        if changed:                                  # cut short: mark where it stopped
-            scaled[-1][2] = -1
-        out += scaled
+        out += [[round(b[0] * d_s / p_s), b[1], -1 if changed else 0] for b in pbs]
     return out

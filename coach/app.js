@@ -217,29 +217,23 @@
       '" y2="' + (H - 100 / CAP * H).toFixed(1) + '" class="pf-thr"/>';
     // The plan over a done session. plan_fit (lib/workout_profile.fit_plan) is the plan
     // re-timed onto what was done - efforts pinned to the efforts, easy parts stretched or
-    // cut. Only the difference is red (13 Oct 2026): flag 2 is time run OVER the plan (red,
-    // yellow shading under it); flag -1 is a part CUT short (a red drop where it stopped).
+    // cut. Time run OVER the plan (flag 2) is drawn red; a part CUT short (flag -1) is drawn
+    // yellow (Jamie, 13 Oct 2026).
     var plan = '';
     if (o.plan && o.plan.length && !o.mini) {
       var pt = o.plan.reduce(function (a, b) { return a + (b[0] || 0); }, 0) || 1, px = 0;
       var yOf = function (b) { return (H - Math.max(6, Math.min(CAP, b[1] || 0) / CAP * H)).toFixed(1); };
-      var risers = '', red = '', over = '';
+      var risers = '', red = '', short = '';
       o.plan.forEach(function (b, i) {
-        var w = W * (b[0] || 0) / pt, y = yOf(b), x0 = px.toFixed(1), x1 = (px + w).toFixed(1);
-        if (i) risers += 'M' + x0 + ' ' + yOf(o.plan[i - 1]) + ' L' + x0 + ' ' + y + ' ';
-        var seg = 'M' + x0 + ' ' + y + ' L' + x1 + ' ' + y + ' ';
-        if (b[2] === 2) {
-          over += '<rect x="' + x0 + '" y="' + y + '" width="' + w.toFixed(1) + '" height="' +
-            (H - y).toFixed(1) + '" class="pf-over"/>';
-          red += seg;
-        } else {
-          plan += seg;
-          if (b[2] === -1) red += 'M' + x1 + ' ' + y + ' L' + x1 + ' ' + H + ' ';
-        }
+        var w = W * (b[0] || 0) / pt, y = yOf(b);
+        if (i) risers += 'M' + px.toFixed(1) + ' ' + yOf(o.plan[i - 1]) + ' L' + px.toFixed(1) + ' ' + y + ' ';
+        var seg = 'M' + px.toFixed(1) + ' ' + y + ' L' + (px + w).toFixed(1) + ' ' + y + ' ';
+        if (b[2] === 2) red += seg; else if (b[2] === -1) short += seg; else plan += seg;
         px += w;
       });
-      plan = over + '<path d="' + risers + plan + '" class="pf-plan"/>' +
-        (red ? '<path d="' + red + '" class="pf-plan pf-plan-x"/>' : '');
+      plan = '<path d="' + risers + plan + '" class="pf-plan"/>' +
+        (red ? '<path d="' + red + '" class="pf-plan pf-plan-x"/>' : '') +
+        (short ? '<path d="' + short + '" class="pf-plan pf-plan-s"/>' : '');
     }
     return '<svg class="pf' + (o.mini ? ' pf-mini' : '') + '" viewBox="0 0 ' + W + ' ' + H +
       '" preserveAspectRatio="none" aria-hidden="true">' + defs + thr + rects + plan + '</svg>';
@@ -4464,9 +4458,9 @@
       (prof && prof.length ? '<div class="sx-pf">' + profSvg(prof, { plan: done ? (pl.plan_fit || pl.plan_prof) : null }) + '</div>' +
         (done && pl.plan_prof && pl.plan_prof.length ? '<p class="sx-k"><i class="sx-dash"></i>planned' +
           ((pl.plan_fit || []).some(function (b) { return b[2] === 2; })
-            ? '<i class="sx-dash x o"></i>over plan' : '') +
+            ? '<i class="sx-dash x"></i>too long' : '') +
           ((pl.plan_fit || []).some(function (b) { return b[2] === -1; })
-            ? '<i class="sx-dash x"></i>cut short' : '') + '</p>' : '')
+            ? '<i class="sx-dash x s"></i>too short' : '') + '</p>' : '')
         : '') +
       '</section>';
 
