@@ -42,6 +42,8 @@ def test_plan_is_retimed_onto_the_efforts_and_changes_flagged():
     plan = [[600, 65, 2], [480, 98, 4], [240, 50, 1], [480, 98, 4], [600, 65, 2]]
     done = [[900, 66, 2], [480, 99, 4], [240, 55, 1], [480, 97, 4], [600, 62, 2]]
     fit = wp.fit_plan(plan, done)
-    assert [b[0] for b in fit] == [900, 480, 240, 480, 600]          # efforts pinned
-    assert [b[2] for b in fit] == [1, 0, 0, 0, 0]                    # warm-up extended
+    assert [b[0] for b in fit] == [600, 300, 480, 240, 480, 600]     # efforts pinned
+    assert [b[2] for b in fit] == [0, 2, 0, 0, 0, 0]                 # only the extra 5 min flagged
+    cut = wp.fit_plan(plan, [[300, 66, 2], [480, 99, 4], [240, 55, 1], [480, 97, 4], [600, 62, 2]])
+    assert cut[0] == [300, 65, -1]                                   # warm-up cut short
     assert wp.fit_plan(plan, [[900, 66, 2], [480, 99, 4], [600, 62, 2]]) is None  # a skipped effort
