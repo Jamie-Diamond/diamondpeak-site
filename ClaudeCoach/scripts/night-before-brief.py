@@ -19,7 +19,9 @@ import claude_call
 import ops_log
 import planning_pause    # tracking-only athletes: no prescribing, no adherence
 from progression import long_run_cap_km as _lr_cap
-from primitives.nutrition import recent_avg_g_hr
+from primitives.nutrition import (recent_avg_g_hr, recent_run_avg_g_hr, fuel_target,  # noqa: E402
+                                  run_fuel_target, RIDE_SPORTS, RUN_SPORTS)
+import fuel_basis      # noqa: E402
 import races as races_lib
 
 TOOLS = "Read,Bash"
@@ -103,8 +105,38 @@ def _form_and_cap(client, today: date) -> tuple[str, str]:
     return form, cap
 
 
+def _fuel_line(events, athlete_cfg, session_log) -> str:
+    """Tomorrow's fuelling, worked out here, not by the model (shadow week, 13 Oct 2026:
+    left to "calibrate to session length and intensity", Sonnet gave Fred 40 g/hr and
+    Haiku 30 g/hr for the same 75-min sweetspot ride). Driven by the longest ride or run:
+      under 60 min, or 60-90 min and easy   no carbs, water to thirst
+      60-90 min with work in it             30 g/hr (Load per hour >= 55)
+      90 min and over                       the athlete's own ramp (fuel_target /
+                                            run_fuel_target toward fuel_basis's ceiling)
+    Swims and strength need nothing during the session."""
+    best = None
+    for ev in events or []:
+        sport = str(ev.get("type") or "")
+        if sport not in RIDE_SPORTS + RUN_SPORTS:
+            continue
+        mins = (ev.get("moving_time") or 0) / 60
+        if best is None or mins > best[0]:
+            best = (mins, sport, ev.get("icu_training_load") or 0)
+    if not best or best[0] < 60:
+        return "0 g/hr carbs, water to thirst"
+    mins, sport, load = best
+    if mins < 90:
+        return ("30 g/hr carbs + 500 ml/hr fluid" if load / (mins / 60) >= 55
+                else "0 g/hr carbs, water to thirst")
+    if sport in RUN_SPORTS:
+        g = run_fuel_target(recent_run_avg_g_hr(session_log), fuel_basis.run_ceiling(athlete_cfg))
+    else:
+        g = fuel_target(recent_avg_g_hr(session_log), fuel_basis.ceiling(athlete_cfg))
+    return f"{g} g/hr carbs + 500-750 ml/hr fluid"
+
+
 def _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries, long_run_cap_km=None,
-                  pace_bands=None, form="", hr_cap=""):
+                  pace_bands=None, form="", hr_cap="", fuel=""):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -179,9 +211,9 @@ Run: • Target pace [/km] • HR cap [bpm]{run_note}
 Swim: • Target pace [/100m] vs CSS {css or '?'} • Main set structure
 Strength: • Main focus • Key movements
 Numbers (pace bands, power, HR caps, durations, Load) are copied EXACTLY as the planned
-event or the data gives them: never round, re-derive or tidy a figure.
+event or the data gives them: never round, re-derive or tidy a figure.{" The Nutrition line is already worked out: copy it exactly." if fuel else ""}
 
-*Nutrition:* [g/hr carbs + ml/hr fluid — calibrated to session length and intensity. Zero if easy/recovery.]
+*Nutrition:* {fuel or "[g/hr carbs + ml/hr fluid — calibrated to session length and intensity. Zero if easy/recovery.]"}
 *Sleep:* ≥8h tonight
 *Form:* [value] ([Fresh / In training / Heavy]){injury_flag}
 
@@ -291,9 +323,15 @@ def run_athlete(slug, athlete_cfg):
         form, hr_cap = _form_and_cap(_Icu2(_c["icu_athlete_id"], _c["icu_api_key"]), date.today())
     except Exception as exc:
         print(f"[{slug}] form / HR cap pre-compute failed: {exc}", file=sys.stderr)
+    fuel = ""
+    try:
+        _sl = json.loads((adir / "session-log.json").read_text()) if (adir / "session-log.json").exists() else []
+        fuel = _fuel_line(events, athlete_cfg, _sl) if coaching_prefs.fuelling_on(slug) else ""
+    except Exception as exc:
+        print(f"[{slug}] fuel pre-compute failed: {exc}", file=sys.stderr)
     prompt = _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries,
                            long_run_cap_km=long_run_cap, pace_bands=pace_bands,
-                           form=form, hr_cap=hr_cap)
+                           form=form, hr_cap=hr_cap, fuel=fuel)
     prompt += coaching_prefs.prompt_note(slug)
 
     with open(log_file, "a") as lf:

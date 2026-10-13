@@ -339,3 +339,33 @@ def fit_plan(plan: list, done: list) -> list | None:
             continue
         out += [[round(b[0] * d_s / p_s), b[1], -1 if changed else 0] for b in pbs]
     return out
+
+
+def _mins(sec: float) -> str:
+    m = sec / 60
+    return f"{m:.0f} min" if abs(m - round(m)) < 0.25 else f"{m:.1f} min"
+
+
+def executed(plan: list, done: list, kind: str = "power") -> str:
+    """One line for the debrief: the planned efforts against the efforts found in the
+    stream (shadow week, 13 Oct 2026: with no Strava laps, Fred's 3x10 sweetspot commute
+    was judged from Intervals.icu's auto-intervals, which cut each effort at junctions, and
+    called "not executed" when the stream shows all three). "" when the plan has no efforts."""
+    pe = [bs for w, bs in _groups(plan) if w]
+    if not pe or not done:
+        return ""
+    de = [bs for w, bs in _groups(done) if w]
+
+    def desc(groups):
+        out = []
+        for bs in groups:
+            sec = sum(b[0] for b in bs) or 1
+            pct = sum(b[0] * b[1] for b in bs) / sec
+            out.append(f"{_mins(sec)} at {pct:.0f}%")
+        return ", ".join(out) or "none"
+    ok = len(de) >= len(pe) and all(
+        sum(b[0] for b in d) >= 0.8 * sum(b[0] for b in p) for p, d in zip(pe, de))
+    verdict = ("planned structure EXECUTED" if ok else
+               f"planned structure NOT fully executed ({len(de)} of {len(pe)} efforts found)")
+    return (f"planned efforts: {desc(pe)} | efforts in the {kind} stream: {desc(de)} | {verdict}"
+            f" (% of threshold; efforts are {WORK_PCT}%+)")

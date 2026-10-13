@@ -47,3 +47,14 @@ def test_plan_is_retimed_onto_the_efforts_and_changes_flagged():
     cut = wp.fit_plan(plan, [[300, 66, 2], [480, 99, 4], [240, 55, 1], [480, 97, 4], [600, 62, 2]])
     assert cut[0] == [300, 65, -1] and cut[1][2] == 0               # warm-up cut short
     assert wp.fit_plan(plan, [[900, 66, 2], [480, 99, 4], [600, 62, 2]]) is None  # a skipped effort
+
+
+def test_executed_counts_efforts_from_the_stream():
+    plan = [[600, 65, 2], [600, 91, 3], [300, 50, 1], [600, 91, 3], [300, 50, 1], [600, 91, 3], [900, 65, 2]]
+    done = [[780, 66, 2], [720, 88, 3], [300, 55, 1], [630, 95, 4], [300, 52, 1], [600, 102, 4], [1100, 62, 2]]
+    line = wp.executed(plan, done)
+    assert "efforts in the power stream: 12 min at 88%, 10.5 min at 95%, 10 min at 102%" in line
+    assert "planned structure EXECUTED" in line
+    short = wp.executed(plan, done[:4] + [[1500, 60, 2]])
+    assert "NOT fully executed (2 of 3 efforts found)" in short
+    assert wp.executed([[3600, 65, 2]], done) == ""                  # no efforts planned

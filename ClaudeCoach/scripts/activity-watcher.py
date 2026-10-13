@@ -27,7 +27,10 @@ CALLER = "activity-watcher"
 # Grade what was done, not what was planned. Without this the model graded a session of two
 # continuous blocks (no lap presses) against a planned 8x100 and printed a vs-plan Load delta.
 STRUCTURE_RULE = (
-    "Executed structure vs plan: from the Strava laps, count the work reps and check for lap presses,"
+    "Executed structure vs plan: when an EXECUTED STRUCTURE line covers this activity, its verdict"
+    " decides whether the planned structure was done; describe the efforts it lists, not"
+    " Intervals.icu's auto-intervals. Otherwise:"
+    " from the Strava laps, count the work reps and check for lap presses,"
     " then compare with the planned structure (rep count, rep length). If the rep count or lap"
     " presses do not match the plan (e.g. two continuous blocks and no lap presses against a planned"
     " 8x100), the planned structure was NOT executed: output `PLAN_DELTA: none`, do NOT grade rep by"
@@ -325,6 +328,7 @@ SWIM:
   Identify the work reps from the laps (skip warmup/cooldown/drill laps — obvious from the
   distance/pace pattern). Pace per rep (seconds/100m) = (lap duration / lap distance) * 100 →
   format as M:SS/100m. icu_intervals may be used ONLY for per-rep HR, matched to laps by order.
+  Report per-rep HR as recorded: never call a reading a sensor spike or fault unless the HR note above flags this activity.
   CSS target from profile swim_css_per_100m. Delta = rep_pace_s - css_s (positive = slower than CSS).
   Header: Nx(distance)m · CSS X:XX/100m · avg rep X:XX/100m (+/-Xsec vs CSS)
   Rep lines (one per work lap): Rep N: X:XX/100m (+/-Xsec vs CSS) · AVGbpm
@@ -567,6 +571,53 @@ def _terrain_pass(slug: str, session_log_f: Path) -> str:
                 + "\n".join(lines))
     except Exception as exc:
         print(f"[terrain:{slug}] check failed: {exc}", file=sys.stderr)
+        return ""
+
+
+def _structure_pass(slug: str, session_log_f: Path) -> str:
+    """For each ride or run in the last 2 days not yet logged that had a structured plan the
+    same day: the planned efforts against the efforts found in its stream
+    (workout_profile.executed). Shadow week, 13 Oct 2026: Fred has no Strava laps, so his
+    3x10 commute was judged from Intervals.icu's auto-intervals - cut at every junction - and
+    called "not executed" when the power stream shows all three efforts. Fail-soft: ""."""
+    try:
+        import workout_profile as wp
+        from icu_api import IcuClient
+        cfg = json.loads(ATHLETES_CONFIG.read_text())[slug]
+        client = IcuClient(cfg["icu_athlete_id"], cfg["icu_api_key"])
+        logged = set()
+        if session_log_f.exists():
+            logged = {str(e.get("activity_id", "")) for e in json.loads(session_log_f.read_text())}
+        acts = [a for a in client.get_training_history(days=2) or []
+                if str(a.get("id")) not in logged
+                and any(k in str(a.get("type") or "") for k in ("Ride", "Run"))]
+        if not acts:
+            return ""
+        ssets = client.get_sport_settings() or []
+        lines = []
+        for a in acts:
+            day = str(a.get("start_date_local") or "")[:10]
+            fam = "Ride" if "Ride" in str(a.get("type")) else "Run"
+            evs = [e for e in client.get_events(day, day) or []
+                   if fam in str(e.get("type") or "") and e.get("workout_doc")]
+            if not evs:
+                continue
+            ss = wp.settings_for(ssets, a.get("type"))
+            raw = client.get_activity_streams(str(a["id"])) or []
+            st = {x.get("type"): x.get("data") for x in raw
+                  if isinstance(x, dict) and isinstance(x.get("data"), list)}
+            done = wp.completed(st, ss, str(a.get("type")))
+            line = wp.executed(wp.planned(evs[0]["workout_doc"], ss), done,
+                               "power" if fam == "Ride" else "pace")
+            if line:
+                lines.append(f"{a.get('name') or fam} ({a['id']}) vs {evs[0].get('name') or 'plan'}: {line}")
+        if not lines:
+            return ""
+        return ("EXECUTED STRUCTURE (efforts found in the stream - authoritative for whether the "
+                "planned structure was done; Intervals.icu's auto-intervals split one effort at "
+                "every junction or light, so never count reps from them):\n" + "\n".join(lines))
+    except Exception as exc:
+        print(f"[structure:{slug}] check failed: {exc}", file=sys.stderr)
         return ""
 
 
@@ -1725,6 +1776,9 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     _terr = _terrain_pass(slug, session_log_f)
     if _terr:
         hr_note = (hr_note + "\n\n" + _terr).strip()
+    _struct = _structure_pass(slug, session_log_f)
+    if _struct:
+        hr_note = (hr_note + "\n\n" + _struct).strip()
     prompt = _build_prompt(slug, first_name, ftp, injuries, profile,
                            run_hr_cap=run_hr_cap, nutrition_target=nutrition_target,
                            nutrition_label=nutrition_label,
