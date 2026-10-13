@@ -560,8 +560,27 @@ def _per_sport_series_cached(slug, client, today, activities=None):
     return out, dur_out
 
 
+def _steps_fn(client, slug: str):
+    """Plain workout steps for a planned event, with this athlete's numbers
+    (lib/workout_steps.py, 13 Oct 2026). Fail-soft: [] on any error."""
+    try:
+        import workout_steps as _ws
+        ss = client.get_sport_settings() or []
+        prof = json.loads((BASE / "athletes" / slug / "profile.json").read_text())
+    except Exception:
+        return lambda ev: []
+
+    def steps(ev):
+        try:
+            return _ws.lines(ev.get("workout_doc"), _ws.thresholds_for(ss, ev.get("type"), prof))
+        except Exception:
+            return []
+    return steps
+
+
 def _build_jamie_data(client) -> dict:
     """Fetch Jamie's training data via IcuClient — replaces the old Claude+MCP approach."""
+    _steps = _steps_fn(client, "jamie")
     today         = date.today()
     # 120 days: the calendar shows whole months and lets you page back, so a 14-day
     # window meant most of every month had no data at all.
@@ -669,6 +688,7 @@ def _build_jamie_data(client) -> dict:
                                "tss":int(ev_tss) if ev_tss else None,
                                "duration_min":round(int(ev_dur)/60) if ev_dur else None,
                                "status":"planned","key":bool(ev_tss and int(ev_tss)>=60),"detail":"",
+                               "steps":_steps(ev),
                                # Peak's Ride indoors button (lib/indoor.py) acts on this event.
                                "event_id":ev.get("id"),
                                "indoor":(ev.get("type") or "") == "VirtualRide"})
@@ -1620,6 +1640,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
 
     today = date.today()
     client = IcuClient(athlete_cfg["icu_athlete_id"], athlete_cfg["icu_api_key"])
+    _steps = _steps_fn(client, slug)
 
     HISTORY_DAYS = 120
     seven_ago  = (today - timedelta(days=7)).isoformat()
@@ -1745,6 +1766,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
             "tss": int(ev_tss) if ev_tss else None,
             "duration_min": round(int(ev_dur) / 60) if ev_dur else None,
             "status": "planned", "key": bool(ev_tss and int(ev_tss) >= 60), "detail": "",
+            "steps": _steps(ev),
             # Peak's Ride indoors button (lib/indoor.py) acts on this event.
             "event_id": ev.get("id"), "indoor": (ev.get("type") or "") == "VirtualRide",
         })

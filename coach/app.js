@@ -4369,6 +4369,14 @@
       pl.detail ? ['Prescription', pl.detail] : null
     ]) || '<div class="empty">No summary recorded</div>', { flush: true });
 
+    // The workout, step by step, with the athlete's own watts / paces (lib/workout_steps.py,
+    // 13 Oct 2026: "Tempo 2x25" alone didn't say what to do).
+    if (!done && (pl.steps || []).length) {
+      h += card('Workout', '<ol class="wk-steps">' + pl.steps.map(function (st) {
+        return '<li>' + esc(st) + '</li>';
+      }).join('') + '</ol>');
+    }
+
     // Ride indoors (lib/indoor.py, 1 Oct 2026): a planned ride under 2 hours can move to
     // the trainer. The session is unchanged; it becomes a virtual ride, which Intervals.icu
     // sends to Zwift when the rider has connected it.
