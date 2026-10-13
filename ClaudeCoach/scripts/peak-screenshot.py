@@ -97,7 +97,7 @@ def main() -> None:
             def handle(route):
                 req = route.request
                 path = req.url[len(HOST):].split("#")[0]
-                if path.startswith("/api/"):
+                if path.startswith("/api/") or path.startswith("/ClaudeCoach/public/"):
                     if req.method != "GET":
                         return route.fulfill(status=403, body="screenshot mode: read only")
                     try:

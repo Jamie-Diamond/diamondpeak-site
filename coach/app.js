@@ -4121,8 +4121,12 @@
       ? 'Fitness held between ' + g.band[0] + ' and ' + g.band[1] + '.'
       : (g.nextTest ? (n - 1) + ' build weeks, then an easier week with ' + (g.nextTest.name === '5k time trial'
           ? 'a 5k time trial' : 'an ' + g.nextTest.name) + '.' : (n - 1) + ' build weeks, then an easier week.');
+    // SMART target (lib/goals.py, 13 Oct 2026): "Keep my fitness" may stay open-ended.
+    var tgt = g.target ? 'Target: ' + g.target + (g.by ? ', by ' + fmt(g.by) : '') + '.'
+      : (g.type === 'maintain' ? '' : 'No target yet. Your coach will agree one with you.');
     var h = '<section class="hero"><p class="hero-k">Goal · no race booked</p>' +
-      '<h2 class="hero-t">' + esc(g.label) + '</h2><p class="hero-m">' + esc(sub) + '</p></section>';
+      '<h2 class="hero-t">' + esc(g.label) + '</h2><p class="hero-m">' + esc(sub) + '</p>' +
+      (tgt ? '<p class="hero-m"><b>' + esc(tgt) + '</b></p>' : '') + '</section>';
     var cur = g.waiting || g.notStarted ? 0 : g.week;
     var strip = '<div class="gb">' + shape.map(function (k, i) {
       return '<div class="gb-w gb-' + k + (i + 1 === cur ? ' now' : '') + '"><b>' + (i + 1) +
@@ -4239,7 +4243,12 @@
       if (pr2) cols.push([pr2.date.slice(0, 4), pr2]);
       if (pr) cols.push([pr.date.slice(0, 4), pr]);
       cols.push(['Target', tg || {}]);
-      h += card('Splits · progression to target', '<table class="tbl">' +
+      // No card when every cell would be a dash (James: a race on file with no split times)
+      var anySplit = cols.some(function (c) {
+        return ['swim_time', 't1t2_time', 'bike_time', 'run_time', 'total_time']
+          .some(function (k) { return c[1][k]; });
+      });
+      if (anySplit) h += card('Splits · progression to target', '<table class="tbl">' +
         '<thead><tr><th>Leg</th>' + cols.map(function (c) {
           return '<th>' + esc(c[0]) + '</th>';
         }).join('') + '</tr></thead><tbody>' +

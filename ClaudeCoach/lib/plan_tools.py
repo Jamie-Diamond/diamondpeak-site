@@ -2872,8 +2872,11 @@ def cmd_race_setup(args) -> dict:
 # ── subcommand: goal-setup ─────────────────────────────────────────────────────
 def goal_setup(slug: str, goal: str | None = None, apply: bool = False, today=None,
                path=None, sports=None, start=None, clear: bool = False,
-               ctl=None, block_weeks: int | None = None) -> dict:
+               ctl=None, block_weeks: int | None = None, target: str | None = None,
+               target_value=None, by: str | None = None) -> dict:
     """Set (or with clear, remove) the athlete's goal without a race (lib/goals.py).
+    target / target_value / by make it SMART (goals.realistic / assess judge the target);
+    the same goal type with a target only updates the target, so a running block goes on.
     A preview by default: what the blocks, tests and this week's load would be. With
     apply, writes athletes.json `goal`, block 1 starting `start` or the coming Monday."""
     import shutil
@@ -2908,7 +2911,18 @@ def goal_setup(slug: str, goal: str | None = None, apply: bool = False, today=No
         sports = _goals.parse_sports(sports)
     first = start if isinstance(start, date) else (
         date.fromisoformat(start) if start else today + timedelta(days=(7 - today.weekday()) % 7 or 7))
-    g = _goals.make(goal, today=today, start=first, sports=sports, ctl=ctl, profile=profile)
+    old = _goals.goal_cfg(cfg)
+    same = bool(old and old.get("type") == goal and (target or target_value or by)
+                and not sports and not start and not block_weeks)
+    g = dict(old) if same else _goals.make(goal, today=today, start=first, sports=sports,
+                                           ctl=ctl, profile=profile)
+    if target:
+        g["target"] = str(target).strip()
+    if target_value not in (None, ""):
+        g["target_value"] = target_value if isinstance(target_value, (int, float)) or ":" in str(
+            target_value) else float(target_value)
+    if by:
+        g["by"] = date.fromisoformat(str(by)[:10]).isoformat()
     if block_weeks:                      # 5 = 4 build weeks + 1 easier, for an experienced athlete
         g["block_weeks"] = max(_goals.MIN_BLOCK_WEEKS, min(_goals.MAX_BLOCK_WEEKS, int(block_weeks)))
     trial = dict(cfg, goal=g)
@@ -2917,7 +2931,17 @@ def goal_setup(slug: str, goal: str | None = None, apply: bool = False, today=No
     # hold) and an off-season block all come first.
     begins = next((w for w in (date.fromisoformat(g["start"]) + timedelta(weeks=i)
                                for i in range(80)) if goal_active(trial, w)), None)
-    out = {"athlete": slug, "goal": goal, "label": gd["label"],
+    _weeks = 12
+    if g.get("by"):
+        _weeks = max(1, (date.fromisoformat(g["by"]) - max(today, date.fromisoformat(
+            g.get("start") or today.isoformat()))).days // 7)
+    _sv = g.get("start_values") or _goals.start_values(profile, ctl)
+    smart = {"realistic": _goals.realistic(goal, _sv, _weeks, ctl), "weeks_to_date": _weeks,
+             "missing": _goals.smart_missing(g)}
+    if g.get("target_value") not in (None, ""):
+        smart["assessment"] = _goals.assess(goal, g["target_value"], _sv, _weeks, ctl)
+    out = {"athlete": slug, "goal": goal, "label": gd["label"], "smart": smart,
+           "keeps_running_block": same,
            "sports": _goals.sports_for(trial, profile),
            "week_shape": list(_goals.shape(_goals.block_weeks(trial))),
            "zone_split": _goals.distribution(trial, profile),
@@ -2956,7 +2980,8 @@ def goal_setup(slug: str, goal: str | None = None, apply: bool = False, today=No
 
 def cmd_goal_setup(args) -> dict:
     return goal_setup(args.athlete, args.goal, apply=args.apply, sports=args.sports,
-                      start=args.start, clear=args.clear, block_weeks=args.block_weeks)
+                      start=args.start, clear=args.clear, block_weeks=args.block_weeks,
+                      target=args.target, target_value=args.target_value, by=args.by)
 
 
 # Chat side of the choice: only the bot hears the athlete answer the Sunday question.
@@ -3210,6 +3235,10 @@ def main():
     pgs.add_argument("--clear", action="store_true", help="remove the goal")
     pgs.add_argument("--block-weeks", type=int, dest="block_weeks",
                      help="block length: 4 = 3 build + 1 easier (default), 5 = 4 + 1")
+    pgs.add_argument("--target", help="the goal in the athlete's words, e.g. '5k under 21:30'")
+    pgs.add_argument("--target-value", dest="target_value",
+                     help="the measure: FTP watts, threshold or CSS pace M:SS, or Fitness")
+    pgs.add_argument("--by", help="the target date, YYYY-MM-DD")
     pgs.add_argument("--apply", action="store_true")
 
     prl = sub.add_parser("race-level", help="the athlete's level for their race and its numbers (blueprint §4.5)")
