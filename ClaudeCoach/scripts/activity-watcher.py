@@ -1540,7 +1540,7 @@ def _strava_update(slug: str, icu_activity_id: str, analysis: str,
         import sys as _sys
         _sys.path.insert(0, str(BASE / "lib"))
         from icu_api import IcuClient
-        from strava_client import StravaClient
+        from strava_client import StravaClient, safe_to_auto_write_description
 
         athletes_cfg = json.loads(ATHLETES_CONFIG.read_text())
         a = athletes_cfg[slug]
