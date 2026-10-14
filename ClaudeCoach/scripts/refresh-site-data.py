@@ -877,6 +877,7 @@ def _build_jamie_data(client) -> dict:
         "weekCalendar": week_calendar,
         "loadChart":    load_chart,
         "weightTrend":  weight_trend,
+        "wellnessTrend": _wellness_trend(wellness_60),
         "powerCurve":   power_curve,
         "powerCurveWindow": power_curve_window,
         "resolvedFtp":  resolved_ftp,
@@ -1666,6 +1667,13 @@ def _format_pace(sport, dist_m, duration_s):
     return None
 
 
+def _wellness_trend(rows) -> list:
+    """Daily HRV and resting HR for Peak's HRV & resting HR card (Jamie, 14 Oct 2026).
+    All of the ~60 days fetched, so the app can draw the last 30 against a 28-day normal."""
+    return [{"date": str(w.get("id", ""))[:10], "hrv": w.get("hrv"), "rhr": w.get("restingHR")}
+            for w in rows or [] if w.get("hrv") is not None or w.get("restingHR") is not None]
+
+
 def _build_athlete_training_data(slug, athlete_cfg):
     """Build training-data-{slug}.json using IcuClient (Python only — no Claude call)."""
     sys.path.insert(0, str(BASE / "lib"))
@@ -1932,6 +1940,9 @@ def _build_athlete_training_data(slug, athlete_cfg):
 
     data = {
         "generated":    today.isoformat(),
+        "weightTrend":  [{"date": w.get("id", "")[:10], "kg": w["weight"]}
+                         for w in wellness_60 if w.get("weight")],
+        "wellnessTrend": _wellness_trend(wellness_60),
         "kpi":          kpi,
         "fitnessThis":  fitness_this,
         "fitnessBySport": fitness_by_sport,

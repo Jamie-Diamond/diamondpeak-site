@@ -682,6 +682,7 @@
       '</div>', { flush: true });
 
     h += weightCard(d.weightTrend);
+    h += wellnessCard(d.wellnessTrend);
 
     if (state.me) {
       h += '<p class="hint upd">' + (state.updated ? 'Updated ' + esc(state.updated) + ' · ' : '') +
@@ -736,6 +737,57 @@
     if (!rows.length) return '';
     return card('Current state', '<div class="cs">' + rows.join('') + '</div>',
       { foot: open.length > 5 ? (open.length - 5) + ' more open actions' : null });
+  }
+
+  /* HRV & resting HR (Jamie, 14 Oct 2026, in place of a body-fat view). The last 30 days:
+     a dot per morning, a 7-day average line, and a dashed line at the athlete's NORMAL -
+     the 28 days before today, the same normal and thresholds as the morning card's
+     "Off your normal" line (HRV 10%+ below, resting HR 6%+ above), so the two agree. */
+  function wellnessCard(wt) {
+    var rows = (wt || []).filter(function (r) { return r && r.date; });
+    if (rows.length < 7) return '';
+    var last = rows[rows.length - 1].date, tL = Date.parse(last);
+    var normal = function (key) {
+      var v = rows.filter(function (r) {
+        var t = Date.parse(r.date); return r[key] != null && t < tL && t >= tL - 28 * 864e5;
+      }).map(function (r) { return Number(r[key]); });
+      return v.length >= 14 ? v.reduce(function (a, b) { return a + b; }, 0) / v.length : null;
+    };
+    var shown = rows.filter(function (r) { return Date.parse(r.date) > tL - 30 * 864e5; });
+    function spark(key, base) {
+      var pts = shown.filter(function (r) { return r[key] != null; });
+      if (pts.length < 3) return '';
+      var vals = pts.map(function (r) { return Number(r[key]); }).concat(base != null ? [base] : []);
+      var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals), span = (hi - lo) || 1;
+      var W = 300, H = 60, t0 = tL - 29 * 864e5;
+      var x = function (r) { return ((Date.parse(r.date) - t0) / (29 * 864e5) * W).toFixed(1); };
+      var y = function (v) { return (H - 4 - (v - lo) / span * (H - 8)).toFixed(1); };
+      var dots = pts.map(function (r) { return 'M' + x(r) + ' ' + y(Number(r[key])) + 'h0'; }).join('');
+      var line = pts.map(function (r) {
+        var t = Date.parse(r.date), win = pts.filter(function (q) {
+          var tq = Date.parse(q.date); return tq <= t && tq > t - 7 * 864e5;
+        });
+        return x(r) + ',' + y(win.reduce(function (a, q) { return a + Number(q[key]); }, 0) / win.length);
+      }).join(' ');
+      return '<svg class="spark wt wl" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
+        (base != null ? '<path class="wl-n" d="M0 ' + y(base) + ' H' + W + '"/>' : '') +
+        '<polyline points="' + line + '"/><path class="wt-d" d="' + dots + '"/></svg>';
+    }
+    var today = rows.filter(function (r) { return r.date === last; })[0] || {};
+    var hb = normal('hrv'), rb = normal('rhr');
+    var hOff = today.hrv != null && hb && today.hrv <= 0.9 * hb;
+    var rOff = today.rhr != null && rb && today.rhr >= 1.06 * rb;
+    var sH = spark('hrv', hb), sR = spark('rhr', rb);
+    if (!sH && !sR) return '';
+    return card('HRV & resting HR',
+      '<div class="figures">' +
+        (sH ? fig(today.hrv != null ? Math.round(today.hrv) : '-', 'HRV', hb ? 'usual ' + Math.round(hb) : 'ms', hOff ? 'neg' : '') : '') +
+        (sR ? fig(today.rhr != null ? Math.round(today.rhr) : '-', 'Resting HR', rb ? 'usual ' + Math.round(rb) : 'bpm', rOff ? 'neg' : '') : '') +
+      '</div>' +
+      (sH ? '<p class="wl-h">HRV</p>' + sH : '') +
+      (sR ? '<p class="wl-h">Resting HR</p>' + sR : '') +
+      '<p class="wt-k"><i class="wt-dot"></i>morning<i class="wt-avg"></i>7-day average<i class="wl-nk"></i>your normal</p>',
+      { foot: 'Normal = your previous 28 days. Red = off normal (HRV 10% below, resting HR 6% above), as on the morning card.' });
   }
 
   // 14-day mean of the morning readings by date (Jamie, 14 Oct 2026: "all should be 14").
@@ -5456,6 +5508,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.58", "2026-10-14", "HRV & resting HR on Today, against your own normal; weight for every athlete with a scale", 0],
     ["3.57", "2026-10-14", "Weight tile is a 14-day mean too; scrolling no longer drags the map; heat is hidden when it's switched off", 0],
     ["3.56", "2026-10-14", "Session insights: efficiency against your normal, \u2605 on 90-day best powers, time in zones, split or fade, and HR recovery", 0],
     ["3.55", "2026-10-14", "Session stats: the key few up front, the rest under More stats", 0],
