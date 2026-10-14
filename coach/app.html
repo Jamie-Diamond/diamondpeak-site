@@ -16,7 +16,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <!-- Glass style preview (glass.css): on only for a device that chose it in Settings > Look,
      or opened with ?glass=1. Set before first paint so the page doesn't flash the old look. -->
-<link rel="stylesheet" href="glass.css?v=134">
+<link rel="stylesheet" href="glass.css?v=135">
 <script>try{if(localStorage.getItem('cc.theme')==='glass'||/[?&]glass=1/.test(location.search))document.documentElement.classList.add('glass');
 var gf=localStorage.getItem("cc.font");if(localStorage.getItem("cc.fontv")!=="3"){gf="jakarta";localStorage.setItem("cc.font",gf);localStorage.setItem("cc.fontv","3")}if(gf===null)gf="jakarta";if(gf)document.documentElement.setAttribute("data-font",gf);
 var GF={inter:'Inter:wght@400;500;600;700',manrope:'Manrope:wght@400;500;600;700',jakarta:'Plus+Jakarta+Sans:wght@400;500;600;700'};
@@ -1263,10 +1263,14 @@ body.drawn{overflow:hidden}
    instrument: your finger covers the point it describes, it needs a precise tap on a
    1px line, and it disappears the moment you lift off. This is a fixed line above the
    chart that updates as you drag, so the value stays put and stays readable. */
+.card:has(> .readout){position:relative}
 .readout{
-  display:flex;align-items:baseline;gap:10px;min-height:34px;
-  padding:10px 15px 8px;border-bottom:1px solid var(--rule-soft);
+  display:none;align-items:baseline;gap:10px;
+  position:absolute;left:12px;right:12px;top:46px;z-index:3;pointer-events:none;
+  padding:7px 12px;border-radius:10px;
+  background:rgba(255,255,255,.92);box-shadow:0 2px 10px rgba(20,24,29,.12);
 }
+.readout.on{display:flex}
 .readout b{
   font-family:'Libre Baskerville',serif;font-weight:400;font-size:15px;
   letter-spacing:-.015em;color:var(--ink);white-space:nowrap;
@@ -1409,6 +1413,6 @@ body.drawn{overflow:hidden}
      broken launch. A new URL cannot hit that cache entry. It always equals the
      number in sw.js CACHE (peak-vN): bump both on every release, enforced by
      ClaudeCoach/ironman-analysis/tests/test_peak_release.py. -->
-<script src="app.js?v=134" defer></script>
+<script src="app.js?v=135" defer></script>
 </body>
 </html>

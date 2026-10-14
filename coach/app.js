@@ -673,7 +673,7 @@
     // rather than below it (Jamie, 21 Aug 2026).
     if ((d.loadChart || []).length) {
       h += card('Seven days either side',
-        '<div class="readout" id="ro-today"><b>—</b><span></span></div>' +
+        '<div class="readout" id="ro-today"><b></b><span></span></div>' +
         '<div class="chartbox"><canvas id="c-today"></canvas></div>',
         {});
     }
@@ -2644,7 +2644,7 @@
     // for the switch: "under fitness and above the sports".
     var h = seg + metricBar + sportBar + card(META.title +
       (sel === 'fit' && state.fitSport !== 'all' ? ' · ' + state.fitSport : ''),
-      '<div class="readout" id="ro"><b>—</b><span></span></div>' +
+      '<div class="readout" id="ro"><b></b><span></span></div>' +
       '<div class="chartbox tall"><canvas id="c-now"></canvas></div>',
       { action: action, foot: META.foot });
 
@@ -3062,8 +3062,11 @@
   function readout(txt, sub, target) {
     var el = $(target || '#ro');
     if (!el) return;
-    el.firstChild.textContent = txt || '—';
+    el.firstChild.textContent = txt || '';
     el.lastChild.textContent = sub || '';
+    // Hidden until a bar is touched (Jamie, 14 Oct 2026: the empty "—" line read as a
+    // weird gap above the chart). It floats over the chart, so showing it moves nothing.
+    el.classList.toggle('on', !!txt);
   }
 
   // Wire a chart so dragging across it writes into the readout. Uses the SAME
@@ -5554,6 +5557,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.75", "2026-10-14", "No empty line above the charts: the tap readout floats over the chart when you touch it", 0],
     ["3.74", "2026-10-14", "HRV and resting HR graphs scale to the trend, so it fills the chart", 0],
     ["3.73", "2026-10-14", "Glass preview: chat button sits beside the tab bar, iOS style; message box clears it", 1],
     ["3.71", "2026-10-14", "Glass preview: calendar and session page polished", 1],
