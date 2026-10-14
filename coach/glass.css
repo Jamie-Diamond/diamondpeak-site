@@ -5,7 +5,7 @@
    sheets. Active only with html.glass (Settings > Look, coach only, this device) until
    it is made the default. The Dev tab keeps its dark style. */
 
-html.glass{--glass-v:'135'}
+html.glass{--glass-v:'136'}
 html.glass body:not(.dev-chat){
   --paper:rgba(255,255,255,.62);
   --paper-2:transparent;

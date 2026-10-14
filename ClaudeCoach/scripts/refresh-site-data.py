@@ -215,6 +215,15 @@ def _focus_sports(slug):
     who only rides. Strength and everything else is still logged and still shown - a
     sport not being a FOCUS is not the same as it not counting.
     """
+    # A display-only choice in athletes.json ("peak_sports") wins: the blueprint's sports
+    # also drive plan generation, so Peak's view can't be changed there (Jamie, 14 Oct
+    # 2026: in a run block, "I want all sports" in Peak).
+    try:
+        own = json.loads(ATHLETES_CONFIG.read_text()).get(slug, {}).get("peak_sports")
+        if isinstance(own, list) and own:
+            return own
+    except Exception:
+        pass
     try:
         bp = json.loads((BASE / f"athletes/{slug}/reference/training-blueprint.json").read_text())
     except Exception:
