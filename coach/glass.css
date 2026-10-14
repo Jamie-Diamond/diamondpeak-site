@@ -5,7 +5,7 @@
    sheets. Active only with html.glass (Settings > Look, coach only, this device) until
    it is made the default. The Dev tab keeps its dark style. */
 
-html.glass{--glass-v:'130'}
+html.glass{--glass-v:'131'}
 html.glass body:not(.dev-chat){
   --paper:rgba(255,255,255,.62);
   --paper-2:transparent;
@@ -271,7 +271,7 @@ html.glass[data-font] body:not(.dev-chat) .msg code{font-family:'DM Mono',monosp
 .look-f .seg{flex:1;margin:0}
 
 /* Plus Jakarta Sans sets a narrow space: words ran together ("Thisweek"). */
-html.glass[data-font=jakarta] body:not(.dev-chat){word-spacing:.12em}
+html.glass[data-font=jakarta] body:not(.dev-chat){word-spacing:.07em}
 html.glass[data-font=jakarta] body:not(.dev-chat) .hero-t,
 html.glass[data-font=jakarta] body:not(.dev-chat) .dr-t{word-spacing:.06em}
 
@@ -331,3 +331,31 @@ html.glass body:not(.dev-chat) .card-a,
 html.glass body:not(.dev-chat) .hint{letter-spacing:0;text-transform:none;font-size:11.5px}
 html.glass body:not(.dev-chat) .card .fig{padding:10px 12px 11px}
 html.glass body:not(.dev-chat) .card .fig .n{font-size:24px}
+
+/* ── calendar and session sheet polish (Jamie, 14 Oct 2026) ─────────────────────── */
+html.glass body:not(.dev-chat) .sesh .meta{display:block;font-size:12px;margin-top:3px;letter-spacing:0}
+html.glass body:not(.dev-chat) .sesh .nm{font-size:15px;font-weight:500}
+html.glass body:not(.dev-chat) .day-h{background:none;padding:12px 16px 4px}
+html.glass body:not(.dev-chat) .day-h .dow{text-transform:none;letter-spacing:0;font-size:13px;font-weight:600;color:var(--ink-2)}
+html.glass body:not(.dev-chat) .day-h .dnum{font-size:13px;font-weight:600}
+html.glass body:not(.dev-chat) .day-h .sum{font-size:12px;letter-spacing:0}
+html.glass body:not(.dev-chat) .wkn,
+html.glass body:not(.dev-chat) .cal-dows .wkdays span{text-transform:none;letter-spacing:0;font-size:11.5px;font-weight:500}
+html.glass body:not(.dev-chat) .minis .mini{padding:10px 11px 11px}
+html.glass body:not(.dev-chat) .minis .mini span{font-size:11px}
+html.glass body:not(.dev-chat) .minis .mini b{font-size:19px}
+
+/* Sheet: iOS header, plain glass close button, tighter workout card, inset map switch. */
+html.glass body:not(.dev-chat) .dr-k{text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--muted)}
+html.glass body:not(.dev-chat) .dr-x{color:var(--muted);outline:none;border:0;
+  background:rgba(118,118,128,.14);box-shadow:none;font-size:14px}
+html.glass body:not(.dev-chat) .dr-x:focus{outline:none;border:0;box-shadow:none}
+html.glass body:not(.dev-chat) .card.sx > .sx-figs{padding:12px 10px 0}
+html.glass body:not(.dev-chat) .card.sx > .sx-pf{height:64px;margin:6px 15px 12px;background:none}
+html.glass body:not(.dev-chat) .route.map{padding-bottom:8px}
+html.glass body:not(.dev-chat) .trk-seg{margin:8px 8px 0;border-radius:10px}
+html.glass body:not(.dev-chat) .trk-map{border-radius:22px 22px 0 0}
+html.glass body:not(.dev-chat) .st-more>summary .gate-row-t b{font-size:14px;font-weight:600}
+html.glass body:not(.dev-chat) .st-more>summary .gate-row-t span{text-transform:none;letter-spacing:0;font-size:12px}
+html.glass body:not(.dev-chat) .wkn{white-space:nowrap;flex-basis:40px}
+html.glass body:not(.dev-chat) table.tbl td{word-spacing:normal}

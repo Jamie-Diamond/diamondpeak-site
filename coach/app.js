@@ -5546,6 +5546,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.71", "2026-10-14", "Glass preview: calendar and session page polished", 1],
     ["3.70", "2026-10-14", "Glass preview: charts in Plus Jakarta Sans, tidier tile labels", 1],
     ["3.69", "2026-10-14", "Glass preview: Health-style metric tiles, charts in the new font with rounded bars", 1],
     ["3.68", "2026-10-14", "Glass preview: Apple-style materials, capsule tab bar, Plus Jakarta Sans", 1],
