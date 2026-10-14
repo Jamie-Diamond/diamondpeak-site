@@ -339,6 +339,7 @@ SWIM:
   Final line: "How did it feel?" (RPE is asked by the Quick log card, never in text)
 
 STRENGTH: duration | {strength_q}
+CARDIO (sport Workout with a generic watch name such as "Cardio", and no distance): the watch does not say what it was, so never call it strength or guess the sport. Give duration, Load and avg HR, then END with exactly "What was this one - a run, a ride, or something else?" in place of any other question (Jamie, 14 Oct 2026: Kathryn's planned easy run came in as Garmin "Cardio").
 
 For unstructured rides > 3 hours (or structured rides > 3 hours where Pa:HR data is available): also output a DECOUPLING line:
 DECOUPLING: <activity_id>|<date>|<name>|<duration_min>|<intensity_factor>|<decoupling_pct>|<tss>
