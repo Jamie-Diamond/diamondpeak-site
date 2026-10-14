@@ -21,3 +21,14 @@ def test_changelog_leads_with_the_current_version():
     ver = re.search(r"const APP_VERSION = '([\d.]+)'", sw).group(1)
     first = re.search(r'var CHANGELOG = \[\s*\["([\d.]+)"', js).group(1)
     assert first == ver, f"sw.js is {ver} but the changelog starts at {first}: add a line"
+
+
+def test_glass_stylesheet_version_matches_the_cache_version():
+    """glass.css?v= moves with each release, or phones keep an old copy (14 Oct 2026:
+    the font trial "doesn't work" because the phone held the stylesheet without it)."""
+    sw = (COACH / "sw.js").read_text()
+    html = (COACH / "app.html").read_text()
+    cache = re.search(r"const CACHE = 'peak-v(\d+)'", sw).group(1)
+    v = re.search(r'href="glass\.css\?v=(\d+)"', html).group(1)
+    assert v == cache and f"./glass.css?v={cache}" in sw
+    assert f"--glass-v:'{cache}'" in (COACH / "glass.css").read_text()

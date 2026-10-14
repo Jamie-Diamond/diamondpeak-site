@@ -3,6 +3,7 @@
    app.html sets from localStorage cc.theme = 'glass' (Settings > Look, coach only), so
    nobody else sees it until it is made the default. The Dev tab keeps its dark style. */
 
+html.glass{--glass-v:'127'}
 html.glass body:not(.dev-chat){
   --paper:rgba(255,255,255,.46);
   --paper-2:transparent;

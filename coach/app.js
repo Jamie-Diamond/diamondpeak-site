@@ -5539,6 +5539,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.67", "2026-10-14", "Glass preview: stylesheet always fresh, Inter switched on", 1],
     ["3.66", "2026-10-14", "Glass preview uses Inter by default", 1],
     ["3.65", "2026-10-14", "Glass preview: font trial and crisper calendar workout strips", 1],
     ["3.64", "2026-10-14", "Glass style preview in Settings > Look", 1],
@@ -5589,6 +5590,13 @@
     ["3.2", "2026-09-30", "Switches for coaching options and the Food tab", 0],
     ["3.0", "2026-09-30", "Peak replaces Telegram: chat, voice, photos, notifications, sign-up and Strava", 0]
   ];
+
+  // What the Look card says is actually in force, so a stale stylesheet shows itself.
+  function lookStatus() {
+    var de = document.documentElement, v = getComputedStyle(de).getPropertyValue('--glass-v').trim();
+    return (de.classList.contains('glass') ? 'glass ' + (v ? 'v' + v.replace(/'/g, '') : '(old stylesheet)') : 'classic') +
+      ' · font ' + (de.getAttribute('data-font') || 'current');
+  }
 
   function openChangelog() {
     var coach = !!(state.me && state.me.coach);
@@ -5939,7 +5947,7 @@
         SWITCH + '</button>' +
         '<div class="look-f"><span>Font</span>' + subSeg('fontSeg', document.documentElement.getAttribute('data-font') || '',
           [['', 'Current'], ['sf', 'SF'], ['inter', 'Inter'], ['manrope', 'Manrope'], ['jakarta', 'Jakarta']]) +
-        '</div></div>', { flush: true, foot: 'Fonts apply with Glass on.' }) : '') +
+        '</div></div>', { flush: true, foot: 'Fonts apply with Glass on. Active: ' + lookStatus() }) : '') +
       '<div class="drawers">' +
       (ATHLETES.length > 1 ? drawer('athlete', 'Athlete', 'showing ' + curName, athleteH) : '') +
       drawer('sports', 'Focus sports', fs.map(function (x) { return SPNAME[x]; }).join(' · '), sportsH) +
@@ -5976,6 +5984,8 @@
       else document.documentElement.removeAttribute('data-font');
       try { localStorage.setItem('cc.font', f); } catch (err) { /* private mode */ }
       fseg.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-selected', x === b); });
+      var lf = fseg.closest('.card').querySelector('.card-f');
+      if (lf) lf.textContent = 'Fonts apply with Glass on. Active: ' + lookStatus();
     };
     var sv = $('#setVer');
     if (sv) {
