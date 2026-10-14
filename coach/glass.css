@@ -2,10 +2,10 @@
    this feel like really Apple glass styling"). Modelled on iOS materials: thin frosted
    panes over a quiet background, a bright specular rim and hairline separators, a
    floating capsule tab bar with a lens on the selected tab, iOS segmented controls and
-   sheets. Active with html.glass: the default for everyone since 3.77; Settings > Look
-   (coach) can switch a device to classic. The Dev tab keeps its dark style. */
+   sheets. Always on since 3.77/3.78 (html.glass, set in app.html); the Dev tab gets the
+   dark glass version at the end of this file. */
 
-html.glass{--glass-v:'137'}
+html.glass{--glass-v:'138'}
 html.glass body:not(.dev-chat){
   --paper:rgba(255,255,255,.62);
   --paper-2:transparent;
@@ -124,148 +124,148 @@ html.glass body:not(.dev-chat) .msg.me{background:var(--accent)}
 
 /* Font trial (Settings > Look): html[data-font] swaps the serif headings and the mono
    labels for one modern sans. Selector lists generated from app.html's own font rules. */
-html.glass[data-font] body:not(.dev-chat) .cal-cell .n,
-html.glass[data-font] body:not(.dev-chat) .chip b,
-html.glass[data-font] body:not(.dev-chat) .countdown b,
-html.glass[data-font] body:not(.dev-chat) .crow-i,
-html.glass[data-font] body:not(.dev-chat) .crow-n,
-html.glass[data-font] body:not(.dev-chat) .day-h .dnum,
-html.glass[data-font] body:not(.dev-chat) .dr-t,
-html.glass[data-font] body:not(.dev-chat) .fig .n,
-html.glass[data-font] body:not(.dev-chat) .fnow-n,
-html.glass[data-font] body:not(.dev-chat) .gate-mark,
-html.glass[data-font] body:not(.dev-chat) .gate-row-t b,
-html.glass[data-font] body:not(.dev-chat) .gate-word,
-html.glass[data-font] body:not(.dev-chat) .gb-w b,
-html.glass[data-font] body:not(.dev-chat) .goal .v,
-html.glass[data-font] body:not(.dev-chat) .gt b,
-html.glass[data-font] body:not(.dev-chat) .hero-t,
-html.glass[data-font] body:not(.dev-chat) .mini b,
-html.glass[data-font] body:not(.dev-chat) .pk b,
-html.glass[data-font] body:not(.dev-chat) .reach h2,
-html.glass[data-font] body:not(.dev-chat) .readout b,
-html.glass[data-font] body:not(.dev-chat) .sesh .rt b,
-html.glass[data-font] body:not(.dev-chat) .statline b,
-html.glass[data-font] body:not(.dev-chat) .sx-f b,
-html.glass[data-font] body:not(.dev-chat) .whobar-name,
-html.glass[data-font] body:not(.dev-chat) .wk-n,
-html.glass[data-font] body:not(.dev-chat) .wk-s b,
-html.glass[data-font] body:not(.dev-chat) .wkd .n,
-html.glass[data-font] body:not(.dev-chat) .wksum b,
-html.glass[data-font] body:not(.dev-chat) .wordmark,
-html.glass[data-font] body:not(.dev-chat) .zv b,
-html.glass[data-font] body:not(.dev-chat) table.tbl td.t{font-family:var(--gf);letter-spacing:-.01em;font-weight:600}
-html.glass[data-font] body:not(.dev-chat) #v-chat.dev .btns button,
-html.glass[data-font] body:not(.dev-chat) #v-chat.dev .chat-log::before,
-html.glass[data-font] body:not(.dev-chat) #v-chat.dev .dev-tools button,
-html.glass[data-font] body:not(.dev-chat) #v-chat.dev .msg,
-html.glass[data-font] body:not(.dev-chat) .adm-t span,
-html.glass[data-font] body:not(.dev-chat) .cal-dows .wkdays span,
-html.glass[data-font] body:not(.dev-chat) .card > .card-f,
-html.glass[data-font] body:not(.dev-chat) .card-a,
-html.glass[data-font] body:not(.dev-chat) .card-h h2,
-html.glass[data-font] body:not(.dev-chat) .card.sx > .sx-k,
-html.glass[data-font] body:not(.dev-chat) .chat .go,
-html.glass[data-font] body:not(.dev-chat) .chat .s,
-html.glass[data-font] body:not(.dev-chat) .chat-status,
-html.glass[data-font] body:not(.dev-chat) .chip,
-html.glass[data-font] body:not(.dev-chat) .cl-d,
-html.glass[data-font] body:not(.dev-chat) .cl-r b,
-html.glass[data-font] body:not(.dev-chat) .countdown,
-html.glass[data-font] body:not(.dev-chat) .crow-s,
-html.glass[data-font] body:not(.dev-chat) .crow-x,
-html.glass[data-font] body:not(.dev-chat) .cs-row b,
-html.glass[data-font] body:not(.dev-chat) .day-h .dow,
-html.glass[data-font] body:not(.dev-chat) .day-h .sum,
-html.glass[data-font] body:not(.dev-chat) .dens,
-html.glass[data-font] body:not(.dev-chat) .dr-k,
-html.glass[data-font] body:not(.dev-chat) .empty,
-html.glass[data-font] body:not(.dev-chat) .fe-l,
-html.glass[data-font] body:not(.dev-chat) .fig .d,
-html.glass[data-font] body:not(.dev-chat) .fig .l,
-html.glass[data-font] body:not(.dev-chat) .fnow-r,
-html.glass[data-font] body:not(.dev-chat) .fnow-u,
-html.glass[data-font] body:not(.dev-chat) .food-status,
-html.glass[data-font] body:not(.dev-chat) .gate-foot,
-html.glass[data-font] body:not(.dev-chat) .gate-kicker,
-html.glass[data-font] body:not(.dev-chat) .gate-row-t span,
-html.glass[data-font] body:not(.dev-chat) .gb-w span,
-html.glass[data-font] body:not(.dev-chat) .goal .n,
-html.glass[data-font] body:not(.dev-chat) .goal .tag,
-html.glass[data-font] body:not(.dev-chat) .gt span,
-html.glass[data-font] body:not(.dev-chat) .hero-done,
-html.glass[data-font] body:not(.dev-chat) .hero-k,
-html.glass[data-font] body:not(.dev-chat) .hint,
-html.glass[data-font] body:not(.dev-chat) .keymark,
-html.glass[data-font] body:not(.dev-chat) .kv,
-html.glass[data-font] body:not(.dev-chat) .lc-top span,
-html.glass[data-font] body:not(.dev-chat) .lib .prog span,
-html.glass[data-font] body:not(.dev-chat) .lib summary .zn,
-html.glass[data-font] body:not(.dev-chat) .meal-h b,
-html.glass[data-font] body:not(.dev-chat) .meal-h span,
-html.glass[data-font] body:not(.dev-chat) .mi-m,
-html.glass[data-font] body:not(.dev-chat) .mi-n em,
-html.glass[data-font] body:not(.dev-chat) .mini span,
-html.glass[data-font] body:not(.dev-chat) .msg .play,
-html.glass[data-font] body:not(.dev-chat) .msg code,
-html.glass[data-font] body:not(.dev-chat) .msg pre,
-html.glass[data-font] body:not(.dev-chat) .msg table.mdt th,
-html.glass[data-font] body:not(.dev-chat) .msg-del,
-html.glass[data-font] body:not(.dev-chat) .msg-meta,
-html.glass[data-font] body:not(.dev-chat) .offline,
-html.glass[data-font] body:not(.dev-chat) .pk span,
-html.glass[data-font] body:not(.dev-chat) .pk-k,
-html.glass[data-font] body:not(.dev-chat) .plantlist,
-html.glass[data-font] body:not(.dev-chat) .ptag,
-html.glass[data-font] body:not(.dev-chat) .ptr,
-html.glass[data-font] body:not(.dev-chat) .reach-k,
-html.glass[data-font] body:not(.dev-chat) .readout span,
-html.glass[data-font] body:not(.dev-chat) .rg-h,
-html.glass[data-font] body:not(.dev-chat) .route-c,
-html.glass[data-font] body:not(.dev-chat) .seg button,
-html.glass[data-font] body:not(.dev-chat) .sesh .meta,
-html.glass[data-font] body:not(.dev-chat) .sesh .rt,
-html.glass[data-font] body:not(.dev-chat) .sesh .tick,
-html.glass[data-font] body:not(.dev-chat) .set-ver,
-html.glass[data-font] body:not(.dev-chat) .statline span,
-html.glass[data-font] body:not(.dev-chat) .sx-f span,
-html.glass[data-font] body:not(.dev-chat) .tabs a,
-html.glass[data-font] body:not(.dev-chat) .tabs button,
-html.glass[data-font] body:not(.dev-chat) .tbl small,
-html.glass[data-font] body:not(.dev-chat) .thumb .th-n,
-html.glass[data-font] body:not(.dev-chat) .tl-dots em,
-html.glass[data-font] body:not(.dev-chat) .tl-ends,
-html.glass[data-font] body:not(.dev-chat) .tl-list span:last-child,
-html.glass[data-font] body:not(.dev-chat) .utbl .ust,
-html.glass[data-font] body:not(.dev-chat) .whobar-name .chg,
-html.glass[data-font] body:not(.dev-chat) .whobar-switch,
-html.glass[data-font] body:not(.dev-chat) .wk-d,
-html.glass[data-font] body:not(.dev-chat) .wk-s span,
-html.glass[data-font] body:not(.dev-chat) .wk-t,
-html.glass[data-font] body:not(.dev-chat) .wk-tag,
-html.glass[data-font] body:not(.dev-chat) .wkn,
-html.glass[data-font] body:not(.dev-chat) .wkrow-s span,
-html.glass[data-font] body:not(.dev-chat) .wksum,
-html.glass[data-font] body:not(.dev-chat) .wktbl td.lbl,
-html.glass[data-font] body:not(.dev-chat) .wktbl td.nw,
-html.glass[data-font] body:not(.dev-chat) .wl-h,
-html.glass[data-font] body:not(.dev-chat) .wt-k,
-html.glass[data-font] body:not(.dev-chat) .zb-b i,
-html.glass[data-font] body:not(.dev-chat) .zb-l,
-html.glass[data-font] body:not(.dev-chat) .zl em,
-html.glass[data-font] body:not(.dev-chat) .zv,
-html.glass[data-font] body:not(.dev-chat) body.dev-chat .composer textarea,
-html.glass[data-font] body:not(.dev-chat) table.tbl,
-html.glass[data-font] body:not(.dev-chat) table.tbl tr.prov td{font-family:var(--gf);font-weight:500}
-html.glass[data-font] body:not(.dev-chat){font-family:var(--gf);font-weight:400}
+html.glass[data-font] body .cal-cell .n,
+html.glass[data-font] body .chip b,
+html.glass[data-font] body .countdown b,
+html.glass[data-font] body .crow-i,
+html.glass[data-font] body .crow-n,
+html.glass[data-font] body .day-h .dnum,
+html.glass[data-font] body .dr-t,
+html.glass[data-font] body .fig .n,
+html.glass[data-font] body .fnow-n,
+html.glass[data-font] body .gate-mark,
+html.glass[data-font] body .gate-row-t b,
+html.glass[data-font] body .gate-word,
+html.glass[data-font] body .gb-w b,
+html.glass[data-font] body .goal .v,
+html.glass[data-font] body .gt b,
+html.glass[data-font] body .hero-t,
+html.glass[data-font] body .mini b,
+html.glass[data-font] body .pk b,
+html.glass[data-font] body .reach h2,
+html.glass[data-font] body .readout b,
+html.glass[data-font] body .sesh .rt b,
+html.glass[data-font] body .statline b,
+html.glass[data-font] body .sx-f b,
+html.glass[data-font] body .whobar-name,
+html.glass[data-font] body .wk-n,
+html.glass[data-font] body .wk-s b,
+html.glass[data-font] body .wkd .n,
+html.glass[data-font] body .wksum b,
+html.glass[data-font] body .wordmark,
+html.glass[data-font] body .zv b,
+html.glass[data-font] body table.tbl td.t{font-family:var(--gf);letter-spacing:-.01em;font-weight:600}
+html.glass[data-font] body #v-chat.dev .btns button,
+html.glass[data-font] body #v-chat.dev .chat-log::before,
+html.glass[data-font] body #v-chat.dev .dev-tools button,
+html.glass[data-font] body #v-chat.dev .msg,
+html.glass[data-font] body .adm-t span,
+html.glass[data-font] body .cal-dows .wkdays span,
+html.glass[data-font] body .card > .card-f,
+html.glass[data-font] body .card-a,
+html.glass[data-font] body .card-h h2,
+html.glass[data-font] body .card.sx > .sx-k,
+html.glass[data-font] body .chat .go,
+html.glass[data-font] body .chat .s,
+html.glass[data-font] body .chat-status,
+html.glass[data-font] body .chip,
+html.glass[data-font] body .cl-d,
+html.glass[data-font] body .cl-r b,
+html.glass[data-font] body .countdown,
+html.glass[data-font] body .crow-s,
+html.glass[data-font] body .crow-x,
+html.glass[data-font] body .cs-row b,
+html.glass[data-font] body .day-h .dow,
+html.glass[data-font] body .day-h .sum,
+html.glass[data-font] body .dens,
+html.glass[data-font] body .dr-k,
+html.glass[data-font] body .empty,
+html.glass[data-font] body .fe-l,
+html.glass[data-font] body .fig .d,
+html.glass[data-font] body .fig .l,
+html.glass[data-font] body .fnow-r,
+html.glass[data-font] body .fnow-u,
+html.glass[data-font] body .food-status,
+html.glass[data-font] body .gate-foot,
+html.glass[data-font] body .gate-kicker,
+html.glass[data-font] body .gate-row-t span,
+html.glass[data-font] body .gb-w span,
+html.glass[data-font] body .goal .n,
+html.glass[data-font] body .goal .tag,
+html.glass[data-font] body .gt span,
+html.glass[data-font] body .hero-done,
+html.glass[data-font] body .hero-k,
+html.glass[data-font] body .hint,
+html.glass[data-font] body .keymark,
+html.glass[data-font] body .kv,
+html.glass[data-font] body .lc-top span,
+html.glass[data-font] body .lib .prog span,
+html.glass[data-font] body .lib summary .zn,
+html.glass[data-font] body .meal-h b,
+html.glass[data-font] body .meal-h span,
+html.glass[data-font] body .mi-m,
+html.glass[data-font] body .mi-n em,
+html.glass[data-font] body .mini span,
+html.glass[data-font] body .msg .play,
+html.glass[data-font] body .msg code,
+html.glass[data-font] body .msg pre,
+html.glass[data-font] body .msg table.mdt th,
+html.glass[data-font] body .msg-del,
+html.glass[data-font] body .msg-meta,
+html.glass[data-font] body .offline,
+html.glass[data-font] body .pk span,
+html.glass[data-font] body .pk-k,
+html.glass[data-font] body .plantlist,
+html.glass[data-font] body .ptag,
+html.glass[data-font] body .ptr,
+html.glass[data-font] body .reach-k,
+html.glass[data-font] body .readout span,
+html.glass[data-font] body .rg-h,
+html.glass[data-font] body .route-c,
+html.glass[data-font] body .seg button,
+html.glass[data-font] body .sesh .meta,
+html.glass[data-font] body .sesh .rt,
+html.glass[data-font] body .sesh .tick,
+html.glass[data-font] body .set-ver,
+html.glass[data-font] body .statline span,
+html.glass[data-font] body .sx-f span,
+html.glass[data-font] body .tabs a,
+html.glass[data-font] body .tabs button,
+html.glass[data-font] body .tbl small,
+html.glass[data-font] body .thumb .th-n,
+html.glass[data-font] body .tl-dots em,
+html.glass[data-font] body .tl-ends,
+html.glass[data-font] body .tl-list span:last-child,
+html.glass[data-font] body .utbl .ust,
+html.glass[data-font] body .whobar-name .chg,
+html.glass[data-font] body .whobar-switch,
+html.glass[data-font] body .wk-d,
+html.glass[data-font] body .wk-s span,
+html.glass[data-font] body .wk-t,
+html.glass[data-font] body .wk-tag,
+html.glass[data-font] body .wkn,
+html.glass[data-font] body .wkrow-s span,
+html.glass[data-font] body .wksum,
+html.glass[data-font] body .wktbl td.lbl,
+html.glass[data-font] body .wktbl td.nw,
+html.glass[data-font] body .wl-h,
+html.glass[data-font] body .wt-k,
+html.glass[data-font] body .zb-b i,
+html.glass[data-font] body .zb-l,
+html.glass[data-font] body .zl em,
+html.glass[data-font] body .zv,
+html.glass[data-font] body body.dev-chat .composer textarea,
+html.glass[data-font] body table.tbl,
+html.glass[data-font] body table.tbl tr.prov td{font-family:var(--gf);font-weight:500}
+html.glass[data-font] body{font-family:var(--gf);font-weight:400}
 html.glass[data-font=sf]{--gf:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,system-ui,sans-serif}
 html.glass[data-font=inter]{--gf:'Inter',system-ui,sans-serif}
 html.glass[data-font=manrope]{--gf:'Manrope',system-ui,sans-serif}
 html.glass[data-font=jakarta]{--gf:'Plus Jakarta Sans',system-ui,sans-serif}
 /* Small workout graphics stay crisp: the 8px rounding bent the 16px calendar strips into bowls. */
 html.glass body:not(.dev-chat) .pf.pf-mini{height:6px;border-radius:3px}
-html.glass[data-font] body:not(.dev-chat) .msg pre,
-html.glass[data-font] body:not(.dev-chat) .msg code{font-family:'DM Mono',monospace;font-weight:400}
+html.glass[data-font] body .msg pre,
+html.glass[data-font] body .msg code{font-family:'DM Mono',monospace;font-weight:400}
 .look-f{display:flex;align-items:center;gap:10px;padding:10px 15px 12px;border-top:1px solid var(--rule-soft)}
 .look-f>span{font:500 10px 'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .look-f .seg{flex:1;margin:0}
@@ -383,3 +383,65 @@ html.glass body:not(.dev-chat) .composer{bottom:calc(82px + env(safe-area-inset-
 html.glass body:not(.dev-chat).in-chat main{padding-bottom:calc(160px + env(safe-area-inset-bottom,0px))}
 html.glass body:not(.dev-chat) .composer textarea{border:0;background:rgba(255,255,255,.85);
   box-shadow:var(--rim), 0 4px 16px rgba(15,25,40,.08)}
+
+
+/* ── Dev tab: the same glass, dark (Jamie, 14 Oct 2026: "refresh the dev page to match").
+   Keeps its green so it can never be mistaken for the coaching chat. ───────────────── */
+html.glass body.dev-chat{
+  --glass-d:rgba(255,255,255,.055);
+  --rim-d:inset 0 1px 0 rgba(255,255,255,.09), inset 0 0 0 .5px rgba(255,255,255,.07);
+  background:#0a0e13;
+}
+html.glass body.dev-chat::before{
+  content:'';position:fixed;inset:-10vmax;z-index:-1;pointer-events:none;
+  background:
+    radial-gradient(40vmax 40vmax at 12% 8%, rgba(63,185,80,.13), transparent 70%),
+    radial-gradient(44vmax 44vmax at 92% 30%, rgba(88,166,255,.09), transparent 70%),
+    radial-gradient(40vmax 40vmax at 70% 95%, rgba(111,92,240,.08), transparent 70%),
+    linear-gradient(170deg,#0d1117,#090c10);
+}
+html.glass body.dev-chat .masthead{background:rgba(13,17,23,.55);border-bottom:.5px solid rgba(255,255,255,.08);
+  backdrop-filter:blur(30px) saturate(160%);-webkit-backdrop-filter:blur(30px) saturate(160%)}
+html.glass body.dev-chat #gear{background:rgba(255,255,255,.08);border:0;border-radius:50%;box-shadow:var(--rim-d)}
+/* Coach / Dev: dark iOS segmented control, green pill on Dev */
+html.glass body.dev-chat #chatTabs{background:rgba(118,118,128,.24);border:0;border-radius:12px;padding:2px;
+  box-shadow:0 6px 20px rgba(0,0,0,.35);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px)}
+html.glass body.dev-chat #chatTabs button{border:0;border-radius:10px;text-transform:none;letter-spacing:0;
+  font-size:13px;font-weight:500;color:#c9d1d9}
+html.glass body.dev-chat #chatTabs button[aria-selected=true]{background:#238636;color:#fff;box-shadow:0 2px 8px rgba(35,134,54,.45)}
+/* the log: one dark glass pane, no terminal chrome */
+html.glass #v-chat.dev .chat-log{background:var(--glass-d);border:0;border-radius:22px;box-shadow:var(--rim-d), 0 10px 30px rgba(0,0,0,.35);
+  padding:16px 14px 18px;backdrop-filter:blur(30px) saturate(150%);-webkit-backdrop-filter:blur(30px) saturate(150%)}
+html.glass #v-chat.dev .chat-log::before{display:none}
+html.glass #v-chat.dev .msg{font-size:14.5px;line-height:1.55;letter-spacing:0;color:#d5dbe2}
+html.glass #v-chat.dev .msg.coach{background:rgba(255,255,255,.04);border:0;border-radius:16px;padding:12px 14px;
+  box-shadow:var(--rim-d)}
+html.glass #v-chat.dev .msg.me{border-radius:16px;background:#238636;box-shadow:0 4px 14px rgba(35,134,54,.3)}
+html.glass #v-chat.dev .msg.me::before{background:rgba(255,255,255,.08)}
+html.glass #v-chat.dev .msg.me::after{font-family:var(--gf);letter-spacing:0;font-size:11px;opacity:.85}
+html.glass #v-chat.dev .msg b{font-weight:600}
+html.glass #v-chat.dev .msg table.mdt th,
+html.glass #v-chat.dev .msg table.mdt td{border-color:rgba(255,255,255,.08)}
+html.glass #v-chat.dev .msg code,
+html.glass #v-chat.dev .msg pre{font-family:'DM Mono',monospace;font-size:12.5px}
+html.glass body.dev-chat .dev-tools button{border:0;background:rgba(255,255,255,.07);box-shadow:var(--rim-d);color:#c9d1d9}
+/* tab bar and composer: dark capsule, message box above it */
+html.glass body.dev-chat .tabs{left:12px;right:12px;bottom:calc(8px + env(safe-area-inset-bottom,0px));
+  padding:4px;border-radius:33px;border:0;background:rgba(22,27,34,.82);
+  box-shadow:var(--rim-d), 0 12px 32px rgba(0,0,0,.5);
+  backdrop-filter:blur(30px) saturate(160%);-webkit-backdrop-filter:blur(30px) saturate(160%)}
+html.glass body.dev-chat .tabs button,
+html.glass body.dev-chat .tabs a{min-height:58px;font-size:10px;font-weight:500;letter-spacing:0;text-transform:none;
+  border-radius:29px;color:#8b949e}
+html.glass body.dev-chat .tabs button[aria-selected=true]{background:rgba(255,255,255,.1);color:#3fb950}
+html.glass body.dev-chat .tabs button[aria-selected=true]::before{display:none}
+html.glass body.dev-chat .composer{bottom:calc(82px + env(safe-area-inset-bottom,0px));background:transparent;border-top:0}
+html.glass body.dev-chat .composer textarea{font:400 15px/1.4 var(--gf);background:rgba(255,255,255,.07);border:0;
+  box-shadow:var(--rim-d);color:#e6edf3}
+html.glass body.dev-chat.in-chat main{padding-bottom:calc(160px + env(safe-area-inset-bottom,0px))}
+/* Settings list: a glass pane like the cards, subtitles in normal case. */
+html.glass body:not(.dev-chat) .drawers{background:var(--glass);border:0;border-radius:22px;overflow:hidden;
+  box-shadow:var(--rim), var(--lift);backdrop-filter:blur(30px) saturate(180%);-webkit-backdrop-filter:blur(30px) saturate(180%)}
+html.glass body:not(.dev-chat) .gate-row-t span,
+html.glass body:not(.dev-chat) .crow-s,
+html.glass body:not(.dev-chat) .set-ver{text-transform:none;letter-spacing:0;font-size:12.5px}

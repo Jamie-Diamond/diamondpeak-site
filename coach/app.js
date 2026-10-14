@@ -5557,6 +5557,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.78", "2026-10-14", "Dev tab in dark glass to match; the style switch is gone", 1],
     ["3.77", "2026-10-14", "New look: frosted-glass design with a floating tab bar, cleaner tiles and charts, and a new font", 0],
     ["3.76", "2026-10-14", "HRV and resting HR graphs show the last 28 days", 0],
     ["3.75", "2026-10-14", "No empty line above the charts: the tap readout floats over the chart when you touch it", 0],
@@ -5617,13 +5618,6 @@
     ["3.2", "2026-09-30", "Switches for coaching options and the Food tab", 0],
     ["3.0", "2026-09-30", "Peak replaces Telegram: chat, voice, photos, notifications, sign-up and Strava", 0]
   ];
-
-  // What the Look card says is actually in force, so a stale stylesheet shows itself.
-  function lookStatus() {
-    var de = document.documentElement, v = getComputedStyle(de).getPropertyValue('--glass-v').trim();
-    return (de.classList.contains('glass') ? 'glass ' + (v ? 'v' + v.replace(/'/g, '') : '(old stylesheet)') : 'classic') +
-      ' · font ' + (de.getAttribute('data-font') || 'current');
-  }
 
   function openChangelog() {
     var coach = !!(state.me && state.me.coach);
@@ -5967,14 +5961,6 @@
     var h = '<p class="set-ver" id="setVer" role="button" tabindex="0">Peak <span id="appVersion">checking…</span>' +
       '<span class="set-new">what\u2019s new \u203A</span></p>' +
       notifH +
-      // Look: the glass preview, coach only until it is made the default (14 Oct 2026).
-      (state.me && state.me.coach ? card('Look', '<div class="body-flush"><button type="button" class="srow" ' +
-        'role="switch" id="glassSw" aria-checked="' + document.documentElement.classList.contains('glass') +
-        '"><span class="gate-row-t"><b>Glass style</b><span>off = classic look, this device only</span></span>' +
-        SWITCH + '</button>' +
-        '<div class="look-f"><span>Font</span>' + subSeg('fontSeg', document.documentElement.getAttribute('data-font') || '',
-          [['', 'Current'], ['sf', 'SF'], ['inter', 'Inter'], ['manrope', 'Manrope'], ['jakarta', 'Jakarta']]) +
-        '</div></div>', { flush: true, foot: 'Fonts apply with Glass on. Active: ' + lookStatus() }) : '') +
       '<div class="drawers">' +
       (ATHLETES.length > 1 ? drawer('athlete', 'Athlete', 'showing ' + curName, athleteH) : '') +
       drawer('sports', 'Focus sports', fs.map(function (x) { return SPNAME[x]; }).join(' · '), sportsH) +
@@ -5994,26 +5980,6 @@
       el.addEventListener('toggle', function () { DRAWERS[el.dataset.drawer] = el.open; });
     });
     fillAppVersion();
-    var gs = $('#glassSw');
-    if (gs) gs.onclick = function () {
-      var on = !document.documentElement.classList.contains('glass');
-      document.documentElement.classList.toggle('glass', on);
-      if (state.data) { renderToday(); renderCalendar(); }       // thumbnails redraw as ribbons
-      try { localStorage.setItem('cc.theme', on ? 'glass' : 'classic'); } catch (e) { /* private mode */ }
-      gs.setAttribute('aria-checked', on);
-    };
-    var fseg = $('#fontSeg');
-    if (fseg) fseg.onclick = function (e) {
-      var b = e.target.closest('button');
-      if (!b) return;
-      var f = b.dataset.s;
-      if (f) { document.documentElement.setAttribute('data-font', f); if (window.peakLoadFont) window.peakLoadFont(f); }
-      else document.documentElement.removeAttribute('data-font');
-      try { localStorage.setItem('cc.font', f); } catch (err) { /* private mode */ }
-      fseg.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-selected', x === b); });
-      var lf = fseg.closest('.card').querySelector('.card-f');
-      if (lf) lf.textContent = 'Fonts apply with Glass on. Active: ' + lookStatus();
-    };
     var sv = $('#setVer');
     if (sv) {
       sv.onclick = openChangelog;
