@@ -206,9 +206,12 @@
     var W = 1000, H = 100, CAP = 160, gap = o.mini ? 0 : 3;
     var tot = blocks.reduce(function (a, b) { return a + (b[0] || 0); }, 0) || 1;
     var x = 0, rects = '';
+    // Glass style: calendar thumbnails become a flat zone ribbon (Jamie, 14 Oct 2026: the
+    // tiny shapes "don't quite work" - at 35 px the warm-up/cool-down steps read as bowls).
+    var ribbon = o.mini && document.documentElement.classList.contains('glass');
     blocks.forEach(function (b) {
       var w = W * (b[0] || 0) / tot;
-      var hgt = Math.max(6, Math.min(CAP, b[1] || 0) / CAP * H);
+      var hgt = ribbon ? H : Math.max(6, Math.min(CAP, b[1] || 0) / CAP * H);
       var z = Math.max(1, Math.min(7, b[2] || 1));
       rects += '<rect x="' + (x + gap / 2).toFixed(1) + '" y="' + (H - hgt).toFixed(1) +
         '" width="' + Math.max(1, w - gap).toFixed(1) + '" height="' + hgt.toFixed(1) +
@@ -5536,6 +5539,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.65", "2026-10-14", "Glass preview: font trial and crisper calendar workout strips", 1],
     ["3.64", "2026-10-14", "Glass style preview in Settings > Look", 1],
     ["3.63", "2026-10-14", "Sweat loss on the session's Fuelling card; empty fuelling rows are hidden", 0],
     ["3.62", "2026-10-14", "Tidier wording across the app; Current state moves to the bottom of Today", 0],
@@ -5931,7 +5935,10 @@
       (state.me && state.me.coach ? card('Look', '<div class="body-flush"><button type="button" class="srow" ' +
         'role="switch" id="glassSw" aria-checked="' + document.documentElement.classList.contains('glass') +
         '"><span class="gate-row-t"><b>Glass style (preview)</b><span>this device only</span></span>' +
-        SWITCH + '</button></div>', { flush: true }) : '') +
+        SWITCH + '</button>' +
+        '<div class="look-f"><span>Font</span>' + subSeg('fontSeg', document.documentElement.getAttribute('data-font') || '',
+          [['', 'Current'], ['sf', 'SF'], ['inter', 'Inter'], ['manrope', 'Manrope'], ['jakarta', 'Jakarta']]) +
+        '</div></div>', { flush: true, foot: 'Fonts apply with Glass on.' }) : '') +
       '<div class="drawers">' +
       (ATHLETES.length > 1 ? drawer('athlete', 'Athlete', 'showing ' + curName, athleteH) : '') +
       drawer('sports', 'Focus sports', fs.map(function (x) { return SPNAME[x]; }).join(' · '), sportsH) +
@@ -5955,8 +5962,19 @@
     if (gs) gs.onclick = function () {
       var on = !document.documentElement.classList.contains('glass');
       document.documentElement.classList.toggle('glass', on);
+      if (state.data) { renderToday(); renderCalendar(); }       // thumbnails redraw as ribbons
       try { localStorage.setItem('cc.theme', on ? 'glass' : ''); } catch (e) { /* private mode */ }
       gs.setAttribute('aria-checked', on);
+    };
+    var fseg = $('#fontSeg');
+    if (fseg) fseg.onclick = function (e) {
+      var b = e.target.closest('button');
+      if (!b) return;
+      var f = b.dataset.s;
+      if (f) { document.documentElement.setAttribute('data-font', f); if (window.peakLoadFont) window.peakLoadFont(f); }
+      else document.documentElement.removeAttribute('data-font');
+      try { localStorage.setItem('cc.font', f); } catch (err) { /* private mode */ }
+      fseg.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-selected', x === b); });
     };
     var sv = $('#setVer');
     if (sv) {

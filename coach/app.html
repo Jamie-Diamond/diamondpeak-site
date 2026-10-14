@@ -17,7 +17,11 @@
 <!-- Glass style preview (glass.css): on only for a device that chose it in Settings > Look,
      or opened with ?glass=1. Set before first paint so the page doesn't flash the old look. -->
 <link rel="stylesheet" href="glass.css">
-<script>try{if(localStorage.getItem('cc.theme')==='glass'||/[?&]glass=1/.test(location.search))document.documentElement.classList.add('glass')}catch(e){}</script>
+<script>try{if(localStorage.getItem('cc.theme')==='glass'||/[?&]glass=1/.test(location.search))document.documentElement.classList.add('glass');
+var gf=localStorage.getItem("cc.font");if(gf)document.documentElement.setAttribute("data-font",gf);
+var GF={inter:'Inter:wght@400;500;600;700',manrope:'Manrope:wght@400;500;600;700',jakarta:'Plus+Jakarta+Sans:wght@400;500;600;700'};
+window.peakLoadFont=function(f){if(!GF[f]||document.getElementById('gf-'+f))return;var l=document.createElement('link');l.id='gf-'+f;l.rel='stylesheet';l.href='https://fonts.googleapis.com/css2?family='+GF[f]+'&display=swap';document.head.appendChild(l)};
+if(gf)peakLoadFont(gf)}catch(e){}</script>
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1405,6 +1409,6 @@ body.drawn{overflow:hidden}
      broken launch. A new URL cannot hit that cache entry. It always equals the
      number in sw.js CACHE (peak-vN): bump both on every release, enforced by
      ClaudeCoach/ironman-analysis/tests/test_peak_release.py. -->
-<script src="app.js?v=124" defer></script>
+<script src="app.js?v=125" defer></script>
 </body>
 </html>
