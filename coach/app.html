@@ -872,6 +872,14 @@ a.pickrow{text-decoration:none;color:inherit}
 .drawers{background:var(--paper);border:1px solid var(--rule);border-radius:4px;margin:0 0 14px;overflow:hidden}
 .sdrawer{border-bottom:1px solid var(--rule-soft)}
 .sdrawer:last-child{border-bottom:0}
+.st-more{border-top:1px solid var(--rule);border-bottom:0}
+#detSlot table.tbl{display:table;width:100%;table-layout:fixed}
+#detSlot table.tbl td.lbl{width:44%}
+.pk{display:grid;grid-template-columns:repeat(5,1fr);padding:14px 10px 2px;text-align:center}
+.pk b{display:block;font:400 21px 'Libre Baskerville',serif;color:var(--ink)}
+.pk span{font:500 9.5px 'DM Mono',monospace;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+.pk-k{margin:2px 0 10px;text-align:center;font:500 9px 'DM Mono',monospace;letter-spacing:.12em;color:var(--muted);text-transform:uppercase}
+.st-more[open]>summary .gate-go{transform:rotate(90deg)}
 .sdrawer>summary{list-style:none;display:flex;align-items:center;gap:13px;padding:9px 15px;cursor:pointer}
 .sdrawer>summary::-webkit-details-marker{display:none}
 .sdrawer>summary .gate-row-t b{font-size:15px}
@@ -1372,6 +1380,6 @@ body.drawn{overflow:hidden}
      broken launch. A new URL cannot hit that cache entry. It always equals the
      number in sw.js CACHE (peak-vN): bump both on every release, enforced by
      ClaudeCoach/ironman-analysis/tests/test_peak_release.py. -->
-<script src="app.js?v=114" defer></script>
+<script src="app.js?v=115" defer></script>
 </body>
 </html>

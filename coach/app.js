@@ -4573,6 +4573,9 @@
     return leafletP;
   }
   var TRK_NAMES = { power: 'Power', hr: 'HR', pace: 'Pace' };
+  // Stats shown without opening the drawer, in lib/activity_stats.py's labels.
+  var STATS_KEY = ['Normalised power', 'Intensity (IF)', 'Peak power', 'Avg pace',
+                   'Grade-adjusted pace', 'Decoupling', 'Avg heart rate'];
   function loadTrack(dateISO, sport, name, fam, rpeRow) {
     if (!state.slug) return;
     var box;
@@ -4583,8 +4586,26 @@
       .then(function (t) {
         // Peak power, corrected decoupling and the rest, in place of the short Details card.
         var slot = $('#detSlot');
+        // The few that matter up front, the rest in a drawer, so more can be added without
+        // crowding the page (Jamie, 14 Oct 2026). Open/closed is remembered like Settings'.
         if (slot && t.stats && t.stats.length) {
-          slot.innerHTML = card('Stats', kvRows(t.stats.concat(rpeRow ? [rpeRow] : [])), { flush: true });
+          var all = t.stats.concat(rpeRow ? [rpeRow] : []);
+          // Peak power as five small tiles ("5 s 432 · 1 min 254 · ... w" wrapped badly as a row).
+          var pkRow = all.filter(function (r) { return r[0] === 'Peak power'; })[0];
+          all = all.filter(function (r) { return r !== pkRow; });
+          var pk = pkRow ? '<div class="pk">' + String(pkRow[1]).replace(/ w$/, '').split(' · ').map(function (c) {
+            var m = c.match(/^(.*) (\d+)$/);
+            return m ? '<div><b>' + m[2] + '</b><span>' + esc(m[1]) + '</span></div>' : '';
+          }).join('') + '</div><p class="pk-k">peak power, watts</p>' : '';
+          var top = all.filter(function (r) { return STATS_KEY.indexOf(r[0]) >= 0; });
+          var more = all.filter(function (r) { return STATS_KEY.indexOf(r[0]) < 0; });
+          if (!top.length) { top = more.slice(0, 4); more = more.slice(4); }
+          slot.innerHTML = card('Stats', pk + kvRows(top) + (more.length
+            ? '<details class="sdrawer st-more" data-drawer="statsMore"' + (DRAWERS.statsMore ? ' open' : '') + '>' +
+              '<summary><span class="gate-row-t"><b>More stats</b><span>' + more.length + ' more</span></span>' +
+              '<span class="gate-go">›</span></summary>' + kvRows(more) + '</details>' : ''), { flush: true });
+          var dm = slot.querySelector('.st-more');
+          if (dm) dm.addEventListener('toggle', function () { DRAWERS.statsMore = dm.open; });
         }
         if (!$('#trkBox') || !t.pts || t.pts.length < 2) return null;
         return needLeaflet().then(function () { return t; });
@@ -5396,6 +5417,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.55", "2026-10-14", "Session stats: the key few up front, the rest under More stats", 0],
     ["3.54", "2026-10-14", "Tap the version number to see what's new", 0],
     ["3.53", "2026-10-14", "Stats on every done session: peak power, decoupling (warm-up and coasting left out), pace, cadence and more", 0],
     ["3.52", "2026-10-14", "Your route on a real map, coloured by power, heart rate or pace zone", 0],
