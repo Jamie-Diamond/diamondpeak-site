@@ -887,6 +887,7 @@ def _build_jamie_data(client) -> dict:
         "loadChart":    load_chart,
         "weightTrend":  weight_trend,
         "wellnessTrend": _wellness_trend(wellness_60),
+        "thresholds":   _thresholds_tile("jamie", client),
         "powerCurve":   power_curve,
         "powerCurveWindow": power_curve_window,
         "resolvedFtp":  resolved_ftp,
@@ -1684,6 +1685,30 @@ def _recent_log(entries, days: int = 120) -> list:
     return sorted(rows, key=lambda e: str(e.get("date") or ""))
 
 
+def _thresholds_tile(slug, client) -> dict | None:
+    """Peak's Today threshold tiles (Jamie, 14 Oct 2026: "FTP should be eFTP and also show
+    run threshold and CSS"): the same resolver the planner reads (lib/thresholds.py), and
+    which sports are still untested in the baseline (lib/baseline.py) so an Intervals.icu
+    default is never shown as the athlete's threshold."""
+    try:
+        import thresholds as _th
+        import baseline as _bl
+        t = _th.get_thresholds(slug, client=client)
+        # Only the athlete's own sports: a sport they don't do shows Intervals.icu's
+        # default (CSS 2:00 for Fred and Calum, who ride). With a baseline, a sport it
+        # hasn't tested is "not tested", never a default dressed as a threshold.
+        sports = _focus_sports(slug) or ["swim", "bike", "run"]
+        conf = _bl.confidence(slug) or {}
+        untested = sorted(f for f in sports if conf and conf.get(f) != "tested")
+    except Exception as e:
+        log(f"[{slug}] thresholds tile skipped: {e}")
+        return None
+    strip = lambda v: v.replace(".0/", "/") if isinstance(v, str) else v
+    return {"ftp": t.get("ftp_watts"), "ftp_source": t.get("ftp_source"),
+            "run": strip(t.get("run_threshold_per_km")), "css": strip(t.get("swim_css_per_100m")),
+            "sports": sports, "untested": untested}
+
+
 def _wellness_trend(rows) -> list:
     """Daily HRV and resting HR for Peak's HRV & resting HR card (Jamie, 14 Oct 2026).
     All of the ~60 days fetched, so the app can draw the last 30 against a 28-day normal."""
@@ -1962,6 +1987,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
         "weightTrend":  [{"date": w.get("id", "")[:10], "kg": w["weight"]}
                          for w in wellness_60 if w.get("weight")],
         "wellnessTrend": _wellness_trend(wellness_60),
+        "thresholds":   _thresholds_tile(slug, client),
         "kpi":          kpi,
         "fitnessThis":  fitness_this,
         "fitnessBySport": fitness_by_sport,

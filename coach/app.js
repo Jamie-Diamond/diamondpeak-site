@@ -467,7 +467,7 @@
 
   // Labels in sentence case with acronyms kept: shown as written in the glass style,
   // capitalised by CSS in the classic one.
-  var MINI_CAPS = { ftp: 'FTP', tss: 'TSS' };
+  var MINI_CAPS = { ftp: 'FTP', eftp: 'eFTP', tss: 'TSS' };
   function mini(v, label, cls) {
     label = MINI_CAPS[label] || (String(label).charAt(0).toUpperCase() + String(label).slice(1));
     return '<div class="mini' + (cls ? ' ' + cls : '') + '"><b>' + esc(v) + '</b>' +
@@ -663,8 +663,21 @@
     if (ha.current != null && heatOn()) {
       signals += mini(Number(ha.current).toFixed(0) + '%', 'heat accl');
     }
-    if (d.resolvedFtp) signals += mini(d.resolvedFtp + 'w', 'ftp');
     if (signals) h += '<div class="minis">' + signals + '</div>';
+    // Thresholds the plan uses (Jamie, 14 Oct 2026): eFTP (live) or FTP, run threshold,
+    // CSS. A sport the baseline hasn't tested says so rather than show an ICU default.
+    var th = d.thresholds;
+    if (th) {
+      var un = th.untested || [];
+      var tv = function (fam, v) { return un.indexOf(fam) >= 0 ? 'not tested' : (v || '\u2014'); };
+      var has = function (f) { return !th.sports || th.sports.indexOf(f) >= 0; };   // own sports only
+      var tiles = (has('bike') ? mini(tv('bike', th.ftp ? th.ftp + 'w' : null), th.ftp_source === 'eftp' ? 'eftp' : 'ftp') : '') +
+        (has('run') ? mini(tv('run', th.run ? th.run.replace('/km', '') : null), 'Run threshold /km') : '') +
+        (has('swim') ? mini(tv('swim', th.css ? th.css.replace('/100m', '') : null), 'CSS /100m') : '');
+      if (tiles) h += '<div class="minis th">' + tiles + '</div>';
+    } else if (d.resolvedFtp) {
+      h += '<div class="minis">' + mini(d.resolvedFtp + 'w', 'ftp') + '</div>';
+    }
 
     h += weekSoFar(d);
 
@@ -5603,6 +5616,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.83", "2026-10-14", "Today shows your eFTP, run threshold and CSS", 0],
     ["3.82", "2026-10-14", "Coach / Dev switch is solid, so chat text doesn't show through", 1],
     ["3.81", "2026-10-14", "Recovery card: sleep joins HRV and resting HR, against your own normal", 0],
     ["3.80", "2026-10-14", "±7 days chart in plain English: Form, Fatigue, Daily load", 0],
