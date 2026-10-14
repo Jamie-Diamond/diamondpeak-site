@@ -1064,6 +1064,20 @@ def validate_week(
                         f"planned, over the cap of {strength_max}"),
             ))
 
+    # 4b. Weekly minimum per sport (soft) — day_rules.min_per_week, e.g. {"swim": 1,
+    #     "bike": 1}: a run block still keeps a swim and a ride every week (Jamie, 14 Oct
+    #     2026: "don't just remove a sport").
+    for sport, need in ((day_rules or {}).get("min_per_week") or {}).items():
+        fam = {"swim": ("Swim",), "bike": ("Ride",), "run": ("Run",)}.get(sport, (sport,))
+        got = sum(1 for e in week_events if any(f in str(e.get("type") or "") for f in fam))
+        if got < int(need):
+            violations.append(Violation(
+                code="sport_below_weekly_min",
+                severity="soft",
+                detail=(f"week of {week_start}: {got} {sport} session(s) planned, "
+                        f"the athlete keeps at least {need} a week"),
+            ))
+
     # 5. Intensity-distribution drift (soft) — excess planned quality vs the
     #    blueprint phase's Z1–2 share. Only asserted when a distribution is supplied.
     #    A Taper phase is the exception: {} there is not an unspecified-future-phase

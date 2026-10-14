@@ -669,6 +669,9 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         "long_swim_target_m": None if offseason else event.get("long_swim_m"),  # OVERDISTANCE weekly long swim (70.3 ~3000, IM ~4500)
         "race_sim_m": None if offseason else event.get("swim_m"),               # EXACT race distance — race-sim rehearsal (70.3 1900, IM 3800)
         "strength_programme": strength,
+        # Every week, whatever the block's focus (day_rules.min_per_week, Jamie 14 Oct 2026).
+        **({"every_week_minimum": (cfg.get("day_rules") or {}).get("min_per_week")}
+           if (cfg.get("day_rules") or {}).get("min_per_week") else {}),
         "durability": durability,
         "menstrual_forecast": menstrual_forecast,
         "thresholds": {"ftp": thresh["ftp_watts"], "run": thresh["run_threshold_per_km"],

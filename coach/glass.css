@@ -2,10 +2,10 @@
    this feel like really Apple glass styling"). Modelled on iOS materials: thin frosted
    panes over a quiet background, a bright specular rim and hairline separators, a
    floating capsule tab bar with a lens on the selected tab, iOS segmented controls and
-   sheets. Active only with html.glass (Settings > Look, coach only, this device) until
-   it is made the default. The Dev tab keeps its dark style. */
+   sheets. Active with html.glass: the default for everyone since 3.77; Settings > Look
+   (coach) can switch a device to classic. The Dev tab keeps its dark style. */
 
-html.glass{--glass-v:'136'}
+html.glass{--glass-v:'137'}
 html.glass body:not(.dev-chat){
   --paper:rgba(255,255,255,.62);
   --paper-2:transparent;

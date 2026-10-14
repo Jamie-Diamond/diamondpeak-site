@@ -954,6 +954,9 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
   sessions_per_week Strength sessions, placed per its "placement" rule, with the session
   content (warm-up / main lifts / ankle / core, default its tier) written into "notes".
   Give each Strength session "minutes": 40 (no segments, no load — code/ICU handle load).
+- EVERY WEEK: if the brief has "every_week_minimum" (e.g. swim 1, bike 1), the week
+  includes at least that many sessions of each sport, on that sport's allowed days, even in
+  a block that focuses on another sport. Easy or technique sessions are fine; never drop one.
 - DURABILITY: if the brief has a non-null "durability", apply it to the long ride (closing block
   at race intensity), expressed in the long ride's segments + notes.
 - MENSTRUAL: if the brief has a non-null "menstrual_forecast", follow its "apply" guidance when

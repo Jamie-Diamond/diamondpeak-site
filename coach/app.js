@@ -5557,6 +5557,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.77", "2026-10-14", "New look: frosted-glass design with a floating tab bar, cleaner tiles and charts, and a new font", 0],
     ["3.76", "2026-10-14", "HRV and resting HR graphs show the last 28 days", 0],
     ["3.75", "2026-10-14", "No empty line above the charts: the tap readout floats over the chart when you touch it", 0],
     ["3.74", "2026-10-14", "HRV and resting HR graphs scale to the trend, so it fills the chart", 0],
@@ -5969,7 +5970,7 @@
       // Look: the glass preview, coach only until it is made the default (14 Oct 2026).
       (state.me && state.me.coach ? card('Look', '<div class="body-flush"><button type="button" class="srow" ' +
         'role="switch" id="glassSw" aria-checked="' + document.documentElement.classList.contains('glass') +
-        '"><span class="gate-row-t"><b>Glass style (preview)</b><span>this device only</span></span>' +
+        '"><span class="gate-row-t"><b>Glass style</b><span>off = classic look, this device only</span></span>' +
         SWITCH + '</button>' +
         '<div class="look-f"><span>Font</span>' + subSeg('fontSeg', document.documentElement.getAttribute('data-font') || '',
           [['', 'Current'], ['sf', 'SF'], ['inter', 'Inter'], ['manrope', 'Manrope'], ['jakarta', 'Jakarta']]) +
@@ -5998,7 +5999,7 @@
       var on = !document.documentElement.classList.contains('glass');
       document.documentElement.classList.toggle('glass', on);
       if (state.data) { renderToday(); renderCalendar(); }       // thumbnails redraw as ribbons
-      try { localStorage.setItem('cc.theme', on ? 'glass' : ''); } catch (e) { /* private mode */ }
+      try { localStorage.setItem('cc.theme', on ? 'glass' : 'classic'); } catch (e) { /* private mode */ }
       gs.setAttribute('aria-checked', on);
     };
     var fseg = $('#fontSeg');
