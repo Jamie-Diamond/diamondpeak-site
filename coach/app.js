@@ -4593,16 +4593,22 @@
     // Fuelling and heat: only once the session is done (13 Oct 2026: a planned session
     // showed a card of "not logged" rows for something that hadn't happened yet). After it,
     // every row shows even when empty: a blank then says "log it".
-    if (done) h += card('Fuelling', kvRows([
-      ['Carbohydrate', x.carb ? Number(x.carb.g_per_hr).toFixed(0) + ' g/hr' : 'not logged',
-       !!x.carb],
-      ['Water', lg.hydration_ml != null ? lg.hydration_ml + ' ml' : 'not logged'],
-      ['Sodium', lg.nutrition_mg_sodium != null ? lg.nutrition_mg_sodium + ' mg' : 'not logged',
-       lg.nutrition_mg_sodium != null],
-      (x.carb && x.carb.dur) ? ['Over', hhmm(x.carb.dur)] : null,
+    // Only what was logged (Jamie, 14 Oct 2026: "if fields are blank don't show them");
+    // no card at all when nothing was. Sweat loss from a pre/post weigh-in
+    // (plan_tools.py sweat-rate --activity).
+    var fuelRows = done ? kvRows([
+      x.carb ? ['Carbohydrate', Number(x.carb.g_per_hr).toFixed(0) + ' g/hr', true] : null,
       (x.carb && x.carb.dur && x.carb.g_per_hr != null)
-        ? ['Total carbohydrate', Math.round(x.carb.g_per_hr * x.carb.dur / 60) + ' g'] : null
-    ]));
+        ? ['Total carbohydrate', Math.round(x.carb.g_per_hr * x.carb.dur / 60) + ' g'] : null,
+      lg.hydration_ml != null ? ['Water', lg.hydration_ml + ' ml'] : null,
+      lg.nutrition_mg_sodium != null ? ['Sodium', lg.nutrition_mg_sodium + ' mg', true] : null,
+      lg.sweat_loss_ml != null ? ['Sweat loss', (lg.sweat_loss_ml / 1000).toFixed(1) + ' L' +
+        (lg.sweat_rate_ml_hr ? ' · ' + lg.sweat_rate_ml_hr + ' ml/hr' : ''), true] : null,
+      lg.sweat_bw_loss_pct != null ? ['Body weight lost', lg.sweat_bw_loss_pct + '%'] : null,
+      (lg.sweat_loss_ml && lg.hydration_ml != null)
+        ? ['Fluid replaced', Math.round(lg.hydration_ml / lg.sweat_loss_ml * 100) + '%'] : null
+    ]) : '';
+    if (fuelRows) h += card('Fuelling', fuelRows);
 
     if (heatOn() && (done || x.heat)) h += card('Heat', x.heat
       ? kvRows([
@@ -5530,6 +5536,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.63", "2026-10-14", "Sweat loss on the session's Fuelling card; empty fuelling rows are hidden", 0],
     ["3.62", "2026-10-14", "Tidier wording across the app; Current state moves to the bottom of Today", 0],
     ["3.61", "2026-10-14", "Coming up moves to the Calendar tab; trend lines use all your readings, not just what's on screen", 0],
     ["3.60", "2026-10-14", "HRV and resting HR judged against your own spread (standard deviation), as sports-science guidance recommends", 0],

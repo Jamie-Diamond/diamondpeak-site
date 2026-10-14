@@ -1491,8 +1491,7 @@ def post_process(data):
     if SESSION_LOG.exists():
         try:
             all_entries = json.loads(SESSION_LOG.read_text())
-            confirmed = [e for e in all_entries if not e.get("stub", True)]
-            data["sessionLog"] = confirmed[-60:]
+            data["sessionLog"] = _recent_log(all_entries)
         except Exception:
             pass
 
@@ -1665,6 +1664,15 @@ def _format_pace(sport, dist_m, duration_s):
         spc = duration_s / (dist_m / 100)
         return f"{int(spc)//60}:{int(spc)%60:02d}/100m"
     return None
+
+
+def _recent_log(entries, days: int = 120) -> list:
+    """Confirmed session-log rows in the calendar's window, oldest first. Was "the last 60"
+    of a file that is NOT in date order (new rows are prepended, backfills appended), so
+    which sessions Peak could see was arbitrary: July's sweat test fell outside it."""
+    since = (date.today() - timedelta(days=days)).isoformat()
+    rows = [e for e in entries if not e.get("stub", True) and str(e.get("date") or "") >= since]
+    return sorted(rows, key=lambda e: str(e.get("date") or ""))
 
 
 def _wellness_trend(rows) -> list:
@@ -1902,7 +1910,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
     if sl_file.exists():
         try:
             all_e = json.loads(sl_file.read_text())
-            session_log = [e for e in all_e if not e.get("stub", True)][-60:]
+            session_log = _recent_log(all_e)
         except Exception:
             pass
 

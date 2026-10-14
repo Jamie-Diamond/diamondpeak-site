@@ -4500,8 +4500,9 @@ def prefetch_context(slug: str) -> str:
                 f"plan_tools.py race-predict --athlete {slug}  "
                 "-> Now / Race-day / Target scenarios from the shared IF ∝ √CTL model (same as /race and the website). "
                 "If the athlete reports a PRE/POST-SESSION WEIGH-IN (sweat test), call:  "
-                f"plan_tools.py sweat-rate --athlete {slug} --pre <kg> --post <kg> --fluid <ml> --minutes <n> --save  "
-                "-> computes sweat rate and (with --save) updates sweat_ml_hr so race-fuelling uses it automatically. "
+                f"plan_tools.py sweat-rate --athlete {slug} --pre <kg> --post <kg> --fluid <ml> --minutes <n> --activity <icu id> --save  "
+                "-> computes sweat rate and (with --save) updates sweat_ml_hr so race-fuelling uses it automatically; "
+                "--activity also records the loss on that session (Peak's Fuelling card). "
                 "Confirm the numbers with the athlete before saving.")
             lines.append(
                 "NEVER restart the bot, run systemctl/service, reboot or kill the process while replying — it drops the "

@@ -2388,6 +2388,23 @@ def cmd_ctl_sweep(args) -> dict:
 
 
 # ── subcommand: sweat-rate ─────────────────────────────────────────────────────
+def record_sweat(slug: str, activity_id: str, loss_ml: int, rate_ml_hr: int, bw_pct: float) -> bool:
+    """Write a session's sweat loss onto its session-log entry. False if not found."""
+    f = BASE / "athletes" / slug / "session-log.json"
+    try:
+        log = json.loads(f.read_text())
+    except Exception:
+        return False
+    hit = False
+    for e in log:
+        if str(e.get("activity_id")) == str(activity_id):
+            e.update(sweat_loss_ml=loss_ml, sweat_rate_ml_hr=rate_ml_hr, sweat_bw_loss_pct=bw_pct)
+            hit = True
+    if hit:
+        f.write_text(json.dumps(log, indent=2))
+    return hit
+
+
 def cmd_sweat_rate(args) -> dict:
     """Sweat rate from a pre/post weigh-in (the standard field test): total loss =
     weight drop + fluid drunk; rate = loss / hours. With --save, writes sweat_ml_hr
@@ -2417,6 +2434,11 @@ def cmd_sweat_rate(args) -> dict:
            "previous_sweat_ml_hr": cfg.get("sweat_ml_hr"),
            "drink_rec_ml_per_15min": round(rate / 4),
            "saved": False}
+    # The loss on the session itself, for Peak's Fuelling card (Jamie, 14 Oct 2026: "add
+    # sweat loss on the fuelling card"). Before this a sweat test lived only in notes.
+    if getattr(args, "activity", None):
+        out["session_recorded"] = record_sweat(args.athlete, args.activity, round(total_loss_ml),
+                                               round(rate), round(pct_loss, 1))
     if getattr(args, "save", False):
         athletes = json.loads(ATHLETES_CONFIG.read_text())
         athletes[args.athlete]["sweat_ml_hr"] = round(rate)
@@ -3234,6 +3256,7 @@ def main():
     psr.add_argument("--fluid", type=float, help="fluid drunk during, ml")
     psr.add_argument("--minutes", type=float, required=True, help="session duration")
     psr.add_argument("--save", action="store_true", help="write result to config/athletes.json sweat_ml_hr")
+    psr.add_argument("--activity", help="ICU activity id: also record the loss on that session")
 
     pws = sub.add_parser("wetsuit", help="Cervia water-temp + wetsuit-legality prediction with live SST (shared engine)")
     pws.add_argument("--year", type=int, help="race year (default: next upcoming edition)")
