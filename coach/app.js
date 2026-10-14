@@ -4469,7 +4469,8 @@
       lg.rpe != null ? ['RPE', lg.rpe + ' / 10'] : null,
       pl.detail && !done ? ['Prescription', pl.detail] : null    // done: it repeats the figures
     ]);
-    if (det) h += card('Details', det, { flush: true });
+    // Done: replaced by the full Stats card once /api/track answers (lib/activity_stats.py).
+    h += '<div id="detSlot">' + (det ? card('Details', det, { flush: true }) : '') + '</div>';
 
     // The workout, step by step, with the athlete's own watts / paces (lib/workout_steps.py,
     // 13 Oct 2026: "Tempo 2x25" alone didn't say what to do).
@@ -4524,7 +4525,8 @@
     document.body.classList.add('drawn');
     $('#drX').onclick = closeDetail;
     dr.querySelector('.dr-h').focus && dr.querySelector('.dr-x').focus();
-    if (done && a.shape && a.shape.length > 3) loadTrack(dateISO, a.type || pl.sport || sport, a.name || name, fam2);
+    if (done && state.me) loadTrack(dateISO, a.type || pl.sport || sport, a.name || name, fam2,
+                                     lg.rpe != null ? ['RPE', lg.rpe + ' / 10'] : null);
     var ib = $('#indoorBtn');
     if (ib) ib.onclick = function () {
       ib.disabled = true;
@@ -4571,17 +4573,25 @@
     return leafletP;
   }
   var TRK_NAMES = { power: 'Power', hr: 'HR', pace: 'Pace' };
-  function loadTrack(dateISO, sport, name, fam) {
-    var box = $('#trkBox');
-    if (!box || !state.slug) return;
+  function loadTrack(dateISO, sport, name, fam, rpeRow) {
+    if (!state.slug) return;
+    var box;
     var url = '/api/track/' + encodeURIComponent(state.slug) + '?date=' + encodeURIComponent(dateISO) +
       '&sport=' + encodeURIComponent(sport || '') + '&name=' + encodeURIComponent(name || '');
     fetch(url, { cache: 'no-store' })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
-      .then(function (t) { return needLeaflet().then(function () { return t; }); })
+      .then(function (t) {
+        // Peak power, corrected decoupling and the rest, in place of the short Details card.
+        var slot = $('#detSlot');
+        if (slot && t.stats && t.stats.length) {
+          slot.innerHTML = card('Stats', kvRows(t.stats.concat(rpeRow ? [rpeRow] : [])), { flush: true });
+        }
+        if (!$('#trkBox') || !t.pts || t.pts.length < 2) return null;
+        return needLeaflet().then(function () { return t; });
+      })
       .then(function (t) {
         box = $('#trkBox');
-        if (!box || !t.pts || t.pts.length < 2) return;
+        if (!t || !box) return;
         var chans = ['power', 'pace', 'hr'].filter(function (k) { return t.ch && t.ch[k]; });
         var pick = fam === 'bike' ? ['power', 'hr'] : ['pace', 'hr'];
         var cur = pick.filter(function (k) { return chans.indexOf(k) >= 0; })[0] || chans[0] || null;

@@ -411,7 +411,8 @@ async def ride_indoors(slug: str, request: Request):
 
 @app.get("/api/track/{slug}")
 def track(slug: str, request: Request, date: str = "", sport: str = "", name: str = ""):
-    """A done session's GPS track and zone colours, for this athlete (or Jamie) only.
+    """A done session's GPS track, zone colours and key stats (lib/activity_stats.py), for
+    this athlete (or Jamie) only.
     Fetched live from Intervals.icu and cached privately; never in training-data."""
     require_slug(request, slug)
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
@@ -419,6 +420,7 @@ def track(slug: str, request: Request, date: str = "", sport: str = "", name: st
     cfg = _load(ATHLETES_CONFIG).get(slug) or {}
     if not cfg.get("icu_api_key"):
         raise HTTPException(404, "no Intervals.icu link")
+    import activity_stats
     import track as track_lib
     import workout_profile as wp
     from icu_api import IcuClient
@@ -432,19 +434,20 @@ def track(slug: str, request: Request, date: str = "", sport: str = "", name: st
         raise HTTPException(404, "no activity")
     aid = str(act["id"])
     data = track_lib.cached(CC, slug, aid)
-    if data is None:
+    if data is None or "stats" not in data:              # pre-stats cache entries rebuild
         try:
             ss = wp.settings_for(client.get_sport_settings() or [], str(act.get("type") or ""))
             prof = _load(CC / "athletes" / slug / "profile.json")
             m = re.match(r"(\d+):(\d{2})", str(prof.get("swim_css_per_100m") or ""))
             css = int(m.group(1)) * 60 + int(m.group(2)) if m else None
-            data = track_lib.build(client.get_activity_streams(aid), ss,
-                                   str(act.get("type") or ""), css) or {}
+            raw = client.get_activity_streams(aid)
+            data = track_lib.build(raw, ss, str(act.get("type") or ""), css) or {}
+            data["stats"] = activity_stats.build(act, raw, str(act.get("type") or ""))
         except Exception:
             raise HTTPException(502, "Intervals.icu didn't answer")
         track_lib.store(CC, slug, aid, data)
-    if not data.get("pts"):
-        raise HTTPException(404, "no GPS")
+    if not data.get("pts") and not data.get("stats"):
+        raise HTTPException(404, "nothing to show")
     return JSONResponse(data, headers=NO_STORE)
 
 
