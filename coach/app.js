@@ -5539,6 +5539,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.66", "2026-10-14", "Glass preview uses Inter by default", 1],
     ["3.65", "2026-10-14", "Glass preview: font trial and crisper calendar workout strips", 1],
     ["3.64", "2026-10-14", "Glass style preview in Settings > Look", 1],
     ["3.63", "2026-10-14", "Sweat loss on the session's Fuelling card; empty fuelling rows are hidden", 0],
