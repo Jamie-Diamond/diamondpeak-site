@@ -5,7 +5,7 @@
    sheets. Active only with html.glass (Settings > Look, coach only, this device) until
    it is made the default. The Dev tab keeps its dark style. */
 
-html.glass{--glass-v:'131'}
+html.glass{--glass-v:'133'}
 html.glass body:not(.dev-chat){
   --paper:rgba(255,255,255,.62);
   --paper-2:transparent;
@@ -359,3 +359,27 @@ html.glass body:not(.dev-chat) .st-more>summary .gate-row-t b{font-size:14px;fon
 html.glass body:not(.dev-chat) .st-more>summary .gate-row-t span{text-transform:none;letter-spacing:0;font-size:12px}
 html.glass body:not(.dev-chat) .wkn{white-space:nowrap;flex-basis:40px}
 html.glass body:not(.dev-chat) table.tbl td{word-spacing:normal}
+
+/* ── tab bar and chat button, as iOS 26 does it (Jamie, 14 Oct 2026: "the menu bar
+   overlaps the chat button and isn't clean") ─────────────────────────────────────
+   A shorter capsule for the tabs and the chat button as a matching glass circle beside
+   it on the same line, like Search beside the tab bar in Apple's own apps. Inside the
+   chat (no chat button) the capsule takes the full width again. */
+html.glass body:not(.dev-chat) .tabs{padding:4px;border-radius:33px}
+html.glass body:not(.dev-chat):not(.in-chat) .tabs{right:88px}
+html.glass body:not(.dev-chat) .tabs button,
+html.glass body:not(.dev-chat) .tabs a{min-height:58px;font-size:10px;font-weight:500;letter-spacing:0;
+  text-transform:none;gap:4px}
+html.glass body:not(.dev-chat) .tabs svg{width:21px;height:21px}
+html.glass body:not(.dev-chat) .tabs button[aria-selected=true]{border-radius:29px}
+html.glass body:not(.dev-chat) .fab{right:12px;bottom:calc(8px + env(safe-area-inset-bottom,0px));
+  width:66px;height:66px;border-radius:50%}
+html.glass body:not(.dev-chat) .fab svg{width:23px;height:23px}
+/* The chat's message box sits above the floating capsule, not on it; the capsule is a
+   touch more solid so text scrolling behind it doesn't read through. */
+html.glass body:not(.dev-chat) .tabs{background:rgba(250,251,253,.9)}
+html.glass body:not(.dev-chat) .composer{bottom:calc(82px + env(safe-area-inset-bottom,0px));
+  background:transparent;border-top:0}
+html.glass body:not(.dev-chat).in-chat main{padding-bottom:calc(160px + env(safe-area-inset-bottom,0px))}
+html.glass body:not(.dev-chat) .composer textarea{border:0;background:rgba(255,255,255,.85);
+  box-shadow:var(--rim), 0 4px 16px rgba(15,25,40,.08)}
