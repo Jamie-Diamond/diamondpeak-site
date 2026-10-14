@@ -407,6 +407,47 @@ async def ride_indoors(slug: str, request: Request):
     return JSONResponse(out, headers=NO_STORE)
 
 
+# ── GPS track for the session sheet's map (lib/track.py, Jamie 14 Oct 2026) ──
+
+@app.get("/api/track/{slug}")
+def track(slug: str, request: Request, date: str = "", sport: str = "", name: str = ""):
+    """A done session's GPS track and zone colours, for this athlete (or Jamie) only.
+    Fetched live from Intervals.icu and cached privately; never in training-data."""
+    require_slug(request, slug)
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
+        raise HTTPException(400, "which day?")
+    cfg = _load(ATHLETES_CONFIG).get(slug) or {}
+    if not cfg.get("icu_api_key"):
+        raise HTTPException(404, "no Intervals.icu link")
+    import track as track_lib
+    import workout_profile as wp
+    from icu_api import IcuClient
+    client = IcuClient(cfg["icu_athlete_id"], cfg["icu_api_key"])
+    try:
+        acts = client._get("activities", {"oldest": date, "newest": date})
+    except Exception:
+        raise HTTPException(502, "Intervals.icu didn't answer")
+    act = track_lib.find_activity(acts, date, sport, name or None)
+    if not act:
+        raise HTTPException(404, "no activity")
+    aid = str(act["id"])
+    data = track_lib.cached(CC, slug, aid)
+    if data is None:
+        try:
+            ss = wp.settings_for(client.get_sport_settings() or [], str(act.get("type") or ""))
+            prof = _load(CC / "athletes" / slug / "profile.json")
+            m = re.match(r"(\d+):(\d{2})", str(prof.get("swim_css_per_100m") or ""))
+            css = int(m.group(1)) * 60 + int(m.group(2)) if m else None
+            data = track_lib.build(client.get_activity_streams(aid), ss,
+                                   str(act.get("type") or ""), css) or {}
+        except Exception:
+            raise HTTPException(502, "Intervals.icu didn't answer")
+        track_lib.store(CC, slug, aid, data)
+    if not data.get("pts"):
+        raise HTTPException(404, "no GPS")
+    return JSONResponse(data, headers=NO_STORE)
+
+
 # ── chat ──
 
 def _sse(kind: str, text: str, extra: dict | None = None) -> str:

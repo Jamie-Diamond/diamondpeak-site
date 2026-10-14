@@ -4449,7 +4449,7 @@
     // Route outline. A unit-box shape (no coordinates - see lib/route_shape.py), so it
     // draws straight into a 0..1 viewBox with no projection work here.
     if (a.shape && a.shape.length > 3) {
-      h += '<div class="route"><svg viewBox="-0.04 -0.04 1.08 1.08" ' +
+      h += '<div class="route" id="trkBox"><svg viewBox="-0.04 -0.04 1.08 1.08" ' +
         'preserveAspectRatio="xMidYMid meet" aria-hidden="true">' +
         '<polyline points="' + a.shape.map(function (pt) {
           return pt[0] + ',' + pt[1];
@@ -4524,6 +4524,7 @@
     document.body.classList.add('drawn');
     $('#drX').onclick = closeDetail;
     dr.querySelector('.dr-h').focus && dr.querySelector('.dr-x').focus();
+    if (done && a.shape && a.shape.length > 3) loadTrack(dateISO, a.type || pl.sport || sport, a.name || name, fam2);
     var ib = $('#indoorBtn');
     if (ib) ib.onclick = function () {
       ib.disabled = true;
@@ -4544,6 +4545,86 @@
           if (m) m.textContent = e.message;
         });
     };
+  }
+
+  /* The route on a real map (Jamie, 14 Oct 2026), coloured by zone with a Power / HR /
+     Pace switch. The track comes from /api/track (lib/track.py), live and private, never
+     from training-data; until it arrives, or if it can't, the outline above stays. Leaflet
+     loads on first use only. Tiles: OpenStreetMap (CARTO needs a signed-up key). */
+  var leafletP = null;
+  function needLeaflet() {
+    if (window.L) return Promise.resolve();
+    if (leafletP) return leafletP;
+    function add(tag, attrs) {                 // resolves once loaded: a map built before its
+      return new Promise(function (ok, bad) {  // stylesheet lands draws tiles with no line on top
+        var el = document.createElement(tag);
+        Object.keys(attrs).forEach(function (k) { el[k] = attrs[k]; });
+        el.onload = ok;
+        el.onerror = bad;
+        document.head.appendChild(el);
+      });
+    }
+    leafletP = Promise.all([
+      add('link', { rel: 'stylesheet', href: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css' }),
+      add('script', { src: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js' })
+    ]).catch(function (e) { leafletP = null; throw e; });
+    return leafletP;
+  }
+  var TRK_NAMES = { power: 'Power', hr: 'HR', pace: 'Pace' };
+  function loadTrack(dateISO, sport, name, fam) {
+    var box = $('#trkBox');
+    if (!box || !state.slug) return;
+    var url = '/api/track/' + encodeURIComponent(state.slug) + '?date=' + encodeURIComponent(dateISO) +
+      '&sport=' + encodeURIComponent(sport || '') + '&name=' + encodeURIComponent(name || '');
+    fetch(url, { cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (t) { return needLeaflet().then(function () { return t; }); })
+      .then(function (t) {
+        box = $('#trkBox');
+        if (!box || !t.pts || t.pts.length < 2) return;
+        var chans = ['power', 'pace', 'hr'].filter(function (k) { return t.ch && t.ch[k]; });
+        var pick = fam === 'bike' ? ['power', 'hr'] : ['pace', 'hr'];
+        var cur = pick.filter(function (k) { return chans.indexOf(k) >= 0; })[0] || chans[0] || null;
+        box.className = 'route map';
+        box.innerHTML = '<div class="trk-map" id="trkMap"></div>' + (chans.length > 1
+          ? '<div class="seg sub trk-seg">' + chans.map(function (k) {
+              return '<button type="button" data-c="' + k + '" aria-selected="' + (k === cur) + '">' +
+                TRK_NAMES[k] + '</button>';
+            }).join('') + '</div>' : '');
+        var map = L.map('trkMap', { zoomControl: false, attributionControl: true });
+        map.attributionControl.setPrefix(false);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 18, attribution: '&copy; OpenStreetMap'
+        }).addTo(map);
+        var layer = L.layerGroup().addTo(map);
+        function draw(k) {
+          layer.clearLayers();
+          var zs = k ? t.ch[k] : null, run = [t.pts[0]], z0 = zs ? zs[0] : 0;
+          function flush(z) {
+            if (run.length > 1) L.polyline(run, { color: z ? ZONE_COL[Math.min(z, 7) - 1] : '#10656b',
+              weight: 4, opacity: 0.95, lineCap: 'round' }).addTo(layer);
+          }
+          for (var i = 1; i < t.pts.length; i++) {
+            var z = zs ? zs[i] : 0;
+            run.push(t.pts[i]);
+            if (z !== z0) { flush(z0); run = [t.pts[i]]; z0 = z; }
+          }
+          flush(z0);
+          L.circleMarker(t.pts[0], { radius: 5, color: '#fff', weight: 2, fillColor: '#14181d', fillOpacity: 1 }).addTo(layer);
+        }
+        draw(cur);
+        var fit = function () { map.invalidateSize(); map.fitBounds(L.latLngBounds(t.pts), { padding: [14, 14] }); };
+        fit();
+        setTimeout(fit, 350);                    // after the sheet's slide-in settles
+        var seg = box.querySelector('.trk-seg');
+        if (seg) seg.onclick = function (e) {
+          var b = e.target.closest('button');
+          if (!b) return;
+          seg.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-selected', x === b); });
+          draw(b.dataset.c);
+        };
+      })
+      .catch(function () { /* the outline stays */ });
   }
 
   function closeDetail() {
