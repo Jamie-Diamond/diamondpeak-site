@@ -87,6 +87,13 @@
     return pref === null ? true : pref === '1';
   }
 
+  // Heat switched off in Coaching options (Jamie, 14 Oct 2026): no heat anywhere -
+  // Trends tab, Today's acclimation figure, the session sheet's Heat card.
+  function heatOn() {
+    var p = (state.data || {}).prefs;
+    return !(p && p.heat === false);
+  }
+
   function tabAllowed(t) {
     if (t.optIn === 'nutrition') return nutritionOn();
     return true;
@@ -646,7 +653,7 @@
       signals += mini(signed(ramp) + ' / ' + cap.toFixed(0), 'ramp vs target',
                       Math.abs(ramp) > cap ? 'warn' : '');
     }
-    if (ha.current != null) {
+    if (ha.current != null && heatOn()) {
       signals += mini(Number(ha.current).toFixed(0) + '%', 'heat accl');
     }
     if (d.resolvedFtp) signals += mini(d.resolvedFtp + 'w', 'ftp');
@@ -731,12 +738,25 @@
       { foot: open.length > 5 ? (open.length - 5) + ' more open actions' : null });
   }
 
+  // 14-day mean of the morning readings by date (Jamie, 14 Oct 2026: "all should be 14").
+  // Display only: the energy maths keeps publish-nutrition-data's own rolling figure.
+  function weight14(w) {
+    var s = ((w || {}).morning_series || []).filter(function (r) { return r && r.kg != null; });
+    if (!s.length) return null;
+    var tl = Date.parse(s[s.length - 1].date);
+    var win = s.filter(function (r) { return Date.parse(r.date) > tl - 14 * 864e5; });
+    return win.reduce(function (a, r) { return a + Number(r.kg); }, 0) / win.length;
+  }
+
   function weightCard(wt) {
     var pts = (wt || []).filter(function (p) { return p && p.kg != null; });
     if (pts.length < 2) return '';
     var kg = pts.map(function (p) { return Number(p.kg); });
     var last = kg[kg.length - 1];
-    var mean7 = kg.slice(-7).reduce(function (a, b) { return a + b; }, 0) / Math.min(7, kg.length);
+    // 14-day mean by DATE, matching the line (Jamie, 14 Oct 2026: "all should be 14").
+    var tLast = Date.parse(pts[pts.length - 1].date);
+    var win14 = pts.filter(function (p) { return Date.parse(p.date) > tLast - 14 * 864e5; });
+    var mean14 = win14.reduce(function (a, p) { return a + Number(p.kg); }, 0) / win14.length;
     var change = last - kg[0];
     // Dots for each reading, a line for the 14-day moving average (Jamie, 14 Oct 2026):
     // a day-to-day line made water swings look like trend. Placed by DATE, so a gap in
@@ -759,7 +779,7 @@
     return card('Weight',
       '<div class="figures">' +
         fig(last.toFixed(1), 'Latest', 'kg') +
-        fig(mean7.toFixed(1), '7-day mean', 'kg') +
+        fig(mean14.toFixed(1), '14-day mean', 'kg') +
         fig(signed(change), 'Change', pts.length + ' readings') +
       '</div>' +
       '<svg class="spark wt" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
@@ -2419,6 +2439,7 @@
   function trendTabs() {
     var fs = focusSports();
     return TRENDS.filter(function (t) {
+      if (t.id === 'heat' && !heatOn()) return false;
       return t.id !== 'longrun' || fs.indexOf('run') >= 0;
     });
   }
@@ -4509,7 +4530,7 @@
         ? ['Total carbohydrate', Math.round(x.carb.g_per_hr * x.carb.dur / 60) + ' g'] : null
     ]), { foot: 'Sodium comes from your reply to the after-session question.' });
 
-    if (done || x.heat) h += card('Heat', x.heat
+    if (heatOn() && (done || x.heat)) h += card('Heat', x.heat
       ? kvRows([
           ['Exposure', x.heat[3] || 'logged', true],
           x.heat[1] != null ? ['Dose', Number(x.heat[1]).toFixed(2)] : null,
@@ -4636,7 +4657,11 @@
               return '<button type="button" data-c="' + k + '" aria-selected="' + (k === cur) + '">' +
                 TRK_NAMES[k] + '</button>';
             }).join('') + '</div>' : '');
-        var map = L.map('trkMap', { zoomControl: false, attributionControl: true });
+        // One finger scrolls the page, never the map (Jamie, 14 Oct 2026: scrolling the
+        // sheet kept dragging the map). Pinch still zooms; on a mouse, drag works as usual.
+        var touch = matchMedia('(hover: none)').matches;
+        var map = L.map('trkMap', { zoomControl: false, attributionControl: true,
+                                    dragging: !touch, tap: false, scrollWheelZoom: false });
         map.attributionControl.setPrefix(false);
         L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
           maxZoom: 18, attribution: '&copy; OpenStreetMap'
@@ -5372,8 +5397,7 @@
       (p.trace_7d ? fig(p.trace_7d, 'seasonings + traces',
                         'in the label, not a portion') : '') +
       fig(p.new_today != null ? p.new_today : '-', 'new today', 'variety, not a score') +
-      fig((n.weight && n.weight.rolling_7d_mean_kg)
-          ? n.weight.rolling_7d_mean_kg.toFixed(1) : '-', 'kg', 'morning 7-day mean') +
+      fig(weight14(n.weight) != null ? weight14(n.weight).toFixed(1) : '-', 'kg', 'morning 14-day mean') +
       '</div>' +
       (p.whole_7d == null
         ? '<p class="prov warn">No plant count yet. ' +
@@ -5431,6 +5455,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.57", "2026-10-14", "Weight tile is a 14-day mean too; scrolling no longer drags the map; heat is hidden when it's switched off", 0],
     ["3.56", "2026-10-14", "Session insights: efficiency against your normal, \u2605 on 90-day best powers, time in zones, split or fade, and HR recovery", 0],
     ["3.55", "2026-10-14", "Session stats: the key few up front, the rest under More stats", 0],
     ["3.54", "2026-10-14", "Tap the version number to see what's new", 0],

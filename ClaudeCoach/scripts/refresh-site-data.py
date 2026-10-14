@@ -1302,7 +1302,9 @@ def post_process(data):
     week_start = today - timedelta(days=today.weekday())
     this_week = [e for e in heat_entries if e.get("date", "") >= week_start.isoformat()]
     last_date = max((e["date"] for e in heat_entries), default=None)
-    accl = _heat_accl_series("jamie")
+    import coaching_prefs
+    data["prefs"] = coaching_prefs.prefs("jamie")       # Peak hides heat when it's off
+    accl = _heat_accl_series("jamie") if coaching_prefs.heat_on("jamie") else None
     if accl:
         data["heatAccl"] = accl
     data["heatProtocol"] = {
@@ -1984,7 +1986,9 @@ def _build_athlete_training_data(slug, athlete_cfg):
     except Exception as e:
         log(f"[{slug}] planVsActual skipped (non-fatal): {e}")
 
-    accl = _heat_accl_series(slug)
+    import coaching_prefs
+    data["prefs"] = coaching_prefs.prefs(slug)          # Peak hides heat when it's off
+    accl = _heat_accl_series(slug) if coaching_prefs.heat_on(slug) else None
     if accl:
         data["heatAccl"] = accl
 
