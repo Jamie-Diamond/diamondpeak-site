@@ -1,86 +1,126 @@
-/* Glassmorphism preview (Jamie, 14 Oct 2026: "can we move the app to a glassmorphism
-   style? I would want to see a preview first"). Active only with html.glass, which
-   app.html sets from localStorage cc.theme = 'glass' (Settings > Look, coach only), so
-   nobody else sees it until it is made the default. The Dev tab keeps its dark style. */
+/* Glass style (Jamie, 14 Oct 2026: "move the app to a glassmorphism style", then "make
+   this feel like really Apple glass styling"). Modelled on iOS materials: thin frosted
+   panes over a quiet background, a bright specular rim and hairline separators, a
+   floating capsule tab bar with a lens on the selected tab, iOS segmented controls and
+   sheets. Active only with html.glass (Settings > Look, coach only, this device) until
+   it is made the default. The Dev tab keeps its dark style. */
 
-html.glass{--glass-v:'127'}
+html.glass{--glass-v:'128'}
 html.glass body:not(.dev-chat){
-  --paper:rgba(255,255,255,.46);
+  --paper:rgba(255,255,255,.62);
   --paper-2:transparent;
-  --rule:rgba(255,255,255,.7);
-  --rule-soft:rgba(20,40,60,.07);
-  background:#e9eef3;
-  background-image:none;
+  --ink:#0b0d10;
+  --ink-2:rgba(30,34,40,.78);
+  --muted:rgba(60,60,67,.6);                 /* iOS secondary label */
+  --rule:rgba(255,255,255,.75);
+  --rule-soft:rgba(60,60,67,.12);            /* iOS separator */
+  --glass:rgba(255,255,255,.58);
+  --glass-strong:rgba(250,251,253,.78);
+  --rim:inset 0 1px 0 rgba(255,255,255,.95), inset 0 0 0 .5px rgba(255,255,255,.55);
+  --lift:0 1px 2px rgba(15,25,40,.05), 0 10px 28px rgba(15,25,40,.08);
+  background:#eef1f5;background-image:none;
 }
-/* The colour behind the glass: soft, fixed, so cards blur something as you scroll. */
+/* A quiet wash behind the glass: enough colour for the blur to have something to bend,
+   not splashes (Jamie: "dial down the colour splashes a little"). */
 html.glass body:not(.dev-chat)::before{
   content:'';position:fixed;inset:-10vmax;z-index:-1;pointer-events:none;
   background:
-    radial-gradient(38vmax 38vmax at 12% 8%, rgba(34,179,166,.55), transparent 70%),
-    radial-gradient(42vmax 42vmax at 92% 22%, rgba(111,92,240,.38), transparent 70%),
-    radial-gradient(40vmax 40vmax at 78% 88%, rgba(242,193,78,.42), transparent 70%),
-    radial-gradient(36vmax 36vmax at 8% 78%, rgba(236,90,90,.28), transparent 70%),
-    linear-gradient(160deg,#eef3f6,#e4e9f2);
-  filter:saturate(1.1);
+    radial-gradient(40vmax 40vmax at 10% 6%, rgba(34,179,166,.20), transparent 70%),
+    radial-gradient(44vmax 44vmax at 95% 24%, rgba(111,92,240,.14), transparent 70%),
+    radial-gradient(42vmax 42vmax at 80% 92%, rgba(242,193,78,.16), transparent 70%),
+    radial-gradient(38vmax 38vmax at 6% 80%, rgba(236,90,90,.10), transparent 70%),
+    linear-gradient(170deg,#f3f5f8,#e9edf3);
 }
 
-/* Cards and tile rows: frosted panes with a light edge and a soft lift. */
+/* Panes: thin material, continuous-looking corners, bright rim, soft lift. */
 html.glass body:not(.dev-chat) .card,
 html.glass body:not(.dev-chat) .figures,
-html.glass body:not(.dev-chat) .minis{
-  background:rgba(255,255,255,.46);
-  border:1px solid rgba(255,255,255,.75);
-  border-radius:20px;
-  box-shadow:0 10px 30px rgba(30,50,70,.10), inset 0 1px 0 rgba(255,255,255,.8);
-  backdrop-filter:blur(22px) saturate(170%);
-  -webkit-backdrop-filter:blur(22px) saturate(170%);
+html.glass body:not(.dev-chat) .minis,
+html.glass body:not(.dev-chat) .route{
+  background:var(--glass);
+  border:0;border-radius:22px;
+  box-shadow:var(--rim), var(--lift);
+  backdrop-filter:blur(30px) saturate(180%);
+  -webkit-backdrop-filter:blur(30px) saturate(180%);
 }
 html.glass body:not(.dev-chat) .card .figures,
 html.glass body:not(.dev-chat) .card .minis{
-  background:rgba(255,255,255,.35);box-shadow:none;border-radius:14px;
+  background:rgba(255,255,255,.45);box-shadow:var(--rim);border-radius:16px;
   backdrop-filter:none;-webkit-backdrop-filter:none;margin:10px 12px 12px;
 }
-html.glass body:not(.dev-chat) .card-h{border-bottom-color:rgba(20,40,60,.07)}
+html.glass body:not(.dev-chat) .card-h{border-bottom:.5px solid var(--rule-soft)}
 html.glass body:not(.dev-chat) .fig,
-html.glass body:not(.dev-chat) .mini{border-right-color:rgba(20,40,60,.07)}
-html.glass body:not(.dev-chat) table.tbl td{border-bottom-color:rgba(20,40,60,.06)}
+html.glass body:not(.dev-chat) .mini{border-right:.5px solid var(--rule-soft)}
+html.glass body:not(.dev-chat) table.tbl td,
+html.glass body:not(.dev-chat) .sdrawer,
+html.glass body:not(.dev-chat) .crow,
+html.glass body:not(.dev-chat) .srow,
+html.glass body:not(.dev-chat) .sesh{border-color:var(--rule-soft);border-width:.5px}
 
-/* Header and tab bar: clear glass over the colour. */
+/* Headers read like iOS: section titles in small caps-free grey, figures in semibold. */
+html.glass body:not(.dev-chat) .card-h h2{font-size:12.5px;letter-spacing:.01em;text-transform:none;
+  font-weight:600;color:var(--ink-2)}
+html.glass body:not(.dev-chat) .card-f{border-top:.5px solid var(--rule-soft)}
+html.glass body:not(.dev-chat) .fig .l,
+html.glass body:not(.dev-chat) .mini span{letter-spacing:.04em}
+
+/* Header bar: thin material. */
 html.glass body:not(.dev-chat) .masthead{
-  background:rgba(255,255,255,.28);
-  backdrop-filter:blur(18px) saturate(160%);-webkit-backdrop-filter:blur(18px) saturate(160%);
-  border-bottom:1px solid rgba(255,255,255,.55);
+  background:rgba(246,248,251,.55);
+  backdrop-filter:blur(30px) saturate(180%);-webkit-backdrop-filter:blur(30px) saturate(180%);
+  border-bottom:.5px solid var(--rule-soft);
 }
+
+/* Tab bar: a floating capsule, with a glass lens behind the selected tab. */
 html.glass body:not(.dev-chat) .tabs{
-  left:10px;right:10px;bottom:calc(8px + env(safe-area-inset-bottom,0px));
-  padding-bottom:0;border-radius:24px;
-  background:rgba(246,249,252,.78);
-  border:1px solid rgba(255,255,255,.85);
-  box-shadow:0 12px 34px rgba(30,50,70,.16);
+  left:12px;right:12px;bottom:calc(8px + env(safe-area-inset-bottom,0px));
+  padding:5px 6px;border-radius:30px;border:0;
+  background:var(--glass-strong);
+  box-shadow:var(--rim), 0 12px 32px rgba(15,25,40,.14);
+  backdrop-filter:blur(30px) saturate(190%);-webkit-backdrop-filter:blur(30px) saturate(190%);
+}
+html.glass body:not(.dev-chat) .tabs button{border-radius:24px;transition:background .2s,color .2s}
+html.glass body:not(.dev-chat) .tabs button[aria-selected=true]{
+  background:rgba(255,255,255,.9);color:var(--accent);
+  box-shadow:0 1px 3px rgba(15,25,40,.1), inset 0 0 0 .5px rgba(60,60,67,.08);
+}
+html.glass body:not(.dev-chat) .tabs button[aria-selected=true]::before{display:none}
+html.glass body:not(.dev-chat){padding-bottom:calc(var(--tab-h) + 28px + env(safe-area-inset-bottom,0px))}
+
+/* iOS segmented control: grey track, white pill. */
+html.glass body:not(.dev-chat) .seg{background:rgba(118,118,128,.12);border:0;border-radius:10px;padding:2px;gap:2px}
+html.glass body:not(.dev-chat) .seg button{border:0;border-radius:8px;letter-spacing:.02em;color:var(--ink-2)}
+html.glass body:not(.dev-chat) .seg button[aria-selected=true]{background:#fff;color:var(--ink);
+  box-shadow:0 3px 8px rgba(0,0,0,.12), 0 3px 1px rgba(0,0,0,.04)}
+
+/* Small round glass buttons. */
+html.glass body:not(.dev-chat) .cal-mo,
+html.glass body:not(.dev-chat) .dr-x,
+html.glass body:not(.dev-chat) #gear{background:rgba(255,255,255,.7);border:0;border-radius:50%;
+  box-shadow:var(--rim), 0 1px 3px rgba(15,25,40,.1)}
+html.glass body:not(.dev-chat) .wkd.sel{background:var(--accent);border-radius:12px}
+html.glass body:not(.dev-chat) .wkd.today{border-radius:12px}
+
+/* Sheet: thicker material, big radius, like an iOS sheet. */
+html.glass body:not(.dev-chat) .drawer{
+  background:rgba(242,244,247,.78);border:0;border-radius:30px 30px 0 0;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.9), 0 -10px 40px rgba(15,25,40,.14);
+  backdrop-filter:blur(40px) saturate(180%);-webkit-backdrop-filter:blur(40px) saturate(180%);
+}
+html.glass body:not(.dev-chat) .dr-h{border-bottom:.5px solid var(--rule-soft)}
+
+/* Chat button: a light glass bubble with the accent glyph. */
+html.glass body:not(.dev-chat) .fab{
+  background:var(--glass-strong);color:var(--accent);
+  box-shadow:var(--rim), 0 10px 26px rgba(15,25,40,.18);
   backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);
 }
-html.glass body:not(.dev-chat) .tabs button[aria-selected=true]::before{border-radius:2px}
-html.glass body:not(.dev-chat){padding-bottom:calc(var(--tab-h) + 22px + env(safe-area-inset-bottom,0px))}
-
-/* Session sheet and the round chat button. */
-html.glass body:not(.dev-chat) .drawer{
-  background:rgba(240,244,248,.62);
-  border-top:1px solid rgba(255,255,255,.8);
-  border-radius:26px 26px 0 0;
-  backdrop-filter:blur(30px) saturate(170%);-webkit-backdrop-filter:blur(30px) saturate(170%);
-}
-html.glass body:not(.dev-chat) .fab{
-  background:rgba(20,24,29,.72);
-  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
-  box-shadow:0 10px 28px rgba(20,24,29,.28);
-}
-html.glass body:not(.dev-chat) .flag{border-radius:14px;background:rgba(255,255,255,.45)}
+html.glass body:not(.dev-chat) .flag{border-radius:16px;background:var(--glass);box-shadow:var(--rim)}
 html.glass body:not(.dev-chat) .zb-b,
 html.glass body:not(.dev-chat) .sx-pf .pf{border-radius:8px}
-html.glass body:not(.dev-chat) .msg.coach{background:rgba(255,255,255,.6);border-color:rgba(255,255,255,.8);
-  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
-html.glass body:not(.dev-chat) .route{border-radius:20px;border-color:rgba(255,255,255,.75);
-  background:rgba(255,255,255,.4);box-shadow:0 10px 30px rgba(30,50,70,.10)}
+html.glass body:not(.dev-chat) .msg.coach{background:var(--glass-strong);border:0;box-shadow:var(--rim), 0 1px 2px rgba(15,25,40,.06);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+html.glass body:not(.dev-chat) .msg.me{background:var(--accent)}
 
 /* Font trial (Settings > Look): html[data-font] swaps the serif headings and the mono
    labels for one modern sans. Selector lists generated from app.html's own font rules. */
@@ -114,7 +154,7 @@ html.glass[data-font] body:not(.dev-chat) .wkd .n,
 html.glass[data-font] body:not(.dev-chat) .wksum b,
 html.glass[data-font] body:not(.dev-chat) .wordmark,
 html.glass[data-font] body:not(.dev-chat) .zv b,
-html.glass[data-font] body:not(.dev-chat) table.tbl td.t{font-family:var(--gf);letter-spacing:-.02em;font-weight:600}
+html.glass[data-font] body:not(.dev-chat) table.tbl td.t{font-family:var(--gf);letter-spacing:-.01em;font-weight:600}
 html.glass[data-font] body:not(.dev-chat) #v-chat.dev .btns button,
 html.glass[data-font] body:not(.dev-chat) #v-chat.dev .chat-log::before,
 html.glass[data-font] body:not(.dev-chat) #v-chat.dev .dev-tools button,
@@ -229,3 +269,8 @@ html.glass[data-font] body:not(.dev-chat) .msg code{font-family:'DM Mono',monosp
 .look-f{display:flex;align-items:center;gap:10px;padding:10px 15px 12px;border-top:1px solid var(--rule-soft)}
 .look-f>span{font:500 10px 'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .look-f .seg{flex:1;margin:0}
+
+/* Plus Jakarta Sans sets a narrow space: words ran together ("Thisweek"). */
+html.glass[data-font=jakarta] body:not(.dev-chat){word-spacing:.12em}
+html.glass[data-font=jakarta] body:not(.dev-chat) .hero-t,
+html.glass[data-font=jakarta] body:not(.dev-chat) .dr-t{word-spacing:.06em}
