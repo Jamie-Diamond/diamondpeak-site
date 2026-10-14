@@ -538,8 +538,8 @@ def _off_normal_line(wellness_rows, today: date) -> str:
     """The wellness numbers the card shows: only those off THIS athlete's normal, with the
     normal beside them (Jamie, 12 Oct 2026: "show only when off normal"). Normal = the mean
     of the previous BASELINE_DAYS days with data (needs half of them; Jamie: "7 day isn't
-    enough for a normal baseline"). Off = HRV 10%+ below, resting HR 6%+ above (Jamie),
-    sleep 1h+ short AND under 7h. "" on a normal day or before last night's sleep syncs."""
+    enough for a normal baseline"). HRV / resting HR off = lib/wellness_normal.py (SD-based,
+    morning or 7-day trend); sleep off = 1h+ short AND under 7h. "" on a normal day or before last night's sleep syncs."""
     rows = {(r.get("id") or "")[:10]: r for r in wellness_rows or []}
     t = rows.get(today.isoformat())
     if not t or t.get("sleepSecs") is None:
@@ -549,13 +549,19 @@ def _off_normal_line(wellness_rows, today: date) -> str:
     def base(key, f=lambda v: v):
         vals = [f(r[key]) for r in prev if r.get(key) is not None]
         return sum(vals) / len(vals) if len(vals) >= BASELINE_DAYS // 2 else None
+    # HRV and resting HR: SD-based, against the athlete's own spread, on the 7-day
+    # average as well as the morning (lib/wellness_normal.py; Jamie, 14 Oct 2026, after
+    # the literature: replaces the flat "HRV 10% below / resting HR 6% above").
+    import wellness_normal as WN
     out = []
-    hrv, hb = t.get("hrv"), base("hrv")
-    if hrv is not None and hb and hrv <= 0.90 * hb:
-        out.append(f"HRV {hrv:.0f} (usual {hb:.0f})")
-    rhr, rb = t.get("restingHR"), base("restingHR")
-    if rhr is not None and rb and rhr >= rb * 1.06:
-        out.append(f"resting HR {rhr:.0f} (usual {rb:.0f})")
+    for key, name in (("hrv", "HRV"), ("restingHR", "resting HR")):
+        a = WN.assess(wellness_rows, key, today)
+        if not a:
+            continue
+        if a["day_off"]:
+            out.append(f"{name} {a['today']:.0f} (usual {a['usual']:.0f})")
+        elif a["trend_off"]:
+            out.append(f"{name} 7-day average {a['avg7']:.0f} (usual {a['usual']:.0f})")
     sl, sb = t["sleepSecs"] / 3600, base("sleepSecs", lambda v: v / 3600)
     if sb and sl <= sb - 1 and sl < 7:
         out.append(f"sleep {sl:.1f}h (usual {sb:.1f}h)")

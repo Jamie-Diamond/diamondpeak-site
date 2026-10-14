@@ -82,8 +82,8 @@ def matched(ev: dict, acts: list):
 
 
 def _wellness_off(rows, start: date, end: date, baseline_days: int = 28) -> bool:
-    """Any night in [start, end] with sleep 1h+ short and under 7h, HRV 10%+ below or
-    resting HR 6%+ above the athlete's own normal (the morning card's thresholds)."""
+    """Any night in [start, end] with sleep 1h+ short and under 7h, or HRV / resting HR
+    off the athlete's own normal (lib/wellness_normal.py, as the morning card)."""
     by = {str(r.get("id") or "")[:10]: r for r in rows or []}
     d = start
     while d <= end:
@@ -94,10 +94,9 @@ def _wellness_off(rows, start: date, end: date, baseline_days: int = 28) -> bool
             v = [r[key] for r in prev if r.get(key) is not None]
             return sum(v) / len(v) if len(v) >= baseline_days // 2 else None
         if t:
-            hb, rb, sb = base("hrv"), base("restingHR"), base("sleepSecs")
-            if t.get("hrv") is not None and hb and t["hrv"] <= 0.90 * hb:
-                return True
-            if t.get("restingHR") is not None and rb and t["restingHR"] >= rb * 1.06:
+            sb = base("sleepSecs")
+            import wellness_normal as WN            # SD-based, as the morning card
+            if WN.off_any(rows, d):
                 return True
             if t.get("sleepSecs") is not None and sb:
                 sl, s0 = t["sleepSecs"] / 3600, sb / 3600

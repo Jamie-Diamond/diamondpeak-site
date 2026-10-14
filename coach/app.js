@@ -747,28 +747,38 @@
     var rows = (wt || []).filter(function (r) { return r && r.date; });
     if (rows.length < 7) return '';
     var last = rows[rows.length - 1].date, tL = Date.parse(last);
-    // An athlete's normal on a given day: the mean of the 28 days before it (needs 14).
-    var normalOn = function (key, t) {
+    // The same rule as lib/wellness_normal.py (Jamie, 14 Oct 2026, after the literature):
+    // each athlete's own 28-day mean and SD, HRV on a log scale; the band is mean +/- 0.5 SD;
+    // "off" is the 7-day average outside it on the under-recovered side, or one morning
+    // beyond 1 SD. Keep the constants in step with that file.
+    var BAND_SD = 0.5, DAY_SD = 1.0, MIN_SD = { hrv: 0.03, rhr: 1.0 }, BAD = { hrv: -1, rhr: 1 };
+    var fwd = function (k, v) { return k === 'hrv' ? Math.log(v) : v; };
+    var inv = function (k, v) { return k === 'hrv' ? Math.exp(v) : v; };
+    var base = function (k, t) {
       var v = rows.filter(function (r) {
-        var tr = Date.parse(r.date); return r[key] != null && tr < t && tr >= t - 28 * 864e5;
-      }).map(function (r) { return Number(r[key]); });
-      return v.length >= 14 ? v.reduce(function (a, b) { return a + b; }, 0) / v.length : null;
+        var tr = Date.parse(r.date); return r[k] > 0 && tr < t && tr >= t - 28 * 864e5;
+      }).map(function (r) { return fwd(k, Number(r[k])); });
+      if (v.length < 14) return null;
+      var m = v.reduce(function (a, b) { return a + b; }, 0) / v.length;
+      var sd = Math.sqrt(v.reduce(function (a, b) { return a + (b - m) * (b - m); }, 0) / (v.length - 1));
+      return { m: m, sd: Math.max(sd, MIN_SD[k]) };
+    };
+    var roll = function (k, t) {
+      var v = rows.filter(function (r) {
+        var tr = Date.parse(r.date); return r[k] > 0 && tr <= t && tr > t - 7 * 864e5;
+      }).map(function (r) { return fwd(k, Number(r[k])); });
+      return v.length >= 3 ? v.reduce(function (a, b) { return a + b; }, 0) / v.length : null;
     };
     var shown = rows.filter(function (r) { return Date.parse(r.date) > tL - 30 * 864e5; });
-    // Band = the normal range: HRV within 10% of normal, resting HR within 6% (the morning
-    // card's thresholds). It moves with the athlete's normal day by day (Jamie, 14 Oct 2026:
-    // "a coloured band for normal ... with outliers coloured"). Outliers: red on the side
-    // that means under-recovered (HRV low, resting HR high), green on the other.
-    var BAND = { hrv: 0.10, rhr: 0.06 };
-    function spark(key) {
-      var pts = shown.filter(function (r) { return r[key] != null; });
+    function spark(k) {
+      var pts = shown.filter(function (r) { return r[k] > 0; });
       if (pts.length < 3) return '';
-      var f = BAND[key], bad = key === 'hrv' ? -1 : 1;
+      var bad = BAD[k];
       var band = pts.map(function (r) {
-        var n = normalOn(key, Date.parse(r.date));
-        return n == null ? null : { r: r, lo: n * (1 - f), hi: n * (1 + f) };
+        var b = base(k, Date.parse(r.date));
+        return b ? { r: r, b: b, lo: inv(k, b.m - BAND_SD * b.sd), hi: inv(k, b.m + BAND_SD * b.sd) } : null;
       }).filter(Boolean);
-      var vals = pts.map(function (r) { return Number(r[key]); });
+      var vals = pts.map(function (r) { return Number(r[k]); });
       band.forEach(function (b) { vals.push(b.lo, b.hi); });
       var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals), span = (hi - lo) || 1;
       var W = 300, H = 60, t0 = tL - 29 * 864e5;
@@ -780,16 +790,17 @@
       band.forEach(function (b) { byDate[b.r.date] = b; });
       var dots = { n: '', bad: '', good: '' };
       pts.forEach(function (r) {
-        var v = Number(r[key]), b = byDate[r.date], k = 'n';
-        if (b && (v > b.hi || v < b.lo)) k = ((v > b.hi ? 1 : -1) === bad) ? 'bad' : 'good';
-        dots[k] += 'M' + x(r) + ' ' + y(v) + 'h0';
+        var v = Number(r[k]), b = byDate[r.date], kk = 'n';
+        if (b) {
+          var z = (fwd(k, v) - b.b.m) / b.b.sd;          // mornings beyond 1 SD are coloured
+          if (Math.abs(z) > DAY_SD) kk = (z > 0 ? 1 : -1) === bad ? 'bad' : 'good';
+        }
+        dots[kk] += 'M' + x(r) + ' ' + y(v) + 'h0';
       });
       var line = pts.map(function (r) {
-        var t = Date.parse(r.date), win = pts.filter(function (q) {
-          var tq = Date.parse(q.date); return tq <= t && tq > t - 7 * 864e5;
-        });
-        return x(r) + ',' + y(win.reduce(function (a, q) { return a + Number(q[key]); }, 0) / win.length);
-      }).join(' ');
+        var a = roll(k, Date.parse(r.date));
+        return a == null ? null : x(r) + ',' + y(inv(k, a));
+      }).filter(Boolean).join(' ');
       return '<svg class="spark wt wl" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
         (bandPath ? '<path class="wl-b" d="' + bandPath + '"/>' : '') +
         '<polyline points="' + line + '"/>' +
@@ -797,21 +808,27 @@
         '<path class="wt-d good" d="' + dots.good + '"/></svg>';
     }
     var today = rows.filter(function (r) { return r.date === last; })[0] || {};
-    var hb = normalOn('hrv', tL), rb = normalOn('rhr', tL);
-    var hOff = today.hrv != null && hb && today.hrv <= 0.9 * hb;
-    var rOff = today.rhr != null && rb && today.rhr >= 1.06 * rb;
+    function state(k) {
+      var b = base(k, tL), a = roll(k, tL);
+      if (!b) return { usual: null, off: false };
+      var v = today[k] > 0 ? fwd(k, today[k]) : null, bad = BAD[k];
+      var dayOff = v != null && (bad < 0 ? v < b.m - DAY_SD * b.sd : v > b.m + DAY_SD * b.sd);
+      var trendOff = a != null && (bad < 0 ? a < b.m - BAND_SD * b.sd : a > b.m + BAND_SD * b.sd);
+      return { usual: inv(k, b.m), off: dayOff || trendOff };
+    }
+    var sh = state('hrv'), sr = state('rhr');
     var sH = spark('hrv'), sR = spark('rhr');
     if (!sH && !sR) return '';
     return card('HRV & resting HR',
       '<div class="figures">' +
-        (sH ? fig(today.hrv != null ? Math.round(today.hrv) : '-', 'HRV', hb ? 'usual ' + Math.round(hb) : 'ms', hOff ? 'neg' : '') : '') +
-        (sR ? fig(today.rhr != null ? Math.round(today.rhr) : '-', 'Resting HR', rb ? 'usual ' + Math.round(rb) : 'bpm', rOff ? 'neg' : '') : '') +
+        (sH ? fig(today.hrv != null ? Math.round(today.hrv) : '-', 'HRV', sh.usual ? 'usual ' + Math.round(sh.usual) : 'ms', sh.off ? 'neg' : '') : '') +
+        (sR ? fig(today.rhr != null ? Math.round(today.rhr) : '-', 'Resting HR', sr.usual ? 'usual ' + Math.round(sr.usual) : 'bpm', sr.off ? 'neg' : '') : '') +
       '</div>' +
       (sH ? '<p class="wl-h">HRV</p>' + sH : '') +
       (sR ? '<p class="wl-h">Resting HR</p>' + sR : '') +
       '<p class="wt-k wl-k"><span><i class="wl-bk"></i>normal</span><span><i class="wt-avg"></i>7-day avg</span>' +
-      '<span><i class="wt-dot bad"></i>off normal</span><span><i class="wt-dot good"></i>better</span></p>',
-      { foot: 'Normal = your previous 28 days. The band is HRV within 10% and resting HR within 6% of it, as on the morning card.' });
+      '<span><i class="wt-dot bad"></i>low recovery</span><span><i class="wt-dot good"></i>better</span></p>',
+      { foot: 'Normal = your last 28 days \u00b1 half a standard deviation. Red tile = the 7-day average has left it, or this morning is more than 1 SD off. Same rule as the morning card.' });
   }
 
   // 14-day mean of the morning readings by date (Jamie, 14 Oct 2026: "all should be 14").
@@ -5532,6 +5549,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.60", "2026-10-14", "HRV and resting HR judged against your own spread (standard deviation), as sports-science guidance recommends", 0],
     ["3.59", "2026-10-14", "HRV and resting HR show your normal range as a band, with off-normal mornings in red", 0],
     ["3.58", "2026-10-14", "HRV & resting HR on Today, against your own normal; weight for every athlete with a scale", 0],
     ["3.57", "2026-10-14", "Weight tile is a 14-day mean too; scrolling no longer drags the map; heat is hidden when it's switched off", 0],
