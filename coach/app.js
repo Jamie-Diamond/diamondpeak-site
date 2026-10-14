@@ -4716,7 +4716,8 @@
      There is deliberately no body-fat chart. BIA fat is weight divided by an assumed
      hydration constant, so it tracks the scale at r = 0.999 and a trend line would be
      a weight chart wearing a fat label. publish-nutrition-data.py does not even emit
-     the series. */
+     the series. Re-checked 14 Oct 2026 when Jamie asked for a body composition view:
+     fat % tracked weight at r = 0.998 (Jamie) and 0.996 (Kathryn), so he kept it out. */
 
   /* One zone row. Three things share this space and must stay distinguishable:
      - the FILL, measured against the zone MINIMUM (a floor is satisfied at its floor;
