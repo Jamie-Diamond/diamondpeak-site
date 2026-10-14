@@ -186,6 +186,8 @@
      A session as zone-coloured blocks: width = time, height = % of threshold (FTP,
      threshold pace or LTHR), colour = the athlete's own zone. Drawn as one SVG so it
      scales from the session sheet down to a calendar thumbnail. */
+  // Chart font: DM Mono, or the glass style's sans (set in init).
+  var CHART_FONT = 'DM Mono', CHART_FS = 9;
   var ZONE_COL = ['#9aa7b4', '#22b3a6', '#f2c14e', '#f5913e', '#ec5a5a', '#c04de0', '#6f5cf0'];
   function profFor(x) {
     if (!x) return null;
@@ -463,7 +465,11 @@
     }).join('') + '</div>';
   }
 
+  // Labels in sentence case with acronyms kept: shown as written in the glass style,
+  // capitalised by CSS in the classic one.
+  var MINI_CAPS = { ftp: 'FTP', tss: 'TSS' };
   function mini(v, label, cls) {
+    label = MINI_CAPS[label] || (String(label).charAt(0).toUpperCase() + String(label).slice(1));
     return '<div class="mini' + (cls ? ' ' + cls : '') + '"><b>' + esc(v) + '</b>' +
       '<span>' + esc(label) + '</span></div>';
   }
@@ -2988,7 +2994,7 @@
         type: 'linear',
         ticks: {
           color: C.muted, maxTicksLimit: 7, autoSkip: true,
-          font: { family: 'DM Mono', size: 9 },
+          font: { family: CHART_FONT, size: CHART_FS },
           callback: function (v) { return doyLabel(v, dense); }
         },
         grid: { display: false },
@@ -2996,8 +3002,8 @@
       },
       y: {
         title: yTitle ? { display: true, text: yTitle, color: C.muted,
-                          font: { family: 'DM Mono', size: 9 } } : { display: false },
-        ticks: { color: C.muted, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 6 },
+                          font: { family: CHART_FONT, size: CHART_FS } } : { display: false },
+        ticks: { color: C.muted, font: { family: CHART_FONT, size: CHART_FS }, maxTicksLimit: 6 },
         grid: { color: C.rule, drawTicks: false },
         border: { display: false }
       }
@@ -3013,7 +3019,7 @@
         legend: {
           labels: {
             color: C.ink, boxWidth: 8, boxHeight: 8, usePointStyle: true, padding: 12,
-            font: { family: 'DM Mono', size: 9 },
+            font: { family: CHART_FONT, size: CHART_FS },
             // Datasets whose label starts with _ are structural (the lower edge of a
             // band, for instance) and must not appear as legend entries.
             filter: function (item) { return item.text && item.text[0] !== '_'; }
@@ -3024,8 +3030,8 @@
         tooltip: {
           enabled: !TOUCH,
           backgroundColor: C.ink, borderColor: C.ink, padding: 9,
-          titleFont: { family: 'DM Mono', size: 10 },
-          bodyFont: { family: 'DM Mono', size: 10 },
+          titleFont: { family: CHART_FONT, size: CHART_FS + 1 },
+          bodyFont: { family: CHART_FONT, size: CHART_FS + 1 },
           displayColors: false
         }
       }
@@ -3308,14 +3314,14 @@
         // full season of three overlaid lines is unreadable. Zoom out reaches the rest.
         min: ax0.min, max: ax0.max,
         ticks: { color: C.muted, maxTicksLimit: 6, autoSkip: true,
-                 font: { family: 'DM Mono', size: 9 },
+                 font: { family: CHART_FONT, size: CHART_FS },
                  callback: function (v) { return label(v); } },
         grid: { display: false }, border: { color: C.rule }
       },
       y: {
         title: { display: true, text: 'CTL', color: C.muted,
-                 font: { family: 'DM Mono', size: 9 } },
-        ticks: { color: C.muted, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 6 },
+                 font: { family: CHART_FONT, size: CHART_FS } },
+        ticks: { color: C.muted, font: { family: CHART_FONT, size: CHART_FS }, maxTicksLimit: 6 },
         grid: { color: C.rule, drawTicks: false }, border: { display: false }
       }
     };
@@ -3383,15 +3389,15 @@
       x: {
         type: 'linear', min: ax0.min, max: ax0.max,
         ticks: { color: C.muted, maxTicksLimit: 6, autoSkip: true,
-                 font: { family: 'DM Mono', size: 9 },
+                 font: { family: CHART_FONT, size: CHART_FS },
                  callback: function (v) { return label(v); } },
         grid: { display: false }, border: { color: C.rule }
       },
       y: {
         beginAtZero: true,
         title: { display: true, text: 'HOURS / WEEK', color: C.muted,
-                 font: { family: 'DM Mono', size: 9 } },
-        ticks: { color: C.muted, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 6 },
+                 font: { family: CHART_FONT, size: CHART_FS } },
+        ticks: { color: C.muted, font: { family: CHART_FONT, size: CHART_FS }, maxTicksLimit: 6 },
         grid: { color: C.rule, drawTicks: false }, border: { display: false }
       }
     };
@@ -3514,19 +3520,20 @@
       x: {
         stacked: true, type: 'category',
         ticks: { color: C.muted, autoSkip: false, maxRotation: 0,
-                 font: { family: 'DM Mono', size: 9 } },
+                 // 15 day labels in a phone's width: smaller in the wider glass font
+                 font: { family: CHART_FONT, size: CHART_FS > 9 ? 8 : CHART_FS } },
         grid: { display: false }, border: { color: C.rule }
       },
       y: {
         stacked: true, position: 'left', beginAtZero: true,
-        title: { display: true, text: 'TSS', color: C.muted, font: { family: 'DM Mono', size: 9 } },
-        ticks: { color: C.muted, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 5 },
+        title: { display: true, text: 'TSS', color: C.muted, font: { family: CHART_FONT, size: CHART_FS } },
+        ticks: { color: C.muted, font: { family: CHART_FONT, size: CHART_FS }, maxTicksLimit: 5 },
         grid: { color: C.rule, drawTicks: false }, border: { display: false }
       },
       y1: {
         position: 'right',
-        title: { display: true, text: 'TSB', color: C.muted, font: { family: 'DM Mono', size: 9 } },
-        ticks: { color: C.muted, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 5 },
+        title: { display: true, text: 'TSB', color: C.muted, font: { family: CHART_FONT, size: CHART_FS } },
+        ticks: { color: C.muted, font: { family: CHART_FONT, size: CHART_FS }, maxTicksLimit: 5 },
         grid: { display: false }, border: { display: false }
       }
     };
@@ -3554,7 +3561,7 @@
         return 'Day total ' + Math.round(totals[items[0].dataIndex]) + ' tss';
       }
     };
-    o.plugins.tooltip.footerFont = { family: 'DM Mono', size: 9 };
+    o.plugins.tooltip.footerFont = { family: CHART_FONT, size: CHART_FS };
 
     return new Chart(el, {
       data: {
@@ -3650,15 +3657,15 @@
       x: {
         type: 'linear',
         ticks: { color: C.muted, maxTicksLimit: 6, autoSkip: true,
-                 font: { family: 'DM Mono', size: 9 },
+                 font: { family: CHART_FONT, size: CHART_FS },
                  callback: function (v) { return label(v); } },
         grid: { display: false }, border: { color: C.rule }
       },
       y: {
         beginAtZero: true,
         title: { display: true, text: 'max g/hr · 14d', color: C.muted,
-                 font: { family: 'DM Mono', size: 9 } },
-        ticks: { color: C.muted, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 5 },
+                 font: { family: CHART_FONT, size: CHART_FS } },
+        ticks: { color: C.muted, font: { family: CHART_FONT, size: CHART_FS }, maxTicksLimit: 5 },
         grid: { color: C.rule, drawTicks: false }, border: { display: false }
       }
     };
@@ -3725,7 +3732,7 @@
       x: {
         type: 'linear', offset: true,
         ticks: { color: C.muted, maxTicksLimit: 7, autoSkip: true, maxRotation: 0,
-                 font: { family: 'DM Mono', size: 9 },
+                 font: { family: CHART_FONT, size: CHART_FS },
                  callback: function (v) {
                    var r = rows[Math.round(v)];
                    if (!r) return '';
@@ -3737,8 +3744,8 @@
       },
       y: {
         beginAtZero: true,
-        title: { display: true, text: 'km', color: C.muted, font: { family: 'DM Mono', size: 9 } },
-        ticks: { color: C.muted, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 6 },
+        title: { display: true, text: 'km', color: C.muted, font: { family: CHART_FONT, size: CHART_FS } },
+        ticks: { color: C.muted, font: { family: CHART_FONT, size: CHART_FS }, maxTicksLimit: 6 },
         grid: { color: C.rule, drawTicks: false }, border: { display: false }
       }
     };
@@ -3789,7 +3796,7 @@
         type: 'linear', offset: true,
         ticks: {
           color: C.muted, autoSkip: true, maxRotation: 0, maxTicksLimit: 7,
-          font: { family: 'DM Mono', size: 9 },
+          font: { family: CHART_FONT, size: CHART_FS },
           callback: function (v) {
             var r = pva[Math.round(v)];
             return r ? dnum(r.week_start) + ' ' +
@@ -3800,8 +3807,8 @@
       },
       y: {
         beginAtZero: true,
-        title: { display: true, text: 'TSS', color: C.muted, font: { family: 'DM Mono', size: 9 } },
-        ticks: { color: C.muted, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 5 },
+        title: { display: true, text: 'TSS', color: C.muted, font: { family: CHART_FONT, size: CHART_FS } },
+        ticks: { color: C.muted, font: { family: CHART_FONT, size: CHART_FS }, maxTicksLimit: 5 },
         grid: { color: C.rule, drawTicks: false }, border: { display: false }
       }
     };
@@ -4099,14 +4106,14 @@
       x: {
         beginAtZero: true, max: Math.min(100, Math.ceil((peak + 6) / 10) * 10),
         title: { display: true, text: '% of classified time', color: C.muted,
-                 font: { family: 'DM Mono', size: 9 } },
-        ticks: { color: C.muted, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 6,
+                 font: { family: CHART_FONT, size: CHART_FS } },
+        ticks: { color: C.muted, font: { family: CHART_FONT, size: CHART_FS }, maxTicksLimit: 6,
                  callback: function (v) { return v + '%'; } },
         grid: { color: C.rule, drawTicks: false }, border: { display: false }
       },
       y: {
         // No autoSkip: a dropped row label leaves a bar belonging to nothing.
-        ticks: { color: C.ink2, font: { family: 'DM Mono', size: 9 }, autoSkip: false },
+        ticks: { color: C.ink2, font: { family: CHART_FONT, size: CHART_FS }, autoSkip: false },
         grid: { display: false }, border: { color: C.rule }
       }
     };
@@ -5539,6 +5546,8 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.70", "2026-10-14", "Glass preview: charts in Plus Jakarta Sans, tidier tile labels", 1],
+    ["3.69", "2026-10-14", "Glass preview: Health-style metric tiles, charts in the new font with rounded bars", 1],
     ["3.68", "2026-10-14", "Glass preview: Apple-style materials, capsule tab bar, Plus Jakarta Sans", 1],
     ["3.67", "2026-10-14", "Glass preview: stylesheet always fresh, Inter switched on", 1],
     ["3.66", "2026-10-14", "Glass preview uses Inter by default", 1],
@@ -6313,6 +6322,23 @@
       Chart.defaults.font.family = 'DM Mono, monospace';
       Chart.defaults.font.size = 9;
       Chart.defaults.color = C.muted;
+      // Glass style: charts in the same font, hairline grids and rounded bars, like
+      // Apple Health. Read once at start, so switching style redraws charts on reopen.
+      if (document.documentElement.classList.contains('glass')) {
+        var gf = document.documentElement.getAttribute('data-font');
+        Chart.defaults.font.family = gf === 'jakarta' ? "'Plus Jakarta Sans', system-ui, sans-serif"
+          : gf === 'inter' ? 'Inter, system-ui, sans-serif'
+          : gf === 'manrope' ? 'Manrope, system-ui, sans-serif'
+          : gf === 'sf' ? '-apple-system, system-ui, sans-serif' : Chart.defaults.font.family;
+        Chart.defaults.font.size = 10;
+        CHART_FONT = Chart.defaults.font.family;
+        CHART_FS = 9.5;
+        Chart.defaults.color = 'rgba(60,60,67,.6)';
+        C.rule = 'rgba(60,60,67,.09)';
+        Chart.defaults.elements.bar.borderRadius = 4;
+        Chart.defaults.elements.line.borderWidth = 2.2;
+        Chart.defaults.elements.point.radius = 2.5;
+      }
     }
     buildChrome();
     buildGate();

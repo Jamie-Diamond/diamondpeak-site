@@ -5,7 +5,7 @@
    sheets. Active only with html.glass (Settings > Look, coach only, this device) until
    it is made the default. The Dev tab keeps its dark style. */
 
-html.glass{--glass-v:'128'}
+html.glass{--glass-v:'130'}
 html.glass body:not(.dev-chat){
   --paper:rgba(255,255,255,.62);
   --paper-2:transparent;
@@ -274,3 +274,60 @@ html.glass[data-font] body:not(.dev-chat) .msg code{font-family:'DM Mono',monosp
 html.glass[data-font=jakarta] body:not(.dev-chat){word-spacing:.12em}
 html.glass[data-font=jakarta] body:not(.dev-chat) .hero-t,
 html.glass[data-font=jakarta] body:not(.dev-chat) .dr-t{word-spacing:.06em}
+
+/* ── metrics, tiles and charts, after Apple Health / Fitness (Jamie, 14 Oct 2026:
+   "also refine how the tiles and graphs and metrics look") ───────────────────────────
+   Each figure is its own small pane: label on top in sentence case, a big rounded
+   number, the detail under it; no dividers. */
+html.glass body:not(.dev-chat) .figures,
+html.glass body:not(.dev-chat) .minis{
+  background:none;box-shadow:none;border-radius:0;overflow:visible;gap:10px;
+  backdrop-filter:none;-webkit-backdrop-filter:none;
+}
+html.glass body:not(.dev-chat) .fig,
+html.glass body:not(.dev-chat) .mini{
+  display:flex;flex-direction:column;align-items:flex-start;text-align:left;
+  padding:12px 14px 13px;border:0;border-radius:18px;
+  background:var(--glass);box-shadow:var(--rim), var(--lift);
+  backdrop-filter:blur(30px) saturate(180%);-webkit-backdrop-filter:blur(30px) saturate(180%);
+}
+html.glass body:not(.dev-chat) .card .figures,
+html.glass body:not(.dev-chat) .card .minis{background:none;box-shadow:none;margin:12px}
+html.glass body:not(.dev-chat) .card .fig,
+html.glass body:not(.dev-chat) .card .mini{background:rgba(255,255,255,.55);box-shadow:var(--rim);
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+html.glass body:not(.dev-chat) .fig .l,
+html.glass body:not(.dev-chat) .mini span{order:-1;margin:0 0 5px;font-size:12px;font-weight:600;
+  letter-spacing:0;text-transform:none;color:var(--ink-2)}
+html.glass body:not(.dev-chat) .fig .n,
+html.glass body:not(.dev-chat) .mini b{font-size:27px;font-weight:700;letter-spacing:-.025em;line-height:1.05}
+html.glass body:not(.dev-chat) .mini b{font-size:21px}
+html.glass body:not(.dev-chat) .fig .d{font-size:11.5px;margin-top:3px;letter-spacing:0;color:var(--muted)}
+
+/* Session figures and peak power: heavier numbers, quiet sentence-case units. */
+html.glass body:not(.dev-chat) .sx-f b,
+html.glass body:not(.dev-chat) .pk b{font-weight:700;letter-spacing:-.02em}
+html.glass body:not(.dev-chat) .sx-f span,
+html.glass body:not(.dev-chat) .pk span,
+html.glass body:not(.dev-chat) .pk-k,
+html.glass body:not(.dev-chat) .card.sx > .sx-k,
+html.glass body:not(.dev-chat) .wt-k,
+html.glass body:not(.dev-chat) .wl-h,
+html.glass body:not(.dev-chat) .zb-l{text-transform:none;letter-spacing:0;font-size:11.5px;font-weight:500}
+html.glass body:not(.dev-chat) .zb-b{height:12px;border-radius:6px}
+html.glass body:not(.dev-chat) table.tbl td.lbl{color:var(--ink-2)}
+
+/* Sparklines: rounder, softer lines and smaller dots. */
+html.glass body:not(.dev-chat) .spark polyline{stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round}
+html.glass body:not(.dev-chat) .spark.wt .wt-d{stroke-width:4.2;opacity:.55}
+html.glass body:not(.dev-chat) .spark.wt .wt-d.bad,
+html.glass body:not(.dev-chat) .spark.wt .wt-d.good{opacity:.95}
+html.glass body:not(.dev-chat) .spark.wl .wl-b{opacity:.10}
+
+html.glass body:not(.dev-chat) .seg button{text-transform:none;font-size:12.5px;font-weight:500;letter-spacing:0}
+html.glass body:not(.dev-chat) .seg.sub button{font-size:12px}
+html.glass body:not(.dev-chat) .card > .card-f,
+html.glass body:not(.dev-chat) .card-a,
+html.glass body:not(.dev-chat) .hint{letter-spacing:0;text-transform:none;font-size:11.5px}
+html.glass body:not(.dev-chat) .card .fig{padding:10px 12px 11px}
+html.glass body:not(.dev-chat) .card .fig .n{font-size:24px}

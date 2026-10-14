@@ -67,6 +67,7 @@ def main() -> None:
     ap.add_argument("--athlete", default="jamie", help="profile to open (skips the picker)")
     ap.add_argument("--hash", default="chat", help="tab to open, e.g. chat, today, calendar")
     ap.add_argument("--dev", action="store_true", help="switch the chat to the Dev tab")
+    ap.add_argument("--glass", action="store_true", help="load in the glass style preview")
     ap.add_argument("--scroll", default="end", help="end | top | a pixel offset")
     ap.add_argument("--width", type=int, default=390)
     ap.add_argument("--height", type=int, default=844)
@@ -95,6 +96,8 @@ def main() -> None:
             ctx.add_init_script(f"localStorage.setItem('cc.athlete', {a.athlete!r})")
             if a.dev:
                 ctx.add_init_script("localStorage.setItem('cc.chatTab','dev')")
+            if a.glass:
+                ctx.add_init_script("localStorage.setItem('cc.theme','glass')")
             page = ctx.new_page()
 
             def handle(route):
