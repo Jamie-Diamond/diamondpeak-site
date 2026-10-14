@@ -1687,8 +1687,10 @@ def _recent_log(entries, days: int = 120) -> list:
 def _wellness_trend(rows) -> list:
     """Daily HRV and resting HR for Peak's HRV & resting HR card (Jamie, 14 Oct 2026).
     All of the ~60 days fetched, so the app can draw the last 30 against a 28-day normal."""
-    return [{"date": str(w.get("id", ""))[:10], "hrv": w.get("hrv"), "rhr": w.get("restingHR")}
-            for w in rows or [] if w.get("hrv") is not None or w.get("restingHR") is not None]
+    return [{"date": str(w.get("id", ""))[:10], "hrv": w.get("hrv"), "rhr": w.get("restingHR"),
+             "sleep": round(w["sleepSecs"] / 3600, 2) if w.get("sleepSecs") else None}
+            for w in rows or [] if w.get("hrv") is not None or w.get("restingHR") is not None
+            or w.get("sleepSecs")]
 
 
 def _build_athlete_training_data(slug, athlete_cfg):

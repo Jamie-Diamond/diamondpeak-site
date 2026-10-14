@@ -772,7 +772,10 @@
     // each athlete's own 28-day mean and SD, HRV on a log scale; the band is mean +/- 0.5 SD;
     // "off" is the 7-day average outside it on the under-recovered side, or one morning
     // beyond 1 SD. Keep the constants in step with that file.
-    var BAND_SD = 0.5, DAY_SD = 1.0, MIN_SD = { hrv: 0.03, rhr: 1.0 }, BAD = { hrv: -1, rhr: 1 };
+    var BAND_SD = 0.5, DAY_SD = 1.0, MIN_SD = { hrv: 0.03, rhr: 1.0, sleep: 0.25 }, BAD = { hrv: -1, rhr: 1, sleep: -1 };
+    // Sleep (hours) joins them (Jamie, 14 Oct 2026): same band and dots; its tile goes red
+    // on the morning card's sleep rule (1h+ short of usual AND under 7h).
+    var fmt = function (k, v) { return k === 'sleep' ? Number(v).toFixed(1) : Math.round(v); };
     var fwd = function (k, v) { return k === 'hrv' ? Math.log(v) : v; };
     var inv = function (k, v) { return k === 'hrv' ? Math.exp(v) : v; };
     var base = function (k, t) {
@@ -840,9 +843,9 @@
         '<path class="wt-d" d="' + dots.n + '"/><path class="wt-d bad" d="' + dots.bad + '"/>' +
         '<path class="wt-d good" d="' + dots.good + '"/></svg>' +
         sparkMarks(W, H, [
-          ex[0] && { x: ex[0].x, y: ex[0].y, txt: Math.round(ex[0].v), kind: 'hi' },
-          ex[1] && { x: ex[1].x, y: ex[1].y, txt: Math.round(ex[1].v), kind: 'lo' },
-          endP && { x: endP.x, y: endP.y, txt: Math.round(endP.v), kind: 'end' }
+          ex[0] && { x: ex[0].x, y: ex[0].y, txt: fmt(k, ex[0].v), kind: 'hi' },
+          ex[1] && { x: ex[1].x, y: ex[1].y, txt: fmt(k, ex[1].v), kind: 'lo' },
+          endP && { x: endP.x, y: endP.y, txt: fmt(k, endP.v), kind: 'end' }
         ]) + '</div>';
     }
     var today = rows.filter(function (r) { return r.date === last; })[0] || {};
@@ -852,18 +855,24 @@
       var v = today[k] > 0 ? fwd(k, today[k]) : null, bad = BAD[k];
       var dayOff = v != null && (bad < 0 ? v < b.m - DAY_SD * b.sd : v > b.m + DAY_SD * b.sd);
       var trendOff = a != null && (bad < 0 ? a < b.m - BAND_SD * b.sd : a > b.m + BAND_SD * b.sd);
+      if (k === 'sleep') {
+        var h = today.sleep, u = inv(k, b.m);
+        return { usual: u, off: h > 0 && h <= u - 1 && h < 7 };
+      }
       return { usual: inv(k, b.m), off: dayOff || trendOff };
     }
-    var sh = state('hrv'), sr = state('rhr');
-    var sH = spark('hrv'), sR = spark('rhr');
-    if (!sH && !sR) return '';
-    return card('HRV & resting HR',
+    var sh = state('hrv'), sr = state('rhr'), ss = state('sleep');
+    var sH = spark('hrv'), sR = spark('rhr'), sS = spark('sleep');
+    if (!sH && !sR && !sS) return '';
+    return card('Recovery',
       '<div class="figures">' +
         (sH ? fig(today.hrv != null ? Math.round(today.hrv) : '-', 'HRV', sh.usual ? 'usual ' + Math.round(sh.usual) : 'ms', sh.off ? 'neg' : '') : '') +
         (sR ? fig(today.rhr != null ? Math.round(today.rhr) : '-', 'Resting HR', sr.usual ? 'usual ' + Math.round(sr.usual) : 'bpm', sr.off ? 'neg' : '') : '') +
+        (sS ? fig(today.sleep != null ? Number(today.sleep).toFixed(1) + 'h' : '-', 'Sleep', ss.usual ? 'usual ' + ss.usual.toFixed(1) + 'h' : 'hours', ss.off ? 'neg' : '') : '') +
       '</div>' +
       (sH ? '<p class="wl-h">HRV</p>' + sH : '') +
       (sR ? '<p class="wl-h">Resting HR</p>' + sR : '') +
+      (sS ? '<p class="wl-h">Sleep</p>' + sS : '') +
       '<p class="wt-k wl-k"><span><i class="wl-bk"></i>normal</span><span><i class="wt-avg"></i>7-day avg</span>' +
       '<span><i class="wt-dot bad"></i>low recovery</span><span><i class="wt-dot good"></i>better</span></p>',
       { foot: 'Band: your 28-day normal \u00b1 \u00bd SD.' });
@@ -5594,6 +5603,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.81", "2026-10-14", "Recovery card: sleep joins HRV and resting HR, against your own normal", 0],
     ["3.80", "2026-10-14", "±7 days chart in plain English: Form, Fatigue, Daily load", 0],
     ["3.79", "2026-10-14", "Weight, HRV and resting HR graphs label the current value and the highs and lows", 0],
     ["3.78", "2026-10-14", "Dev tab in dark glass to match; the style switch is gone", 1],
