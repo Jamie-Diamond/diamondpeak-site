@@ -780,12 +780,20 @@
         var b = base(k, Date.parse(r.date));
         return b ? { r: r, b: b, lo: inv(k, b.m - BAND_SD * b.sd), hi: inv(k, b.m + BAND_SD * b.sd) } : null;
       }).filter(Boolean);
-      var vals = pts.map(function (r) { return Number(r[k]); });
+      // Scale to the 7-day line and the normal band, so they fill the height (Jamie, 14 Oct
+      // 2026: "make these graphs fill the y axis"); a morning outside that range is pinned
+      // to the top or bottom edge, still coloured, rather than squashing the trend flat.
+      var vals = [];
       band.forEach(function (b) { vals.push(b.lo, b.hi); });
-      var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals), span = (hi - lo) || 1;
+      pts.forEach(function (r) { var a = roll(k, Date.parse(r.date)); if (a != null) vals.push(inv(k, a)); });
+      if (vals.length < 2) vals = pts.map(function (r) { return Number(r[k]); });
+      var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+      var pad = (hi - lo) * 0.18 || 1;
+      lo -= pad; hi += pad;
+      var span = hi - lo;
       var W = 300, H = 60, t0 = tL - 29 * 864e5;
       var x = function (r) { return ((Date.parse(r.date) - t0) / (29 * 864e5) * W).toFixed(1); };
-      var y = function (v) { return (H - 4 - (v - lo) / span * (H - 8)).toFixed(1); };
+      var y = function (v) { v = Math.max(lo, Math.min(hi, v)); return (H - 3 - (v - lo) / span * (H - 6)).toFixed(1); };
       var bandPath = band.length > 1 ? 'M' + band.map(function (b) { return x(b.r) + ' ' + y(b.hi); }).join(' L') +
         ' L' + band.slice().reverse().map(function (b) { return x(b.r) + ' ' + y(b.lo); }).join(' L') + 'Z' : '';
       var byDate = {};
@@ -5546,6 +5554,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.74", "2026-10-14", "HRV and resting HR graphs scale to the trend, so it fills the chart", 0],
     ["3.73", "2026-10-14", "Glass preview: chat button sits beside the tab bar, iOS style; message box clears it", 1],
     ["3.71", "2026-10-14", "Glass preview: calendar and session page polished", 1],
     ["3.70", "2026-10-14", "Glass preview: charts in Plus Jakarta Sans, tidier tile labels", 1],
