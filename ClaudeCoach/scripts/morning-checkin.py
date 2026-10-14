@@ -22,6 +22,7 @@ sys.path.insert(0, str(BASE / "ironman-analysis"))
 import claude_call
 import ask_gate                 # standing-ask backoff (weight, ankle score)
 from coaching_levels import level_block as _level_block
+import consistency          # missed-session line (lib/consistency.py)
 import illness as illness_lib   # structured illness/compromised flag (surfacing gate)
 import weekly_availability     # per-week declared hours (Sunday ask + resolver)
 from primitives.planned_tss import planned_sessions_block
@@ -554,6 +555,27 @@ def _off_normal_line(wellness_rows, today: date) -> str:
     return ("Off your normal: " + " · ".join(out)) if out else ""
 
 
+def _consistency_line(slug, adir, athlete_cfg, wellness_rows, card) -> str | None:
+    """The consistency case to append to today's card (lib/consistency.py), or None."""
+    today = date.today()
+    if not consistency.due(adir, today) or _post_race_recovery(athlete_cfg):
+        return None
+    if illness_lib.state_from_dir(adir, today):
+        return None
+    from icu_api import IcuClient
+    a = json.loads(ATHLETES_CONFIG.read_text())[slug]
+    client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
+    start = today - timedelta(days=consistency.LOOKBACK_MISS + consistency.LOOKBACK_OVER)
+    events = client.get_events(start.isoformat(), (today - timedelta(days=1)).isoformat())
+    acts = client.get_training_history(days=(today - start).days + 1)
+    r = consistency.assess(events, acts, wellness_rows, today)
+    if not r:
+        return None
+    if r["case"] == "ask" and any(l.rstrip().endswith("?") for l in card.splitlines()):
+        return None                     # one question per card: try again tomorrow
+    return r["case"]
+
+
 def _flag_skip(athlete_cfg, wellness_rows) -> frozenset:
     """Triggers the card must not show this week: T6 (drift) outside a durability-building
     week, the same rule the watchdog applies (lib/watchdog_checks.durability_phase), so a
@@ -1003,9 +1025,26 @@ def run_athlete(slug, athlete_cfg):
         _passive_sent_for, _passive_text = passive_lines[0]
         output = f"{output}\n\n_{_passive_text}_"
 
+    # CONSISTENCY LINE (lib/consistency.py, Jamie 14 Oct 2026): a planned session missed
+    # in the last few days gets ONE line, at most once a week, picked by its likely cause
+    # (an overshoot before it, wellness off normal, or neither -> one open question).
+    # Appended in Python like the lines above, so the model can neither nag nor guess.
+    # Never alongside the other appended lines, never during illness or post-race.
+    _cons_case = None
+    if output and not _hours_ask_appended and not _passive_sent_for:
+        try:
+            _cons_case = _consistency_line(slug, adir, athlete_cfg, baseline_rows, output)
+            if _cons_case:
+                output = f"{output}\n\n{consistency.LINES[_cons_case]}"
+        except Exception as exc:
+            print(f"[{slug}] consistency check failed: {exc}", file=sys.stderr)
+            _cons_case = None
+
     sent = False
     if output:
         sent = notify(output, chat_id, slug=slug)
+        if sent and _cons_case:
+            consistency.mark(adir, date.today(), _cons_case)
         if sent:
             # RECORD FROM THE TEXT, NOT THE INTENT. The card is generative: Python
             # authorising a question is not the same as the question shipping, and

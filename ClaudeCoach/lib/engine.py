@@ -344,7 +344,12 @@ _FEEDBACK_LOG_RULE = (
     "reply with the bare word 'Logged.' on its own. If the athlete asks you to save, remember "
     "or note something, save it in THIS reply: nothing else writes rules before the nightly "
     "sync. If the message reports a genuine fault in the "
-    "coaching system, record it as a bug in feedback-log.json."
+    "coaching system, record it as a bug in feedback-log.json. "
+    "TIREDNESS CAUSE: when the athlete says why they are tired or missed a session (training, "
+    "sleep, work or life stress, alcohol, illness, travel), add one dated line to the Recent "
+    "context section of their current-state.md (e.g. '14 Oct: tired from a busy work week, not "
+    "training') so it is not asked again, and coach from it: lifestyle fatigue gets easier "
+    "days and recovery basics, never extra training (lib/consistency.py, Jamie 14 Oct 2026)."
 )
 
 

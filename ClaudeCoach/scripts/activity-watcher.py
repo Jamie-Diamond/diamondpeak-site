@@ -622,6 +622,54 @@ def _structure_pass(slug: str, session_log_f: Path) -> str:
         return ""
 
 
+def _overshoot_pass(slug: str, session_log_f: Path) -> str:
+    """For each session in the last 2 days not yet logged that ran well over its plan
+    (lib/consistency.overshoot): one warm line about letting the next session land (Jamie,
+    14 Oct 2026: "going over power or a longer session but skipping the next one isn't how
+    to build fitness ... subtly and politely"). Fail-soft: ""."""
+    try:
+        import consistency
+        from icu_api import IcuClient
+        from datetime import date as _d
+        cfg = json.loads(ATHLETES_CONFIG.read_text())[slug]
+        client = IcuClient(cfg["icu_athlete_id"], cfg["icu_api_key"])
+        logged = set()
+        if session_log_f.exists():
+            logged = {str(e.get("activity_id", "")) for e in json.loads(session_log_f.read_text())}
+        acts = [a for a in client.get_training_history(days=2) or []
+                if str(a.get("id")) not in logged]
+        if not acts:
+            return ""
+        today = _d.today()
+        evs = [e for e in client.get_events((today - timedelta(days=2)).isoformat(),
+                                            (today + timedelta(days=7)).isoformat()) or []
+               if (e.get("category") or "WORKOUT") == "WORKOUT"]
+        lines = []
+        for a in acts:
+            day = str(a.get("start_date_local") or "")[:10]
+            plan = [e for e in evs if str(e.get("start_date_local") or "")[:10] == day
+                    and consistency.family(e.get("type")) == consistency.family(a.get("type"))]
+            if not plan or not consistency.overshoot(plan[0], a):
+                continue
+            nxt = sorted((e for e in evs if str(e.get("start_date_local") or "")[:10] > day),
+                         key=lambda e: e.get("start_date_local") or "")
+            nxt_txt = (f"the next planned session ({nxt[0].get('name')}, "
+                       f"{datetime.fromisoformat(str(nxt[0]['start_date_local'])[:10]):%A})"
+                       if nxt else "the next session")
+            lines.append(f"{a.get('name') or 'This session'} ({a['id']}) ran well over its plan "
+                         f"({plan[0].get('name')}). Next: {nxt_txt}.")
+        if not lines:
+            return ""
+        return ("OVER PLAN (computed - authoritative):\n" + "\n".join(lines) + "\n"
+                "For that activity, just before the question line, add ONE short line: credit "
+                "the effort first, then say that keeping to the plan is what lets the next "
+                "planned session (named above) land well too, because steady sessions build "
+                "more than big one-off days. Warm, never a telling-off, no numbers in that line.")
+    except Exception as exc:
+        print(f"[overshoot:{slug}] check failed: {exc}", file=sys.stderr)
+        return ""
+
+
 def _hr_quality_pass(slug: str, chat_id: str) -> str:
     """Code-side HR check and baseline-test capture for the last 3 days' activities,
     run BEFORE the analysis prompt is built so the model is told which HR to ignore.
@@ -1780,6 +1828,9 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     _struct = _structure_pass(slug, session_log_f)
     if _struct:
         hr_note = (hr_note + "\n\n" + _struct).strip()
+    _over = _overshoot_pass(slug, session_log_f)
+    if _over:
+        hr_note = (hr_note + "\n\n" + _over).strip()
     prompt = _build_prompt(slug, first_name, ftp, injuries, profile,
                            run_hr_cap=run_hr_cap, nutrition_target=nutrition_target,
                            nutrition_label=nutrition_label,
