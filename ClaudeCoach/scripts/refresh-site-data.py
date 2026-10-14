@@ -604,7 +604,7 @@ def _build_jamie_data(client) -> dict:
     twentyone_fwd = (today + timedelta(days=21)).isoformat()
 
     wellness_60, history_21, events_21, fitness_ytd = client.fetch_all(
-        ("get_wellness", 60),
+        ("get_wellness", 90),   # 90: Peak's averages need the days before what it draws
         ("get_training_history", HISTORY_DAYS),
         ("get_events", today.isoformat(), twentyone_fwd),
         ("get_fitness", (today - date(today.year, 1, 1)).days + 1),
@@ -1697,7 +1697,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
     # miscounted as rest days ("19 rest days in July" for Kathryn). history_21 below
     # still exists so pre-existing 14/21-day consumers are unaffected.
     wellness_60, history_49, events_21, fitness_ytd = client.fetch_all(
-        ("get_wellness", 60),
+        ("get_wellness", 90),   # 90: Peak's averages need the days before what it draws
         ("get_training_history", HISTORY_DAYS),
         ("get_events", today.isoformat(), twentyone_fwd),
         ("get_fitness", (today - date(today.year, 1, 1)).days + 1),

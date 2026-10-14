@@ -595,7 +595,6 @@
     var t = todayISO();
     var cal = (d.weekCalendar || []);
     var today = cal.filter(function (s) { return s.date === t; });
-    var next = cal.filter(function (s) { return s.date > t; }).slice(0, 4);
     var ha = d.heatAccl || {};
     var ramp = k.ramp7d;
 
@@ -676,10 +675,6 @@
     }
 
     h += currentStateCard(d.currentState);
-
-    h += card('Coming up', '<div class="body-flush">' +
-      (next.length ? groupByDay(next) : '<div class="empty">Nothing planned yet</div>') +
-      '</div>', { flush: true });
 
     h += weightCard(d.weightTrend);
     h += wellnessCard(d.wellnessTrend);
@@ -763,6 +758,8 @@
       var sd = Math.sqrt(v.reduce(function (a, b) { return a + (b - m) * (b - m); }, 0) / (v.length - 1));
       return { m: m, sd: Math.max(sd, MIN_SD[k]) };
     };
+    // Over ALL published rows (90 days), not just the 30 drawn, so the line's left end is
+    // a full 7-day average and the band there has its full 28-day baseline.
     var roll = function (k, t) {
       var v = rows.filter(function (r) {
         var tr = Date.parse(r.date); return r[k] > 0 && tr <= t && tr > t - 7 * 864e5;
@@ -842,33 +839,34 @@
   }
 
   function weightCard(wt) {
-    var pts = (wt || []).filter(function (p) { return p && p.kg != null; });
+    var all = (wt || []).filter(function (p) { return p && p.kg != null; });
+    if (all.length < 2) return '';
+    // Draw the last WEIGHT_SHOW_DAYS; the 14-day average uses EVERY published reading,
+    // so the line's left end is a true 14-day mean, not one cut short at the chart's edge
+    // (Jamie, 14 Oct 2026). refresh-site-data publishes 90 days for this.
+    var tLast = Date.parse(all[all.length - 1].date);
+    var pts = all.filter(function (p) { return Date.parse(p.date) > tLast - WEIGHT_SHOW_DAYS * 864e5; });
     if (pts.length < 2) return '';
+    var avg14 = function (t) {
+      var win = all.filter(function (q) { var tq = Date.parse(q.date); return tq <= t && tq > t - 14 * 864e5; });
+      return win.reduce(function (a, q) { return a + Number(q.kg); }, 0) / win.length;
+    };
     var kg = pts.map(function (p) { return Number(p.kg); });
     var last = kg[kg.length - 1];
-    // 14-day mean by DATE, matching the line (Jamie, 14 Oct 2026: "all should be 14").
-    var tLast = Date.parse(pts[pts.length - 1].date);
-    var win14 = pts.filter(function (p) { return Date.parse(p.date) > tLast - 14 * 864e5; });
-    var mean14 = win14.reduce(function (a, p) { return a + Number(p.kg); }, 0) / win14.length;
+    var mean14 = avg14(tLast);
     var change = last - kg[0];
-    // Dots for each reading, a line for the 14-day moving average (Jamie, 14 Oct 2026):
-    // a day-to-day line made water swings look like trend. Placed by DATE, so a gap in
-    // weigh-ins shows as a gap; the average is the readings in the 14 days up to each one.
-    var lo = Math.min.apply(null, kg), hi = Math.max.apply(null, kg), span = (hi - lo) || 1;
+    // Dots for each reading, a line for the 14-day moving average: a day-to-day line made
+    // water swings look like trend. Placed by DATE, so a gap in weigh-ins shows as a gap.
+    var avgs = pts.map(function (p) { return avg14(Date.parse(p.date)); });
+    var lo = Math.min.apply(null, kg.concat(avgs)), hi = Math.max.apply(null, kg.concat(avgs)), span = (hi - lo) || 1;
     var W = 300, H = 60;
-    var t0 = Date.parse(pts[0].date), tN = Date.parse(pts[pts.length - 1].date), tSpan = (tN - t0) || 1;
+    var t0 = Date.parse(pts[0].date), tSpan = (tLast - t0) || 1;
     var xOf = function (p) { return ((Date.parse(p.date) - t0) / tSpan * W).toFixed(1); };
     var yOf = function (v) { return (H - 4 - (v - lo) / span * (H - 8)).toFixed(1); };
     var dots = pts.map(function (p) {
       return 'M' + xOf(p) + ' ' + yOf(Number(p.kg)) + 'h0';   // round cap = a dot that never stretches
     }).join('');
-    var line = pts.map(function (p) {
-      var t = Date.parse(p.date), win = pts.filter(function (q) {
-        var tq = Date.parse(q.date); return tq <= t && tq > t - 14 * 864e5;
-      });
-      var m = win.reduce(function (a, q) { return a + Number(q.kg); }, 0) / win.length;
-      return xOf(p) + ',' + yOf(m);
-    }).join(' ');
+    var line = pts.map(function (p, i) { return xOf(p) + ',' + yOf(avgs[i]); }).join(' ');
     return card('Weight',
       '<div class="figures">' +
         fig(last.toFixed(1), 'Latest', 'kg') +
@@ -881,6 +879,8 @@
       { foot: 'Scale readings from Intervals.icu since ' + dow(pts[0].date) + ' ' +
               dnum(pts[0].date) + '.' });
   }
+  var WEIGHT_SHOW_DAYS = 60;
+
 
   /* ── refresh (private host only) ─────────────────────────────────────── */
 
@@ -2467,6 +2467,12 @@
     } else {
       h += '<p class="hint">Tap a day for its sessions.</p>';
     }
+
+    // Coming up lives with the calendar (Jamie, 14 Oct 2026), not on Today.
+    var next = (state.data.weekCalendar || []).filter(function (s) { return s.date > t; }).slice(0, 4);
+    h += card('Coming up', '<div class="body-flush">' +
+      (next.length ? groupByDay(next) : '<div class="empty">Nothing planned yet</div>') +
+      '</div>', { flush: true });
 
     $('#v-cal').innerHTML = h;
 
@@ -5549,6 +5555,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.61", "2026-10-14", "Coming up moves to the Calendar tab; trend lines use all your readings, not just what's on screen", 0],
     ["3.60", "2026-10-14", "HRV and resting HR judged against your own spread (standard deviation), as sports-science guidance recommends", 0],
     ["3.59", "2026-10-14", "HRV and resting HR show your normal range as a band, with off-normal mornings in red", 0],
     ["3.58", "2026-10-14", "HRV & resting HR on Today, against your own normal; weight for every athlete with a scale", 0],
