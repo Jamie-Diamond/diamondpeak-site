@@ -561,40 +561,6 @@
               (d.refreshCadence ? '. Refreshes ' + d.refreshCadence + '.' : '.') });
   }
 
-  /* Detail for one session, hidden until its heading is tapped. Every field is emitted
-     only if PRESENT: a planned session has an aim and no numbers, a completed one has
-     numbers and often no aim, and printing a label with nothing after it reads as missing
-     data rather than as a field that does not apply here. */
-  function sessionDetail(s, si) {
-    var rows = [];
-    function add(label, value) {
-      if (value == null || value === '') { return; }
-      rows.push('<p class="hero-m"><span class="mut">' + esc(label) + '</span> ' +
-                esc(String(value)) + '</p>');
-    }
-    add(s.status === 'completed' ? 'Actual load' : 'Planned load',
-        s.tss != null ? Math.round(s.tss) + ' TSS' : null);
-    if (s.status === 'completed') {
-      add('Planned load', s.planned_tss != null ? Math.round(s.planned_tss) + ' TSS' : null);
-    }
-    add('Duration', s.duration_min ? hhmm(s.duration_min) : null);
-    add('Distance', s.distance_km != null ? Number(s.distance_km).toFixed(1) + ' km' : null);
-    add('Status', s.status);
-    var aim = s.description || s.aim || s.notes;
-    if (aim) {
-      rows.push('<p class="hero-m">' + esc(String(aim).slice(0, 600)) + '</p>');
-    }
-    if (!rows.length) {
-      rows.push('<p class="hero-m mut">Nothing further recorded for this one yet.</p>');
-    }
-    return '<div class="sessdet" data-sessdet="' + si + '" hidden>' +
-      rows.join('') + '</div>';
-  }
-
-  function toggleSession(si) {
-    var el = document.querySelector('[data-sessdet="' + si + '"]');
-    if (el) { el.hidden = !el.hidden; }
-  }
 
   /* Set up Peak (Jamie, 2 Oct 2026: "you never showed him how to pin the app, or
      notifications"). The install question at the end of sign-up was buried by the
@@ -642,13 +608,15 @@
                 (s.status === 'completed' && s.planned_tss != null && s.planned_tss !== s.tss
                   ? ' (planned ' + Math.round(s.planned_tss) + ')' : '')
               : null;
-            return '<h2 class="hero-t" data-sess="' + si + '">' +
+            // Tapping opens the calendar's session sheet (Jamie, 14 Oct 2026: "the same
+            // info as if I go through the calendar"), not a smaller inline summary.
+            return '<h2 class="hero-t" data-sess="' + si + '" data-d="' + esc(s.date || '') +
+              '" data-sp="' + esc(s.sport || '') + '" data-n="' + esc(s.name || '') + '">' +
               '<span class="sp ' + sportClass(s.sport) + '"></span>' +
               esc(s.name || s.sport) + '</h2>' +
               '<p class="hero-m">' + esc([hhmm(s.duration_min), tssTxt,
                 s.detail].filter(Boolean).join(' · ')) + '</p>' +
-              (s.status === 'completed' ? '<p class="hero-done">✓ Completed</p>' : '') +
-              sessionDetail(s, si);
+              (s.status === 'completed' ? '<p class="hero-done">✓ Completed</p>' : '');
           }).join('<hr class="hero-r">')
         : '<h2 class="hero-t">Rest day</h2><p class="hero-m">Nothing scheduled.</p>') +
       '</section>';
@@ -725,7 +693,7 @@
       th.addEventListener('click', function (e) {
         try {
           var head = e.target.closest('[data-sess]');
-          if (head) { toggleSession(head.getAttribute('data-sess')); }
+          if (head && head.dataset.d) openDetail(head.dataset.d, head.dataset.sp, head.dataset.n);
         } catch (err) {
           if (window.console) { console.error('[peak] session toggle:', err); }
         }
@@ -770,10 +738,23 @@
     var last = kg[kg.length - 1];
     var mean7 = kg.slice(-7).reduce(function (a, b) { return a + b; }, 0) / Math.min(7, kg.length);
     var change = last - kg[0];
+    // Dots for each reading, a line for the 7-day moving average (Jamie, 14 Oct 2026):
+    // a day-to-day line made water swings look like trend. Placed by DATE, so a gap in
+    // weigh-ins shows as a gap; the average is the readings in the 7 days up to each one.
     var lo = Math.min.apply(null, kg), hi = Math.max.apply(null, kg), span = (hi - lo) || 1;
     var W = 300, H = 60;
-    var line = kg.map(function (v, i) {
-      return (i / (kg.length - 1) * W).toFixed(1) + ',' + (H - 4 - (v - lo) / span * (H - 8)).toFixed(1);
+    var t0 = Date.parse(pts[0].date), tN = Date.parse(pts[pts.length - 1].date), tSpan = (tN - t0) || 1;
+    var xOf = function (p) { return ((Date.parse(p.date) - t0) / tSpan * W).toFixed(1); };
+    var yOf = function (v) { return (H - 4 - (v - lo) / span * (H - 8)).toFixed(1); };
+    var dots = pts.map(function (p) {
+      return 'M' + xOf(p) + ' ' + yOf(Number(p.kg)) + 'h0';   // round cap = a dot that never stretches
+    }).join('');
+    var line = pts.map(function (p) {
+      var t = Date.parse(p.date), win = pts.filter(function (q) {
+        var tq = Date.parse(q.date); return tq <= t && tq > t - 7 * 864e5;
+      });
+      var m = win.reduce(function (a, q) { return a + Number(q.kg); }, 0) / win.length;
+      return xOf(p) + ',' + yOf(m);
     }).join(' ');
     return card('Weight',
       '<div class="figures">' +
@@ -781,8 +762,9 @@
         fig(mean7.toFixed(1), '7-day mean', 'kg') +
         fig(signed(change), 'Change', pts.length + ' readings') +
       '</div>' +
-      '<svg class="spark" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
-        '<polyline points="' + line + '"/></svg>',
+      '<svg class="spark wt" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
+        '<polyline points="' + line + '"/><path class="wt-d" d="' + dots + '"/></svg>' +
+      '<p class="wt-k"><i class="wt-dot"></i>reading<i class="wt-avg"></i>7-day average</p>',
       { foot: 'Scale readings from Intervals.icu since ' + dow(pts[0].date) + ' ' +
               dnum(pts[0].date) + '.' });
   }
