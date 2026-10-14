@@ -3494,7 +3494,8 @@
       var iso = isoAdd(lc[0].date, i);
       return Object.prototype.hasOwnProperty.call(priorTss, iso) ? priorTss[iso] : null;
     };
-    // Trailing 7-day mean of daily load, on the TSS axis because it shares the unit.
+    // Trailing 7-day mean of daily load, on the load axis because it shares the unit.
+    // Labelled in plain English (Jamie, 14 Oct 2026): Form not TSB, Fatigue not 7d avg load.
     // Reaches outside the drawn window for the leftmost days rather than clamping.
     var roll = totals.map(function (_, i) {
       var vals = [];
@@ -3528,12 +3529,12 @@
       });
     });
     ds.push({
-      type: 'line', label: '7d avg load', yAxisID: 'y', order: 2, data: roll,
+      type: 'line', label: 'Fatigue (7-day load)', yAxisID: 'y', order: 2, data: roll,
       borderColor: 'rgba(20,24,29,.55)', borderWidth: 1.6, borderDash: [5, 3],
       pointRadius: 0, tension: 0.3, fill: false
     });
     ds.push({
-      type: 'line', label: 'TSB', yAxisID: 'y1', order: 1,
+      type: 'line', label: 'Form', yAxisID: 'y1', order: 1,
       data: lc.map(function (r) { return r.tsb; }),
       borderColor: C.ink2, borderWidth: 1.4, tension: 0.3, fill: false,
       pointRadius: 3, pointBorderColor: '#fff', pointBorderWidth: 1,
@@ -3573,13 +3574,13 @@
       },
       y: {
         stacked: true, position: 'left', beginAtZero: true,
-        title: { display: true, text: 'TSS', color: C.muted, font: { family: CHART_FONT, size: CHART_FS } },
+        title: { display: true, text: 'Daily load', color: C.muted, font: { family: CHART_FONT, size: CHART_FS } },
         ticks: { color: C.muted, font: { family: CHART_FONT, size: CHART_FS }, maxTicksLimit: 5 },
         grid: { color: C.rule, drawTicks: false }, border: { display: false }
       },
       y1: {
         position: 'right',
-        title: { display: true, text: 'TSB', color: C.muted, font: { family: CHART_FONT, size: CHART_FS } },
+        title: { display: true, text: 'Form', color: C.muted, font: { family: CHART_FONT, size: CHART_FS } },
         ticks: { color: C.muted, font: { family: CHART_FONT, size: CHART_FS }, maxTicksLimit: 5 },
         grid: { display: false }, border: { display: false }
       }
@@ -3592,8 +3593,8 @@
           (r.projected || r.date > t ? ' · planned' : '') : '';
       },
       label: function (it) {
-        if (it.dataset.yAxisID === 'y1') return 'TSB ' + signed(it.parsed.y);
-        if (it.dataset.label === '7d avg load') return '7d avg ' + Math.round(it.parsed.y);
+        if (it.dataset.yAxisID === 'y1') return 'Form ' + signed(it.parsed.y);
+        if (it.dataset.label === 'Fatigue (7-day load)') return 'Fatigue ' + Math.round(it.parsed.y);
         if (!it.parsed.y) return null;
         // Named, not just sported: the bar is a per-sport TOTAL (usually one session),
         // so the session's own name reads better here than the sport twice over.
@@ -3601,7 +3602,7 @@
         var names = (row.activities || [])
           .filter(function (a) { return norm(a.sport) === it.dataset.label && a.name; })
           .map(function (a) { return a.name; });
-        return it.dataset.label + ' ' + Math.round(it.parsed.y) + ' tss' +
+        return it.dataset.label + ' ' + Math.round(it.parsed.y) + ' load' +
           (names.length ? ' — ' + names.join(', ') : '');
       },
       footer: function (items) {
@@ -5593,6 +5594,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.80", "2026-10-14", "±7 days chart in plain English: Form, Fatigue, Daily load", 0],
     ["3.79", "2026-10-14", "Weight, HRV and resting HR graphs label the current value and the highs and lows", 0],
     ["3.78", "2026-10-14", "Dev tab in dark glass to match; the style switch is gone", 1],
     ["3.77", "2026-10-14", "New look: frosted-glass design with a floating tab bar, cleaner tiles and charts, and a new font", 0],
