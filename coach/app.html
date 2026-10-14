@@ -861,6 +861,14 @@ a.pickrow{text-decoration:none;color:inherit}
 /* settings: version line and drawers (app.js drawer(); .drawer is the bottom sheet) */
 .set-ver{margin:0 2px 12px;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.13em;
   text-transform:uppercase;color:var(--muted)}
+.set-ver{cursor:pointer;display:flex;gap:6px;align-items:baseline}
+.set-new{margin-left:auto;color:var(--accent);white-space:nowrap}
+.cl{display:flex;flex-direction:column}
+.cl-r{display:grid;grid-template-columns:3.4em 4.2em 1fr;gap:4px 10px;padding:11px 16px;border-top:1px solid var(--rule);align-items:baseline}
+.cl-r:first-child{border-top:0}
+.cl-r b{font:500 12px 'DM Mono',monospace;color:var(--ink)}
+.cl-d{font:400 10px 'DM Mono',monospace;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+.cl-t{font-size:14px;line-height:1.4;color:var(--ink-2)}
 .drawers{background:var(--paper);border:1px solid var(--rule);border-radius:4px;margin:0 0 14px;overflow:hidden}
 .sdrawer{border-bottom:1px solid var(--rule-soft)}
 .sdrawer:last-child{border-bottom:0}
@@ -1364,6 +1372,6 @@ body.drawn{overflow:hidden}
      broken launch. A new URL cannot hit that cache entry. It always equals the
      number in sw.js CACHE (peak-vN): bump both on every release, enforced by
      ClaudeCoach/ironman-analysis/tests/test_peak_release.py. -->
-<script src="app.js?v=113" defer></script>
+<script src="app.js?v=114" defer></script>
 </body>
 </html>

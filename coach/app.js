@@ -5392,6 +5392,66 @@
 
   /* ── Settings ────────────────────────────────────────────────────────── */
 
+  // What's new (Jamie, 14 Oct 2026: "add a change log when I click on the version number").
+  // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
+  // [version, date, what changed in plain words, coach-only]
+  var CHANGELOG = [
+    ["3.54", "2026-10-14", "Tap the version number to see what's new", 0],
+    ["3.53", "2026-10-14", "Stats on every done session: peak power, decoupling (warm-up and coasting left out), pace, cadence and more", 0],
+    ["3.52", "2026-10-14", "Your route on a real map, coloured by power, heart rate or pace zone", 0],
+    ["3.51", "2026-10-14", "Weight trend uses a 14-day average", 0],
+    ["3.50", "2026-10-14", "Weight shows each weigh-in as a dot with a trend line; tapping today's session opens the full session page", 0],
+    ["3.49", "2026-10-13", "Planned line over a done session: red where you went longer, yellow where you cut it short", 0],
+    ["3.47", "2026-10-13", "The plan lines up with what you actually did, even when the warm-up ran long", 0],
+    ["3.46", "2026-10-13", "Session page tidied; swim sets show one bar per rep", 0],
+    ["3.44", "2026-10-13", "Workout shapes on the session page and the calendar", 0],
+    ["3.43", "2026-10-13", "Planned sessions list each step in your own watts and paces", 0],
+    ["3.42", "2026-10-13", "Session page names the sport", 0],
+    ["3.41", "2026-10-13", "Goals: one main focus plus extras", 0],
+    ["3.40", "2026-10-13", "Goals set the SMART way: specific, measurable and achievable", 0],
+    ["3.39", "2026-10-13", "Quick-answer buttons in the coach chat", 0],
+    ["3.38", "2026-10-12", "Send up to 6 photos in one message", 0],
+    ["3.37", "2026-10-12", "Photos in the Dev tab", 1],
+    ["3.36", "2026-10-07", "Dev questions come with answer buttons", 1],
+    ["3.35", "2026-10-05", "Dev tab goes dark so it's easy to tell apart", 1],
+    ["3.31", "2026-10-04", "Coach and Dev tabs in the chat", 1],
+    ["3.30", "2026-10-04", "Full chat history with Show earlier messages", 0],
+    ["3.28", "2026-10-02", "Notifications replace each other instead of stacking up", 0],
+    ["3.23", "2026-10-02", "Athletes & usage shows API cost", 1],
+    ["3.22", "2026-10-02", "Set up Peak card on Today", 0],
+    ["3.21", "2026-10-02", "Safer sign-in: a refused sign-in keeps nothing on the phone", 0],
+    ["3.18", "2026-10-01", "Ride indoors: move any planned ride under 2 hours to the trainer", 0],
+    ["3.17", "2026-10-01", "Pull down to refresh on every tab", 0],
+    ["3.13", "2026-10-01", "Updates arrive properly", 0],
+    ["3.12", "2026-10-01", "The Offline banner only shows when you really are offline", 0],
+    ["3.9", "2026-10-01", "Tap a logged food to change or delete it", 0],
+    ["3.8", "2026-10-01", "The Food tab has its own chat: type, talk or snap a photo", 0],
+    ["3.7", "2026-10-01", "Install guide for putting Peak on your home screen", 0],
+    ["3.6", "2026-10-01", "Goals page: your races, the season's phases and your goal", 0],
+    ["3.5", "2026-10-01", "Fitness chart compares with your last two years", 0],
+    ["3.4", "2026-09-30", "Delete chat messages", 0],
+    ["3.3", "2026-09-30", "Disconnect Strava from Settings", 0],
+    ["3.2", "2026-09-30", "Switches for coaching options and the Food tab", 0],
+    ["3.0", "2026-09-30", "Peak replaces Telegram: chat, voice, photos, notifications, sign-up and Strava", 0]
+  ];
+
+  function openChangelog() {
+    var coach = !!(state.me && state.me.coach);
+    var rows = CHANGELOG.filter(function (e) { return coach || !e[3]; }).map(function (e) {
+      return '<div class="cl-r"><b>' + esc(e[0]) + '</b><span class="cl-d">' +
+        esc(dnum(e[1]) + ' ' + new Date(e[1] + 'T12:00:00').toLocaleDateString('en-GB', { month: 'short' })) +
+        '</span><span class="cl-t">' + esc(e[2]) + '</span></div>';
+    }).join('');
+    var dr = $('#drawer');
+    dr.innerHTML = '<header class="dr-h"><div><p class="dr-k">Peak</p><h2 class="dr-t">What\u2019s new</h2></div>' +
+      '<button type="button" class="dr-x" id="drX" aria-label="Close">\u2715</button></header>' +
+      '<div class="dr-b"><section class="card"><div class="cl">' + rows + '</div></section></div>';
+    dr.classList.add('on');
+    document.body.classList.add('drawn');
+    $('#drX').onclick = closeDetail;
+  }
+
+
   /* The version row asks the RUNNING service worker for its cache name rather than
      trusting a constant in this file: app.js and sw.js deploy together, but a client
      can hold an old worker for days, and the whole point of the row is telling those
@@ -5721,7 +5781,8 @@
     // file — a constant here can lie about what is actually installed, which is the
     // one question this line exists to answer ("am I stale or just syncing?",
     // Jamie, 13 Aug 2026). Filled in async by fillAppVersion().
-    var h = '<p class="set-ver">Peak <span id="appVersion">checking…</span></p>' +
+    var h = '<p class="set-ver" id="setVer" role="button" tabindex="0">Peak <span id="appVersion">checking…</span>' +
+      '<span class="set-new">what\u2019s new \u203A</span></p>' +
       notifH +
       '<div class="drawers">' +
       (ATHLETES.length > 1 ? drawer('athlete', 'Athlete', 'showing ' + curName, athleteH) : '') +
@@ -5742,6 +5803,11 @@
       el.addEventListener('toggle', function () { DRAWERS[el.dataset.drawer] = el.open; });
     });
     fillAppVersion();
+    var sv = $('#setVer');
+    if (sv) {
+      sv.onclick = openChangelog;
+      sv.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openChangelog(); } };
+    }
     fillClaudeRow();
     // Disconnect Strava: two taps, no browser dialog (lib/strava_link.py disconnect).
     var so = $('#stravaOff');
