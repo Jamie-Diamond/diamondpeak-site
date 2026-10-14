@@ -564,8 +564,7 @@
     return card('This week', '<div><p class="wsum">' + esc(bits.join(' · ')) + '</p>' +
       (target ? '<div class="bar' + (pct > 110 ? ' warn' : '') + '"><i style="width:' +
         Math.min(100, pct || 0) + '%"></i></div>' : '') + '</div>',
-      { foot: 'As of ' + esc(d.generated || 'unknown') +
-              (d.refreshCadence ? '. Refreshes ' + d.refreshCadence + '.' : '.') });
+      {});
   }
 
 
@@ -620,7 +619,7 @@
               '" data-sp="' + esc(s.sport || '') + '" data-n="' + esc(s.name || '') + '">' +
               '<span class="sp ' + sportClass(s.sport) + '"></span>' +
               esc(s.name || s.sport) + '</h2>' +
-              '<p class="hero-m">' + esc([hhmm(s.duration_min), tssTxt,
+              '<p class="hero-m">' + esc([s.duration_min ? hhmm(s.duration_min) : null, tssTxt,
                 s.detail].filter(Boolean).join(' · ')) + '</p>' +
               (s.status === 'completed' ? '<p class="hero-done">✓ Completed</p>' : '');
           }).join('<hr class="hero-r">')
@@ -640,7 +639,7 @@
       .reduce(function (a, s) { return a + (s.tss || 0); }, 0);
     if (pendingToday > 0) {
       h += '<p class="hint">' + esc(Math.round(pendingToday)) +
-        ' tss still planned today, not yet in Fitness / Fatigue / Form</p>';
+        ' tss still to do today, not in these yet</p>';
     }
 
     // Ramp and heat were two full cards each. They are two numbers - so they are
@@ -657,10 +656,6 @@
     }
     if (d.resolvedFtp) signals += mini(d.resolvedFtp + 'w', 'ftp');
     if (signals) h += '<div class="minis">' + signals + '</div>';
-    if (ramp != null && Math.abs(ramp) > cap) {
-      h += '<p class="flag">Ramp ' + signed(ramp) + ' is above the ' + cap.toFixed(0) +
-        '-point weekly guide.</p>';
-    }
 
     h += weekSoFar(d);
 
@@ -671,13 +666,13 @@
       h += card('Seven days either side',
         '<div class="readout" id="ro-today"><b>—</b><span></span></div>' +
         '<div class="chartbox"><canvas id="c-today"></canvas></div>',
-        { foot: 'Daily TSS by sport, faded where still planned. Line is form (TSB).' });
+        {});
     }
 
-    h += currentStateCard(d.currentState);
 
     h += weightCard(d.weightTrend);
     h += wellnessCard(d.wellnessTrend);
+    h += currentStateCard(d.currentState);      // at the bottom (Jamie, 14 Oct 2026)
 
     if (state.me) {
       h += '<p class="hint upd">' + (state.updated ? 'Updated ' + esc(state.updated) + ' · ' : '') +
@@ -726,12 +721,13 @@
       return !a.closed && a.status !== 'done' && a.status !== 'dropped';
     }).sort(function (a, b) { return String(a.due || '9').localeCompare(String(b.due || '9')); });
     open.slice(0, 5).forEach(function (a) {
+      // Two lines, tap for the rest: the coach writes these as notes to itself.
       rows.push('<div class="cs-row"><b>' + esc(a.due ? dow(a.due) + ' ' + dnum(a.due) : 'Open') +
-        '</b><span>' + esc(a.action || '') + '</span></div>');
+        '</b><span class="cs-clamp" onclick="this.classList.toggle(\'open\')">' + esc(a.action || '') + '</span></div>');
     });
     if (!rows.length) return '';
     return card('Current state', '<div class="cs">' + rows.join('') + '</div>',
-      { foot: open.length > 5 ? (open.length - 5) + ' more open actions' : null });
+      { foot: open.length > 5 ? '+' + (open.length - 5) + ' more' : null });
   }
 
   /* HRV & resting HR (Jamie, 14 Oct 2026, in place of a body-fat view). The last 30 days:
@@ -825,7 +821,7 @@
       (sR ? '<p class="wl-h">Resting HR</p>' + sR : '') +
       '<p class="wt-k wl-k"><span><i class="wl-bk"></i>normal</span><span><i class="wt-avg"></i>7-day avg</span>' +
       '<span><i class="wt-dot bad"></i>low recovery</span><span><i class="wt-dot good"></i>better</span></p>',
-      { foot: 'Normal = your last 28 days \u00b1 half a standard deviation. Red tile = the 7-day average has left it, or this morning is more than 1 SD off. Same rule as the morning card.' });
+      { foot: 'Band: your 28-day normal \u00b1 \u00bd SD.' });
   }
 
   // 14-day mean of the morning readings by date (Jamie, 14 Oct 2026: "all should be 14").
@@ -876,8 +872,7 @@
       '<svg class="spark wt" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
         '<polyline points="' + line + '"/><path class="wt-d" d="' + dots + '"/></svg>' +
       '<p class="wt-k"><i class="wt-dot"></i>reading<i class="wt-avg"></i>14-day average</p>',
-      { foot: 'Scale readings from Intervals.icu since ' + dow(pts[0].date) + ' ' +
-              dnum(pts[0].date) + '.' });
+      {});
   }
   var WEIGHT_SHOW_DAYS = 60;
 
@@ -2451,9 +2446,7 @@
     // Say what is not known rather than folding it into a number.
     if (mTot.nodata) {
       h += '<p class="hint">' + mTot.nodata + ' day' + (mTot.nodata === 1 ? '' : 's') +
-        ' this month are outside the published window' +
-        (cov ? ' (' + cov.from + ' to ' + cov.to + ')' : '') +
-        ' — not counted as rest.</p>';
+        ' with no data, not counted as rest.</p>';
     }
 
     var sel = state.calDay && by[state.calDay] ? by[state.calDay] : null;
@@ -2465,7 +2458,7 @@
             ? 'Rest day — nothing recorded'
             : 'Outside the published data window') + '</div>') + '</div>', { flush: true });
     } else {
-      h += '<p class="hint">Tap a day for its sessions.</p>';
+
     }
 
     // Coming up lives with the calendar (Jamie, 14 Oct 2026), not on Today.
@@ -2573,34 +2566,27 @@
     var META = {
       fit:  fitMetric() === 'dur'
         ? { title: calYears ? 'Hours · by year' : 'Hours · three seasons',
-            foot: 'Rolling training hours per week, smoothed on the same 42-day ' +
-                  'constant as CTL and ' + (calYears ? 'overlaid by calendar date' : 'aligned on race day') +
-                  '. This is volume, not intensity: switch to TSS for the load that came with it.' }
+            foot: 'Hours per week, 42-day smoothing, ' + (calYears ? 'by calendar date' : 'aligned on race day') + '.' }
         : { title: calYears ? 'Fitness · this year and the last two' : 'Fitness · three seasons',
             foot: calYears
               ? 'CTL by calendar date, against the same dates in earlier years. Pinch, scroll or ' +
                 'drag to zoom.'
               : 'CTL by calendar date. Pinch, scroll or drag to zoom; the shaded band is the race-day target.' },
       load: { title: 'Seven days either side',
-              foot: 'Bars are daily TSS, faded where still planned. The line is form (TSB).' },
+              foot: 'Faded = planned.' },
       heat: { title: 'Heat acclimation',
-              foot: 'Score decays with a 21-day constant. Dots are logged heat exposures.' },
+              foot: 'Dots are heat sessions.' },
       fuel: { title: 'Fuelling capacity',
-              foot: 'Best carbohydrate rate achieved in the trailing 14 days, bike and run ' +
-                    'separately. A gap means nothing was logged in that window.' },
+              foot: 'Best carbs per hour over 14 days. Gap = nothing logged.' },
       plan: { title: 'Plan vs actual',
               foot: 'Weekly planned and completed TSS.' },
       longrun: state.lrMode === 'total'
         ? { title: 'Total run km by week',
-            foot: 'Every run in the week added together, with the week-on-week build. ' +
-                  '10% is the usual ceiling for a build week; the dashed line is the race.' }
+            foot: 'Build above 10% is flagged. Dashed line = race.' }
         : { title: 'Longest run by week',
-            foot: 'The longest single run in each week, with the week-on-week build. ' +
-                  '10% is the usual ceiling for a build week; the dashed line is the race.' },
+            foot: 'Build above 10% is flagged. Dashed line = race.' },
       zones: { title: 'Time in zones vs target',
-               foot: 'Bike by power, run by pace, swim by pace against CSS. Bars are the ' +
-                     'share of moving time in each band; the notch is the blueprint target ' +
-                     'for the current phase.' }
+               foot: 'Notch = target for this phase.' }
     }[sel];
 
     // Which metric, then which discipline. Both series sets are published per sport for
@@ -2704,9 +2690,7 @@
             '%"></i></div></span><span class="rt"><b>' + Number(last).toFixed(1) +
             'h</b>peak ' + Number(peak).toFixed(1) + 'h</span></div>';
         }).join('') + '</div>', { flush: true,
-          foot: 'Hours per week now, and the highest this season, on the same 42-day ' +
-                'smoothing as the chart. Total counts every activity logged, including ' +
-                'strength and anything outside the three disciplines.' });
+          foot: 'Total includes strength and other activities.' });
       }
     }
 
@@ -2847,16 +2831,14 @@
               (e[1] != null ? Number(e[1]).toFixed(2) : '—') + '</td><td class="t">' +
               (e[2] != null ? Number(e[2]).toFixed(0) + '%' : '—') + '</td></tr>';
           }).join('') + '</tbody></table>',
-          { flush: true, foot: 'Dose is the credit for that exposure; score is the ' +
-                              'acclimation level it left you at. Neither is a temperature.' });
+          { flush: true });
       }
     }
 
     if (sel === 'fuel') {
       var f = fuelSeries(d);
       if (!f) {
-        h += '<p class="hint">No fuelling logged yet. Tell the coach what you took ' +
-             'on and it lands here.</p>';
+        h += '<p class="hint">No fuelling logged yet. Tell the coach.</p>';
       } else {
         var latest = function (rows) {
           for (var i = rows.length - 1; i >= 0; i--) if (rows[i].y != null) return rows[i].y;
@@ -2911,10 +2893,7 @@
               '</td><td>' + (lg.nutrition_mg_sodium != null
                 ? Math.round(lg.nutrition_mg_sodium) + 'mg' : '—') + '</td></tr>';
           }).join('') + '</tbody></table></div>',
-          { flush: true, foot: 'A rate held for four hours is a different result from the ' +
-                              'same rate held for one, so duration is shown with it. Water ' +
-                              'and sodium appear once logged - sodium capture is new, so ' +
-                              'older sessions have none.' });
+          { flush: true });
       }
     }
 
@@ -2922,7 +2901,7 @@
       var total = state.lrMode === 'total';
       var lr = longRunWeeks(d, state.lrMode);
       if (!lr.length) {
-        h += '<p class="hint">No runs with distance in the published window.</p>';
+        h += '<p class="hint">No runs yet.</p>';
       } else {
         var peak = lr.reduce(function (m, r) { return r.km > m.km ? r : m; }, lr[0]);
         var over = lr.filter(function (r) { return r.pct != null && r.pct > 10; }).length;
@@ -2943,8 +2922,7 @@
               (total ? r.n + ' · longest ' + r.longest.toFixed(1) + 'km'
                      : esc((r.name || '').slice(0, 26))) + '</td></tr>';
           }).join('') + '</tbody></table></div>',
-          { flush: true, foot: 'Amber bars and red percentages are weeks that grew the ' +
-                              (total ? 'weekly total' : 'long run') + ' by more than 10%.' });
+          { flush: true, foot: 'Amber = grew more than 10%.' });
       }
     }
 
@@ -3981,13 +3959,11 @@
 
   function zoneExtras(d) {
     if (!(d || {}).zoneDistribution) {
-      return '<p class="hint">Time in zones appears here once the nightly refresh has ' +
-             'published it.</p>';
+      return '<p class="hint">No zone data yet.</p>';
     }
     var z = zoneData(d);
     if (!z) {
-      return '<p class="hint">No zone time recorded for your focus sports in this ' +
-             'window.</p>';
+      return '<p class="hint">No zone data yet.</p>';
     }
 
     var wl = ZONE_WINS.filter(function (o) { return o[0] === z.win; })[0];
@@ -4391,8 +4367,7 @@
               '<td>' + (hold || rtime(r.now_s)) + '</td><td class="t">' + (hold ? '' : rtime(r.raceday_s)) +
               '</td><td>' + esc(r.goal || '\u2014') + '</td></tr>';
           }).join('') + '</tbody></table>',
-          { flush: true, foot: 'Now: from your tested threshold pace. Race day: with the training ' +
-                               'the plan has built by then. Estimates.' });
+          { flush: true, foot: 'Estimates.' });
       }
     } else {
       h += '<section class="hero">' +
@@ -4627,7 +4602,7 @@
       (x.carb && x.carb.dur) ? ['Over', hhmm(x.carb.dur)] : null,
       (x.carb && x.carb.dur && x.carb.g_per_hr != null)
         ? ['Total carbohydrate', Math.round(x.carb.g_per_hr * x.carb.dur / 60) + ' g'] : null
-    ]), { foot: 'Sodium comes from your reply to the after-session question.' });
+    ]));
 
     if (heatOn() && (done || x.heat)) h += card('Heat', x.heat
       ? kvRows([
@@ -5555,6 +5530,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.62", "2026-10-14", "Tidier wording across the app; Current state moves to the bottom of Today", 0],
     ["3.61", "2026-10-14", "Coming up moves to the Calendar tab; trend lines use all your readings, not just what's on screen", 0],
     ["3.60", "2026-10-14", "HRV and resting HR judged against your own spread (standard deviation), as sports-science guidance recommends", 0],
     ["3.59", "2026-10-14", "HRV and resting HR show your normal range as a band, with off-normal mornings in red", 0],
@@ -5753,10 +5729,7 @@
           '<span class="gate-go">' + (on ? '✓' : '+') + '</span></button>';
       }).join('') + '</div>',
       { flush: true,
-        foot: 'Sets which sports get their own fitness series, zone card and trend tab. ' +
-              'Strength and everything else still appear in the calendar, the week ' +
-              'totals and the load chart, because they are training you did. The last ' +
-              'sport cannot be turned off - an app focused on nothing has nothing to show.' });
+        foot: 'Other sports still count in the calendar and totals.' });
 
     // Only offered when the data exists. A toggle that cannot reveal anything is
     // worse than no toggle: it implies the feature is broken rather than not published.
@@ -5769,9 +5742,7 @@
         '<span class="gate-row-t"><b>Food tab</b><span>' +
         (fon ? 'showing in the bar' : 'hidden') + '</span></span>' + SWITCH + '</button></div>',
         { flush: true,
-          foot: 'Hides or shows the Food tab on this device. It is opt-in per athlete ' +
-                'and off unless nutrition data is published for them, so turning it ' +
-                'on here cannot reveal anyone else\u2019s log.' });
+          foot: 'This device only.' });
     }
 
     if (state.nutr && state.nutr.nutrition_enabled) {
@@ -5803,8 +5774,7 @@
       '<tr><td class="lbl">Threshold power</td><td>' +
       (d.resolvedFtp ? d.resolvedFtp + 'w' : '—') + '</td></tr>' +
       '</tbody></table>',
-      { flush: true, foot: 'Figures come from the nightly published subset. ' +
-                          'Body weight, HRV and resting HR are never published.' });
+      { flush: true });
 
     var css = (d.swimLog || []).filter(function (x) {
       return /css|test/i.test(x.name || '');
@@ -5829,8 +5799,7 @@
         return '<tr><td class="lbl">' + esc(r[0]) + '</td><td class="t">' + esc(r[1]) +
           '</td></tr><tr class="prov"><td colspan="2">' + esc(r[2]) + '</td></tr>';
       }).join('') + '</tbody></table>',
-      { flush: true, foot: 'Every figure the coach quotes is derived from these. If one ' +
-                          'looks wrong, this is the input to challenge.' });
+      { flush: true, foot: 'The coach works from these. Wrong one? Tell the coach.' });
 
     if (css.length) {
       dataH += card('CSS test history', '<table class="tbl">' +
