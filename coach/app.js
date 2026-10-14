@@ -5603,6 +5603,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.82", "2026-10-14", "Coach / Dev switch is solid, so chat text doesn't show through", 1],
     ["3.81", "2026-10-14", "Recovery card: sleep joins HRV and resting HR, against your own normal", 0],
     ["3.80", "2026-10-14", "±7 days chart in plain English: Form, Fatigue, Daily load", 0],
     ["3.79", "2026-10-14", "Weight, HRV and resting HR graphs label the current value and the highs and lows", 0],

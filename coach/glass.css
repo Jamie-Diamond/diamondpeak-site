@@ -5,7 +5,7 @@
    sheets. Always on since 3.77/3.78 (html.glass, set in app.html); the Dev tab gets the
    dark glass version at the end of this file. */
 
-html.glass{--glass-v:'141'}
+html.glass{--glass-v:'142'}
 html.glass body:not(.dev-chat){
   --paper:rgba(255,255,255,.62);
   --paper-2:transparent;
@@ -445,3 +445,17 @@ html.glass body:not(.dev-chat) .drawers{background:var(--glass);border:0;border-
 html.glass body:not(.dev-chat) .gate-row-t span,
 html.glass body:not(.dev-chat) .crow-s,
 html.glass body:not(.dev-chat) .set-ver{text-transform:none;letter-spacing:0;font-size:12.5px}
+/* Coach / Dev switch in the coaching chat: a solid frosted bar, not the see-through
+   segmented track - messages scrolled under it read through (Jamie, 14 Oct 2026). */
+html.glass body:not(.dev-chat) #chatTabs{background:rgba(236,240,245,.94);padding:3px;border-radius:12px;
+  box-shadow:var(--rim), 0 6px 18px rgba(15,25,40,.12);
+  backdrop-filter:blur(30px) saturate(180%);-webkit-backdrop-filter:blur(30px) saturate(180%)}
+html.glass body:not(.dev-chat) #chatTabs button{text-transform:none;letter-spacing:0;font-size:13px;font-weight:500}
+/* Header and the message box strip: frosted enough that scrolled text doesn't read through. */
+html.glass body:not(.dev-chat) .masthead{background:rgba(242,245,249,.94)}
+html.glass body:not(.dev-chat) .composer{background:rgba(238,242,246,.86);
+  backdrop-filter:blur(24px) saturate(170%);-webkit-backdrop-filter:blur(24px) saturate(170%);
+  border-radius:22px;margin:0 8px;left:0;right:0}
+html.glass body.dev-chat .masthead{background:rgba(13,17,23,.86)}
+html.glass body.dev-chat .composer{background:rgba(13,17,23,.86);border-radius:22px;margin:0 8px;
+  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px)}
