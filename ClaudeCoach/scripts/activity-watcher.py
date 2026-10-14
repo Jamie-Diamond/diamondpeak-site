@@ -290,6 +290,7 @@ Interval source: prefer Strava laps when they give a cleaner breakdown than ICU 
 Rules for ANALYSIS — each logical line must be a separate output line (no semicolons to merge lines):
 
 Always lead with a one-sentence narrative verdict (e.g. "Solid Z2. Form held to the end.").
+Describe what the data shows; never offer a CAUSE for it (tiredness, fatigue, a fitness ceiling, heat, a sensor fault, illness) unless a computed note above or the athlete says so. A fade is "the last km slowed by 50 s", not "points to tiredness": the question line is where the athlete tells you why.
 Always END with the session's question line from its format below ("How did it feel?", or
 the strength question). Short easy-session messages keep it too.
 

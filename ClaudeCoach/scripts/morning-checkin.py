@@ -170,6 +170,13 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
     if post_race_recovery:
         form_line_rule = ("[Form line — OMIT ENTIRELY: post-race recovery. High Form is "
                           "expected and is never a cue for quality work.]")
+    elif off_normal:
+        # "Fresh legs, good day for quality" beside "resting HR off your normal" told
+        # Kathryn two opposite things on one card (shadow week, 14 Oct 2026). Training
+        # freshness says nothing about recovery when wellness is off, so no green line.
+        form_line_rule = """[Form line — only include if notable:
+  · Form < −20: ⚠️ Heavy load today — keep intensity in check
+  · Otherwise omit entirely: wellness is off normal today, so never call it a good day for quality]"""
     else:
         form_line_rule = """[Form line — only include if notable:
   · Form < −20: ⚠️ Heavy load today — keep intensity in check

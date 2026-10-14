@@ -135,8 +135,34 @@ def _fuel_line(events, athlete_cfg, session_log) -> str:
     return f"{g} g/hr carbs + 500-750 ml/hr fluid"
 
 
+def _to_brief(events) -> list[dict]:
+    """Tomorrow's sessions worth a brief: planned workouts with Load >= 30 or 40+ min.
+    Decided here, not by the model (shadow week, 13 Oct 2026: with only a strength
+    session of no set length on the calendar, Sonnet stayed silent and Haiku briefed it)."""
+    out = []
+    for e in events or []:
+        if (e.get("category") or "WORKOUT") != "WORKOUT":
+            continue
+        if (e.get("icu_training_load") or 0) >= 30 or (e.get("moving_time") or 0) >= 40 * 60:
+            out.append(e)
+    return out
+
+
+def _sessions_line(events) -> str:
+    """The sessions the brief must cover, in calendar order."""
+    parts = []
+    for e in sorted(events, key=lambda e: e.get("start_date_local") or ""):
+        bits = [str(e.get("type") or ""), str(e.get("name") or "session")]
+        if e.get("moving_time"):
+            bits.append(f"{round(e['moving_time'] / 60)} min")
+        if e.get("icu_training_load"):
+            bits.append(f"Load {e['icu_training_load']}")
+        parts.append(" · ".join(b for b in bits if b))
+    return "; ".join(parts)
+
+
 def _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries, long_run_cap_km=None,
-                  pace_bands=None, form="", hr_cap="", fuel=""):
+                  pace_bands=None, form="", hr_cap="", fuel="", sessions=""):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -199,7 +225,7 @@ Reference for working out targets (NEVER print these lines; they are not part of
   {form_line}
   {cap_line}
 
-Step 3 — If no events tomorrow, or only events with planned Load < 30 AND duration < 40 min: output nothing. Stop.
+{"Step 3 — Tomorrow's sessions to brief, already decided (cover EVERY one of these, and no others; with two or more, title them joined with ' + '): " + sessions if sessions else "Step 3 — If no events tomorrow, or only events with planned Load < 30 AND duration < 40 min: output nothing. Stop."}
 {long_run_cap_block}
 Step 4 — Output the night-before brief in Telegram Markdown (no preamble, no sign-off):
 
@@ -276,12 +302,14 @@ def run_athlete(slug, athlete_cfg):
     # does, so a long run can't be quoted past the progression ceiling here either.
     long_run_cap = None
     events = []
+    events_ok = False
     try:
         from primitives.modulation import classify_session_type as _lr_classify
         from icu_api import IcuClient as _Icu
         tomorrow = (date.today() + timedelta(days=1)).isoformat()
         athlete_cfg_full = json.loads(ATHLETES_CONFIG.read_text())[slug]
         events = _Icu(athlete_cfg_full["icu_athlete_id"], athlete_cfg_full["icu_api_key"]).get_events(tomorrow, tomorrow)
+        events_ok = True
         session_log_path = adir / "session-log.json"
         session_log = json.loads(session_log_path.read_text()) if session_log_path.exists() else []
         long_run_cap = _lr_cap(events, session_log, _lr_classify)
@@ -329,9 +357,19 @@ def run_athlete(slug, athlete_cfg):
         fuel = _fuel_line(events, athlete_cfg, _sl) if coaching_prefs.fuelling_on(slug) else ""
     except Exception as exc:
         print(f"[{slug}] fuel pre-compute failed: {exc}", file=sys.stderr)
+    # Whether to brief at all is decided here when the calendar was read (_to_brief).
+    sessions = ""
+    if events_ok:
+        _brief = _to_brief(events)
+        if not _brief:
+            print(f"[{slug}] nothing tomorrow worth a brief - silent", file=sys.stderr)
+            ops_log.record_run("night-before-brief", athlete=slug, ok=True,
+                               detail="silent (no session worth a brief, decided in code)")
+            return
+        sessions = _sessions_line(_brief)
     prompt = _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries,
                            long_run_cap_km=long_run_cap, pace_bands=pace_bands,
-                           form=form, hr_cap=hr_cap, fuel=fuel)
+                           form=form, hr_cap=hr_cap, fuel=fuel, sessions=sessions)
     prompt += coaching_prefs.prompt_note(slug)
 
     with open(log_file, "a") as lf:

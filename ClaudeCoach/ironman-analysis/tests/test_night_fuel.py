@@ -27,3 +27,15 @@ def test_long_ride_uses_the_athletes_ramp():
     line = nb._fuel_line([{"type": "Ride", "moving_time": 12600, "icu_training_load": 180}],
                          {"nutrition_target_g_hr": 90}, [])
     assert line.endswith("g/hr carbs + 500-750 ml/hr fluid") and not line.startswith("0 ")
+
+
+def _ev(t, n, m, load):
+    return {"category": "WORKOUT", "type": t, "name": n, "moving_time": m,
+            "icu_training_load": load, "start_date_local": "2026-10-14T00:00:00"}
+
+
+def test_brief_decided_in_code():
+    assert nb._to_brief([_ev("WeightTraining", "Strength A", None, None)]) == []
+    both = nb._to_brief([_ev("WeightTraining", "Strength A", 2400, 20), _ev("Run", "Easy run", 2880, 55)])
+    assert [e["name"] for e in both] == ["Strength A", "Easy run"]
+    assert "Easy run · 48 min · Load 55" in nb._sessions_line(both)
