@@ -747,22 +747,43 @@
     var rows = (wt || []).filter(function (r) { return r && r.date; });
     if (rows.length < 7) return '';
     var last = rows[rows.length - 1].date, tL = Date.parse(last);
-    var normal = function (key) {
+    // An athlete's normal on a given day: the mean of the 28 days before it (needs 14).
+    var normalOn = function (key, t) {
       var v = rows.filter(function (r) {
-        var t = Date.parse(r.date); return r[key] != null && t < tL && t >= tL - 28 * 864e5;
+        var tr = Date.parse(r.date); return r[key] != null && tr < t && tr >= t - 28 * 864e5;
       }).map(function (r) { return Number(r[key]); });
       return v.length >= 14 ? v.reduce(function (a, b) { return a + b; }, 0) / v.length : null;
     };
     var shown = rows.filter(function (r) { return Date.parse(r.date) > tL - 30 * 864e5; });
-    function spark(key, base) {
+    // Band = the normal range: HRV within 10% of normal, resting HR within 6% (the morning
+    // card's thresholds). It moves with the athlete's normal day by day (Jamie, 14 Oct 2026:
+    // "a coloured band for normal ... with outliers coloured"). Outliers: red on the side
+    // that means under-recovered (HRV low, resting HR high), green on the other.
+    var BAND = { hrv: 0.10, rhr: 0.06 };
+    function spark(key) {
       var pts = shown.filter(function (r) { return r[key] != null; });
       if (pts.length < 3) return '';
-      var vals = pts.map(function (r) { return Number(r[key]); }).concat(base != null ? [base] : []);
+      var f = BAND[key], bad = key === 'hrv' ? -1 : 1;
+      var band = pts.map(function (r) {
+        var n = normalOn(key, Date.parse(r.date));
+        return n == null ? null : { r: r, lo: n * (1 - f), hi: n * (1 + f) };
+      }).filter(Boolean);
+      var vals = pts.map(function (r) { return Number(r[key]); });
+      band.forEach(function (b) { vals.push(b.lo, b.hi); });
       var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals), span = (hi - lo) || 1;
       var W = 300, H = 60, t0 = tL - 29 * 864e5;
       var x = function (r) { return ((Date.parse(r.date) - t0) / (29 * 864e5) * W).toFixed(1); };
       var y = function (v) { return (H - 4 - (v - lo) / span * (H - 8)).toFixed(1); };
-      var dots = pts.map(function (r) { return 'M' + x(r) + ' ' + y(Number(r[key])) + 'h0'; }).join('');
+      var bandPath = band.length > 1 ? 'M' + band.map(function (b) { return x(b.r) + ' ' + y(b.hi); }).join(' L') +
+        ' L' + band.slice().reverse().map(function (b) { return x(b.r) + ' ' + y(b.lo); }).join(' L') + 'Z' : '';
+      var byDate = {};
+      band.forEach(function (b) { byDate[b.r.date] = b; });
+      var dots = { n: '', bad: '', good: '' };
+      pts.forEach(function (r) {
+        var v = Number(r[key]), b = byDate[r.date], k = 'n';
+        if (b && (v > b.hi || v < b.lo)) k = ((v > b.hi ? 1 : -1) === bad) ? 'bad' : 'good';
+        dots[k] += 'M' + x(r) + ' ' + y(v) + 'h0';
+      });
       var line = pts.map(function (r) {
         var t = Date.parse(r.date), win = pts.filter(function (q) {
           var tq = Date.parse(q.date); return tq <= t && tq > t - 7 * 864e5;
@@ -770,14 +791,16 @@
         return x(r) + ',' + y(win.reduce(function (a, q) { return a + Number(q[key]); }, 0) / win.length);
       }).join(' ');
       return '<svg class="spark wt wl" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
-        (base != null ? '<path class="wl-n" d="M0 ' + y(base) + ' H' + W + '"/>' : '') +
-        '<polyline points="' + line + '"/><path class="wt-d" d="' + dots + '"/></svg>';
+        (bandPath ? '<path class="wl-b" d="' + bandPath + '"/>' : '') +
+        '<polyline points="' + line + '"/>' +
+        '<path class="wt-d" d="' + dots.n + '"/><path class="wt-d bad" d="' + dots.bad + '"/>' +
+        '<path class="wt-d good" d="' + dots.good + '"/></svg>';
     }
     var today = rows.filter(function (r) { return r.date === last; })[0] || {};
-    var hb = normal('hrv'), rb = normal('rhr');
+    var hb = normalOn('hrv', tL), rb = normalOn('rhr', tL);
     var hOff = today.hrv != null && hb && today.hrv <= 0.9 * hb;
     var rOff = today.rhr != null && rb && today.rhr >= 1.06 * rb;
-    var sH = spark('hrv', hb), sR = spark('rhr', rb);
+    var sH = spark('hrv'), sR = spark('rhr');
     if (!sH && !sR) return '';
     return card('HRV & resting HR',
       '<div class="figures">' +
@@ -786,8 +809,9 @@
       '</div>' +
       (sH ? '<p class="wl-h">HRV</p>' + sH : '') +
       (sR ? '<p class="wl-h">Resting HR</p>' + sR : '') +
-      '<p class="wt-k"><i class="wt-dot"></i>morning<i class="wt-avg"></i>7-day average<i class="wl-nk"></i>your normal</p>',
-      { foot: 'Normal = your previous 28 days. Red = off normal (HRV 10% below, resting HR 6% above), as on the morning card.' });
+      '<p class="wt-k wl-k"><span><i class="wl-bk"></i>normal</span><span><i class="wt-avg"></i>7-day avg</span>' +
+      '<span><i class="wt-dot bad"></i>off normal</span><span><i class="wt-dot good"></i>better</span></p>',
+      { foot: 'Normal = your previous 28 days. The band is HRV within 10% and resting HR within 6% of it, as on the morning card.' });
   }
 
   // 14-day mean of the morning readings by date (Jamie, 14 Oct 2026: "all should be 14").
@@ -5508,6 +5532,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.59", "2026-10-14", "HRV and resting HR show your normal range as a band, with off-normal mornings in red", 0],
     ["3.58", "2026-10-14", "HRV & resting HR on Today, against your own normal; weight for every athlete with a scale", 0],
     ["3.57", "2026-10-14", "Weight tile is a 14-day mean too; scrolling no longer drags the map; heat is hidden when it's switched off", 0],
     ["3.56", "2026-10-14", "Session insights: efficiency against your normal, \u2605 on 90-day best powers, time in zones, split or fade, and HR recovery", 0],

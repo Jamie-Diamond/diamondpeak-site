@@ -760,9 +760,16 @@ body.signup.in-chat main{padding-bottom:calc(86px + env(safe-area-inset-bottom,0
 .wt-k{margin:8px 0 0;text-align:center;font:500 10px 'DM Mono',monospace;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
 .spark.wt polyline{stroke-width:2}
 .spark.wl{height:70px}
-.spark.wl .wl-n{fill:none;stroke:var(--ink);stroke-width:1.2;stroke-dasharray:4 3;opacity:.45;vector-effect:non-scaling-stroke}
+.spark.wl .wl-b{fill:var(--accent);opacity:.13;stroke:none}
+.spark.wt .wt-d.bad{stroke:var(--red);opacity:.95}
+.spark.wt .wt-d.good{stroke:#22b3a6;opacity:.95}
+.wt-dot.bad{background:var(--red);margin-left:14px}
+.wt-dot.good{background:#22b3a6;margin-left:14px}
+.wl-k{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 14px}
+.wl-k span{white-space:nowrap}
+.wl-k i{margin-left:0!important}
+.wl-bk{display:inline-block;vertical-align:middle;width:16px;height:9px;background:var(--accent);opacity:.18;margin-right:6px}
 .wl-h{margin:12px 16px 2px;font:500 9.5px 'DM Mono',monospace;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}
-.wl-nk{display:inline-block;vertical-align:middle;width:16px;border-top:1.2px dashed var(--ink);opacity:.45;margin:0 6px 0 14px}
 .wt-dot,.wt-avg{display:inline-block;vertical-align:middle;margin-right:6px}
 .wt-dot{width:6px;height:6px;border-radius:50%;background:var(--muted)}
 .wt-avg{width:16px;border-top:2px solid var(--accent);margin-left:14px}
@@ -1392,6 +1399,6 @@ body.drawn{overflow:hidden}
      broken launch. A new URL cannot hit that cache entry. It always equals the
      number in sw.js CACHE (peak-vN): bump both on every release, enforced by
      ClaudeCoach/ironman-analysis/tests/test_peak_release.py. -->
-<script src="app.js?v=118" defer></script>
+<script src="app.js?v=119" defer></script>
 </body>
 </html>
