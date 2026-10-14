@@ -16,7 +16,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <!-- Glass style (glass.css) and Plus Jakarta Sans: the only look since 3.78 (Jamie,
      14 Oct 2026). Set before first paint. -->
-<link rel="stylesheet" href="glass.css?v=138">
+<link rel="stylesheet" href="glass.css?v=139">
 <script>try{document.documentElement.classList.add('glass');
 var gf="jakarta";document.documentElement.setAttribute("data-font",gf);
 var GF={inter:'Inter:wght@400;500;600;700',manrope:'Manrope:wght@400;500;600;700',jakarta:'Plus+Jakarta+Sans:wght@400;500;600;700'};
@@ -768,6 +768,14 @@ body.signup.in-chat main{padding-bottom:calc(86px + env(safe-area-inset-bottom,0
 .wt-k{margin:8px 0 0;text-align:center;font:500 10px 'DM Mono',monospace;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
 .spark.wt polyline{stroke-width:2}
 .spark.wl{height:86px;margin-top:-4px}
+.spk{position:relative;margin:0 16px}
+.card > .spk:not(.card-h):not(.card-f){padding:0}   /* beats the card body padding, so labels and line share one width */
+.spk .spark{margin:0}
+.spk-l{position:absolute;white-space:nowrap;pointer-events:none;font-size:11px;font-weight:600;color:var(--ink-2);background:rgba(255,255,255,.8);
+  line-height:1;padding:2px 4px;border-radius:6px}
+.spk-l.end{font-size:13px;font-weight:700;color:#fff;background:var(--accent);box-shadow:0 2px 6px rgba(16,101,107,.3)}
+.spk-ring{position:absolute;width:11px;height:11px;margin:-5.5px 0 0 -5.5px;border-radius:50%;
+  background:#fff;border:2.5px solid var(--accent);box-sizing:border-box;pointer-events:none}
 .spark.wl .wl-b{fill:var(--accent);opacity:.13;stroke:none}
 .spark.wt .wt-d.bad{stroke:var(--red);opacity:.95}
 .spark.wt .wt-d.good{stroke:#22b3a6;opacity:.95}
@@ -1413,6 +1421,6 @@ body.drawn{overflow:hidden}
      broken launch. A new URL cannot hit that cache entry. It always equals the
      number in sw.js CACHE (peak-vN): bump both on every release, enforced by
      ClaudeCoach/ironman-analysis/tests/test_peak_release.py. -->
-<script src="app.js?v=138" defer></script>
+<script src="app.js?v=139" defer></script>
 </body>
 </html>

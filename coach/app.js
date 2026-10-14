@@ -739,6 +739,27 @@
       { foot: open.length > 5 ? '+' + (open.length - 5) + ' more' : null });
   }
 
+  /* Key values on a sparkline (Jamie, 14 Oct 2026: "highlight the key values"), the way
+     Apple Health labels a chart: the current value at the end of the line, in the accent,
+     with a ring on the point; the highest and lowest points labelled small. HTML over the
+     SVG, placed in %, because text inside a stretched SVG would stretch with it. */
+  function sparkMarks(W, H, marks) {
+    return marks.filter(Boolean).map(function (m) {
+      var lx = m.x / W * 100, ty = m.y / H * 100;
+      var ax = lx > 88 ? '-100%' : lx < 12 ? '0' : '-50%';
+      var ay = m.kind === 'lo' ? '45%' : '-145%';
+      return (m.kind === 'end' ? '<i class="spk-ring" style="left:' + lx.toFixed(1) + '%;top:' + ty.toFixed(1) + '%"></i>' : '') +
+        '<span class="spk-l ' + m.kind + '" style="left:' + lx.toFixed(1) + '%;top:' + ty.toFixed(1) +
+        '%;transform:translate(' + ax + ',' + ay + ')">' + esc(m.txt) + '</span>';
+    }).join('');
+  }
+  function extremes(list) {      // [{x,y,v}] -> [highest, lowest] by value
+    if (list.length < 3) return [null, null];
+    var hi = list[0], lo = list[0];
+    list.forEach(function (p) { if (p.v > hi.v) hi = p; if (p.v < lo.v) lo = p; });
+    return [hi, lo];
+  }
+
   /* HRV & resting HR (Jamie, 14 Oct 2026, in place of a body-fat view). The last 30 days:
      a dot per morning, a 7-day average line, and a dashed line at the athlete's NORMAL -
      the 28 days before today, the same normal and thresholds as the morning card's
@@ -807,15 +828,22 @@
         }
         dots[kk] += 'M' + x(r) + ' ' + y(v) + 'h0';
       });
-      var line = pts.map(function (r) {
+      var lp = pts.map(function (r) {
         var a = roll(k, Date.parse(r.date));
-        return a == null ? null : x(r) + ',' + y(inv(k, a));
-      }).filter(Boolean).join(' ');
-      return '<svg class="spark wt wl" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
+        return a == null ? null : { x: +x(r), y: +y(inv(k, a)), v: inv(k, a) };
+      }).filter(Boolean);
+      var line = lp.map(function (q) { return q.x + ',' + q.y; }).join(' ');
+      var ex = extremes(lp.slice(0, -1)), endP = lp[lp.length - 1];
+      return '<div class="spk"><svg class="spark wt wl" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
         (bandPath ? '<path class="wl-b" d="' + bandPath + '"/>' : '') +
         '<polyline points="' + line + '"/>' +
         '<path class="wt-d" d="' + dots.n + '"/><path class="wt-d bad" d="' + dots.bad + '"/>' +
-        '<path class="wt-d good" d="' + dots.good + '"/></svg>';
+        '<path class="wt-d good" d="' + dots.good + '"/></svg>' +
+        sparkMarks(W, H, [
+          ex[0] && { x: ex[0].x, y: ex[0].y, txt: Math.round(ex[0].v), kind: 'hi' },
+          ex[1] && { x: ex[1].x, y: ex[1].y, txt: Math.round(ex[1].v), kind: 'lo' },
+          endP && { x: endP.x, y: endP.y, txt: Math.round(endP.v), kind: 'end' }
+        ]) + '</div>';
     }
     var today = rows.filter(function (r) { return r.date === last; })[0] || {};
     function state(k) {
@@ -880,14 +908,22 @@
       return 'M' + xOf(p) + ' ' + yOf(Number(p.kg)) + 'h0';   // round cap = a dot that never stretches
     }).join('');
     var line = pts.map(function (p, i) { return xOf(p) + ',' + yOf(avgs[i]); }).join(' ');
+    var rd = pts.map(function (p) { return { x: +xOf(p), y: +yOf(Number(p.kg)), v: Number(p.kg) }; });
+    var wex = extremes(rd);
+    var wEnd = { x: +xOf(pts[pts.length - 1]), y: +yOf(avgs[avgs.length - 1]), txt: avgs[avgs.length - 1].toFixed(1), kind: 'end' };
     return card('Weight',
       '<div class="figures">' +
         fig(last.toFixed(1), 'Latest', 'kg') +
         fig(mean14.toFixed(1), '14-day mean', 'kg') +
         fig(signed(change), 'Change', pts.length + ' readings') +
       '</div>' +
-      '<svg class="spark wt" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
+      '<div class="spk"><svg class="spark wt" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
         '<polyline points="' + line + '"/><path class="wt-d" d="' + dots + '"/></svg>' +
+        sparkMarks(W, H, [
+          wex[0] && { x: wex[0].x, y: wex[0].y, txt: wex[0].v.toFixed(1), kind: 'hi' },
+          wex[1] && { x: wex[1].x, y: wex[1].y, txt: wex[1].v.toFixed(1), kind: 'lo' },
+          wEnd
+        ]) + '</div>' +
       '<p class="wt-k"><i class="wt-dot"></i>reading<i class="wt-avg"></i>14-day average</p>',
       {});
   }
@@ -5557,6 +5593,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.79", "2026-10-14", "Weight, HRV and resting HR graphs label the current value and the highs and lows", 0],
     ["3.78", "2026-10-14", "Dev tab in dark glass to match; the style switch is gone", 1],
     ["3.77", "2026-10-14", "New look: frosted-glass design with a floating tab bar, cleaner tiles and charts, and a new font", 0],
     ["3.76", "2026-10-14", "HRV and resting HR graphs show the last 28 days", 0],
