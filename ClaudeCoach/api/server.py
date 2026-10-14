@@ -434,7 +434,7 @@ def track(slug: str, request: Request, date: str = "", sport: str = "", name: st
         raise HTTPException(404, "no activity")
     aid = str(act["id"])
     data = track_lib.cached(CC, slug, aid)
-    if data is None or "stats" not in data:              # pre-stats cache entries rebuild
+    if data is None or "zones" not in data:              # older cache entries rebuild
         try:
             ss = wp.settings_for(client.get_sport_settings() or [], str(act.get("type") or ""))
             prof = _load(CC / "athletes" / slug / "profile.json")
@@ -442,7 +442,23 @@ def track(slug: str, request: Request, date: str = "", sport: str = "", name: st
             css = int(m.group(1)) * 60 + int(m.group(2)) if m else None
             raw = client.get_activity_streams(aid)
             data = track_lib.build(raw, ss, str(act.get("type") or ""), css) or {}
-            data["stats"] = activity_stats.build(act, raw, str(act.get("type") or ""))
+            typ = str(act.get("type") or "")
+            from datetime import date as _date, timedelta as _td
+            hist, curve = [], None
+            try:
+                hist = client._get("activities", {
+                    "oldest": (_date.fromisoformat(date) - _td(days=activity_stats.HISTORY_DAYS)).isoformat(),
+                    "newest": date})
+            except Exception:
+                pass
+            if "Ride" in typ:
+                try:
+                    c = (client._get("power-curves", {"type": "Ride", "curves": "90d"}).get("list") or [{}])[0]
+                    curve = dict(zip(c.get("secs") or [], c.get("watts") or []))
+                except Exception:
+                    curve = None
+            data["stats"] = activity_stats.build(act, raw, typ, hist, curve)
+            data["zones"] = activity_stats.zones(act, typ)
         except Exception:
             raise HTTPException(502, "Intervals.icu didn't answer")
         track_lib.store(CC, slug, aid, data)

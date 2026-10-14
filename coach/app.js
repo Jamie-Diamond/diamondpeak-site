@@ -4574,8 +4574,8 @@
   }
   var TRK_NAMES = { power: 'Power', hr: 'HR', pace: 'Pace' };
   // Stats shown without opening the drawer, in lib/activity_stats.py's labels.
-  var STATS_KEY = ['Normalised power', 'Intensity (IF)', 'Peak power', 'Avg pace',
-                   'Grade-adjusted pace', 'Decoupling', 'Avg heart rate'];
+  var STATS_KEY = ['Efficiency vs your normal', 'Split', 'Fade', 'Normalised power', 'Intensity (IF)',
+                   'Peak power', 'Avg pace', 'Grade-adjusted pace', 'Decoupling', 'Avg heart rate'];
   function loadTrack(dateISO, sport, name, fam, rpeRow) {
     if (!state.slug) return;
     var box;
@@ -4593,14 +4593,28 @@
           // Peak power as five small tiles ("5 s 432 · 1 min 254 · ... w" wrapped badly as a row).
           var pkRow = all.filter(function (r) { return r[0] === 'Peak power'; })[0];
           all = all.filter(function (r) { return r !== pkRow; });
+          var star = pkRow && String(pkRow[1]).indexOf('\u2605') >= 0;
           var pk = pkRow ? '<div class="pk">' + String(pkRow[1]).replace(/ w$/, '').split(' · ').map(function (c) {
-            var m = c.match(/^(.*) (\d+)$/);
-            return m ? '<div><b>' + m[2] + '</b><span>' + esc(m[1]) + '</span></div>' : '';
-          }).join('') + '</div><p class="pk-k">peak power, watts</p>' : '';
-          var top = all.filter(function (r) { return STATS_KEY.indexOf(r[0]) >= 0; });
+            var m = c.match(/^(.*) (\d+)(\u2605?)$/);
+            return m ? '<div' + (m[3] ? ' class="best"' : '') + '><b>' + m[2] + (m[3] ? '<i>\u2605</i>' : '') +
+              '</b><span>' + esc(m[1]) + '</span></div>' : '';
+          }).join('') + '</div><p class="pk-k">peak power, watts' +
+            (star ? ' · <em>\u2605 best in 90 days</em>' : '') + '</p>' : '';
+          // Time in zones (lib/activity_stats.zones): one bar per measure, zone colours.
+          var zb = (t.zones || []).map(function (z) {
+            var tot = z.secs.reduce(function (a, b) { return a + b; }, 0) || 1;
+            return '<div class="zb"><span class="zb-l">' + esc(z.label) + '</span><div class="zb-b">' +
+              z.secs.map(function (sec, i) {
+                var pc = sec / tot * 100;
+                return pc > 0 ? '<i style="width:' + pc.toFixed(1) + '%;background:' + ZONE_COL[Math.min(i, 6)] +
+                  '" title="Z' + (i + 1) + ' ' + Math.round(pc) + '%">' + (pc >= 12 ? 'Z' + (i + 1) : '') + '</i>' : '';
+              }).join('') + '</div></div>';
+          }).join('');
+          var top = all.filter(function (r) { return STATS_KEY.indexOf(r[0]) >= 0; })
+            .sort(function (x, y) { return STATS_KEY.indexOf(x[0]) - STATS_KEY.indexOf(y[0]); });
           var more = all.filter(function (r) { return STATS_KEY.indexOf(r[0]) < 0; });
           if (!top.length) { top = more.slice(0, 4); more = more.slice(4); }
-          slot.innerHTML = card('Stats', pk + kvRows(top) + (more.length
+          slot.innerHTML = card('Stats', pk + (zb ? '<div class="zbs">' + zb + '</div>' : '') + kvRows(top) + (more.length
             ? '<details class="sdrawer st-more" data-drawer="statsMore"' + (DRAWERS.statsMore ? ' open' : '') + '>' +
               '<summary><span class="gate-row-t"><b>More stats</b><span>' + more.length + ' more</span></span>' +
               '<span class="gate-go">›</span></summary>' + kvRows(more) + '</details>' : ''), { flush: true });
@@ -5417,6 +5431,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.56", "2026-10-14", "Session insights: efficiency against your normal, \u2605 on 90-day best powers, time in zones, split or fade, and HR recovery", 0],
     ["3.55", "2026-10-14", "Session stats: the key few up front, the rest under More stats", 0],
     ["3.54", "2026-10-14", "Tap the version number to see what's new", 0],
     ["3.53", "2026-10-14", "Stats on every done session: peak power, decoupling (warm-up and coasting left out), pace, cadence and more", 0],
