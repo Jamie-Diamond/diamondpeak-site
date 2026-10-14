@@ -738,9 +738,9 @@
     var last = kg[kg.length - 1];
     var mean7 = kg.slice(-7).reduce(function (a, b) { return a + b; }, 0) / Math.min(7, kg.length);
     var change = last - kg[0];
-    // Dots for each reading, a line for the 7-day moving average (Jamie, 14 Oct 2026):
+    // Dots for each reading, a line for the 14-day moving average (Jamie, 14 Oct 2026):
     // a day-to-day line made water swings look like trend. Placed by DATE, so a gap in
-    // weigh-ins shows as a gap; the average is the readings in the 7 days up to each one.
+    // weigh-ins shows as a gap; the average is the readings in the 14 days up to each one.
     var lo = Math.min.apply(null, kg), hi = Math.max.apply(null, kg), span = (hi - lo) || 1;
     var W = 300, H = 60;
     var t0 = Date.parse(pts[0].date), tN = Date.parse(pts[pts.length - 1].date), tSpan = (tN - t0) || 1;
@@ -751,7 +751,7 @@
     }).join('');
     var line = pts.map(function (p) {
       var t = Date.parse(p.date), win = pts.filter(function (q) {
-        var tq = Date.parse(q.date); return tq <= t && tq > t - 7 * 864e5;
+        var tq = Date.parse(q.date); return tq <= t && tq > t - 14 * 864e5;
       });
       var m = win.reduce(function (a, q) { return a + Number(q.kg); }, 0) / win.length;
       return xOf(p) + ',' + yOf(m);
@@ -764,7 +764,7 @@
       '</div>' +
       '<svg class="spark wt" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
         '<polyline points="' + line + '"/><path class="wt-d" d="' + dots + '"/></svg>' +
-      '<p class="wt-k"><i class="wt-dot"></i>reading<i class="wt-avg"></i>7-day average</p>',
+      '<p class="wt-k"><i class="wt-dot"></i>reading<i class="wt-avg"></i>14-day average</p>',
       { foot: 'Scale readings from Intervals.icu since ' + dow(pts[0].date) + ' ' +
               dnum(pts[0].date) + '.' });
   }
