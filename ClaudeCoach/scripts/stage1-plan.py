@@ -384,6 +384,37 @@ def _overall_z3plus(proposal: dict):
     return z3, tot
 
 
+def _post_race(brief: dict) -> bool:
+    """True while recovering from an A-race: the transition phase / post_race week
+    (plan_tools.required_tss types the 3 weeks after the race, plus a held week 4+)."""
+    return ((brief.get("week_type") or "").lower() == "post_race"
+            or (brief.get("phase") or "").lower() == "transition")
+
+
+def post_race_gate(brief: dict, proposal: dict) -> dict:
+    """Transition protocol: nothing above Z2 and no brick. Bricks are dropped, any
+    segment above the sport's Z2/Z3 cut is flattened to Z2 (same minutes) and its session
+    renamed so the name no longer claims the quality. No-op outside post-race weeks."""
+    if not _post_race(brief):
+        return proposal
+    kept = []
+    for s in proposal.get("sessions", []):
+        if (s.get("sport") or "").lower() == "brick":
+            continue
+        cut = 0.76 if (s.get("sport") or "").lower() in ("bike", "ride") else 0.85
+        flat = False
+        for seg in (s.get("segments") or []):
+            if (_seg_if(s.get("sport", ""), seg) or 0) >= cut:
+                seg["zone"] = "Z2"
+                seg.pop("if", None)
+                flat = True
+        if flat:
+            s["name"] = f"Easy {s.get('sport', '')}".strip()
+        kept.append(s)
+    proposal["sessions"] = kept
+    return proposal
+
+
 # High-zone (Z4-5 / VO2) tolerance, shared by advisory and picker so both flag/deprioritise
 # the SAME attempts. Z4-5 boundary is IF >= 0.90 (debrief Z4 = 0.90-1.05), unified across
 # sports and identical to the target-banding used for the per-sport rows.
@@ -996,6 +1027,9 @@ def _parse_args(argv=None):
     ap.add_argument("--athlete", required=True)
     ap.add_argument("--push", action="store_true")
     ap.add_argument("--notify", action="store_true", help="message the athlete on completion")
+    ap.add_argument("--requested", action="store_true",
+                    help="Jamie asked for this week; without it a post-race week is built "
+                         "but not pushed or sent")
     ap.add_argument("--week-start", help="Monday YYYY-MM-DD to plan (default: next Monday)")
     # Planning engine runs on Opus (28 Sep 2026, Jamie, for cost: Fable is ~2.5x the
     # per-token price and the Sunday build retries up to 3 times per athlete). The week is
@@ -1176,6 +1210,7 @@ def _plan(args):
     override_path = Path(args.override_json) if args.override_json else None
     if override_path and override_path.exists():
         proposal = json.loads(override_path.read_text())
+        proposal = post_race_gate(brief, proposal)
         built = close_to_target(args.athlete, proposal, target, brief)
         blocking, advisory = audit_built(brief, built, target, proposal)
         attempts = [f"override: {len(blocking)} blocking / {len(advisory)} advisory"
@@ -1208,6 +1243,7 @@ def _plan(args):
             # the whole-week number would stretch those days to cover load that is already
             # on the calendar. Ranking is comparative between attempts, so it is consistent
             # either way; the WHOLE-week audit that decides overall_ok runs post-splice.
+            proposal = post_race_gate(brief, proposal)
             built = close_to_target(args.athlete, proposal, p_target, brief)
             blocking, advisory = audit_built(brief, built, p_target, proposal)
             all_issues = _msgs(blocking) + advisory
@@ -1342,7 +1378,13 @@ def _plan(args):
         "pinned_load": agreed_week.pinned_load(pins),
         "proposer_target_tss": p_target,
     }
-    if args.push:
+    if args.push and _post_race(brief) and not args.requested:
+        # Unsolicited auto-push/send is blocked in the transition protocol: recovery
+        # weeks are agreed with Jamie, not dropped on the calendar by the Sunday cron.
+        summary["pushed"] = False
+        summary["held_post_race"] = True
+        summary["reason"] = "post-race transition week - built, not pushed or sent (not requested)"
+    elif args.push:
         if not overall_ok:
             summary["pushed"] = False
             summary["reason"] = f"not ready (rules_ok={built['ok']}, load_on_target={load_on_target}) — not pushing"
@@ -1514,7 +1556,7 @@ def exit_code_for(summary: dict, pushed_run: bool) -> int:
     """
     if not pushed_run:
         return 0
-    if summary.get("pushed"):
+    if summary.get("pushed") or summary.get("held_post_race"):
         return 0
     return 3
 
