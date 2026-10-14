@@ -5536,6 +5536,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.64", "2026-10-14", "Glass style preview in Settings > Look", 1],
     ["3.63", "2026-10-14", "Sweat loss on the session's Fuelling card; empty fuelling rows are hidden", 0],
     ["3.62", "2026-10-14", "Tidier wording across the app; Current state moves to the bottom of Today", 0],
     ["3.61", "2026-10-14", "Coming up moves to the Calendar tab; trend lines use all your readings, not just what's on screen", 0],
@@ -5926,6 +5927,11 @@
     var h = '<p class="set-ver" id="setVer" role="button" tabindex="0">Peak <span id="appVersion">checking…</span>' +
       '<span class="set-new">what\u2019s new \u203A</span></p>' +
       notifH +
+      // Look: the glass preview, coach only until it is made the default (14 Oct 2026).
+      (state.me && state.me.coach ? card('Look', '<div class="body-flush"><button type="button" class="srow" ' +
+        'role="switch" id="glassSw" aria-checked="' + document.documentElement.classList.contains('glass') +
+        '"><span class="gate-row-t"><b>Glass style (preview)</b><span>this device only</span></span>' +
+        SWITCH + '</button></div>', { flush: true }) : '') +
       '<div class="drawers">' +
       (ATHLETES.length > 1 ? drawer('athlete', 'Athlete', 'showing ' + curName, athleteH) : '') +
       drawer('sports', 'Focus sports', fs.map(function (x) { return SPNAME[x]; }).join(' · '), sportsH) +
@@ -5945,6 +5951,13 @@
       el.addEventListener('toggle', function () { DRAWERS[el.dataset.drawer] = el.open; });
     });
     fillAppVersion();
+    var gs = $('#glassSw');
+    if (gs) gs.onclick = function () {
+      var on = !document.documentElement.classList.contains('glass');
+      document.documentElement.classList.toggle('glass', on);
+      try { localStorage.setItem('cc.theme', on ? 'glass' : ''); } catch (e) { /* private mode */ }
+      gs.setAttribute('aria-checked', on);
+    };
     var sv = $('#setVer');
     if (sv) {
       sv.onclick = openChangelog;
