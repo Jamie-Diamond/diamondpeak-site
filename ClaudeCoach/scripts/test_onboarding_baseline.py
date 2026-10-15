@@ -347,8 +347,16 @@ n = len(SENT)
 B.handle_onboarding("t", WEB, KEY)
 fix = [(t, m) for c, t, m in SENT[n:] if c == WEB]
 rows = (fix[-1][1] or {}).get("inline_keyboard", [[]])
-check("no watch data: the fix step offers Connect Strava",
-      rows[0][0].get("url", "").endswith("/api/strava/connect") and any("Connect Strava" in t for t, _ in fix), rows)
+check("no watch data: the fix step asks about an Apple Watch, it doesn't push Strava on everyone",
+      rows[0][0].get("callback_data") == "ob:icu_fix:apple" and not any("Connect Strava" in t for t, _ in fix)
+      and not any(b.get("url", "").endswith("/api/strava/connect") for r in rows for b in r), rows)
+n = len(SENT)
+B.handle_onboarding("t", WEB, "ob:icu_fix:apple")
+ap = [(t, m) for c, t, m in SENT[n:] if c == WEB]
+check("an Apple Watch: Connect Strava, explained, with Check again",
+      "can't link to Intervals.icu directly" in ap[-1][0]
+      and ap[-1][1]["inline_keyboard"][0][0]["url"].endswith("/api/strava/connect")
+      and B.load_onboarding_state()[WEB]["current_key"] == "icu_fix", ap)
 (OB.SIGNUP_DIR / WEB).mkdir(parents=True, exist_ok=True)
 (OB.SIGNUP_DIR / WEB / "strava_tokens.json").write_text('{"refresh_token": "r"}')
 check("with Strava connected, nothing is left to fix",
@@ -408,6 +416,9 @@ check("a sign-up from before Connect that connects anyway is moved on to it",
 ck = {c["key"]: c for c in B._icu_checks({}, [], [], {"garmin_health_connected": True})}
 check("watch linked ticks from Intervals.icu's connections before any activity arrives",
       ck["watch"]["ok"] and not ck["history"]["ok"], ck)
+ck0 = {c["key"]: c for c in B._icu_checks({}, [], [], {})}
+check("a brand-new account: nothing ticked, workouts included",
+      not any(c["ok"] for c in ck0.values()) and "Once your watch is linked" in ck0["workouts"]["fix"], ck0)
 check("a link per line goes to their watch's settings",
       ck["wellness"]["url"].endswith("/settings/connections?services=garmin"), ck["wellness"])
 ck = {c["key"]: c for c in B._icu_checks({"icu_garmin_download_wellness": True,

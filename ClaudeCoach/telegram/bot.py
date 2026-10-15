@@ -4673,8 +4673,8 @@ _OB_ICU_CONNECT_Q = (
     "Now link your *Intervals.icu*. It's a free training log: it's how your watch's "
     "sessions, sleep and heart rate reach me, and how my sessions get onto your watch. "
     "I can't coach you without it.\n\n"
-    "Tap *Connect Intervals.icu*, sign in (or sign up free on the same page) and tap "
-    "*Allow*. Then come back here.")
+    "Tap *Connect Intervals.icu* and sign in (or sign up free on the same page). Then "
+    "*tick every box* and tap *Allow*, and come back here.")
 _OB_PHASE1 = [
     ("consent", _OB_CONSENT_Q),
     ("name",    "Thanks! Just a few questions to get you set up.\n\nWhat's your *full name*?"),
@@ -4944,7 +4944,7 @@ def _validate_ob_answer(key, answer):
             return ("That doesn't look like an API key -- it's one long run of letters and "
                     "numbers. Copy it again from *Settings* -> *Developer Settings* -> *(view)*.")
     if key == "icu_fix":
-        if not re.match(r"^\s*(again|check|done|skip|carry on|later)", answer, re.I):
+        if not re.match(r"^\s*(again|check|done|skip|carry on|later|apple)", answer, re.I):
             return "Tap *Check again* once it's switched on, or *Carry on for now*."
     if key == "compare_race":
         if not _NO_WORDS.match(answer) and not _parse_past_race(answer):
@@ -5379,8 +5379,8 @@ def _ob_markup(key, picked=()):
 
 def _ob_ask(token, chat_id, key, question, answers=None, strava=False):
     """Send one sign-up question: its text, then its screenshots and a closing line
-    carrying its buttons, or just the text with its buttons. strava: add the Connect
-    Strava link (lib/strava_link.py) above them."""
+    carrying its buttons, or just the text with its buttons. strava: add an "I use an
+    Apple Watch" button above them, which leads to Connect Strava."""
     images = list(_OB_IMAGES.get(key, []))
     if key == "icu_key" and (answers or {}).get("icu_has") == "yes":
         images.insert(0, "icu-settings.png")        # the "no" path showed it already
@@ -5389,12 +5389,10 @@ def _ob_ask(token, chat_id, key, question, answers=None, strava=False):
         markup["inline_keyboard"].append([{"text": "Open Intervals.icu settings",
                                            "url": _icu_settings_url()}])
     if strava and markup:
-        try:
-            import strava_link
-            markup["inline_keyboard"].insert(0, [{"text": "Connect Strava",
-                                                  "url": strava_link.CONNECT_URL}])
-        except Exception:
-            pass
+        # Strava is only for a watch with no direct Intervals.icu link (Jamie, 15 Oct 2026:
+        # "not everyone should get the Connect Strava option"): ask first.
+        markup["inline_keyboard"].insert(0, [{"text": "I use an Apple Watch",
+                                              "callback_data": "ob:icu_fix:apple"}])
     if not images:
         send(token, chat_id, question, reply_markup=markup)
         return
@@ -5404,7 +5402,10 @@ def _ob_ask(token, chat_id, key, question, answers=None, strava=False):
             send_photo(token, chat_id, (_OB_IMG_DIR / name).read_bytes())
         except OSError as e:
             log(f"Onboarding screenshot {name} missing: {e}")
-    send(token, chat_id, _OB_AFTER.get(key, "👇"), reply_markup=markup)
+    after = _OB_AFTER.get(key, "👇")
+    if key == "icu_fix" and str(chat_id).startswith("web-"):
+        after = "Each one ticks itself as you switch it on:"     # Peak's live checklist follows
+    send(token, chat_id, after, reply_markup=markup)
 
 
 def _icu_id_for_key(icu_key):
@@ -5476,9 +5477,11 @@ def _icu_checks(profile, acts, well, connections=None):
                           f"_Download wellness data_ under {watch}."
                           + ("" if devices else " " + apple)})
     off = [name for _src, prefix, name in devices if profile.get(prefix + "upload_workouts") is False]
-    checks.append({"key": "workouts", "label": "Workouts to watch", "ok": not off,
+    checks.append({"key": "workouts", "label": "Workouts to watch",
+                   "ok": not off and bool(devices or acts),        # nothing linked: not yet
                    "fix": " ".join(f"Your planned sessions won't reach your watch. Tick _Upload "
-                                   f"planned workouts_ under {name}." for name in off)})
+                                   f"planned workouts_ under {name}." for name in off)
+                   or "Once your watch is linked, tick _Upload planned workouts_ under it."})
     days = sorted(str(a.get("start_date_local") or "")[:10] for a in acts if a.get("start_date_local"))
     seen = (date.today() - date.fromisoformat(days[0])).days if days else 0
     weeks = max(1, seen // 7)
@@ -5548,16 +5551,28 @@ def _strava_offer(chat_id, issues) -> bool:
             and any(i.startswith(_NO_WATCH) for i in issues))
 
 
-def _icu_fix_question(issues, again=False, strava=False):
+def _icu_fix_question(issues, again=False, strava=False, web=False):
+    """The fix step. In Peak (web) the four lines are shown live under it and tick
+    themselves (app.js icuChecklist), so the text is just the heading."""
+    if web:
+        head = ("Still not quite there." if again else
+                "Connected ✓ Now a few things to switch on in Intervals.icu, so I can coach you "
+                "properly. The picture shows where.")
+        return head + ("\n\nApple Watch? It can't link to Intervals.icu directly: tap *I use "
+                       "an Apple Watch*." if strava else "")
     head = ("Still not quite there:" if again else
             "Connected ✓ -- a few things to sort in Intervals.icu first, so I can "
             "coach you properly:")
     body = "\n\n".join("• " + i for i in issues)
     tail = "All in *Settings* -> *Connections*."
     if strava:
-        tail += ("\n\nOr tap *Connect Strava* and I'll copy your workouts across from Strava "
-                 "myself -- no sleep or HRV that way.")
+        tail += "\n\nApple Watch? It can't link to Intervals.icu directly: tap *I use an Apple Watch*."
     return f"{head}\n\n{body}\n\n{tail}"
+
+
+_OB_APPLE = ("An Apple Watch can't link to Intervals.icu directly, so I copy your workouts "
+             "across from *Strava* instead -- no sleep or HRV that way. Tap *Connect Strava*, "
+             "allow it, then *Check again*.")
 
 
 def _ob_after_icu(token, chat_id, ob_state, session):
@@ -5666,7 +5681,8 @@ def _ob_icu_linked(token, chat_id, ob_state, session, icu_id, icu_key):
         session["current_key"] = "icu_fix"
         save_onboarding_state(ob_state)
         offer = _strava_offer(chat_id, issues)
-        _ob_ask(token, chat_id, "icu_fix", _icu_fix_question(issues, strava=offer), strava=offer)
+        _ob_ask(token, chat_id, "icu_fix", _icu_fix_question(
+            issues, strava=offer, web=str(chat_id).startswith("web-")), strava=offer)
         return True
     return _ob_after_icu(token, chat_id, ob_state, session)
 
@@ -5834,10 +5850,22 @@ def handle_onboarding(token, chat_id, text):
             if issues:
                 save_onboarding_state(ob_state)
                 offer = _strava_offer(chat_id, issues)
-                _ob_ask(token, chat_id, "icu_fix", _icu_fix_question(issues, again=True, strava=offer),
-                        strava=offer)
+                _ob_ask(token, chat_id, "icu_fix", _icu_fix_question(
+                    issues, again=True, strava=offer, web=str(chat_id).startswith("web-")),
+                    strava=offer)
                 return True
             send(token, chat_id, "All connected ✓")
+        elif re.match(r"^\s*apple", answer, re.I):
+            save_onboarding_state(ob_state)
+            markup = _ob_markup("icu_fix")
+            try:
+                import strava_link
+                markup["inline_keyboard"].insert(0, [{"text": "Connect Strava",
+                                                      "url": strava_link.CONNECT_URL}])
+            except Exception:
+                pass
+            send(token, chat_id, _OB_APPLE, reply_markup=markup)
+            return True
         return _ob_after_icu(token, chat_id, ob_state, session)
 
     # Advance to next question

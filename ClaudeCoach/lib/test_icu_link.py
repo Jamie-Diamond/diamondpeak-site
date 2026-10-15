@@ -40,7 +40,7 @@ def test_authorize_url_asks_for_comma_separated_scopes_and_the_registered_redire
     u = icu_link.authorize_url("web-abc123")
     assert u.startswith("https://intervals.icu/oauth/authorize?client_id=1374")
     assert "redirect_uri=https%3A%2F%2Fx%2Fcb" in u
-    assert "scope=ACTIVITY%3AWRITE%2CWELLNESS%3AREAD%2CCALENDAR%3AWRITE%2CSETTINGS%3AWRITE" in u
+    assert "scope=ACTIVITY%3AWRITE%2CWELLNESS%3AWRITE%2CCALENDAR%3AWRITE%2CSETTINGS%3AWRITE" in u
 
 
 def test_missing_scopes_and_athlete_ids():

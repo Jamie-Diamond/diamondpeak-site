@@ -1674,8 +1674,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     var tapped = false;
     function draw(j) {
       el.classList.add('has-icu-check');
-      box.innerHTML = '<p class="icu-check-h">' + (j.done ? 'All set \u2713'
-        : 'These tick themselves as you switch them on in Intervals.icu:') + '</p>' +
+      box.innerHTML = (j.done ? '<p class="icu-check-h">All set \u2713</p>' : '') +
         j.items.map(function (c) {
           return '<div class="icu-row' + (c.ok ? ' ok' : '') + '"><span class="icu-tick">' +
             (c.ok ? '\u2713' : '') + '</span><div><b>' + esc(c.label) + '</b>' +
@@ -1692,7 +1691,12 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       if (document.hidden) { setTimeout(tick, 20000); return; }
       fetch('/api/icu/checklist', { cache: 'no-store' })
         .then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (j) { if (j && j.items) draw(j); setTimeout(tick, 20000); })
+        .then(function (j) {
+          if (j && j.items) draw(j);
+          else if (!box.innerHTML) box.innerHTML = '<p class="icu-check-h">Couldn\u2019t read ' +
+            'Intervals.icu just now. Tap Check again in a minute.</p>';
+          setTimeout(tick, 20000);
+        })
         .catch(function () { setTimeout(tick, 30000); });
     }
     tick();
@@ -6019,6 +6023,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.012", "2026-10-15", "Sign-up: tick every box on Intervals.icu; Connect Strava only for an Apple Watch; the checklist reads cleaner", 0],
     ["4.011", "2026-10-15", "Sign-up links Intervals.icu with one Connect button and a checklist that ticks itself; Settings offers Reconnect Intervals.icu", 0],
     ["4.010", "2026-10-15", "A queued message survives Peak reloading or updating", 0],
     ["4.009", "2026-10-15", "Chats show the last 7 days, 100 messages at most", 0],

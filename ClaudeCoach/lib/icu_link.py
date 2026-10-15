@@ -47,8 +47,10 @@ CONNECT_URL = PEAK + "/api/icu/connect"
 REDIRECT_URI = PEAK + "/api/icu/callback"
 # Comma-separated (Intervals.icu's format, not spaces). WRITE includes READ.
 # ACTIVITY: manual gym sessions, Strava copies, HR fixes. CALENDAR: the plan.
-# SETTINGS: FTP / thresholds (lib/thresholds.py, lib/baseline.py). WELLNESS: read only.
-SCOPE = "ACTIVITY:WRITE,WELLNESS:READ,CALENDAR:WRITE,SETTINGS:WRITE"
+# SETTINGS: FTP / thresholds (lib/thresholds.py, lib/baseline.py). WELLNESS: WRITE too, so
+# "tick every box" on Intervals.icu's page is the whole instruction (Jamie, 15 Oct 2026:
+# his test sign-up had to pick "update wellness" by hand).
+SCOPE = "ACTIVITY:WRITE,WELLNESS:WRITE,CALENDAR:WRITE,SETTINGS:WRITE"
 NEEDED = ("ACTIVITY", "WELLNESS", "CALENDAR", "SETTINGS")
 STATE_TTL = 30 * 60
 UA = "ClaudeCoach (coach.diamondpeak.uk)"
