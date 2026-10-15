@@ -1375,7 +1375,8 @@
               return '/api/dev/media/' + encodeURIComponent(n); })));
           }
           else {
-            var el = coachItem(m.text, m.buttons, m.photo ? '/api/media/' + encodeURIComponent(m.photo) : null,
+            var el = coachItem(m.text, m.buttons, m.chart === 'load' ? LIVE_LOAD
+                                 : m.photo ? '/api/media/' + encodeURIComponent(m.photo) : null,
                                m.error ? 'err' : '', m.id);
             // options he has already answered (a later message of his) can't be tapped again
             if (i < lastMe && el) {
@@ -1452,7 +1453,40 @@
     el.appendChild(box);
   }
 
+  // The ±7-day chart the coach sends is drawn LIVE in the chat (Jamie, 15 Oct 2026: the
+  // picture "doesn't fit in the message ... isn't dynamic"): the same Chart.js chart as
+  // Today, sized to the bubble, tap a day for its numbers. The PNG stays in the outbox
+  // for anything else that reads it.
+  var LIVE_LOAD = 'peak:live-load';
+  var liveCharts = [];
+  function liveLoad(el) {
+    var box = document.createElement('div');
+    box.className = 'msg-chart';
+    box.innerHTML = '<p class="msg-chart-h">Seven days either side</p>' +
+      '<div class="readout"><b></b><span></span></div><div class="chartbox"><canvas></canvas></div>';
+    el.insertBefore(box, el.firstChild);
+    el.classList.add('has-chart');
+    var tries = 0;
+    var draw = function () {
+      if (!box.isConnected) return;
+      if (typeof Chart === 'undefined' || !state.data || !(state.data.loadChart || []).length) {
+        if (++tries < 40) return setTimeout(draw, 250);     // the chat can render before the data
+        box.querySelector('.chartbox').innerHTML = '<p class="hint">Chart loads with your data.</p>';
+        return;
+      }
+      try {
+        var c = chartLoad(box.querySelector('canvas'), state.data);
+        var ro = box.querySelector('.readout');
+        ro.id = 'ro-live-' + liveCharts.length;
+        attachReadout(c, '#' + ro.id);
+        liveCharts.push(c);
+      } catch (e) { if (window.console) console.error('[peak] live chart failed:', e); }
+    };
+    setTimeout(draw, 0);
+  }
+
   function addPhoto(el, src) {
+    if (src === LIVE_LOAD) return liveLoad(el);
     var img = document.createElement('img');
     img.className = 'msg-img'; img.alt = ''; img.src = src;
     el.insertBefore(img, el.firstChild);
@@ -1740,7 +1774,8 @@
         hist.forEach(function (m, i) {
           var el = m.who === 'me' ? bubble('me', m.text)
             : coachItem(m.text, j.readonly ? [] : m.buttons,
-                        m.photo ? '/api/media/' + encodeURIComponent(m.photo) + mq : null, '', m.id,
+                        m.chart === 'load' && !mq ? LIVE_LOAD
+                          : m.photo ? '/api/media/' + encodeURIComponent(m.photo) + mq : null, '', m.id,
                         { form: j.readonly ? null : m.form, logged: m.logged, drills: m.drills });
           if (m.key && !j.readonly) el.setAttribute('data-key', m.key);
           // option buttons already answered (a later message from the athlete) lock
@@ -1958,6 +1993,7 @@
     function onEvent(kind, text, obj) {
       if (kind === 'status') { chatSetStatus(text); return; }
       if (kind === 'photo') { coachItem('', null, 'data:image/png;base64,' + text); chatScroll(); return; }
+      if (kind === 'chart') { coachItem('', null, LIVE_LOAD); chatScroll(); return; }
       if (kind === 'edit') { applyEdit(obj, text); return; }
       if (kind === 'drill') { fillDrill(obj, text); return; }
       if (kind === 'heard') {
@@ -5695,6 +5731,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.91", "2026-10-15", "The coach's load chart is live in the chat: tap a day for its numbers", 0],
     ["3.90", "2026-10-15", "±7 days legend shows every sport's colour", 0],
     ["3.89", "2026-10-15", "Fitness tile shows this week's change; the separate ramp tile is gone", 0],
     ["3.88", "2026-10-15", "Athlete picker readable when opened from the Dev tab", 1],

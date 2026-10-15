@@ -95,14 +95,19 @@ matplotlib.rcParams.update({
 # ── Local-render house style ───────────────────────────────────────────────────
 
 
-def _render(fig):
-    """Save a figure to PNG bytes (white bg) and close it."""
+PEAK_CHART_TAG = "peak-chart:load"   # Peak draws this chart live instead of the PNG
+
+
+def _render(fig, tag=None):
+    """Save a figure to PNG bytes (white bg) and close it. `tag` goes in the PNG's
+    Description so Peak can recognise the chart (api/chat.py, lib/outbox.py)."""
     import io
     buf = io.BytesIO()
     # dpi 400 ≈ 4× — crispest on high-DPI phone screens when tapped to full-screen.
     # Telegram's sendPhoto still recompresses the inline preview, so the gain over 3×
     # shows mainly on zoom; files stay well under Telegram's 10MB photo limit (~0.5-1.3MB).
-    fig.savefig(buf, format="png", dpi=400, bbox_inches="tight", facecolor="white")
+    fig.savefig(buf, format="png", dpi=400, bbox_inches="tight", facecolor="white",
+                metadata={"Description": tag} if tag else None)
     plt.close(fig)
     return buf.getvalue()
 
@@ -458,7 +463,7 @@ def load_chart(payload, coaching_level="mid"):
     for t in leg.get_texts():
         t.set_color("#3a3f47")
     fig.subplots_adjust(left=0.08, right=0.92, top=0.88, bottom=0.2)
-    return _render(fig)
+    return _render(fig, tag=PEAK_CHART_TAG)
 
 
 # ── Heat acclimation ───────────────────────────────────────────────────────────

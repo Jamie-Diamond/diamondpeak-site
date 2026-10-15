@@ -148,6 +148,8 @@ def record(chat_id, text: str = "", reply_markup=None, photo: bytes | None = Non
                  "text": text or "", "buttons": _buttons(reply_markup),
                  "photo": photo_name, "source": source or os.path.basename(
                      os.environ.get("CC_OUTBOX_SOURCE", "") or "")}
+        if photo and b"peak-chart:load" in photo[:4096]:
+            entry["chart"] = "load"      # Peak shows its live ±7-day chart in place of the PNG
         if who:
             entry["who"] = who
         if tab:

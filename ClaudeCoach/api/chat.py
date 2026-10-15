@@ -178,7 +178,10 @@ def _patch(b):
         sink = _sink_for(chat_id)
         if not sink:
             return orig_photo(token, chat_id, photo_bytes, *a, **k)
-        sink.put("photo", base64.b64encode(photo_bytes).decode())
+        if photo_bytes and b"peak-chart:load" in photo_bytes[:4096]:
+            sink.put("chart", "load")
+        else:
+            sink.put("photo", base64.b64encode(photo_bytes).decode())
         try:
             import outbox
             outbox.record(chat_id, "", photo=photo_bytes, source="web-turn", tab=sink.tab)
@@ -636,7 +639,7 @@ def timeline(slug: str | None, limit: int = 80, chat_id: str | None = None,
         items.append({"who": o.get("who") or "coach", "text": o.get("text") or "", "ts": o.get("ts") or "",
                       "key": "o:" + str(o.get("id") or ""),
                       "buttons": o.get("buttons") or [], "photo": o.get("photo"),
-                      "form": log_form(o), "logged": o.get("logged"), "drills": o.get("drills"),
+                      "chart": o.get("chart"), "form": log_form(o), "logged": o.get("logged"), "drills": o.get("drills"),
                       "id": o.get("id")})
     items.sort(key=lambda i: i["ts"] or "")     # stable: equal times keep history order
     if meta is not None:
@@ -763,5 +766,5 @@ def _signup_timeline(chat_id: str, limit: int) -> list[dict]:
         return []
     return [{"who": o.get("who") or "coach", "text": o.get("text") or "", "ts": o.get("ts") or "",
              "buttons": o.get("buttons") or [], "photo": o.get("photo"), "id": o.get("id"),
-             "key": "o:" + str(o.get("id") or "")}
+             "chart": o.get("chart"), "key": "o:" + str(o.get("id") or "")}
             for o in entries if not o.get("deleted")]

@@ -16,7 +16,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <!-- Glass style (glass.css) and Plus Jakarta Sans: the only look since 3.78 (Jamie,
      14 Oct 2026). Set before first paint. -->
-<link rel="stylesheet" href="glass.css?v=150">
+<link rel="stylesheet" href="glass.css?v=151">
 <script>try{document.documentElement.classList.add('glass');
 var gf="jakarta";document.documentElement.setAttribute("data-font",gf);
 var GF={inter:'Inter:wght@400;500;600;700',manrope:'Manrope:wght@400;500;600;700',jakarta:'Plus+Jakarta+Sans:wght@400;500;600;700'};
@@ -774,6 +774,11 @@ body.signup.in-chat main{padding-bottom:calc(86px + env(safe-area-inset-bottom,0
 .spark.wt polyline{stroke-width:2}
 .spark.wl{height:86px;margin-top:-4px}
 .fig .d.warn{color:var(--amber);font-weight:600}
+.msg.has-chart{max-width:100%;align-self:stretch}
+.msg-chart{position:relative;margin:-2px -4px 8px}
+.msg-chart-h{margin:0 0 4px;font-weight:600;font-size:13px;color:var(--ink-2)}
+.msg-chart .chartbox{height:230px;padding:0}
+.msg-chart .readout{top:22px;left:0;right:0}
 .spk{position:relative;margin:0 16px}
 .card > .spk:not(.card-h):not(.card-f){padding:0}   /* beats the card body padding, so labels and line share one width */
 .spk .spark{margin:0}
@@ -1427,6 +1432,6 @@ body.drawn{overflow:hidden}
      broken launch. A new URL cannot hit that cache entry. It always equals the
      number in sw.js CACHE (peak-vN): bump both on every release, enforced by
      ClaudeCoach/ironman-analysis/tests/test_peak_release.py. -->
-<script src="app.js?v=150" defer></script>
+<script src="app.js?v=151" defer></script>
 </body>
 </html>
