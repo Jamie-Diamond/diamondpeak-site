@@ -18,6 +18,7 @@ Pure apart from attach(); never raises out of attach().
 from __future__ import annotations
 
 import json
+import math
 import time
 from pathlib import Path
 
@@ -134,10 +135,13 @@ def completed(streams: dict, ss: dict, sport: str, threshold_pace_s=None) -> lis
         vals = [float(v) for v in src[i:j] if v is not None]
         if vals:
             dur = int(times[min(j, n - 1)] - times[i]) or SLICE_S
-            segs.append([dur, 100.0 * (sum(vals) / len(vals)) / ref])
+            vv = [float(v) for v in (vel or [])[i:j] if v is not None]
+            metres = dur * sum(vv) / len(vv) if vv else None      # for lap lengths
+            segs.append([dur, 100.0 * (sum(vals) / len(vals)) / ref, metres])
         i = max(j, i + 1)
+    blocks = laps(segs, _segment(segs), sport)
     out = []
-    for dur, pct in _segment(segs):
+    for dur, pct in blocks:
         if kind == "power":
             z = _zone(pct, ss.get("power_zones"))
         elif kind == "pace":
@@ -192,6 +196,100 @@ def _segment(segs: list) -> list:
     return segs
 
 
+# Done sessions of every sport (Jamie, 15 Oct 2026: "when I look back at activities and
+# just see one long line it doesn't show me much ... at least three ... warm-up, main
+# session and warm-down ... a maximum of 5K per lap; an 8k main session split four and
+# four, not five and three", then "this applies to all activities of any type"). A steady
+# session merges to one block above; here it is cut back into laps, each drawn at the
+# effort actually done in it, so the warm-up, drift and finish show.
+MIN_LAPS = 3
+# Longest lap per sport, in km (runs as Jamie set; the rest scaled to similar lap times).
+MAX_LAP_KM = {"Run": 5.0, "Walk": 5.0, "Hike": 5.0, "Ride": 20.0, "Swim": 0.5, "Row": 5.0}
+MAX_LAP_MIN = 25          # no distance (indoor ride, gym): laps by time instead
+RUN_MAX_LAP_KM = MAX_LAP_KM["Run"]
+
+
+def _max_km(sport: str) -> float | None:
+    for k, v in MAX_LAP_KM.items():
+        if k in (sport or ""):
+            return v
+    return None
+
+
+def _cut(slices: list, n: int, dist) -> list:
+    """slices -> n consecutive groups of equal distance (by dist(slice)), at slice edges."""
+    if n <= 1 or len(slices) < n:
+        return [slices]
+    total = sum(dist(x) for x in slices) or 1
+    groups, cur, acc, k = [], [], 0.0, 1
+    for x in slices:
+        cur.append(x)
+        acc += dist(x)
+        if k < n and acc >= total * k / n and len(slices) - slices.index(x) - 1 >= n - k:
+            groups.append(cur)
+            cur, k = [], k + 1
+    groups.append(cur)
+    return [g for g in groups if g]
+
+
+def laps(slices: list, blocks: list, sport: str) -> list:
+    """Re-cut a done session's merged blocks into laps: at least MIN_LAPS, none longer
+    than the sport's MAX_LAP_KM (or MAX_LAP_MIN when there is no speed stream), equal
+    lengths within a block. Each lap's % is the average of the 30 s slices in it (the
+    real effort, not the block's). Intervals keep their blocks; long steady ones are cut."""
+    blocks = [[b[0], b[1]] for b in blocks or []]   # _segment can pass slices through as-is
+    if not slices or not blocks:
+        return blocks
+    cap = _max_km(sport)
+    if cap and all(len(x) > 2 and x[2] is not None for x in slices):
+        dist = lambda x: x[2] / 1000                                  # km
+    else:
+        cap = float(MAX_LAP_MIN)
+        dist = lambda x: x[0] / 60                                    # minutes
+    # Which slices make up each block (blocks are runs of consecutive slices).
+    groups, i = [], 0
+    for dur, _ in blocks:
+        g, acc = [], 0
+        while i < len(slices) and (acc < dur - 1 or not g):
+            g.append(slices[i])
+            acc += slices[i][0]
+            i += 1
+        groups.append(g)
+    if i < len(slices):
+        groups[-1].extend(slices[i:])
+    km = [sum(dist(x) for x in g) for g in groups]
+    n = [max(1, math.ceil(k / cap - 0.1)) for k in km]
+    pieces = []
+    if len(groups) == 1 and sum(x[0] for x in groups[0]) >= 20 * 60:
+        # One steady block: warm-up, the main part (cut by distance), warm-down.
+        g = groups[0]
+        tot = sum(x[0] for x in g)
+        wu_s = max(300, min(720, tot * 0.12))
+        cd_s = max(180, min(480, tot * 0.08))
+        a = b = 0
+        acc = 0
+        while a < len(g) and acc < wu_s:
+            acc += g[a][0]; a += 1
+        acc, b = 0, len(g)
+        while b > a + 1 and acc < cd_s:
+            b -= 1; acc += g[b][0]
+        main = g[a:b]
+        main_km = sum(dist(x) for x in main)
+        pieces = [g[:a]] + _cut(main, max(1, math.ceil(main_km / cap - 0.1)), dist) + [g[b:]]
+    else:
+        while sum(n) < MIN_LAPS and any(len(g) > k for g, k in zip(groups, n)):
+            j = max(range(len(groups)), key=lambda j: km[j] / n[j] if len(groups[j]) > n[j] else -1)
+            n[j] += 1
+        for g, k in zip(groups, n):
+            pieces += _cut(g, k, dist)
+    out = []
+    for g in pieces:
+        d = sum(x[0] for x in g)
+        if d:
+            out.append([d, sum(x[0] * x[1] for x in g) / d])
+    return out if len(out) >= len(blocks) else blocks
+
+
 def from_intervals(intervals: list, ss: dict, threshold_pace_s=None) -> list:
     """Blocks for a pool swim from Intervals.icu's intervals: each rep its own bar, each
     rest a low grey one (Jamie, 13 Oct 2026: "10x100 swim sets should be 10 bars"; 30 s
@@ -217,7 +315,8 @@ def from_intervals(intervals: list, ss: dict, threshold_pace_s=None) -> list:
 def _cache_path(base: Path, slug: str) -> Path:
     # v3: swims from intervals; v2: blocks of steady effort (_segment), not 1-minute bins - a new file so every
     # activity is rebuilt once rather than mixing the two
-    return base / "athletes" / slug / "profile-cache-v3.json"
+    # v4: every sport cut into laps (laps)
+    return base / "athletes" / slug / "profile-cache-v4.json"
 
 
 def attach(client, base: Path, slug: str, recent: list, sport_settings: list,

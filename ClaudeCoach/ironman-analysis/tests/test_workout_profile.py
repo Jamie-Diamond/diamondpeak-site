@@ -20,7 +20,8 @@ def test_completed_ride_by_power_run_by_pace():
     n = 600
     ride = {"watts": [200] * n, "time": list(range(n))}
     b = wp.completed(ride, SS, "Ride")
-    assert len(b) == 1 and b[0][1] == 100 and b[0][2] == 4      # one steady block
+    # one steady effort, drawn as 3 laps (Jamie, 15 Oct 2026: never one long line)
+    assert len(b) == 3 and all(x[1] == 100 and x[2] == 4 for x in b)
     run = {"watts": [400] * n, "velocity_smooth": [3.4] * n, "time": list(range(n))}
     b = wp.completed(run, dict(SS, ftp=452), "Run")
     assert b and b[0][1] == 85 and b[0][2] == 2          # by pace (Z2), not running power
@@ -58,3 +59,16 @@ def test_executed_counts_efforts_from_the_stream():
     short = wp.executed(plan, done[:4] + [[1500, 60, 2]])
     assert "NOT fully executed (2 of 3 efforts found)" in short
     assert wp.executed([[3600, 65, 2]], done) == ""                  # no efforts planned
+
+
+def test_done_sessions_get_laps():
+    """Jamie, 15 Oct 2026: at least 3 laps, none over 5 km on a run, split evenly."""
+    n = 4800                                   # 80 min at 3.4 m/s = 16.3 km
+    run = {"velocity_smooth": [3.4] * n, "time": list(range(n))}
+    b = wp.completed(run, SS, "Run")
+    km = [x[0] * 3.4 / 1000 for x in b]
+    assert len(b) >= 5 and max(km) <= 5.5               # warm-up, 3+ main laps, warm-down
+    main = km[1:-1]
+    assert max(main) - min(main) < 0.6                  # even, not 5 + 5 + 1
+    short = {"velocity_smooth": [3.4] * 1500, "time": list(range(1500))}
+    assert len(wp.completed(short, SS, "Run")) == 3      # 25 min easy: warm-up / main / down
