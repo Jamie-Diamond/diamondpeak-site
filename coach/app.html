@@ -16,7 +16,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <!-- Glass style (glass.css) and Plus Jakarta Sans: the only look since 3.78 (Jamie,
      14 Oct 2026). Set before first paint. -->
-<link rel="stylesheet" href="glass.css?v=159">
+<link rel="stylesheet" href="glass.css?v=160">
 <script>try{document.documentElement.classList.add('glass');
 var gf="jakarta";document.documentElement.setAttribute("data-font",gf);
 var GF={inter:'Inter:wght@400;500;600;700',manrope:'Manrope:wght@400;500;600;700',jakarta:'Plus+Jakarta+Sans:wght@400;500;600;700'};
@@ -101,7 +101,10 @@ body{
 .wordmark{letter-spacing:-.01em}
 .wordmark .mark{width:22px;height:22px;display:block}
 .masthead-row .countdown{max-width:58%}
-.masthead-row .whobar-name{font-size:17px;font-weight:600;padding:4px 0;min-width:0}
+.mast-mark{width:24px;height:24px;display:block;flex:0 0 auto}
+.mast-id{display:flex;flex-direction:column;align-items:flex-start;gap:1px;min-width:0;margin-right:auto}
+.masthead-row .whobar-name{font-size:12.5px;font-weight:500;color:var(--ink-2);padding:2px 0 0;gap:6px}
+.masthead-row .whobar-name .chg{font-size:8px}
 .gate-logo{width:44px;height:44px;display:block;margin:0 0 18px}
 .countdown{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);text-align:right;line-height:1.5;margin-left:auto}
 .gear{
@@ -1389,8 +1392,11 @@ body.drawn{overflow:hidden}
 
 <header class="masthead">
   <div class="masthead-row">
-    <h1 class="wordmark"><img src="icons/dpc-mark.png" alt="Peak" class="mark"></h1>
-    <button type="button" class="whobar-name" id="whoName">—</button>
+    <img src="icons/dpc-mark.png" alt="" class="mark mast-mark">
+    <div class="mast-id">
+      <h1 class="wordmark">Peak</h1>
+      <button type="button" class="whobar-name" id="whoName">—</button>
+    </div>
     <div class="countdown" id="cd"><b>—</b>days to race</div>
     <button type="button" class="gear" id="gear" aria-pressed="false" aria-label="Settings">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.3 3.2h3.4l.5 2.2 1.9.8 1.9-1.2 2.4 2.4-1.2 1.9.8 1.9 2.2.5v3.4l-2.2.5-.8 1.9 1.2 1.9-2.4 2.4-1.9-1.2-1.9.8-.5 2.2h-3.4l-.5-2.2-1.9-.8-1.9 1.2-2.4-2.4 1.2-1.9-.8-1.9-2.2-.5v-3.4l2.2-.5.8-1.9-1.2-1.9 2.4-2.41.9 1.2 1.9-.8z"/><circle cx="12" cy="12" r="3.1"/></svg>
@@ -1439,6 +1445,6 @@ body.drawn{overflow:hidden}
      broken launch. A new URL cannot hit that cache entry. It always equals the
      number in sw.js CACHE (peak-vN): bump both on every release, enforced by
      ClaudeCoach/ironman-analysis/tests/test_peak_release.py. -->
-<script src="app.js?v=159" defer></script>
+<script src="app.js?v=160" defer></script>
 </body>
 </html>

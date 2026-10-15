@@ -5841,6 +5841,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.00", "2026-10-15", "Header shows Peak, with your name smaller underneath", 0],
     ["3.99", "2026-10-15", "Header on one line: your name beside the logo", 0],
     ["3.98", "2026-10-15", "Today note in a smaller font", 0],
     ["3.97", "2026-10-15", "Trends > Body: weight, HRV, resting HR and sleep over 90 days; Today note kept short", 0],
