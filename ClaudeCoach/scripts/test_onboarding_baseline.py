@@ -419,8 +419,8 @@ check("watch linked ticks from Intervals.icu's connections before any activity a
 ck0 = {c["key"]: c for c in B._icu_checks({}, [], [], {})}
 check("a brand-new account: nothing ticked, workouts included",
       not any(c["ok"] for c in ck0.values()) and "Once your watch is linked" in ck0["workouts"]["fix"], ck0)
-check("a link per line goes to their watch's settings",
-      ck["wellness"]["url"].endswith("/settings/connections?services=garmin"), ck["wellness"])
+check("a link per line goes to Intervals.icu's Settings -> Connections",
+      ck["wellness"]["url"] == "https://intervals.icu/settings/connections", ck["wellness"])
 ck = {c["key"]: c for c in B._icu_checks({"icu_garmin_download_wellness": True,
                                           "icu_garmin_upload_workouts": False}, LONG, [])}
 check("ticking Download wellness ticks Sleep & HRV before the data lands; upload off is open",

@@ -5498,13 +5498,14 @@ def _icu_checks(profile, acts, well, connections=None):
     return checks
 
 
-# Intervals.icu's connections page, showing just their watch's block (deep link per the
-# Intervals.icu forum, API thread post #728, 30 Jul 2026).
+# Intervals.icu's Settings -> Connections page: the address its own welcome email links
+# to (checked in its app bundle, 15 Oct 2026). The forum's ?services=<brand> filter
+# (API thread #728) isn't in that bundle, so it isn't used until it's seen working.
 _ICU_SETTINGS = "https://intervals.icu/settings/connections"
 
 
 def _icu_settings_url(brand: str = "") -> str:
-    return _ICU_SETTINGS + (f"?services={brand.lower()}" if brand and brand != "your watch" else "")
+    return _ICU_SETTINGS
 
 
 def _icu_checklist(icu_id, icu_key="", chat_id=None):
