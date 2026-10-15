@@ -65,3 +65,14 @@ def test_safety_nets_interval_new_day_quiet_webhooks_and_the_switch(cc, monkeypa
     assert not ic.due("jamie", "refresh", 7200, now=late - 20)
     monkeypatch.setenv("CC_ICU_WEBHOOK_GATE", "0")
     assert ic.due("jamie", "refresh", 7200, now=late - 20)
+
+
+def test_reason_says_why(cc):
+    assert ic.reason("kathryn", "watcher", 1800, now=NOON) == "polled"
+    ic.record("jamie", "WELLNESS_UPDATED", now=NOON - 10)
+    assert ic.reason("jamie", "watcher", 1800, ic.ACTIVITY_TYPES, now=NOON) == "first"
+    ic.mark_run("jamie", "watcher", NOON)
+    assert ic.reason("jamie", "watcher", 1800, ic.ACTIVITY_TYPES, now=NOON + 60) == ""
+    assert ic.reason("jamie", "watcher", 1800, ic.ACTIVITY_TYPES, now=NOON + 1800) == "interval"
+    ic.record("jamie", "ACTIVITY_UPLOADED", now=NOON + 100)
+    assert ic.reason("jamie", "watcher", 1800, ic.ACTIVITY_TYPES, now=NOON + 1800) == "changed"

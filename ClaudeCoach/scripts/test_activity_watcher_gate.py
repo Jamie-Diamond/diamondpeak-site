@@ -75,3 +75,18 @@ def test_prompt_drops_plan_delta_when_structure_not_executed():
     assert "planned structure not executed" in aw.STRUCTURE_RULE
     assert "PLAN_DELTA: none" in aw.STRUCTURE_RULE
     assert "rep by rep" in aw.STRUCTURE_RULE
+
+
+def test_the_safety_check_logs_activities_no_webhook_announced(monkeypatch, tmp_path):
+    # Jamie, 15 Oct 2026: the 30-minute safety net goes once webhooks prove reliable;
+    # this log is the evidence.
+    monkeypatch.setattr(aw, "WEBHOOK_MISSES", tmp_path / "misses.log")
+    announced = {"i2"}
+    monkeypatch.setattr(aw.icu_changes, "changed_since",
+                        lambda slug, since, types=None: bool(announced))
+    acts = [act("i1", "2026-10-15T07:00:00"), act("i2", "2026-10-15T18:00:00"),
+            {"id": "99", "source": "STRAVA", "start_date_local": "2026-10-15T07:00:00"}]
+    assert aw._note_webhook_misses("jamie", acts, {"i1"}) == 0        # i2 had a webhook
+    announced.clear()
+    assert aw._note_webhook_misses("jamie", acts, {"i1"}) == 1        # i2 had none
+    assert "jamie i2 2026-10-15T18:00:00" in (tmp_path / "misses.log").read_text()

@@ -102,17 +102,29 @@ def mark_run(slug: str, job: str, started: float) -> None:
         pass
 
 
-def due(slug: str, job: str, every: float, types=None, now: float | None = None) -> bool:
-    """Should `job` fetch this athlete now? Always yes unless they are webhook-driven;
-    then yes when something it cares about changed since its last run (a change during
-    that run counts: runs are marked with their START time), when `every` has passed,
-    or on a new local day."""
+def reason(slug: str, job: str, every: float, types=None, now: float | None = None) -> str:
+    """Why `job` should fetch this athlete now, or "" when it needn't:
+      "polled"   not webhook-driven: every run, as before
+      "first"    this job has never run for them
+      "changed"  something it cares about changed since its last run (a change during
+                 that run counts: runs are marked with their START time)
+      "interval" the safety net: `every` seconds have passed
+      "new-day"  the safety net: the first run of a local day"""
     now = time.time() if now is None else now
     if not webhook_driven(slug, now):
-        return True
+        return "polled"
     last = last_run(slug, job)
-    if last is None or now - last >= every:
-        return True
+    if last is None:
+        return "first"
+    if changed_since(slug, last, types):
+        return "changed"
+    if now - last >= every:
+        return "interval"
     if time.strftime("%Y-%m-%d", time.localtime(last)) != time.strftime("%Y-%m-%d", time.localtime(now)):
-        return True
-    return changed_since(slug, last, types)
+        return "new-day"
+    return ""
+
+
+def due(slug: str, job: str, every: float, types=None, now: float | None = None) -> bool:
+    """Should `job` fetch this athlete now? (reason() says why.)"""
+    return bool(reason(slug, job, every, types, now))

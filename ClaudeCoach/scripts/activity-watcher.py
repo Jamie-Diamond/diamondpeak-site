@@ -41,7 +41,40 @@ STRUCTURE_RULE = (
 _WATER_SPORTS = {"sail", "watersport", "windsurf", "kitesurf", "kiteboard"}
 
 # Safety net for an athlete whose new activities arrive by webhook: look anyway this often.
+# TO RETIRE (Jamie, 15 Oct 2026): once webhooks have proved reliable, drop this to the
+# new-day check alone. The evidence is ~/Library/Logs/ClaudeCoach/icu-webhook-misses.log:
+# every activity this safety net found that no webhook had announced. Two weeks of it
+# empty with OAuth athletes training = safe to retire.
 WATCH_EVERY_S = 30 * 60
+WEBHOOK_MISSES = Path.home() / "Library/Logs/ClaudeCoach/icu-webhook-misses.log"
+
+
+def _note_webhook_misses(slug: str, acts: list, existing_ids: set) -> int:
+    """The safety net found activities no webhook announced: one line each in
+    WEBHOOK_MISSES (the case for keeping the 30-minute check). Returns how many."""
+    n = 0
+    for a in acts or []:
+        if (str(a.get("source") or "").upper() == "STRAVA"
+                or duplicates.activity_ids(a) & existing_ids):
+            continue
+        try:
+            start = time.mktime(time.strptime(str(a.get("start_date_local") or "")[:19],
+                                              "%Y-%m-%dT%H:%M:%S"))
+        except ValueError:
+            continue
+        if icu_changes.changed_since(slug, start, icu_changes.ACTIVITY_TYPES):
+            continue                     # a webhook did come; the analysis is just retrying
+        n += 1
+        print(f"[{slug}] webhook-miss: {a.get('id')} ({a.get('start_date_local')}) found by "
+              f"the safety check, no webhook", file=sys.stderr)
+        try:
+            WEBHOOK_MISSES.parent.mkdir(parents=True, exist_ok=True)
+            with open(WEBHOOK_MISSES, "a") as fh:
+                fh.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} {slug} {a.get('id')} "
+                         f"{a.get('start_date_local')} {a.get('type')}\n")
+        except OSError:
+            pass
+    return n
 
 
 def _log_to_history(slug: str, message: str) -> None:
@@ -1818,7 +1851,8 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     # through Peak is only asked for activities when Intervals.icu said one arrived, or
     # every WATCH_EVERY_S as a safety net. Everyone else: every cycle, as before.
     poll_started = time.time()
-    poll = icu_changes.due(slug, "watcher", WATCH_EVERY_S, icu_changes.ACTIVITY_TYPES)
+    why = icu_changes.reason(slug, "watcher", WATCH_EVERY_S, icu_changes.ACTIVITY_TYPES)
+    poll = bool(why)
     recent = _recent_activities(slug) if poll else []
     if poll and recent is not None:
         icu_changes.mark_run(slug, "watcher", poll_started)
@@ -1839,6 +1873,8 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     # and the follow-up nudge below still run every cycle — only the expensive
     # Claude call is gated, so this script can poll every 5 min cheaply.
     _duplicate_tick(slug, chat_id, recent)
+    if why in ("interval", "new-day") and recent:
+        _note_webhook_misses(slug, recent, existing_ids)
     if not _has_new_activity(slug, existing_ids, recent):
         if announce_empty and chat_id:
             last = _last_logged_label(session_log_f)
