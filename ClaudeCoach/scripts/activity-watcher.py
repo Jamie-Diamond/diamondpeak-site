@@ -545,6 +545,17 @@ _TERRAIN_DENIAL = re.compile(
     r"|\b(don'?t|doesn'?t|do not|does not|not)\b[^.\n]*\bexplain[^.\n]*(climbs?|hills?|terrain|gradient)", re.I)
 
 
+_INDOOR_TYPES = {"Swim", "WeightTraining", "Workout", "Yoga", "Pilates", "Crossfit", "Elliptical",
+                 "StairStepper", "HighIntensityIntervalTraining", "VirtualRide", "VirtualRun",
+                 "VirtualRow", "IceSkate"}
+
+
+def _outdoor(a: dict) -> bool:
+    """A session out on real terrain: not on a trainer or treadmill, not a gym or pool sport."""
+    typ = str(a.get("type") or "")
+    return bool(typ) and not a.get("trainer") and typ not in _INDOOR_TYPES and not typ.startswith("Virtual")
+
+
 def _terrain_pass(slug: str, session_log_f: Path) -> str:
     """lib/terrain.py for each run in the last 2 days not yet in the session log: whether
     real climbs explain its time above Z2. The debrief may only blame terrain where this
@@ -558,9 +569,12 @@ def _terrain_pass(slug: str, session_log_f: Path) -> str:
         logged = set()
         if session_log_f.exists():
             logged = {str(e.get("activity_id", "")) for e in json.loads(session_log_f.read_text())}
+        # Every OUTDOOR session, not just runs and rides (Jamie, 15 Oct 2026: "the run
+        # debrief fix should apply to any outdoor sport"): hikes, walks, open-water swims,
+        # e-bike rides, skiing, rowing... Indoor = trainer flag, Virtual*, or a sport with
+        # no terrain (gym, pool swim, yoga).
         runs = [a for a in client.get_training_history(days=2) or []
-                if a.get("type") in ("Run", "TrailRun", "Ride", "GravelRide", "MountainBikeRide")
-                and str(a.get("id")) not in logged]
+                if _outdoor(a) and str(a.get("id")) not in logged]
         if not runs:
             return ""
         zones = {}
@@ -570,12 +584,14 @@ def _terrain_pass(slug: str, session_log_f: Path) -> str:
                     zones[t] = float(ss["hr_zones"][1])
         lines = []
         for a in runs:
-            ceiling = zones.get(a.get("type")) or float(cfg.get("run_hr_cap") or 150)
+            typ = str(a.get("type") or "")
+            ceiling = (zones.get(typ) or zones.get("Ride" if "Ride" in typ else "Run")
+                       or float(cfg.get("run_hr_cap") or 150))
             st = hr_quality.streams_by_type(client.get_activity_streams(str(a["id"])))
             res = terrain.check(st, ceiling)
-            lines.append(terrain.note(a.get("name") or "Run", str(a["id"]), res, ceiling))
-            tbl = terrain.table(a.get("name") or "Run", str(a["id"]), st, ceiling,
-                                "Run" in str(a.get("type")), res and res["share"])
+            lines.append(terrain.note(a.get("name") or typ, str(a["id"]), res, ceiling))
+            tbl = terrain.table(a.get("name") or typ, str(a["id"]), st, ceiling,
+                                "Run" in typ, res and res["share"])
             if tbl:
                 lines.append(tbl)
         return ("TERRAIN CHECK (computed from the altitude and HR streams - authoritative):\n"
