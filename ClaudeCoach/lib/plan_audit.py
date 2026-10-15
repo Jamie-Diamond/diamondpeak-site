@@ -38,6 +38,7 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 sys.path.insert(0, str(BASE / "lib"))
+import ramp as _ramp  # noqa: E402  weekly CTL ramp cap, one rule (lib/ramp.py)
 
 from primitives.validate_plan import validate_week, escalate_repeats  # noqa: E402
 from primitives.blueprint import current_phase                # noqa: E402
@@ -355,7 +356,7 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
             basis = float(mct) if mct is not None else float(ctl)
             ramp_floor = pt.compute_required_tss(float(ctl), basis,
                                                  pt._MAINTENANCE_CONVERGE_WEEKS)
-            max_ramp = cfg.get("max_ctl_ramp_per_week")
+            max_ramp = _ramp.cap(cfg, ctl=float(ctl))
             if max_ramp:
                 ramp_floor = min(ramp_floor, pt.compute_required_tss(
                     float(ctl), float(ctl) + float(max_ramp), 1))
@@ -386,7 +387,7 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
                     f"week {ws}: HOURS-BOUND — the hours-derived ceiling "
                     f"{_b['ceiling']:.0f} TSS is {_b['gap_tss']:.0f} below the "
                     f"{_b['ramp_permitted']:.0f} TSS this athlete's own "
-                    f"+{cfg.get('max_ctl_ramp_per_week')}/wk CTL-ramp cap permits, so "
+                    f"+{_ramp.cap(cfg)}/wk CTL-ramp cap permits, so "
                     f"available time and not fatigue is limiting the week. Either the "
                     f"athlete is genuinely time-limited (the CTL target must come down) "
                     f"or the hours figure is stale — confirm with the athlete; no "
@@ -401,7 +402,7 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
                             weekly_tss_cap=wk_cap,
                             weekly_tss_floor=tss_floor,
                             run_week_min_cap=run_cap,
-                            ramp_cap=float(cfg.get("max_ctl_ramp_per_week", 5.0)),
+                            ramp_cap=_ramp.cap(cfg),
                             strength_max=(dr or {}).get("strength_max"),
                             # A goal block has no blueprint phase: its own zone split.
                             distribution=((req or {}).get("goal_distribution")

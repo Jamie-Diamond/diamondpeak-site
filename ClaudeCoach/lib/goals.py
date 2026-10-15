@@ -55,7 +55,7 @@ def shape(n: int = BLOCK_WEEKS) -> tuple:
 
 BLOCK_SHAPE = shape()            # the default block, for display
 MAINTAIN_HALF_BAND = 3.0          # maintain: Fitness held within +/- this of the start
-DEFAULT_RAMP_CAP = 3.0            # Fitness per week when the athlete has no ramp cap set
+DEFAULT_RAMP_CAP = 3.0            # superseded by lib/ramp.py (scaled by Fitness); kept for old imports
 
 # Zone splits [Z1-2 / Z3 / Z4-5] in the library's own row format (plan_tools
 # OFFSEASON_DISTRIBUTION). The goal sport gets the top-end-heavy row; the others are

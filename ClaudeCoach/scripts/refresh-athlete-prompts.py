@@ -20,6 +20,7 @@ from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent          # ClaudeCoach/
 sys.path.insert(0, str(BASE / "lib"))
+import ramp as _ramp  # noqa: E402  weekly CTL ramp cap, one rule (lib/ramp.py)
 import menstrual  # noqa: E402
 
 BEGIN = "### AUTO-SYNC: live config (regenerated daily by refresh-athlete-prompts.py — do not edit) ###"
@@ -75,14 +76,14 @@ def build_block(slug: str, cfg: dict) -> str:
             lines.append(f"- Last race: {r.get('name', '?')} on {str(r.get('date'))[:10]}"
                          + (f" ({r['distance']})" if r.get("distance") else "")
                          + (", completed" if r.get("status") == "completed" else ""))
-        ramp = cfg.get("max_ctl_ramp_per_week")
+        ramp = _ramp.cap(cfg)
         if ramp:
             lines.append(f"- CTL ramp cap: +{ramp} CTL points/week (NOT a percentage)")
         lines.append(_non_race_fuel_line(slug, cfg))
         lines.append(END)
         return "\n".join(lines)
     lines.append(f"- Race: {cfg.get('race_name', '?')} on {cfg.get('race_date', '?')}")
-    ramp = cfg.get("max_ctl_ramp_per_week")
+    ramp = _ramp.cap(cfg)
     if ramp:
         lines.append(f"- CTL ramp cap: +{ramp} CTL points/week (NOT a percentage)")
     ct = cfg.get("ctl_targets") or {}

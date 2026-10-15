@@ -31,6 +31,7 @@ PUBLIC_DIR       = BASE / "public"                             # sanitised, trac
 GIT_PUSH         = BASE / "scripts/cc-git-commit-push.sh"
 
 sys.path.insert(0, str(BASE / "lib"))
+import ramp as _ramp  # noqa: E402  weekly CTL ramp cap, one rule (lib/ramp.py)
 from public_sanitise import sanitise_training_data, write_public_json
 PROJECT_DIR      = str(BASE.parent)                        # diamondpeak-site/
 LOCK_FILE        = BASE / ".refresh_site_data.lock"
@@ -974,7 +975,7 @@ def _ramp_cap(slug: str) -> float:
     """
     try:
         cfg = json.loads(ATHLETES_CONFIG.read_text()).get(slug, {})
-        return float(cfg.get("max_ctl_ramp_per_week", 5.0))
+        return _ramp.cap(cfg, slug=slug)
     except Exception:
         return 5.0
 
@@ -1062,7 +1063,7 @@ def _ctl_target_milestones(athlete_cfg, current_ctl, today):
         derived = derive_phase_ctl_targets(
             current_ctl, int(ct["race_min"]), plan_start,
             ends["base"], ends["build"], ends["specific"], ends["peak"],
-            float(athlete_cfg.get("max_ctl_ramp_per_week", 5.0)),
+            _ramp.cap(athlete_cfg),
             float(athlete_cfg.get("taper_overshoot", 1.15)), today=today)
     ms = {}
     for label, key in (("End Base", "base"), ("End Build", "build"),
@@ -1424,7 +1425,7 @@ def post_process(data):
         # /form quotes. See _projection_block for why the tail stops at peak.
         "projection": _projection_block(
             current_ctl, data.get("weekCalendar", []), data.get("fitnessThis", []),
-            _milestones, _jamie_cfg.get("max_ctl_ramp_per_week", 5.0), today),
+            _milestones, _ramp.cap(_jamie_cfg), today),
     }
 
     # Race predictor — Now / Race day / Target, from IF ∝ √CTL (see _race_predictor).
@@ -2158,7 +2159,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
                 "specific": phase_cfg.get("specific_end_week", 14),
                 "peak":     phase_cfg.get("peak_end_week", 17),
             }
-            max_ramp        = float(athlete_cfg.get("max_ctl_ramp_per_week", 5.0))
+            max_ramp        = _ramp.cap(athlete_cfg)
             taper_overshoot = float(athlete_cfg.get("taper_overshoot", 1.15))
             derived = derive_phase_ctl_targets(
                 current_ctl, int(race_min), plan_start_dt,

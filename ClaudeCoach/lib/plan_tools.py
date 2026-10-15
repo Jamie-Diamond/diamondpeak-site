@@ -56,6 +56,7 @@ FUELLING_CLI = BASE.parent / "js" / "fuelling-cli.js"  # shared JS engine bridge
 WETSUIT_CLI = BASE.parent / "js" / "wetsuit-cli.js"    # shared JS engine bridge
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 sys.path.insert(0, str(BASE / "lib"))
+import ramp as _ramp  # noqa: E402  weekly CTL ramp cap, one rule (lib/ramp.py)
 
 from primitives.planned_tss import (                            # noqa: E402
     race_tss, race_tss_from_prev_race, race_leg_distances,
@@ -983,7 +984,7 @@ def _goal_week(cfg: dict, ctl_today, today: date, last_week_tss=None,
             and float(last_week_tss) < _MISS_TRIGGER * maint):
         kind, why = "easy", (f"last week's executed load ({int(last_week_tss)} TSS) was under "
                              f"{int(_MISS_TRIGGER * 100)}% of maintenance")
-    max_ramp = float(cfg.get("max_ctl_ramp_per_week") or _goals.DEFAULT_RAMP_CAP)
+    max_ramp = _ramp.cap(cfg)
     lo_hi = _goals.band(cfg, ctl) if g["type"] == "maintain" else None
     if kind in ("easy", "test"):
         target = int(round(maint * gd["easy_factor"]))
@@ -1477,7 +1478,7 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
             # Off-season: converge on the configured maintenance CTL, ramp-capped.
             target = compute_required_tss(float(ctl_today), mct,
                                           _MAINTENANCE_CONVERGE_WEEKS)
-            max_ramp = cfg.get("max_ctl_ramp_per_week")
+            max_ramp = _ramp.cap(cfg, ctl=float(ctl_today))
             if max_ramp:
                 target = min(target, compute_required_tss(
                     float(ctl_today), float(ctl_today) + float(max_ramp), 1))
@@ -1707,7 +1708,7 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
         phase_ctl = derive_phase_ctl_targets(
             ctl_today, int(ctl_targets["race_min"]), plan_start,
             ends["base"], ends["build"], ends["specific"], ends["peak"],
-            float(cfg.get("max_ctl_ramp_per_week", 5.0)),
+            _ramp.cap(cfg),
             float(cfg.get("taper_overshoot", 1.15)), today=today)
         ctl_source = "derived_from_race_min"
 
@@ -1720,7 +1721,7 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
     out = {"phase": phase, "training_week": week_now, "ctl_today": ctl_today,
            "phase_target_ctl": target_ctl, "ctl_target_source": ctl_source,
            "weeks_to_phase_end": weeks_remaining, "required_weekly_tss": required}
-    max_ramp = cfg.get("max_ctl_ramp_per_week")
+    max_ramp = _ramp.cap(cfg, ctl=float(ctl_today))
     if max_ramp:
         safe = compute_required_tss(ctl_today, ctl_today + float(max_ramp), 1)
         out.update({"max_ctl_ramp_per_week": float(max_ramp),
@@ -2126,7 +2127,7 @@ def cmd_validate(args) -> dict:
         weekly_tss_floor=tss_floor,
         run_week_min_cap=caps.get("weekly_min_cap"),
         run_long_min_cap=caps.get("long_run_min_cap"),
-        ramp_cap=float(cfg.get("max_ctl_ramp_per_week", 5.0)),
+        ramp_cap=_ramp.cap(cfg),
         strength_max=(day_rules or {}).get("strength_max"),
         distribution=phase.get("distribution"),
         # Absolute ride ceiling, same arming pattern as plan_builder.py: `or 300`

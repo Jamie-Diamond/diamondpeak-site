@@ -36,6 +36,7 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 sys.path.insert(0, str(BASE / "lib"))
+import ramp as _ramp  # noqa: E402  weekly CTL ramp cap, one rule (lib/ramp.py)
 
 from primitives.planned_tss import render_workout, planned_session_tss  # noqa: E402
 import coaching_prefs  # noqa: E402
@@ -338,7 +339,7 @@ def build_sessions(slug: str, proposal: dict) -> dict:
                         run_week_min_cap=_caps.get("weekly_min_cap"),
                         run_long_min_cap=_caps.get("long_run_min_cap"),
                         ctl_today=_ctl,
-                        ramp_cap=float(cfg.get("max_ctl_ramp_per_week", 5.0)),
+                        ramp_cap=_ramp.cap(cfg),
                         strength_max=(dr or {}).get("strength_max"),
                         distribution=phase.get("distribution"),
                         # Absolute ride ceiling (Jamie, 4 Aug 2026: no benefit past 5h,

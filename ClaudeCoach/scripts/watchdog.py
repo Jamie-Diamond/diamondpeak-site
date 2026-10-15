@@ -11,6 +11,7 @@ from pathlib import Path
 BASE        = Path(__file__).parent.parent   # ClaudeCoach/
 PROJECT_DIR = str(BASE.parent)               # diamondpeak-site/
 sys.path.insert(0, str(BASE / "lib"))
+import ramp as _ramp  # noqa: E402  weekly CTL ramp cap, one rule (lib/ramp.py)
 import claude_call
 import ops_log
 import planning_pause    # tracking-only athletes: no prescribing, no adherence
@@ -174,7 +175,7 @@ def ramp_flags(slug: str, cfg: dict, today: date | None = None,
         log = []
     series, source = ctl_history(slug, log, today=today)
     breaches = realised_ramp(
-        series, float(cfg.get("max_ctl_ramp_per_week", 5.0)),
+        series, _ramp.cap(cfg),
         cfg.get("ctl_ramp_overreach_threshold"), today=today,
         tolerance=0.0 if source == "icu_fitness" else RAMP_TOLERANCE)
     for b in breaches:
@@ -565,7 +566,7 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
             ramp_out = ramp_trail(breaches)
             ops_log.record_run("watchdog", athlete=slug, ok=True,
                                detail=f"T12: {len(breaches)} week(s) over the "
-                                      f"{cfg.get('max_ctl_ramp_per_week', 5.0)}/wk CTL ramp cap "
+                                      f"{_ramp.cap(cfg)}/wk CTL ramp cap "
                                       f"(source {breaches[0].get('source')})")
     except Exception as e:
         with open(LOG_FILE, "a") as lf:

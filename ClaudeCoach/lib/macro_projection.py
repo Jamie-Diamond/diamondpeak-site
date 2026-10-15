@@ -65,6 +65,7 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 sys.path.insert(0, str(BASE / "lib"))
+import ramp as _ramp  # noqa: E402  weekly CTL ramp cap, one rule (lib/ramp.py)
 
 from primitives.blueprint import current_phase                 # noqa: E402
 from primitives.load import compute_projected_ctl              # noqa: E402
@@ -278,7 +279,7 @@ def project_block(
                            f"week is {gap} below ctl_targets.race_min {race_min}; "
                            f"{len(loading)} loading week(s) remain and the block cannot "
                            f"close the gap at the configured ramp cap "
-                           f"({cfg.get('max_ctl_ramp_per_week')}/wk)")})
+                           f"({_ramp.cap(cfg)}/wk)")})
 
     infeasible = [k for k in weeks if k["ceiling_infeasible"]]
     if infeasible:
@@ -328,7 +329,7 @@ def project_block(
                 f"ceiling {worst['phase_tss_ceiling']:.0f} TSS sits "
                 f"{worst['binding_gap_tss']:.0f} BELOW the "
                 f"{worst['ramp_permitted_tss']:.0f} TSS the athlete's own "
-                f"+{cfg.get('max_ctl_ramp_per_week')}/wk CTL-ramp cap already deems "
+                f"+{_ramp.cap(cfg)}/wk CTL-ramp cap already deems "
                 f"safe. The ramp cap is the constraint that manages fatigue "
                 f"accumulation and it is not the one binding here. Two readings, and "
                 f"this module deliberately does not choose between them: (1) the "
@@ -347,7 +348,7 @@ def project_block(
             "code": "ramp_bound", "severity": "info",
             "detail": (
                 f"{len(ramp_bound)} of {len(loading)} remaining loading week(s) are "
-                f"bound by the +{cfg.get('max_ctl_ramp_per_week')}/wk CTL-ramp cap "
+                f"bound by the +{_ramp.cap(cfg)}/wk CTL-ramp cap "
                 f"first, which is the design intent — fatigue accumulation is the "
                 f"limiter and the hours ceiling has headroom above it (e.g. week "
                 f"{ramp_bound[0]['week_start']}: ramp permits "
