@@ -46,6 +46,22 @@ def _wellness_row_finalized(row: dict) -> bool:
     return bool(row_date and updated and updated > row_date)
 
 
+def drop_orphan_resting_hr(rows: list) -> list:
+    """Jamie, 15 Oct 2026: from 31 Jul to 5 Sep his Garmin sent no HRV or sleep, and the
+    resting HR on those days swung 40-76: all-day readings, not overnight ones. For an
+    athlete whose watch normally sends HRV (on half or more of the days with a resting
+    HR), a resting HR on a day with no HRV AND no sleep is moved to `restingHR_raw` and
+    left out, so Trends, the morning card and the coach's baseline skip it. Athletes
+    without HRV (no overnight data at all) keep every value. Intervals.icu is untouched."""
+    with_rhr = [r for r in rows if r.get("restingHR")]
+    if not with_rhr or sum(1 for r in with_rhr if r.get("hrv")) * 2 < len(with_rhr):
+        return rows
+    for r in with_rhr:
+        if not r.get("hrv") and not r.get("sleepSecs"):
+            r["restingHR_raw"] = r.pop("restingHR")
+    return rows
+
+
 _COUNT_DIR = os.path.expanduser(os.environ.get("CC_ICU_COUNT_DIR", "~/Library/Logs/ClaudeCoach/icu-requests"))
 _CALLER = os.path.basename(sys.argv[0] or "") or "python"
 
@@ -156,7 +172,7 @@ class IcuClient:
         rows = self._get("wellness", params)
         for row in rows:
             row["wellness_finalized"] = _wellness_row_finalized(row)
-        return rows
+        return drop_orphan_resting_hr(rows)
 
     def get_training_history(self, days: int = 30, sport: str = None) -> list:
         """Completed activities. sport filters e.g. 'Ride', 'Run', 'Swim'."""
