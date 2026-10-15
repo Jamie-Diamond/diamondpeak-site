@@ -265,12 +265,11 @@ def test_a_multi_day_change_with_no_day_named_is_carded(monkeypatch):
     cards = tg.cards()
     assert len(cards) == 1
     text, kb = cards[0]
-    assert text.startswith("Your message didn't name a day, and this changed "
-                           "Wed 19 Aug, Thu 20 Aug and Fri 21 Aug:")
+    assert text.startswith("📅 Calendar changed:")
     assert "• added Wed 19 Aug: Recovery spin (30 TSS)" in text
     assert "• added Fri 21 Aug: Easy run (25 TSS)" in text
     # And it says so: the change stands, the athlete decides.
-    assert "It all stands unless you say otherwise - tap below to undo it." in text
+    assert "It stands unless you tap to undo it." in text
     labels = [b["text"] for row in kb["inline_keyboard"] for b in row]
     assert labels == ["↩️ Undo all of it", "✅ Keep it all"]
 
@@ -280,14 +279,12 @@ def test_a_change_that_spreads_beyond_the_named_day_is_carded(monkeypatch):
     after = [ev(1, THU, name="Shorter ride", load=40), ev(2, WED), ev(3, FRI)]
     tg = _check(monkeypatch, "make Thursday 2.5 hours", before, after)
     text, kb = tg.cards()[0]
-    assert text.startswith("You asked about Thu 20 Aug. "
-                           "This also changed Wed 19 Aug and Fri 21 Aug:")
-    assert ("It all stands unless you say otherwise - tap below to keep only Thu 20 Aug "
-            "and undo the rest.") in text
+    assert text.startswith("📅 Also changed Wed 19 Aug and Fri 21 Aug:")
+    assert "It stands unless you tap to keep only Thu 20 Aug." in text
     labels = [b["text"] for row in kb["inline_keyboard"] for b in row]
     assert labels == ["↩️ Just Thu 20 Aug", "✅ Keep it all"]
     # Thursday's own edit is IN scope, so it is not in the card and not in the undo.
-    assert "Thu 20 Aug" not in text.split(":", 1)[1].split("It all stands")[0]
+    assert "Thu 20 Aug" not in text.split(":", 1)[1].split("It stands")[0]
 
 
 def test_a_change_on_a_different_day_than_the_one_named_is_carded(monkeypatch):
@@ -295,11 +292,8 @@ def test_a_change_on_a_different_day_than_the_one_named_is_carded(monkeypatch):
     they named, and "also changed" would be a lie because nothing landed on Thursday."""
     tg = _check(monkeypatch, "2.5 hours on Thursday", [], [ev(9, FRI)])
     text, kb = tg.cards()[0]
-    assert text.startswith(
-        "You asked about Thu 20 Aug, but nothing changed there. "
-        "What did change was Fri 21 Aug:")
-    assert ("It stands unless you say otherwise - tap below to undo it and leave "
-            "Thu 20 Aug as it was.") in text
+    assert text.startswith("📅 Changed Fri 21 Aug instead:")
+    assert "It stands unless you tap to undo it." in text
     labels = [b["text"] for row in kb["inline_keyboard"] for b in row]
     # NOT "Just Thu 20 Aug". Nothing landed on Thursday, so that button would be offering
     # to keep nothing at all.
@@ -331,7 +325,7 @@ def test_an_edit_only_overreach_is_stated_and_not_offered(monkeypatch):
     assert tg.cards() == [], "no button that would do the wrong thing"
     assert bot._PENDING_UNDO == {}
     text = tg.sent_text()
-    assert "I can't safely reverse these, so check them yourself:" in text
+    assert "No undo for this one" in text
     assert "tap below" not in text, "there is no button on this one to tap"
 
 
@@ -341,7 +335,7 @@ def test_a_removed_note_is_stated_and_not_offered(monkeypatch):
     before = [ev(2, WED, category="NOTE"), ev(3, FRI, category="NOTE")]
     tg = _check(monkeypatch, "2.5 hours", before, [])
     assert tg.cards() == []
-    assert "I can't safely reverse these" in tg.sent_text()
+    assert "No undo for this one" in tg.sent_text()
 
 
 # ---------------------------------------------------------------------------
@@ -494,7 +488,7 @@ def test_the_card_never_promises_to_undo_on_silence(monkeypatch):
     tg = _check(monkeypatch, "2.5 hours", [], _week_replan_after())
     text = tg.cards()[0][0]
     assert "No reply" not in text and "minutes" not in text
-    assert "stands unless you say otherwise" in text
+    assert "stands unless you tap" in text
 
 
 # ---------------------------------------------------------------------------

@@ -6604,32 +6604,24 @@ def _scope_card_text(kept_days, authorised, excess_dates, excess):
     timer that deletes calendar work he never asked to lose is a destructive default
     dressed as a safeguard. The card asks, the buttons stay live, and nothing is undone
     unless he taps."""
+    # Short (Jamie, 15 Oct 2026: "long text"): what moved, and the one action. The coach's
+    # own reply usually says why, so this card doesn't.
     if kept_days:
-        head = (f"You asked about {_pretty_days(kept_days)}. "
-                f"This also changed {_pretty_days(excess_dates)}:")
-        tail = (f"It all stands unless you say otherwise - tap below to keep only "
-                f"{_pretty_days(kept_days)} and undo the rest.")
+        head = f"📅 Also changed {_pretty_days(excess_dates)}:"
+        tail = f"It stands unless you tap to keep only {_pretty_days(kept_days)}."
     elif authorised:
-        head = (f"You asked about {_pretty_days(sorted(authorised))}, but nothing changed "
-                f"there. What did change was {_pretty_days(excess_dates)}:")
-        tail = ("It stands unless you say otherwise - tap below to undo it and leave "
-                f"{_pretty_days(sorted(authorised))} as it was.")
+        head = f"📅 Changed {_pretty_days(excess_dates)} instead:"
+        tail = "It stands unless you tap to undo it."
     else:
-        head = ("Your message didn't name a day, and this changed "
-                f"{_pretty_days(excess_dates)}:")
-        tail = "It all stands unless you say otherwise - tap below to undo it."
+        head = "📅 Calendar changed:"
+        tail = "It stands unless you tap to undo it."
     lines = [head] + write_verify.describe_diff(excess)
     plan = _reversible(excess)
-    if plan["manual"]:
-        # Identical refusal to the cancel report's: an edit cannot be un-edited from a
-        # five-field fingerprint, and a removed NOTE or race entry would come back as a
-        # WORKOUT. Naming it is the honest half of a thing we cannot do.
-        lines += ["", "I can't safely reverse " + ("these" if len(plan["manual"]) > 1
-                                                   else "this") + ", so check "
-                  + ("them" if len(plan["manual"]) > 1 else "it") + " yourself:"]
-        lines += [f"• {write_verify.describe_event(e)}" for e in plan["manual"]]
     if plan["delete"] or plan["recreate"]:
-        lines += ["", tail]
+        lines.append(tail)
+    elif plan["manual"]:
+        # An edit can't be un-edited from a fingerprint; say so once, without re-listing it.
+        lines.append("No undo for this one, so change it in your calendar if it's wrong.")
     return "\n".join(lines)
 
 
