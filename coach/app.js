@@ -1195,8 +1195,8 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // The last 7 days, a week more per tap (Jamie, 15 Oct 2026: "otherwise it will grow
   // forever", then "maybe it's the last 7 days rolling"). Never fewer than CHAT_MIN, so a
   // quiet week doesn't open on an empty chat.
-  var chatState = { loaded: false, busy: false, limit: 200, slug: null, dev: false, queue: [], days: 7 };
-  var CHAT_PAGE = 200;         // messages fetched; the day window does the trimming
+  var chatState = { loaded: false, busy: false, limit: 100, slug: null, dev: false, queue: [], days: 7 };
+  var CHAT_PAGE = 100;         // at most this many at a time, in every chat (Jamie, 15 Oct 2026)
   var CHAT_MIN = 10;
   function lastDays(hist, days) {
     var cut = Date.now() - days * 864e5, keep = 0;
@@ -5945,6 +5945,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.009", "2026-10-15", "Chats show the last 7 days, 100 messages at most", 0],
     ["4.008", "2026-10-15", "Chats show the last 7 days, a week more per tap", 0],
     ["4.007", "2026-10-15", "Chats show the last 50 messages; queue a message while a reply is written; session graphs scaled to the session", 0],
     ["4.006", "2026-10-15", "Done sessions show laps, with the fastest and slowest labelled", 0],
