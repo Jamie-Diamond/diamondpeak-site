@@ -485,10 +485,11 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
 
   // Labels in sentence case with acronyms kept: shown as written in the glass style,
   // capitalised by CSS in the classic one.
-  var MINI_CAPS = { ftp: 'FTP', eftp: 'eFTP', tss: 'TSS' };
-  function mini(v, label, cls) {
+  var MINI_CAPS = { ftp: 'FTP', eftp: 'eFTP', tss: 'TSS', lthr: 'LTHR', css: 'CSS' };
+  function mini(v, label, cls, sub) {
     label = MINI_CAPS[label] || (String(label).charAt(0).toUpperCase() + String(label).slice(1));
     return '<div class="mini' + (cls ? ' ' + cls : '') + '"><b>' + esc(v) + '</b>' +
+      (sub ? '<i>' + esc(sub) + '</i>' : '') +
       '<span>' + esc(label) + '</span></div>';
   }
 
@@ -692,9 +693,11 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       var un = th.untested || [];
       var tv = function (fam, v) { return un.indexOf(fam) >= 0 ? 'not tested' : (v || '\u2014'); };
       var has = function (f) { return !th.sports || th.sports.indexOf(f) >= 0; };   // own sports only
-      var tiles = (has('bike') ? mini(tv('bike', th.ftp ? th.ftp + 'w' : null), th.ftp_source === 'eftp' ? 'eftp' : 'ftp') : '') +
-        (has('run') ? mini(tv('run', th.run ? th.run.replace('/km', '') : null), 'Run threshold /km') : '') +
-        (has('swim') ? mini(tv('swim', th.css ? th.css.replace('/100m', '') : null), 'CSS /100m') : '');
+      var wkg = un.indexOf('bike') < 0 && th.wkg ? th.wkg.toFixed(2) + ' W/kg' : '';
+      var tiles = (has('bike') ? mini(tv('bike', th.ftp ? th.ftp + 'w' : null), th.ftp_source === 'eftp' ? 'eftp' : 'ftp', '', wkg) : '') +
+        (has('run') ? mini(tv('run', th.run ? th.run.replace('/km', '') : null), 'Run', '', th.run && un.indexOf('run') < 0 ? 'per km' : '') : '') +
+        (has('swim') ? mini(tv('swim', th.css ? th.css.replace('/100m', '') : null), 'css', '', th.css && un.indexOf('swim') < 0 ? 'per 100m' : '') : '') +
+        (th.lthr ? mini(String(th.lthr), 'lthr', '', 'bpm') : '');
       if (tiles) h += '<div class="minis th">' + tiles + '</div>';
     } else if (d.resolvedFtp) {
       h += '<div class="minis">' + mini(d.resolvedFtp + 'w', 'ftp') + '</div>';
@@ -5753,6 +5756,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.95", "2026-10-15", "eFTP tile shows W/kg; LTHR tile added", 0],
     ["3.95", "2026-10-15", "Privacy policy linked from Settings", 0],
     ["3.94", "2026-10-15", "Load chart renamed \"Load and fatigue\"", 0],
     ["3.93", "2026-10-15", "Fatigue shown as a line in the load chart legend", 0],

@@ -92,17 +92,15 @@ def get_thresholds(slug: str, cfg: dict | None = None, client=None) -> dict:
 def sync_ftp_from_eftp(slug: str, cfg: dict | None = None, client=None,
                        min_delta_w: int = 2, min_pct: float = 0.01,
                        apply: bool = False) -> dict:
-    """Keep the ICU *configured* FTP tracking live eFTP — RAISE-ONLY.
+    """Keep the ICU *configured* FTP equal to live eFTP, UP AND DOWN (Jamie, 15 Oct 2026:
+    "eFTP synced automatically"; it was raise-only and never scheduled, so the plan read
+    eFTP while the zones the athlete rides by came from a stale FTP 4-8% higher).
 
-    The planner already reads eFTP-first, but intervals.icu's static `ftp` (which
-    drives the zones the athlete sees in ICU and on their Garmin) does not auto-update
-    — there is no athlete- or sport-level auto-apply flag in the API. So we mirror
-    ICU's own native semantics: bump the configured FTP up to eFTP when eFTP sets a
-    new high, and NEVER cut it because eFTP decayed over an easy week (eFTP falling
-    means 'no recent hard effort', not lost fitness). Guarded by a meaningful-delta
-    floor (≥min_delta_w AND ≥min_pct) so noise doesn't churn the setting. apply=False
-    is a dry-run. eFTP is computed from the power curve independently of FTP, so the
-    write can't create a feedback loop."""
+    intervals.icu's power zones are % of the configured FTP, so they follow the write.
+    Accepted trade-off: eFTP sags after an easy fortnight, and the zones sag with it.
+    Guarded by a meaningful-delta floor (>=min_delta_w AND >=min_pct) so daily noise
+    doesn't churn the setting. apply=False is a dry-run. eFTP is computed from the power
+    curve independently of FTP, so the write can't feed back into it."""
     if cfg is None:
         cfg = json.loads(ATHLETES.read_text())[slug]
     if client is None:
@@ -116,28 +114,12 @@ def sync_ftp_from_eftp(slug: str, cfg: dict | None = None, client=None,
         out["reason"] = "no eFTP" if not eftp else "no static FTP to compare"
         return out
     delta = eftp - static
-    if delta <= 0:
-        out["reason"] = f"eFTP {eftp} not above static {static} (raise-only — left as-is)"
-        # Downward-drift ALERT (audit P1-8): raise-only means a detraining athlete
-        # keeps stale-high zones forever with no signal. Flag — never auto-cut
-        # (no-test policy: the cut is a coaching conversation, not an automation).
-        drift_pct = (static - eftp) / static * 100 if static else 0.0
-        if drift_pct >= 7.0:
-            out["downward_drift_pct"] = round(drift_pct, 1)
-            try:
-                from ops_log import alert
-                alert("thresholds",
-                      f"eFTP {eftp}W sits {drift_pct:.0f}% below configured FTP {static}W — "
-                      f"zones may be stale-high (detraining or a long gap since hard riding). "
-                      f"Review with the athlete before any cut.", athlete=slug)
-            except Exception:
-                pass
-        return out
-    if delta < max(min_delta_w, static * min_pct):
-        out["reason"] = f"eFTP {eftp} only +{delta}W over {static} — below {max(min_delta_w, round(static*min_pct))}W floor"
+    floor = max(min_delta_w, static * min_pct)
+    if abs(delta) < floor:
+        out["reason"] = f"eFTP {eftp} within {round(floor)}W of FTP {static}"
         return out
     out.update(changed=True, new_ftp=eftp,
-               reason=f"raise {static} -> {eftp} (+{delta}W new eFTP high)")
+               reason=f"{'raise' if delta > 0 else 'lower'} {static} -> {eftp} ({delta:+d}W to eFTP)")
     if apply:
         client._put("sport-settings/Ride", {"ftp": eftp})
         out["applied"] = True
@@ -168,7 +150,7 @@ if __name__ == "__main__":
     ap.add_argument("--athlete")
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--sync-ftp", action="store_true",
-                    help="raise ICU configured FTP up to eFTP (new high); dry-run unless --apply")
+                    help="set ICU configured FTP to eFTP (up or down); dry-run unless --apply")
     ap.add_argument("--apply", action="store_true", help="actually write the FTP change")
     ap.add_argument("--notify", action="store_true",
                     help="Telegram the athlete when an FTP change is applied")
@@ -181,15 +163,15 @@ if __name__ == "__main__":
         for r in res:
             tag = "APPLIED" if r["applied"] else ("WOULD CHANGE" if r["changed"] else "no change")
             print(f"{r['athlete']:9} [{tag}] {r['reason']}")
-            if args.notify and r["applied"]:
-                import subprocess
-                cid = athletes[r["athlete"]].get("chat_id")
-                if cid:
-                    msg = (f"📈 *FTP auto-update* — your cycling FTP is now *{r['new_ftp']}W* "
-                           f"(was {r['static_ftp']}W). intervals.icu's estimated FTP set a new high, "
-                           "so I've updated it; your power zones and planned sessions now use this.")
-                    subprocess.run(["python3", str(BASE / "telegram/notify.py"),
-                                    "--chat-id", str(cid), msg], check=False)
+        moved = [r for r in res if r["applied"]]
+        if args.notify and moved:
+            # One Dev-tab line for the coach, not the athletes (their zones just follow).
+            from outbox import record
+            lines = "\n".join(f"- {r['athlete'].title()}: {r['static_ftp']}W \u2192 *{r['new_ftp']}W*"
+                               for r in moved)
+            record(athletes["jamie"].get("chat_id"),
+                   f"FTP synced to eFTP in Intervals.icu (power zones follow):\n{lines}",
+                   source="dev-session", parse_mode="Markdown", tab="dev")
     else:
         print(json.dumps([get_thresholds(s, athletes[s]) for s in slugs], indent=1))
 

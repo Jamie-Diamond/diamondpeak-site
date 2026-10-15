@@ -1705,7 +1705,23 @@ def _thresholds_tile(slug, client) -> dict | None:
         log(f"[{slug}] thresholds tile skipped: {e}")
         return None
     strip = lambda v: v.replace(".0/", "/") if isinstance(v, str) else v
-    return {"ftp": t.get("ftp_watts"), "ftp_source": t.get("ftp_source"),
+    # W/kg from the latest weigh-in, and threshold HR (run's when they run, else ride's),
+    # beside the power and paces (Jamie, 15 Oct 2026).
+    kg = lthr = None
+    try:
+        kg = next((w["weight"] for w in reversed(client.get_wellness(days=30) or [])
+                   if w.get("weight")), None)
+        for sp in (("Run", "Ride") if "run" in sports else ("Ride", "Run")):
+            st = client.get_sport_settings(sp) or {}
+            st = (st[0] if st else {}) if isinstance(st, list) else st
+            if st.get("lthr"):
+                lthr = int(st["lthr"])
+                break
+    except Exception as e:
+        log(f"[{slug}] thresholds tile: weight/LTHR skipped: {e}")
+    ftp = t.get("ftp_watts")
+    return {"ftp": ftp, "ftp_source": t.get("ftp_source"),
+            "wkg": round(ftp / kg, 2) if ftp and kg else None, "lthr": lthr,
             "run": strip(t.get("run_threshold_per_km")), "css": strip(t.get("swim_css_per_100m")),
             "sports": sports, "untested": untested}
 
