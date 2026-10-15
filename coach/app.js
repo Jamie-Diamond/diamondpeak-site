@@ -5681,6 +5681,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.88", "2026-10-15", "Athlete picker readable when opened from the Dev tab", 1],
     ["3.87", "2026-10-15", "Recovery tiles show the 7-day average the graph shows, with today and usual underneath", 0],
     ["3.86", "2026-10-15", "Stop button while the coach is replying; weigh-ins left out show on the graph as outliers", 0],
     ["3.85", "2026-10-15", "Weigh-ins that can't be you are left out of the weight trend until you confirm them", 0],
