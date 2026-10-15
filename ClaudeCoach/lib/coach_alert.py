@@ -280,10 +280,14 @@ DELIVERABLES = [
     # lib_git_alert.sh's git_sync_ok/git_sync_fail actually pass to
     # ops_log — NOT the script filename; get that wrong and this is a false
     # registration that can never see a heartbeat.
-    {"script": "sync-private",        "label": "private repo sync",  "window": "daily",
+    # 15 Oct 2026: sync-private (plaintext mirror, dead since 13 Aug) retired for
+    # backup-athletes-encrypted.sh — same slot, same "only off-server copy of
+    # athletes/" class, but GitHub now holds ciphertext only. Label is the NAME the
+    # script passes to git_sync_ok / git_sync_fail.
+    {"script": "backup-athletes",     "label": "encrypted athlete backup", "window": "daily",
      "per_athlete": False, "telegram": False, "detail": "sync ok",
-     "cron": "20 23 * * *",      "cron_cmd": "sync-private-repo.sh",
-     "since": "2026-07-28T16:21:45"},   # merged to main (was 5eaae85 commit time)
+     "cron": "25 23 * * *",      "cron_cmd": "backup-athletes-encrypted.sh",
+     "since": "2026-10-15T15:30:00"},
                                         # its heartbeat write, for every job
                                         # that calls it, not just backup-config.
     # activity-watcher.py (every 5 min, "2-57/5 * * * *") is the busiest
@@ -954,6 +958,7 @@ OUTCOME_CLASS = {
     "watchdog":           FAILURE,
     "backup-config":      FAILURE,   # via ops_log.sync_failure's non-transient branch
     "sync-private":       FAILURE,   # same helper, non-transient branch
+    "backup-athletes":    FAILURE,   # encrypted athlete backup (replaced sync-private 15 Oct 2026)
     "activity-watcher":   FAILURE,   # "Telegram send failed after retry" /
                                      # "activity analysis timed out Nx in a row"
     "stage1-plan":        FAILURE,
