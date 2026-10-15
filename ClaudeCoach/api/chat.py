@@ -81,6 +81,7 @@ class Sink:
         self.edit_item = None        # ... and as Peak knows it (web-outbox id)
         self.drill = None            # (item, type): a drill answer goes inside its card
         self.tab = ""                # "dev": a tap in the coach's Dev tab, kept there
+        self.run_id = None           # the coach run, from its Stop keyboard (stop())
 
     def put(self, kind, text="", **extra):
         self.q.put((kind, text, extra))
@@ -111,6 +112,13 @@ class Sink:
     def handle(self, method, payload):
         payload = payload or {}
         text = payload.get("text") or ""
+        # The live status line carries the bot's "⏹ Stop" keyboard (stop:<run id>); Peak
+        # shows its own Stop button, so keep the id for stop() (Jamie, 15 Oct 2026).
+        for row in ((payload.get("reply_markup") or {}).get("inline_keyboard") or []):
+            for btn in row or []:
+                cd = str((btn or {}).get("callback_data") or "")
+                if cd.startswith("stop:") and not self.run_id:
+                    self.run_id = cd[5:]
         if method == "sendMessage":
             mid = self._id()
             if text == "…" and payload.get("disable_notification") and self.placeholder_id is None:
@@ -366,6 +374,22 @@ def log_session(chat_id: str, item: str, values: dict) -> dict:
     markup = _drill_markup(form["activity"], form["slug"])
     outbox.update(chat_id, item, summary, markup, form=form, logged=logged)
     return {"text": summary, "buttons": outbox._buttons(markup), "form": form, "logged": logged}
+
+
+def stop(chat_id: str) -> bool:
+    """Peak's Stop button: cancel this chat's reply in flight, through the bot's own Stop
+    path (cancels a running CLI, or parks the cancel if it hasn't started yet)."""
+    with _SINKS_GUARD:
+        sink = _SINKS.get(str(chat_id))
+    if not sink or not sink.run_id:
+        return False
+    b = bot()
+    try:
+        if b.engine.cancel_run(sink.run_id, owner=str(chat_id)):
+            return True
+        return bool(b._request_cancel_before_start(sink.run_id))
+    except Exception:
+        return False
 
 
 def start_turn(chat_id: str, label: str = "", text: str = "", audio: bytes | None = None,

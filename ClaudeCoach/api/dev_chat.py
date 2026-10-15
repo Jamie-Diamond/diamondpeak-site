@@ -84,6 +84,8 @@ class Sink:
         self.q: queue.Queue = queue.Queue()
         self.status = "Thinking…"
         self.draft = ""
+        self.run_id = None          # the engine run, for the Stop button (stop())
+        self.stopped = False        # Jamie tapped Stop, as opposed to the time limit
 
     def put(self, kind, text="", **extra):
         if kind == "status":
@@ -257,6 +259,18 @@ def _run(engine, prompt: str, sid: str | None, sink: Sink, run) -> tuple:
             sink.put("status", " · ".join(x for x in ev[1:] if x)[:140])
 
 
+def stop(slug: str) -> bool:
+    """The Stop button (Jamie, 15 Oct 2026: "so I can stop it if I want to correct"):
+    cancel the turn in flight, keyed by the run this slug's turn registered."""
+    import engine
+    with _GUARD:
+        sink = _RUNNING.get(slug)
+    if not sink or not sink.run_id:
+        return False
+    sink.stopped = True
+    return engine.cancel_run(sink.run_id)
+
+
 def start_turn(slug: str, text: str, photos: list | None = None) -> Sink:
     import engine                          # lib/, on sys.path (server.py)
     sink = Sink()
@@ -270,6 +284,7 @@ def start_turn(slug: str, text: str, photos: list | None = None) -> Sink:
 
     def work():
         run = engine._register_run(engine.new_run_id(), owner=f"dev:{slug}")
+        sink.run_id = run.run_id
         timer = threading.Timer(MAX_SECS, engine.cancel_run, args=(run.run_id,))
         timer.daemon = True
         timer.start()
@@ -286,8 +301,8 @@ def start_turn(slug: str, text: str, photos: list | None = None) -> Sink:
             reply, restart = split_restart(final or streamed or "")
             reply, option_rows = split_options(reply)
             if run.cancelled:
-                reply = (reply + "\n\n" if reply else "") + \
-                    f"_Stopped after {MAX_SECS // 60} minutes._"
+                reply = (reply + "\n\n" if reply else "") + (
+                    "_Stopped._" if sink.stopped else f"_Stopped after {MAX_SECS // 60} minutes._")
             if not reply:
                 raise RuntimeError(f"no reply (exit {rc})")
             _save_session(slug, new_sid)

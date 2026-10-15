@@ -1116,6 +1116,22 @@ async def dev_send(request: Request):
     return _sink_stream(sink)
 
 
+@app.post("/api/dev/stop")
+async def dev_stop(request: Request):
+    """Stop the Dev reply in flight (the ■ button)."""
+    slug = _dev_slug(request)
+    return JSONResponse({"stopped": dev_chat.stop(slug)}, headers=NO_STORE)
+
+
+@app.post("/api/chat/stop")
+async def chat_stop(request: Request):
+    """Stop the coach's reply in flight (the ■ button)."""
+    if request.headers.get("x-peak") != "1":
+        raise HTTPException(400, "missing app header")
+    cid, _ = _chat_user(request)
+    return JSONResponse({"stopped": chat.stop(cid)}, headers=NO_STORE)
+
+
 @app.get("/api/dev/media/{name}")
 def dev_media(name: str, request: Request):
     """A photo Jamie attached in the Dev tab (dev_chat.save_photos)."""

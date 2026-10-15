@@ -915,6 +915,14 @@
       return win.reduce(function (a, q) { return a + Number(q.kg); }, 0) / win.length;
     };
     var kg = pts.map(function (p) { return Number(p.kg); });
+    // Weigh-ins left out of the trend are still drawn, as outliers (Jamie, 15 Oct 2026).
+    var out = [];
+    (held || []).forEach(function (g) {
+      (g.readings || g.dates.map(function (d) { return { date: d, kg: g.kg }; })).forEach(function (r) {
+        var tr = Date.parse(r.date);
+        if (tr > tLast - WEIGHT_SHOW_DAYS * 864e5 && tr <= tLast) out.push(r);
+      });
+    });
     var last = kg[kg.length - 1];
     var mean14 = avg14(tLast);
     // Right tile: 28-day change of the 14-day average (Jamie, 15 Oct 2026), so one
@@ -925,7 +933,8 @@
     // Dots for each reading, a line for the 14-day moving average: a day-to-day line made
     // water swings look like trend. Placed by DATE, so a gap in weigh-ins shows as a gap.
     var avgs = pts.map(function (p) { return avg14(Date.parse(p.date)); });
-    var lo = Math.min.apply(null, kg.concat(avgs)), hi = Math.max.apply(null, kg.concat(avgs)), span = (hi - lo) || 1;
+    var outKg = out.map(function (r) { return Number(r.kg); });
+    var lo = Math.min.apply(null, kg.concat(avgs, outKg)), hi = Math.max.apply(null, kg.concat(avgs, outKg)), span = (hi - lo) || 1;
     var W = 300, H = 60;
     var t0 = Date.parse(pts[0].date), tSpan = (tLast - t0) || 1;
     var xOf = function (p) { return ((Date.parse(p.date) - t0) / tSpan * W).toFixed(1); };
@@ -944,13 +953,18 @@
         fig(change28 != null ? signed(change28) : '\u2014', '28-day change', change28 != null ? 'kg, 14-day avg' : 'not enough readings') +
       '</div>' +
       '<div class="spk"><svg class="spark wt" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
-        '<polyline points="' + line + '"/><path class="wt-d" d="' + dots + '"/></svg>' +
+        '<polyline points="' + line + '"/><path class="wt-d" d="' + dots + '"/>' +
+        (out.length ? '<path class="wt-d out" d="' + out.map(function (r) {
+          return 'M' + xOf(r) + ' ' + yOf(Number(r.kg)) + 'h0'; }).join('') + '"/>' : '') + '</svg>' +
         sparkMarks(W, H, [
+          out.length && { x: +xOf(out[0]), y: +yOf(Number(out[0].kg)), txt: Number(out[0].kg).toFixed(1) + ' left out',
+                          kind: Number(out[0].kg) < avgs[0] ? 'lo' : 'hi' },
           wex[0] && { x: wex[0].x, y: wex[0].y, txt: wex[0].v.toFixed(1), kind: 'hi' },
           wex[1] && { x: wex[1].x, y: wex[1].y, txt: wex[1].v.toFixed(1), kind: 'lo' },
           wEnd
         ]) + '</div>' +
-      '<p class="wt-k"><i class="wt-dot"></i>reading<i class="wt-avg"></i>14-day average</p>',
+      '<p class="wt-k"><i class="wt-dot"></i>reading<i class="wt-avg"></i>14-day average' +
+        (out.length ? '<i class="wt-dot out"></i>left out' : '') + '</p>',
       // Weigh-ins that can't be the athlete are left out until they say they were
       // (lib/weight_check.py, 15 Oct 2026); say so, so a gap never looks like lost data.
       { foot: (held || []).length ? (held.reduce(function (n, g) { return n + g.dates.length; }, 0)) +
@@ -1241,6 +1255,10 @@
             '<svg viewBox="0 0 24 24"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/></svg></button>' +
           '<button type="submit" class="cb go" id="chatSend" aria-label="Send" hidden>' +
             '<svg viewBox="0 0 24 24"><path d="M21 4 3 11l5 2 2 5 3-4 5 3z"/></svg></button>' +
+          // Stop the reply in flight (Jamie, 15 Oct 2026: "so I can stop it if I want to
+          // correct"). Shown in place of Send / mic while the coach or Dev is answering.
+          '<button type="button" class="cb stop" id="chatStop" aria-label="Stop the reply" hidden>' +
+            '<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button>' +
         '</form>';
       var ta = $('#chatIn');
       ta.addEventListener('input', function () {
@@ -1252,6 +1270,7 @@
       $('#composer').onsubmit = function (e) { e.preventDefault(); sendChat(); };
       ta.addEventListener('input', composerMode);
       $('#chatMic').onclick = toggleRecord;
+      $('#chatStop').onclick = stopReply;
       $('#chatCam').onclick = function () { if (!chatState.busy) $('#chatFile').click(); };
       $('#chatFile').onchange = function () {
         pickDevPhotos(this.files);                       // Coach and Dev: up to 6 (12 Oct 2026)
@@ -1352,6 +1371,7 @@
         }
         chatState.devBusy = !!j.busy;
         $('#chatSend').disabled = !!j.busy;
+        showStop(!!j.busy || !!chatState.busy);
         if (j.busy) {
           if (j.draft) bubble('coach', '', 'draft').innerHTML = md(j.draft);
           chatSetStatus(j.status || 'Working\u2026');
@@ -1835,12 +1855,30 @@
   function chatBusy(on) {
     chatState.busy = on;
     ['#chatSend', '#chatMic', '#chatCam'].forEach(function (id) { var b = $(id); if (b) b.disabled = on; });
+    showStop(on);
     if (!on) chatSetStatus('');
+  }
+  // While a reply runs the Stop button stands where Send / the mic do.
+  function showStop(on) {
+    var st = $('#chatStop');
+    if (!st) return;
+    st.hidden = !on;
+    st.disabled = false;
+    if (on) { $('#chatSend').hidden = true; $('#chatMic').hidden = true; } else composerMode();
+  }
+  function stopReply() {
+    var st = $('#chatStop');
+    if (st) st.disabled = true;
+    chatSetStatus('Stopping\u2026');
+    postJSON(devTab() ? '/api/dev/stop' : '/api/chat/stop', {})
+      .then(function (j) { if (!j || !j.stopped) chatSetStatus('Nothing to stop: it had already finished'); })
+      .catch(function () { if (st) st.disabled = false; chatSetStatus('Couldn\u2019t stop it - try again'); });
   }
 
   // Composer: typed text shows Send; an empty box shows the mic. A chosen photo sits
   // above the box as a thumbnail and the text becomes its caption.
   function composerMode() {
+    if ((chatState.busy || chatState.devBusy) && $('#chatStop') && !$('#chatStop').hidden) return;
     if (devTab()) { $('#chatSend').hidden = false; $('#chatMic').hidden = true; return; }
     var has = !!($('#chatIn').value.trim() || chatState.photo || (chatState.devPhotos || []).length);
     $('#chatSend').hidden = !has || chatState.rec != null;
@@ -5624,6 +5662,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.86", "2026-10-15", "Stop button while the coach is replying; weigh-ins left out show on the graph as outliers", 0],
     ["3.85", "2026-10-15", "Weigh-ins that can't be you are left out of the weight trend until you confirm them", 0],
     ["3.84", "2026-10-15", "Weight shows the 28-day change; cleaner athlete picker", 0],
     ["3.83", "2026-10-14", "Today shows your eFTP, run threshold and CSS", 0],

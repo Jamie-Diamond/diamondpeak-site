@@ -61,7 +61,8 @@ def suspects(readings: list) -> list:
         off_next = abs(m - mean(nxt)) / mean(nxt) * 100 > allowed_pct(_days(g[-1]["date"], nxt[0]["date"]))
         if off_prev and off_next:
             out.append({"dates": [r["date"] for r in g], "kg": round(m, 1),
-                        "usual": round((mean(prev) + mean(nxt)) / 2, 1)})
+                        "usual": round((mean(prev) + mean(nxt)) / 2, 1),
+                        "readings": [{"date": r["date"], "kg": r["kg"]} for r in g]})
     return out
 
 
@@ -111,8 +112,12 @@ def answer(slug: str, dates: list, approve: bool) -> None:
 
 
 def to_ask(slug: str, readings: list) -> list:
-    """Suspect groups nobody has asked about yet."""
+    """Suspect groups nobody has asked about yet (none while a "hold_until" time, set
+    around a deploy so the Yes / No handler is live first, hasn't passed)."""
     st = load(slug)
+    from datetime import datetime
+    if st.get("hold_until") and datetime.now().isoformat() < st["hold_until"]:
+        return []
     seen = set(st["asked"]) | set(st["approved"]) | set(st["rejected"])
     return [s for s in suspects(readings) if not any(d in seen for d in s["dates"])]
 
