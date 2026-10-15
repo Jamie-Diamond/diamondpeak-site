@@ -4321,6 +4321,12 @@ def prefetch_context(slug: str) -> str:
             f"\nFor more detail call: python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint <endpoint> [options]"
         )
         lines.append("Write endpoints: push_workout (--payload JSON), edit_workout (--event-id ID --payload JSON), delete_workout (--event-id ID)")
+        # A plain answer to the Today note's "Has your period started yet?" (Jamie, 15 Oct
+        # 2026) must log the start too, not only the exact "period started" command.
+        if _menstrual is not None and _menstrual.enabled(slug):
+            lines.append("Cycle tracking is on: when they say their period started (any wording, "
+                         "any day), log it: python3 ClaudeCoach/lib/menstrual.py --athlete "
+                         f"{slug} --started YYYY-MM-DD")
 
         # Inject today's already-answered values from current-state.json so Claude
         # doesn't re-ask questions the athlete has already answered this session.

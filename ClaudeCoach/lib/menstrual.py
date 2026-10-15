@@ -243,3 +243,16 @@ def forecast_block(slug: str, start: date, days: int = 14,
         days_lbl = f"day {day1}" if day1 == day2 else f"days {day1}–{day2}"
         lines.append(f"  {span}: {phase.upper()} ({days_lbl}) — {CUES[phase]}")
     return "\n".join(lines)
+
+
+if __name__ == "__main__":
+    # Log a period start from the coach chat (telegram/bot.py tells the coach this line).
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--athlete", required=True)
+    ap.add_argument("--started", required=True, help="YYYY-MM-DD")
+    a = ap.parse_args()
+    mc = log_period_start(a.athlete, date.fromisoformat(a.started))
+    print(json.dumps({"last_period_start": mc.get("last_period_start"),
+                      "cycle_length_days": mc.get("cycle_length_days"),
+                      "now": phase_for(a.athlete)}))

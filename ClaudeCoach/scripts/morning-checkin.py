@@ -71,8 +71,9 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
         if cycle.get("overdue"):
             cycle_question = (
                 "- FIRST PRIORITY question (overrides the ones below): the cycle anchor is "
-                "overdue — ask \"Has your period started? Reply 'period started' (or "
-                "'period started yesterday') so cycle-aware planning stays accurate.\"\n"
+                "overdue — ask it the way a coach would, e.g. \"Has your period started "
+                "yet? Just tell me the day when it does.\" (Jamie, 15 Oct 2026: not the "
+                "form-style \"Reply 'period started'\"; the chat understands a plain answer.)\n"
             )
 
     # WHICH QUESTION, DECIDED IN PYTHON. `ask_weight` and `ask_ankle` arrive already
