@@ -96,16 +96,45 @@ ICU_TRI = {"ftp_watts": 250, "run_threshold_pace_per_km": None, "swim_css_per_10
 
 
 def onboard(chat, answers):
-    """Send each answer; return the questions asked (text of each bot message)."""
+    """Agree to the consent step, send each answer; return the questions asked (text of
+    each bot message)."""
     B.save_pending([chat])
     asked = []
     B.handle_onboarding("t", chat, "hi")
+    B.handle_onboarding("t", chat, "ob:consent:yes")
     for a in answers:
         n = len(SENT)
         B.handle_onboarding("t", chat, a)
         asked.extend(t for c, t, _ in SENT[n:] if c == chat)
     return asked
 
+
+# ── 0. consent comes first: nothing is asked until they agree ────────────────
+B.save_pending(["120"])
+B.handle_onboarding("t", "120", "hi")
+first = [(t, m) for c, t, m in SENT if c == "120"]
+check("first message is the consent question, with the privacy link",
+      "Before we start" in first[-1][0] and B.PRIVACY_URL in first[-1][0], first)
+check("consent has I agree / Not now buttons",
+      [b["callback_data"] for b in first[-1][1]["inline_keyboard"][0]] == ["ob:consent:yes", "ob:consent:no"],
+      first[-1][1])
+n = len(SENT)
+B.handle_onboarding("t", "120", "ob:consent:no")
+said = [(t, m) for c, t, m in SENT[n:] if c == "120"]
+check("Not now: sign-up waits, with I agree still there",
+      any("can't coach you without it" in t for t, _ in said) and said[-1][1]
+      and said[-1][1]["inline_keyboard"][0][0]["callback_data"] == "ob:consent:yes"
+      and B.load_onboarding_state()["120"]["current_key"] == "consent", said)
+n = len(SENT)
+B.handle_onboarding("t", "120", "maybe")
+check("an answer that isn't yes or no asks for a tap",
+      any("Tap *I agree*" in t for c, t, _ in SENT[n:]), SENT[n:])
+n = len(SENT)
+B.handle_onboarding("t", "120", "I agree")
+ans = B.load_onboarding_state()["120"]["answers"]
+check("typed 'I agree' records consent, its time and the policy version, then asks the name",
+      ans.get("consent") == "yes" and ans.get("consent_at") and ans.get("consent_policy") == B.PRIVACY_VERSION
+      and any("*full name*" in t for c, t, _ in SENT[n:]), (ans, SENT[n:]))
 
 # ── 1. a 70.3 athlete: wrist HR, rides with power, one tested swim number ──────
 fake_icu(ICU_TRI, TRI)
@@ -169,6 +198,9 @@ check("the ramp starts from the rough FTP when there is no tested one",
       B.baseline_lib.expected_mid(ss["bike"]["expected"]) == 230)
 check("athletes.json entry inactive until approved",
       json.loads(B.ATHLETES_CONFIG.read_text())["sam"]["active"] is False)
+_c = json.loads(B.ATHLETES_CONFIG.read_text())["sam"].get("consent") or {}
+check("athletes.json keeps the consent: given, when, which policy",
+      _c.get("given") is True and _c.get("at") and _c.get("policy") == B.PRIVACY_VERSION, _c)
 
 # ── 2. /approve hands off to baseline-week.py start ─────────────────────────
 RUNS.clear()
@@ -202,6 +234,7 @@ PHOTOS.clear()
 ISSUES[:] = [["Planned workouts aren't set to go to your *Garmin*."], []]
 B.save_pending(["125"])
 B.handle_onboarding("t", "125", "hi")
+B.handle_onboarding("t", "125", "ob:consent:yes")
 for a in ["Pat Lee", "70.3 Test, 2027-06-01"]:
     B.handle_onboarding("t", "125", a)
 n = len(SENT)
@@ -296,7 +329,7 @@ B._outbox = OB
 WEB = "web-00aa11bb22"
 ISSUES[:] = [["Your activities only come in through *Strava*, and Strava hides them from me."], []]
 B.save_pending([WEB])
-for a in ["hi", "Robin Apple", "70.3 Test, 2027-06-01", "ob:icu_has:yes"]:
+for a in ["hi", "ob:consent:yes", "Robin Apple", "70.3 Test, 2027-06-01", "ob:icu_has:yes"]:
     B.handle_onboarding("t", WEB, a)
 n = len(SENT)
 B.handle_onboarding("t", WEB, KEY)

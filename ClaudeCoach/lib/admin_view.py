@@ -22,7 +22,7 @@ BASE = Path(__file__).resolve().parent.parent            # ClaudeCoach/
 
 # Sign-up question keys (telegram/bot.py onboarding) in plain words.
 QUESTION = {
-    "name": "their name", "race": "race or goal", "goal": "choosing a goal",
+    "consent": "agreeing to the privacy terms", "name": "their name", "race": "race or goal", "goal": "choosing a goal",
     "goal_sports": "choosing sports", "icu_has": "Intervals.icu: do they use it",
     "icu_setup": "setting up Intervals.icu", "icu_key": "Intervals.icu key",
     "icu_fix": "fixing their Intervals.icu set-up", "a_goal": "race goal",

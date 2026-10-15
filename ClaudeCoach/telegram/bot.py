@@ -4635,12 +4635,30 @@ def prefetch_context(slug: str) -> str:
 PENDING_FILE    = BASE.parent / "config/pending.json"
 ONBOARDING_FILE = BASE.parent / "config/onboarding_state.json"  # gitignored
 
+# Consent before anything is collected (Jamie, 15 Oct 2026: UK GDPR explicit consent for
+# health data, and Garmin's AI transparency rule). The date is the privacy page version
+# agreed to; bump it when diamondpeak.uk/privacy.html changes in a way that matters.
+PRIVACY_URL = "https://diamondpeak.uk/privacy.html"
+PRIVACY_VERSION = "2026-10-15"
+_OB_CONSENT_Q = (
+    "Hi! I'm your Peak coach. Before we start, one thing to agree.\n\n"
+    "I'm an AI (Claude, made by Anthropic). To coach you I read your training, your "
+    "wellness data (sleep, HRV, resting heart rate) and anything you tell me about your "
+    "health, like illness or injuries. I only use it to coach you, and you can withdraw "
+    "your consent at any time.\n\n"
+    f"How your data is used: [privacy policy]({PRIVACY_URL})\n\n"
+    "Do you agree?")
+_OB_CONSENT_NO = (
+    "No problem. I can't coach you without it, so sign-up waits here. Tap *I agree* "
+    f"whenever you're ready, or read the [privacy policy]({PRIVACY_URL}) first.")
+
 # Phase 1: always asked, in order. Intervals.icu (30 Sep 2026): asked whether they use
 # it; a "no" adds the set-up walk-through. The athlete ID is no longer asked - the API
 # key alone identifies the athlete. Screenshots are onboarding/img/ (Jamie's account,
 # key and personal details removed).
 _OB_PHASE1 = [
-    ("name",    "Hi! I'm ClaudeCoach. Just a few questions to get you set up.\n\nWhat's your *full name*?"),
+    ("consent", _OB_CONSENT_Q),
+    ("name",    "Thanks! Just a few questions to get you set up.\n\nWhat's your *full name*?"),
     ("race",    "What's your *target race* -- name and date? (e.g. _IM Frankfurt, 2027-06-29_)\n\n"
                 "Not training for a race? Reply _none_."),
     ("icu_has", "Do you already use *Intervals.icu*? It's the free training log I read your sessions, sleep and fitness from, and where I put your plan."),
@@ -4717,6 +4735,7 @@ _OB_LEVEL = ("level",
     "*Pro* -- the technical terms too (CTL, TSS, NP), with the full numbers when you ask.")
 # (button text, value) rows per question; a tap arrives as "ob:<question>:<value>".
 _OB_BUTTONS = {
+    "consent":   [[("I agree", "yes"), ("Not now", "no")]],
     "icu_has":   [[("Yes, I use it", "yes"), ("No, not yet", "no")]],
     "icu_setup": [[("I've done it", "done")]],
     "icu_fix":   [[("Check again", "again"), ("Carry on for now", "skip")]],
@@ -4861,6 +4880,11 @@ _HR_WORDS = ((r"strap|chest|arm|belt|polar h|hrm", "1"), (r"mix|both|sometimes",
 def _ob_normalise(key, answer):
     """Typed words for the button questions: "chest strap" -> 1, "all" -> every option."""
     a = (answer or "").strip()
+    if key == "consent":
+        if re.match(r"^\s*(i agree|agree|agreed|yes|y|yep|yeah|ok|okay|sure)\b", a, re.I):
+            return "yes"
+        if re.match(r"^\s*(not now|no|n|nope|not yet|later)\b", a, re.I):
+            return "no"
     if key == "hr_source" and not re.search(r"[1-4]", a):
         for pat, digit in _HR_WORDS:
             if re.search(pat, a, re.I):
@@ -4880,6 +4904,8 @@ def _validate_ob_answer(key, answer):
     if key == "icu_id":
         if not re.match(r'^i\d+$', answer.strip()):
             return "That doesn't look right -- the athlete ID starts with 'i' followed by numbers (e.g. _i196362_). Check intervals.icu -> Profile."
+    if key == "consent" and answer not in ("yes", "no"):
+        return "Tap *I agree* or *Not now*."
     if key == "icu_has":
         if not re.match(r"^\s*(y|yes|yep|yeah|n|no|nope|not yet)\b", answer, re.I):
             return "Just _yes_ or _no_ -- do you already use Intervals.icu?"
@@ -5292,6 +5318,10 @@ def _scaffold_athlete(chat_id, answers, icu_data, race_data=None, sports=None, r
         "active": False,
         "race_date": race_date or "", "race_name": race_name,
     }
+    if answers.get("consent") == "yes":
+        athletes_data[slug]["consent"] = {"given": True, "at": answers.get("consent_at", ""),
+                                          "policy": answers.get("consent_policy", ""),
+                                          "how": "sign-up: tapped I agree"}
     if goal_key:
         # Block 1 starts the Monday after the baseline week (goals.block_start); the
         # tested numbers are pinned as the start values when that week closes.
@@ -5527,7 +5557,7 @@ def handle_onboarding(token, chat_id, text):
             "started_at": datetime.now().isoformat(),
         }
         save_onboarding_state(ob_state)
-        send(token, chat_id, _OB_PHASE1[0][1])
+        _ob_ask(token, chat_id, _OB_PHASE1[0][0], _OB_PHASE1[0][1])
         return True
 
     session = ob_state[chat_id]
@@ -5567,6 +5597,13 @@ def handle_onboarding(token, chat_id, text):
         return True
     _outbox_clear_buttons(chat_id)
 
+    if key == "consent":
+        if answer != "yes":
+            save_onboarding_state(ob_state)
+            send(token, chat_id, _OB_CONSENT_NO, reply_markup=_ob_markup("consent"))
+            return True
+        session["answers"]["consent_at"] = datetime.now().isoformat(timespec="seconds")
+        session["answers"]["consent_policy"] = PRIVACY_VERSION
     if key == "icu_has":
         answer = "no" if re.match(r"^\s*(n|no|nope|not yet)\b", answer, re.I) else "yes"
         if answer == "no":
