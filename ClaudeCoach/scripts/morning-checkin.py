@@ -280,6 +280,12 @@ ORDER is fixed: greeting, Today, the flag/📌/🍌 lines, then the question (if
 countdown line above, copied exactly, as the LAST line. It is always there; nothing goes after it.
 
 Rules:
+- SHORT (Jamie, 15 Oct 2026: "it's like an essay"): the card is read in five seconds.
+  Every ⚠️ / 📌 / 🔁 line is ONE sentence of at most 18 words: what to do, then the number
+  that says why. No reasoning, no dates of individual readings, no "I'd offer". At most TWO
+  ⚠️ lines: keep the two that change what the athlete does today; drop the rest.
+  e.g. "⚠️ HRV is down 8% on last week, so keep today easy."
+  e.g. "⚠️ Two sessions missed this week; don't make them up."
 - Sleep/HRV/RHR: use ONLY the pre-fetched wellness line above — never infer or estimate values yourself.
 - If no planned session: say "Rest day" and skip the Today line.
 - Omit any section that has nothing to say — do not pad with dashes or "N/A".
@@ -1062,8 +1068,15 @@ def run_athlete(slug, athlete_cfg):
     if output and not _hours_ask_appended and not _passive_sent_for:
         try:
             _cons_case = _consistency_line(slug, adir, athlete_cfg, baseline_rows, output)
+            # Not when the card has already raised the misses itself (15 Oct: both said it),
+            # and above the countdown, which stays the last line.
+            if _cons_case and re.search(r"\bmiss(ed)?\b", output, re.I):
+                _cons_case = None
             if _cons_case:
-                output = f"{output}\n\n{consistency.LINES[_cons_case]}"
+                _body, _sep, _last = output.rpartition("\n\n")
+                _line = consistency.LINES[_cons_case]
+                output = (f"{_body}\n\n{_line}\n\n{_last}" if _sep and _last.startswith("_")
+                          else f"{output}\n\n{_line}")
         except Exception as exc:
             print(f"[{slug}] consistency check failed: {exc}", file=sys.stderr)
             _cons_case = None

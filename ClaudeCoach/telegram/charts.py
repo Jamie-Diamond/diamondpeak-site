@@ -47,6 +47,20 @@ try:
             _registered = True
     if _registered:
         matplotlib.rcParams["font.family"] = "DM Sans"
+    # Peak's font (Plus Jakarta Sans, OFL; variable TTF so weights come from the default
+    # instance) for charts drawn to match the app (Jamie, 15 Oct 2026).
+    _jp = _os.path.join(_FONT_DIR, "PlusJakartaSans-Variable.ttf")
+    if _os.path.exists(_jp):
+        _fm.fontManager.addfont(_jp)
+        _JAKARTA = True
+except Exception:
+    pass  # default font — never break rendering on a font issue
+try:
+    _JAKARTA
+except NameError:
+    _JAKARTA = False
+try:
+    pass
 except Exception:
     pass  # default font — never break rendering on a font issue
 
@@ -330,119 +344,120 @@ def load_chart(payload, coaching_level="mid"):
     """
     payload: {"today":"MM-DD","days":[{"date":"YYYY-MM-DD","tsb":-8.7,
               "activities":[{"sport":"Ride","tss":117,"dur":120,"status":"completed"},...]},...]}
-    Stacked TSS bars by sport (actual solid, planned faded) + TSB line on a right axis
-    with fresh/load/heavy zone bands. Local matplotlib render.
+    The morning card's "seven days either side" chart, drawn to match Peak (Jamie, 15 Oct
+    2026: "ugly by our modern standards"): Peak's sport colours and font, rounded stacked
+    bars (planned faded), Form as a smooth line with its latest value tagged, Fatigue
+    dashed, plain-English labels, no zone bands, today marked on the date axis.
     """
-    if isinstance(payload, dict):
-        days      = payload.get("days", [])
-        today     = payload.get("today")
-        seed_ctl  = payload.get("seed_ctl")
-        seed_atl  = payload.get("seed_atl")
-        if "level" in payload:
-            coaching_level = payload["level"]
-    else:
+    if not isinstance(payload, dict):
         return None
-    L = _lbl(coaching_level)
+    days, today = payload.get("days", []), payload.get("today")
+    seed_ctl, seed_atl = payload.get("seed_ctl"), payload.get("seed_atl")
     if not days:
         return None
 
     import numpy as np
+    from matplotlib.patches import FancyBboxPatch
+    INK, MUTED, HAIR, ACCENT = "#0b0d10", "#8a8f98", "#e6e9ee", "#10656b"
     SPORTS = ["Ride", "Run", "Swim", "Strength", "Other"]
-    BASE   = {"Ride": "#1d6840", "Run": "#c0392b", "Swim": "#1a5276",
-              "Strength": "#7f8c8d", "Other": "#b0aaa0"}
+    BASE = {"Ride": "#10656b", "Run": "#ba3c32", "Swim": "#1d4e73",
+            "Strength": "#78848e", "Other": "#a6acb4"}
+    fam = "Plus Jakarta Sans" if _JAKARTA else matplotlib.rcParams["font.family"]
 
-    mmdd = [d["date"][5:] for d in days]
-    n    = len(days)
-    x    = np.arange(n)
-
-    fig, ax = plt.subplots(figsize=(7.8, 4.4))
+    n = len(days)
+    x = np.arange(n)
+    fig, ax = plt.subplots(figsize=(7.8, 4.6))
+    fig.patch.set_facecolor("white")
     ax1 = ax.twinx()
-    _style_ax(ax)
-    _style_ax(ax1, twin=True)
+    for a in (ax, ax1):
+        for sp in a.spines.values():
+            sp.set_visible(False)
+        a.tick_params(length=0, labelsize=9.5, colors=MUTED)
+    ax.grid(True, axis="y", color=HAIR, linewidth=0.8)
+    ax.set_axisbelow(True)
 
-    # Stacked TSS bars by sport; planned segments faded, actual solid.
-    bottom  = np.zeros(n)
+    # Stacked bars by sport with rounded corners; planned faded.
+    W = 0.62
+    bottom = np.zeros(n)
     present = []
+    tops = np.zeros(n)
+    for d_i, d in enumerate(days):
+        tops[d_i] = sum((a.get("tss") or 0) for a in d.get("activities", []))
+    ymax = max(tops.max(), 1) * 1.18
+    ax.set_ylim(0, ymax)
+    ax.set_xlim(-0.6, n - 0.4)
+    # rounding in display-consistent units: x is in bar-widths, y in load points
+    aspect = ymax / (n * 0.55)
     for sport in SPORTS:
-        tss_vals, colours, has_data = [], [], False
-        for d in days:
-            sport_tss, is_planned = 0.0, False
+        any_ = False
+        for d_i, d in enumerate(days):
+            tss, planned = 0.0, False
             for a in d.get("activities", []):
                 if _norm_sport(a.get("sport", "")) == sport:
-                    sport_tss += a.get("tss") or 0
-                    if a.get("status") == "planned":
-                        is_planned = True
-            tss_vals.append(round(sport_tss, 1))
-            if sport_tss > 0:
-                has_data = True
-            alpha = (_PLANNED_ALPHA if is_planned else 0.87) if sport_tss > 0 else 0
-            colours.append(_col(BASE[sport], alpha))
-        if not has_data:
-            continue
-        ax.bar(x, tss_vals, bottom=bottom, width=0.8, color=colours, zorder=2)
-        bottom += np.array(tss_vals)
-        present.append(sport)
+                    tss += a.get("tss") or 0
+                    planned = planned or a.get("status") == "planned"
+            if tss <= 0:
+                continue
+            any_ = True
+            ax.add_patch(FancyBboxPatch(
+                (x[d_i] - W / 2, bottom[d_i]), W, tss,
+                boxstyle="round,pad=0,rounding_size=0.13", mutation_aspect=aspect,
+                facecolor=BASE[sport], alpha=0.32 if planned else 0.92,
+                edgecolor="white", linewidth=1.2, zorder=2))
+            bottom[d_i] += tss
+        if any_:
+            present.append(sport)
 
-    # Rolling 7-day average load/day (trailing window over total daily TSS),
-    # plotted on the primary axis since it shares TSS units with the bars.
-    _WIN = 7
-    roll_vals = [float(np.mean(bottom[max(0, i - _WIN + 1):i + 1])) for i in range(n)]
-    roll_line, = ax.plot(x, roll_vals, color=_col(BRAND_INK, 0.6), linewidth=1.6,
-                         linestyle="--", zorder=3)
+    # Fatigue: trailing 7-day mean of daily load, dashed.
+    roll = [float(np.mean(bottom[max(0, i - 6):i + 1])) for i in range(n)]
+    ax.plot(x, roll, color="#6b7380", linewidth=1.8, linestyle=(0, (4, 3)), zorder=3)
 
-    # TSB line on the right twin, with coloured zone bands behind it.
-    if seed_ctl is not None and seed_atl is not None:
-        tsb_vals = _project_tsb(days, seed_ctl, seed_atl)
-    else:
-        tsb_vals = [round(d.get("tsb") or 0, 1) for d in days]
+    # Form on the right axis: a line with soft dots and its latest value tagged.
+    tsb = (_project_tsb(days, seed_ctl, seed_atl) if seed_ctl is not None and seed_atl is not None
+           else [round(d.get("tsb") or 0, 1) for d in days])
+    lo, hi = min(tsb + [-10]), max(tsb + [10])
+    pad = max(3, (hi - lo) * 0.14)
+    ax1.set_ylim(lo - pad, hi + pad)
+    ax1.plot(x, tsb, color=ACCENT, linewidth=2.4, zorder=4, solid_joinstyle="round")
+    ax1.scatter(x, tsb, s=22, color=ACCENT, edgecolors="white", linewidths=1.2, zorder=5)
+    ax1.annotate(f"{tsb[-1]:+.0f}", (x[-1], tsb[-1]), xytext=(0, 12), textcoords="offset points",
+                 ha="center", fontsize=10, fontweight="bold", color="white", family=fam,
+                 bbox=dict(boxstyle="round,pad=0.35,rounding_size=0.6", fc=ACCENT, ec="none"),
+                 zorder=7)
 
-    tlo = min(tsb_vals + [-25]); thi = max(tsb_vals + [10])
-    tpad = max(3, (thi - tlo) * 0.10)
-    ax1.set_ylim(tlo - tpad, thi + tpad)
-    y1lo, y1hi = ax1.get_ylim()
-    ax1.axhspan(5, y1hi,    facecolor=_CTL_COL,  alpha=0.09, zorder=0)   # fresh
-    ax1.axhspan(0, 5,       facecolor="#78c88c", alpha=0.10, zorder=0)   # ok
-    ax1.axhspan(-20, 0,     facecolor="#c8a03c", alpha=0.08, zorder=0)   # load
-    ax1.axhspan(y1lo, -20,  facecolor="#c0392b", alpha=0.09, zorder=0)   # heavy
-    ax1.axhline(0, color=(0.4, 0.4, 0.4, 0.3), linewidth=0.8,
-                linestyle=(0, (4, 3)), zorder=1)
+    # Dates as "Thu 15"; today bold in the accent with a faint column behind it.
+    labels = []
+    t_idx = None
+    for i, d in enumerate(days):
+        dt = _date.fromisoformat(d["date"][:10])
+        labels.append(f"{dt.strftime('%a')[:1]}\n{dt.day}")
+        if d["date"][5:10] == today:
+            t_idx = i
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=9, color=MUTED, family=fam, linespacing=1.3)
+    if t_idx is not None:
+        ax.axvspan(t_idx - 0.5, t_idx + 0.5, color=ACCENT, alpha=0.06, zorder=0)
+        tl = ax.get_xticklabels()[t_idx]
+        tl.set_color(ACCENT); tl.set_fontweight("bold")
 
-    def _tsb_dot(v):
-        if v > 5:    return "#2e9c8e"   # fresh
-        if v >= -20: return "#c9871f"   # load
-        return "#c0392b"                # heavy
-
-    ax1.plot(x, tsb_vals, color=_col(BRAND_SECOND, 0.7), linewidth=1.4, zorder=4)
-    ax1.scatter(x, tsb_vals, s=34, color=[_tsb_dot(v) for v in tsb_vals],
-                edgecolors="white", linewidths=1.0, zorder=5)
-
-    # Today line.
-    if today in mmdd:
-        ax.axvline(mmdd.index(today), color=_col(BRAND_SECOND, 0.55), linewidth=1.3, zorder=6)
-
-    # Sparse, rotated date ticks (bars are categorical → tick by index).
-    step = max(1, n // 12)
-    ticks = list(range(0, n, step))
-    ax.set_xticks(ticks)
-    ax.set_xticklabels([days[i]["date"][5:] for i in ticks], rotation=45, ha="right",
-                       fontsize=8.5, color=BRAND_MUTED)
-    ax.set_xlim(-0.6, n - 0.4)
-
-    ax.set_ylabel(L["load_tss"], fontsize=10.5, color=BRAND_MUTED)
-    ax.set_ylim(0, max(bottom.max(), 1) * 1.12)
-    ax1.set_ylabel(L["load_tsb"], fontsize=10.5, color=BRAND_SECOND)
-    ax1.tick_params(axis="y", labelcolor=BRAND_SECOND)
-    ax.set_title(f"Training load — {L['load_tss']} by sport  ·  {L['load_tsb']} (right)",
-                 fontsize=12, fontweight="bold", color=BRAND_INK)
+    ax.set_ylabel("Daily load", fontsize=10, color=MUTED, family=fam, labelpad=8)
+    ax1.set_ylabel("Form", fontsize=10, color=ACCENT, family=fam, labelpad=8)
+    ax1.tick_params(axis="y", colors=ACCENT)
+    fig.text(0.02, 0.985, "Seven days either side", fontsize=13.5, fontweight="bold",
+             color=INK, family=fam, va="top")
 
     handles = [mpatches.Patch(facecolor=BASE[s], label=s) for s in present]
-    handles.append(Line2D([0], [0], color=_col(BRAND_SECOND, 0.7), lw=1.4,
-                          marker="o", markerfacecolor="#c9871f", markeredgecolor="white",
-                          markersize=7, label=L["load_tsb"]))
-    handles.append(Line2D([0], [0], color=_col(BRAND_INK, 0.6), lw=1.6,
-                          linestyle="--", label="7d avg load/day"))
-    ax.legend(handles=handles, loc="upper left", frameon=False, fontsize=8.5,
-              ncol=min(len(handles), 4), columnspacing=1.0, handletextpad=0.4)
+    handles += [Line2D([0], [0], color=ACCENT, lw=2.4, marker="o", markersize=5,
+                       markeredgecolor="white", label="Form"),
+                Line2D([0], [0], color="#6b7380", lw=1.8, linestyle=(0, (4, 3)),
+                       label="Fatigue (7-day load)"),
+                mpatches.Patch(facecolor="#a6acb4", alpha=0.32, label="Planned")]
+    leg = fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, -0.02),
+                     ncol=len(handles), frameon=False, fontsize=9, handlelength=1.2,
+                     handletextpad=0.5, columnspacing=1.1, prop={"family": fam, "size": 9})
+    for t in leg.get_texts():
+        t.set_color("#3a3f47")
+    fig.subplots_adjust(left=0.08, right=0.92, top=0.88, bottom=0.2)
     return _render(fig)
 
 
