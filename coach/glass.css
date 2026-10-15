@@ -5,7 +5,7 @@
    sheets. Always on since 3.77/3.78 (html.glass, set in app.html); the Dev tab gets the
    dark glass version at the end of this file. */
 
-html.glass{--glass-v:'165'}
+html.glass{--glass-v:'166'}
 html.glass body:not(.dev-chat){
   --paper:rgba(255,255,255,.62);
   --paper-2:transparent;
@@ -351,7 +351,7 @@ html.glass body:not(.dev-chat) .dr-x{color:var(--muted);outline:none;border:0;
   background:rgba(118,118,128,.14);box-shadow:none;font-size:14px}
 html.glass body:not(.dev-chat) .dr-x:focus{outline:none;border:0;box-shadow:none}
 html.glass body:not(.dev-chat) .card.sx > .sx-figs{padding:12px 10px 0}
-html.glass body:not(.dev-chat) .card.sx > .sx-pf{height:64px;margin:6px 15px 12px;background:none}
+html.glass body:not(.dev-chat) .card.sx > .sx-pf{height:64px;margin:26px 15px 12px;background:none}
 html.glass body:not(.dev-chat) .route.map{padding-bottom:8px}
 html.glass body:not(.dev-chat) .trk-seg{margin:8px 8px 0;border-radius:10px}
 html.glass body:not(.dev-chat) .trk-map{border-radius:22px 22px 0 0}

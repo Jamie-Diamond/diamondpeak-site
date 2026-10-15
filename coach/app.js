@@ -849,6 +849,35 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
         '%;transform:translate(' + ax + ',' + ay + ')">' + esc(m.txt) + '</span>';
     }).join('');
   }
+  /* The standout laps of a done session, labelled like the HRV highs and lows (Jamie,
+     15 Oct 2026: pace under each lap "but make sure not to crowd it ... on some intervals
+     that's not practical"). Two labels at most: the fastest lap, and the slowest of the
+     laps run near that effort (so a recovery jog is never called the slowest lap). Pace
+     from threshold pace for runs and swims, watts from FTP for rides; nothing otherwise. */
+  function lapMarks(blocks, fam) {
+    var th = (state.data || {}).thresholds || {};
+    var secs = function (t) { var m = /(\d+):(\d\d)/.exec(t || ''); return m ? +m[1] * 60 + +m[2] : null; };
+    var mmss = function (v) { v = Math.round(v); return Math.floor(v / 60) + ':' + ('0' + v % 60).slice(-2); };
+    var fmt = fam === 'run' && secs(th.run) ? function (p) { return mmss(secs(th.run) / (p / 100)); }
+      : fam === 'swim' && secs(th.css) ? function (p) { return mmss(secs(th.css) / (p / 100)); }
+      : fam === 'bike' && th.ftp ? function (p) { return Math.round(th.ftp * p / 100) + 'w'; } : null;
+    if (!fmt) return '';
+    var tot = blocks.reduce(function (a, b) { return a + (b[0] || 0); }, 0) || 1, x = 0, CAP = 160;
+    var laps = [];
+    blocks.forEach(function (b) {
+      var w = (b[0] || 0) / tot;
+      if (b[0] >= 60 && b[1] >= 40) laps.push({ x: (x + w / 2) * 1000, y: (1 - Math.min(CAP, b[1]) / CAP) * 100, v: b[1] });
+      x += w;
+    });
+    if (laps.length < 3) return '';
+    var hi = laps.reduce(function (a, b) { return b.v > a.v ? b : a; });
+    var near = laps.filter(function (l) { return l !== hi && l.v >= hi.v * 0.85; });
+    var lo = near.length ? near.reduce(function (a, b) { return b.v < a.v ? b : a; }) : null;
+    if (lo && hi.v - lo.v < 2) lo = null;                   // nothing stands out
+    return sparkMarks(1000, 100, [{ x: hi.x, y: hi.y, txt: fmt(hi.v), kind: 'hi' },
+      lo && { x: lo.x, y: lo.y, txt: fmt(lo.v), kind: 'hi' }]);
+  }
+
   function extremes(list) {      // [{x,y,v}] -> [highest, lowest] by value
     if (list.length < 3) return [null, null];
     var hi = list[0], lo = list[0];
@@ -4837,7 +4866,8 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       '<header class="card-h">' + sportIcon(pl.sport || a.type || sport) +
       '<h2>' + esc(sportWord(pl.sport || a.type || sport) || 'Session') + (done ? '' : ' · planned') + '</h2></header>' +
       '<div class="sx-figs">' + figRow.join('') + '</div>' +
-      (prof && prof.length ? '<div class="sx-pf">' + profSvg(prof, { plan: done ? (pl.plan_fit || pl.plan_prof) : null }) + '</div>' +
+      (prof && prof.length ? '<div class="sx-pf">' + profSvg(prof, { plan: done ? (pl.plan_fit || pl.plan_prof) : null }) +
+        (done ? lapMarks(prof, fam2) : '') + '</div>' +
         (done && pl.plan_prof && pl.plan_prof.length ? '<p class="sx-k"><i class="sx-dash"></i>planned' +
           ((pl.plan_fit || []).some(function (b) { return b[2] === 2; })
             ? '<i class="sx-dash x"></i>too long' : '') +
@@ -5841,6 +5871,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.006", "2026-10-15", "Done sessions show laps, with the fastest and slowest labelled", 0],
     ["4.005", "2026-10-15", "Today note without a title", 0],
     ["4.004", "2026-10-15", "Today note: no status label", 0],
     ["4.003", "2026-10-15", "Today note: a small chat button, bold labels instead of emoji", 0],
