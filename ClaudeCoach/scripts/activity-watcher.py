@@ -40,6 +40,9 @@ STRUCTURE_RULE = (
 
 _WATER_SPORTS = {"sail", "watersport", "windsurf", "kitesurf", "kiteboard"}
 
+# Safety net for an athlete whose new activities arrive by webhook: look anyway this often.
+WATCH_EVERY_S = 30 * 60
+
 
 def _log_to_history(slug: str, message: str) -> None:
     """Append an outbound notification to the athlete's Telegram history so the bot has context for replies."""
@@ -73,6 +76,7 @@ import hr_quality              # per-activity HR trust (wrist-sensor artefacts)
 import baseline as baseline_lib   # new athletes' baseline block: test capture + close
 import duplicates                  # a session in Intervals.icu twice: ask, then delete or merge
 import goals as goals_lib         # a goal without a race: block 1 pinned when baseline closes
+import icu_changes                # webhooks instead of polling, for athletes linked by OAuth
 from git_sync import sync_commit_push
 from primitives.run_durability import compute_run_durability, fade_line
 
@@ -873,7 +877,8 @@ _HISTORY_SPORT = {"VirtualRide": "Ride", "GravelRide": "Ride", "MountainBikeRide
                   "TrailRun": "Run", "VirtualRun": "Run", "WeightTraining": "Strength"}
 
 
-def _log_pre_activation_history(slug: str, athlete_cfg: dict, session_log_f: Path) -> int:
+def _log_pre_activation_history(slug: str, athlete_cfg: dict, session_log_f: Path,
+                                acts: list | None = None) -> int:
     """Sessions from BEFORE the athlete was approved are history, not news (Fred, 1 Oct
     2026: approved at 20:32, his Garmin history landed in Intervals.icu, and the 29 and
     30 Sep strength sessions were debriefed with "Quick log - RPE" and asked about again
@@ -883,12 +888,13 @@ def _log_pre_activation_history(slug: str, athlete_cfg: dict, session_log_f: Pat
     activated = str(athlete_cfg.get("activated") or "")
     if not activated:
         return 0
-    try:
-        from icu_api import IcuClient
-        acts = IcuClient(athlete_cfg["icu_athlete_id"],
-                         athlete_cfg["icu_api_key"]).get_training_history(days=3) or []
-    except Exception:
-        return 0
+    if acts is None:                    # the cycle's own 3-day fetch, when it has one
+        try:
+            from icu_api import IcuClient
+            acts = IcuClient(athlete_cfg["icu_athlete_id"],
+                             athlete_cfg.get("icu_api_key") or "").get_training_history(days=3) or []
+        except Exception:
+            return 0
     old = [a for a in acts if str(a.get("start_date_local") or "")[:19] < activated[:19]]
     if not old:
         return 0
@@ -960,6 +966,11 @@ def _has_new_activity(slug: str, existing_ids: set, acts: list | None = None) ->
         acts = _recent_activities(slug) if acts is None else acts
         if acts is None:
             return True
+        # A Strava-sourced activity comes through the API as an empty stub (no type, no
+        # time, no data): there is nothing to analyse, and the watch's own copy is the
+        # real one. Kathryn's 15 Oct run had one, and Sonnet answered ACTIVITY_ID: none
+        # every 5 minutes for it.
+        acts = [a for a in acts if str(a.get("source") or "").upper() != "STRAVA"]
         logged = [a for a in acts if duplicates.activity_ids(a) & existing_ids]
         for a in acts:
             if duplicates.activity_ids(a) & existing_ids or any(duplicates.same_session(a, b) for b in logged):
@@ -1783,7 +1794,6 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
         except Exception:
             pass
 
-    ftp = _resolve_ftp(slug, profile, session_log_f)
     first_name = profile.get("name", slug).split()[0]
     injuries = [_i for _i in profile.get("injuries", []) if str(_i.get("status") or "").lower() not in ("cleared", "resolved")]   # cleared = not current
     run_hr_cap       = int(athlete_cfg.get("run_hr_cap", 150))
@@ -1804,7 +1814,17 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     _strava_refresh_updated(slug, state, state_file)
     _baseline_tick(slug, chat_id)
 
-    _log_pre_activation_history(slug, athlete_cfg, session_log_f)
+    # Webhooks instead of polling (lib/icu_changes.py, 15 Oct 2026): an athlete linked
+    # through Peak is only asked for activities when Intervals.icu said one arrived, or
+    # every WATCH_EVERY_S as a safety net. Everyone else: every cycle, as before.
+    poll_started = time.time()
+    poll = icu_changes.due(slug, "watcher", WATCH_EVERY_S, icu_changes.ACTIVITY_TYPES)
+    recent = _recent_activities(slug) if poll else []
+    if poll and recent is not None:
+        icu_changes.mark_run(slug, "watcher", poll_started)
+
+    if poll:
+        _log_pre_activation_history(slug, athlete_cfg, session_log_f, acts=recent)
 
     # Snapshot existing IDs before Claude runs
     existing_ids: set = set()
@@ -1818,7 +1838,6 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     # nothing new. The cheap cyclic tasks above (test reminders, Strava refresh)
     # and the follow-up nudge below still run every cycle — only the expensive
     # Claude call is gated, so this script can poll every 5 min cheaply.
-    recent = _recent_activities(slug)
     _duplicate_tick(slug, chat_id, recent)
     if not _has_new_activity(slug, existing_ids, recent):
         if announce_empty and chat_id:
@@ -1829,6 +1848,10 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
         _send_followup_nudge(state, session_log_f, chat_id, injuries=injuries,
                              state_file=state_file, slug=slug)
         return
+
+    # Looked up only now there is something to analyse: it is an Intervals.icu call, and
+    # it used to run every 5 minutes for every athlete whether or not anything was new.
+    ftp = _resolve_ftp(slug, profile, session_log_f)
 
     # Recent chat so the analysis can suppress itself when the athlete already
     # discussed this activity with the bot ("we've already discussed this").

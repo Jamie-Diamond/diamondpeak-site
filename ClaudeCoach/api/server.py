@@ -934,6 +934,7 @@ def strava_disconnect(slug: str, request: Request):
 # ── Connect Intervals.icu by OAuth (lib/icu_link.py), instead of pasting an API key ──
 
 ICU_WEBHOOK_LOG = Path(os.path.expanduser("~/Library/Logs/ClaudeCoach/icu-webhooks.jsonl"))
+_icu_webhook_lock = threading.Lock()
 
 
 @app.get("/api/icu/connect")
@@ -1005,9 +1006,12 @@ def icu_callback(request: Request, code: str = "", state: str = "", error: str =
 @app.post("/api/icu/webhook")
 async def icu_webhook(request: Request):
     """Intervals.icu's webhooks (Manage App -> Webhooks). Server to server, so NOT behind a
-    Cloudflare Access sign-in: the path needs an Access bypass, and the app's webhook secret
-    in the body is the only proof. Logged (secret removed) and answered at once; nothing
-    acts on them yet. They will replace polling (new activity, wellness, calendar)."""
+    Cloudflare Access sign-in: the path has an Access bypass (15 Oct 2026), and the app's
+    webhook secret in the body is the only proof. Body: {"secret", "events": [{"athlete_id",
+    "type", "timestamp", ...}]}. Each event marks its athlete as changed (lib/icu_changes.py),
+    which is what lets the cron jobs skip athletes with nothing new instead of polling.
+    Logged (secret removed) and answered at once."""
+    import icu_changes
     import icu_link
     try:
         body = await request.json()
@@ -1017,12 +1021,25 @@ async def icu_webhook(request: Request):
         print("[icu] webhook refused: bad secret", flush=True)
         raise HTTPException(403, "bad secret")
     body.pop("secret", None)
-    try:
-        ICU_WEBHOOK_LOG.parent.mkdir(parents=True, exist_ok=True)
-        with open(ICU_WEBHOOK_LOG, "a") as fh:
-            fh.write(json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), **body}) + "\n")
-    except OSError:
-        pass
+    athletes = _load(ATHLETES_CONFIG)
+    with _icu_webhook_lock:
+        for ev in body.get("events") or []:
+            if not isinstance(ev, dict):
+                continue
+            aid = ev.get("athlete_id")
+            slug = next((s for s, a in athletes.items() if isinstance(a, dict)
+                         and icu_link.same_athlete(a.get("icu_athlete_id"), aid)), None)
+            ev["slug"] = slug
+            if slug:
+                icu_changes.record(slug, str(ev.get("type") or ""))
+            if ev.get("type") == "APP_SCOPE_CHANGED":
+                print(f"[icu] {slug or aid} changed Peak's Intervals.icu permissions: {ev}", flush=True)
+        try:
+            ICU_WEBHOOK_LOG.parent.mkdir(parents=True, exist_ok=True)
+            with open(ICU_WEBHOOK_LOG, "a") as fh:
+                fh.write(json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), **body}) + "\n")
+        except OSError:
+            pass
     return JSONResponse({"ok": True})
 
 

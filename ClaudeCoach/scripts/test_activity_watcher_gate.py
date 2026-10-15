@@ -55,6 +55,15 @@ def test_overlapping_other_sport_is_new(monkeypatch):
     assert gate(monkeypatch, acts, {"i30"})
 
 
+def test_a_strava_stub_is_never_new(monkeypatch):
+    # 15 Oct 2026: Kathryn's run came through twice - the Garmin copy (logged) and a
+    # Strava-sourced stub the API empties (no type, no time) - and Sonnet ran every 5 min.
+    acts = [act("i197461272", "2026-10-15T06:32:34", 3000, "Run"),
+            {"id": "20591423496", "start_date_local": "2026-10-15T06:32:34", "type": None,
+             "source": "STRAVA"}]
+    assert not gate(monkeypatch, acts, {"i197461272"})
+
+
 def test_fetch_failure_fails_open(monkeypatch):
     monkeypatch.setattr(aw.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(
         a, 1, stdout="", stderr="boom"))

@@ -67,3 +67,17 @@ def test_no_activation_time_changes_nothing(tmp_path, monkeypatch):
     log.write_text("[]")
     assert w._log_pre_activation_history("jamie", {"icu_athlete_id": "x", "icu_api_key": "k"}, log) == 0
     assert json.loads(log.read_text()) == []
+
+
+def test_the_cycles_own_fetch_is_reused(tmp_path, monkeypatch):
+    w = _watcher()
+    import icu_api
+
+    class NoCalls:
+        def __init__(self, *a):
+            raise AssertionError("fetched again")
+    monkeypatch.setattr(icu_api, "IcuClient", NoCalls)
+    log = tmp_path / "session-log.json"
+    log.write_text("[]")
+    cfg = {"icu_athlete_id": "i9", "icu_api_key": "k", "activated": "2026-10-01T20:32:41"}
+    assert w._log_pre_activation_history("fred", cfg, log, acts=ACTS) == 2

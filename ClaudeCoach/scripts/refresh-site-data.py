@@ -27,6 +27,7 @@ from collections import defaultdict
 
 BASE             = Path(__file__).parent.parent          # ClaudeCoach/
 OUT_FILE         = BASE / "athletes/jamie/training-data.json"  # full private copy (gitignored)
+REFRESH_EVERY_S  = 2 * 3600   # rebuild a webhook-driven athlete at least this often
 PUBLIC_DIR       = BASE / "public"                             # sanitised, tracked, published
 GIT_PUSH         = BASE / "scripts/cc-git-commit-push.sh"
 
@@ -2294,11 +2295,15 @@ def refresh_one(slug):
     """Rebuild ONE athlete's private training data and nothing else - no library,
     no publish. The app's pull-to-refresh calls this through api/server.py."""
     sys.path.insert(0, str(BASE / "lib"))
+    import icu_api
+    import icu_changes
     from icu_api import IcuClient
+    icu_api.enable_run_cache()
     acfg = json.loads(ATHLETES_CONFIG.read_text()).get(slug)
     if not acfg or not acfg.get("active", True):
         log(f"[{slug}] not an active athlete")
         return 2
+    started = time.time()
     if slug == "jamie":
         data = _build_jamie_data(IcuClient(acfg["icu_athlete_id"], acfg["icu_api_key"]))
         try:
@@ -2311,6 +2316,7 @@ def refresh_one(slug):
         log(f"[jamie] refreshed: CTL {data['kpi'].get('ctl')}")
     else:
         _build_athlete_training_data(slug, acfg)
+    icu_changes.mark_run(slug, "refresh", started)
     try:
         subprocess.run([sys.executable, str(BASE / "scripts" / "publish-nutrition-data.py"), slug],
                        capture_output=True, text=True, timeout=120)
@@ -2340,7 +2346,10 @@ def main():
 
     try:
         sys.path.insert(0, str(BASE / "lib"))
+        import icu_api
+        import icu_changes
         from icu_api import IcuClient
+        icu_api.enable_run_cache()
         athletes_map = json.loads(ATHLETES_CONFIG.read_text())
         jamie_cfg    = athletes_map.get("jamie", {})
         client       = IcuClient(jamie_cfg["icu_athlete_id"], jamie_cfg["icu_api_key"])
@@ -2379,34 +2388,42 @@ def main():
         except Exception as e:
             log(f"Nutrition publish warning: {e}, app keeps last copy")
 
-        log("Fetching live data via IcuClient...")
-        try:
-            data = _build_jamie_data(client)
-            log(f"Fetch ok: CTL {data['kpi'].get('ctl')}, {len(data['recent'])} activities")
-        except Exception as e:
-            log(f"IcuClient fetch failed: {e}")
-            sys.exit(1)
+        # Webhooks instead of polling (lib/icu_changes.py, 15 Oct 2026): an athlete linked
+        # through Peak is rebuilt only when Intervals.icu said something changed, at least
+        # every REFRESH_EVERY_S, and on a new day. Everyone else: every run, as before.
+        if icu_changes.due("jamie", "refresh", REFRESH_EVERY_S):
+            started = time.time()
+            log("Fetching live data via IcuClient...")
+            try:
+                data = _build_jamie_data(client)
+                log(f"Fetch ok: CTL {data['kpi'].get('ctl')}, {len(data['recent'])} activities")
+            except Exception as e:
+                log(f"IcuClient fetch failed: {e}")
+                sys.exit(1)
 
-        # Add locally-computed fields (heat, decoupling, CTL projection, session log…)
-        try:
-            data = post_process(data)
-            log("Post-processing: heat, decoupling, CTL projection added")
-        except Exception as e:
-            log(f"Post-processing warning: {e} — continuing without extra fields")
-        data["nextRace"] = _next_race("jamie")
-        data["season"] = _season("jamie", data)
-        OUT_FILE.write_text(json.dumps(data, separators=(",", ":")))
+            # Add locally-computed fields (heat, decoupling, CTL projection, session log…)
+            try:
+                data = post_process(data)
+                log("Post-processing: heat, decoupling, CTL projection added")
+            except Exception as e:
+                log(f"Post-processing warning: {e} — continuing without extra fields")
+            data["nextRace"] = _next_race("jamie")
+            data["season"] = _season("jamie", data)
+            OUT_FILE.write_text(json.dumps(data, separators=(",", ":")))
+            icu_changes.mark_run("jamie", "refresh", started)
 
-        # Sanitised public variant for GitHub Pages. The old root-level
-        # ClaudeCoach/training-data.json write is gone: it was a deny-list
-        # output living at a path whose name implied it was safe, which is
-        # exactly the confusion that kept the leak invisible for 11 weeks.
-        # Nothing on the box reads it (only HTTP did, and the dashboards now
-        # fetch public/ instead). The stale file is left on disk untouched.
-        if PUBLISH_PUBLIC:
-            pub_rel = write_public_variant(data, "jamie")
-            if pub_rel:
-                _PUBLISHED.append(pub_rel)
+            # Sanitised public variant for GitHub Pages. The old root-level
+            # ClaudeCoach/training-data.json write is gone: it was a deny-list
+            # output living at a path whose name implied it was safe, which is
+            # exactly the confusion that kept the leak invisible for 11 weeks.
+            # Nothing on the box reads it (only HTTP did, and the dashboards now
+            # fetch public/ instead). The stale file is left on disk untouched.
+            if PUBLISH_PUBLIC:
+                pub_rel = write_public_variant(data, "jamie")
+                if pub_rel:
+                    _PUBLISHED.append(pub_rel)
+        else:
+            log("[jamie] nothing new from Intervals.icu (webhooks) - skipped")
 
         # Refresh per-athlete training data for other athletes (using IcuClient directly)
         if ATHLETES_CONFIG.exists():
@@ -2415,8 +2432,13 @@ def main():
                 for slug, acfg in athletes_map.items():
                     if slug == "jamie" or not acfg.get("active", True):
                         continue
+                    if not icu_changes.due(slug, "refresh", REFRESH_EVERY_S):
+                        log(f"[{slug}] nothing new from Intervals.icu (webhooks) - skipped")
+                        continue
                     try:
+                        started = time.time()
                         _build_athlete_training_data(slug, acfg)
+                        icu_changes.mark_run(slug, "refresh", started)
                     except Exception as e:
                         log(f"[{slug}] training-data refresh failed (non-fatal): {e}")
             except Exception as e:

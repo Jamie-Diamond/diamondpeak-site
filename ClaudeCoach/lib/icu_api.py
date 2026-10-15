@@ -92,6 +92,30 @@ def count_request(athlete_id: str, auth: str, r) -> None:
         pass
 
 
+# Read-once cache for one batch job (refresh-site-data.py): the same GET asked twice in
+# one run is answered from memory. Its builders asked for the same wellness up to 8 times
+# per athlete per run (15 Oct 2026). Off unless a job turns it on; writes are never cached.
+_RUN_CACHE: dict | None = None
+
+
+def enable_run_cache() -> None:
+    global _RUN_CACHE
+    _RUN_CACHE = {}
+
+
+def _cached_get(session, url: str, params: dict | None):
+    import copy
+    key = (url, tuple(sorted((params or {}).items())))
+    if _RUN_CACHE is not None and key in _RUN_CACHE:
+        return copy.deepcopy(_RUN_CACHE[key])
+    r = session.get(url, params=params, timeout=15)
+    r.raise_for_status()
+    data = r.json()
+    if _RUN_CACHE is not None:
+        _RUN_CACHE[key] = copy.deepcopy(data)
+    return data
+
+
 class IcuClient:
     def __init__(self, athlete_id: str, api_key: str = "", token: str | None = None):
         self.athlete_id = athlete_id
@@ -113,17 +137,13 @@ class IcuClient:
 
     def _get(self, path: str, params: dict = None, base: str = None) -> dict | list:
         url = (base or f"{BASE_URL}/athlete/{self.athlete_id}") + ("/" + path.lstrip("/") if path else "")
-        r = self.session.get(url, params=params, timeout=15)
-        r.raise_for_status()
-        return r.json()
+        return _cached_get(self.session, url, params)
 
     def _activity_get(self, activity_id: str, sub: str = "") -> dict | list:
         path = f"{BASE_URL}/activity/{activity_id}"
         if sub:
             path += "/" + sub.lstrip("/")
-        r = self.session.get(path, timeout=15)
-        r.raise_for_status()
-        return r.json()
+        return _cached_get(self.session, path, None)
 
     def _put(self, path: str, payload: dict) -> dict:
         url = f"{BASE_URL}/athlete/{self.athlete_id}/{path.lstrip('/')}"

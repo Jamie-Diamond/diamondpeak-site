@@ -813,10 +813,19 @@ def test_an_athlete_with_only_a_token_reads_as_linked(env, icu, monkeypatch):
     assert server._icu_linked(json.loads(server.ATHLETES_CONFIG.read_text())["kathryn"])
 
 
-def test_intervals_webhook_needs_the_secret_and_is_logged_without_it(env, icu):
-    body = {"secret": "wh", "events": [{"athlete_id": "i22", "type": "ACTIVITY_UPLOADED"}]}
+def test_intervals_webhook_needs_the_secret_and_marks_the_athlete_changed(env, icu, monkeypatch):
+    import icu_changes
+    monkeypatch.setattr(icu_changes, "BASE", server.CC)
+    ath = json.loads(server.ATHLETES_CONFIG.read_text())
+    ath["kathryn"].update(icu_athlete_id="i22")
+    server.ATHLETES_CONFIG.write_text(json.dumps(ath))
+    body = {"secret": "wh", "events": [{"athlete_id": "i22", "type": "ACTIVITY_UPLOADED"},
+                                       {"athlete_id": "i404", "type": "WELLNESS_UPDATED"}]}
     assert env.post("/api/icu/webhook", json={**body, "secret": "bad"}).status_code == 403
     assert env.post("/api/icu/webhook", content=b"nope").status_code == 400
+    assert not icu_changes.changed_since("kathryn", 0)
     assert env.post("/api/icu/webhook", json=body).json() == {"ok": True}
     logged = json.loads(server.ICU_WEBHOOK_LOG.read_text().splitlines()[-1])
     assert "secret" not in logged and logged["events"][0]["type"] == "ACTIVITY_UPLOADED"
+    assert logged["events"][0]["slug"] == "kathryn" and logged["events"][1]["slug"] is None
+    assert icu_changes.changed_since("kathryn", 0, icu_changes.ACTIVITY_TYPES)

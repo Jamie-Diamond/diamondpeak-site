@@ -118,3 +118,31 @@ def test_every_call_is_counted_per_athlete(cc, monkeypatch, tmp_path):
     icu_api.count_request("i1", "oauth", R)
     line = next(logs.iterdir()).read_text().split()
     assert line[1:] == ["i1", "oauth", line[3], "GET", "/api/v1/athlete/i1/wellness", "200", "2499,4990"]
+
+
+def test_a_batch_job_asks_intervals_once_per_identical_read(monkeypatch):
+    import icu_api
+    calls = []
+
+    class R:
+        def __init__(self, url):
+            self.url = url
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return [{"id": "2026-10-15", "url": self.url}]
+    c = IcuClient("i1", "k")
+    monkeypatch.setattr(c.session, "get", lambda url, params=None, timeout=None: calls.append(url) or R(url))
+    monkeypatch.setattr(icu_api, "_RUN_CACHE", None)
+    c.get_wellness(days=7, newest="2026-10-15")
+    c.get_wellness(days=7, newest="2026-10-15")
+    assert len(calls) == 2                                  # off by default
+    icu_api.enable_run_cache()
+    a = c.get_wellness(days=7, newest="2026-10-15")
+    a[0]["changed"] = True                                  # a caller's edit stays its own
+    b = c.get_wellness(days=7, newest="2026-10-15")
+    c.get_wellness(days=14, newest="2026-10-15")            # different question: asked
+    assert len(calls) == 4 and "changed" not in b[0]
+    monkeypatch.setattr(icu_api, "_RUN_CACHE", None)
