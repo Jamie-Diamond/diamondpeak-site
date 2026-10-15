@@ -1615,10 +1615,13 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       '<div class="readout"><b></b><span></span></div><div class="chartbox"><canvas></canvas></div>';
     el.insertBefore(box, el.firstChild);
     el.classList.add('has-chart');
-    var tries = 0;
+    // Another athlete's chat draws THEIR chart (Jamie, 15 Oct 2026: Fred's still showed
+    // the old picture), so wait for that athlete's data, not whoever was open before.
+    var tries = 0, who = state.slug;
     var draw = function () {
       if (!box.isConnected) return;
-      if (typeof Chart === 'undefined' || !state.data || !(state.data.loadChart || []).length) {
+      if (typeof Chart === 'undefined' || !state.data || state.dataSlug !== who ||
+          !(state.data.loadChart || []).length) {
         if (++tries < 40) return setTimeout(draw, 250);     // the chat can render before the data
         box.querySelector('.chartbox').innerHTML = '<p class="hint">Chart loads with your data.</p>';
         return;
@@ -1968,7 +1971,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
         hist.forEach(function (m, i) {
           var el = m.who === 'me' ? bubble('me', m.text)
             : coachItem(m.text, j.readonly ? [] : m.buttons,
-                        m.chart === 'load' && !mq ? LIVE_LOAD
+                        m.chart === 'load' ? LIVE_LOAD
                           : m.photo ? '/api/media/' + encodeURIComponent(m.photo) + mq : null, '', m.id,
                         { form: j.readonly ? null : m.form, logged: m.logged, drills: m.drills });
           if (m.key && !j.readonly) el.setAttribute('data-key', m.key);
@@ -6025,6 +6028,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   var CHANGELOG = [
     ["4.012", "2026-10-15", "Sign-up: tick every box on Intervals.icu; Connect Strava only for an Apple Watch; the checklist reads cleaner", 0],
     ["4.011", "2026-10-15", "Sign-up links Intervals.icu with one Connect button and a checklist that ticks itself; Settings offers Reconnect Intervals.icu", 0],
+    ["4.011", "2026-10-15", "Another athlete\u2019s chat draws their load chart live, like your own", 1],
     ["4.010", "2026-10-15", "A queued message survives Peak reloading or updating", 0],
     ["4.009", "2026-10-15", "Chats show the last 7 days, 100 messages at most", 0],
     ["4.008", "2026-10-15", "Chats show the last 7 days, a week more per tap", 0],
@@ -6783,7 +6787,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
           hour: '2-digit', minute: '2-digit' }) : null;
         return r.json();
       })
-      .then(function (j) { state.data = j; renderAll(); })
+      .then(function (j) { state.data = j; state.dataSlug = slug; renderAll(); })
       .then(loadNutrition)
       .catch(function () {
         $('#v-today').innerHTML =
