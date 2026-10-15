@@ -1658,7 +1658,8 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       }
       logCard(el, id, form, extra || {}, false);
     } else addButtons(el, buttons);
-    if ((buttons || []).some(function (r) { return r.some(function (b) { return b.data === ICU_AGAIN; }); }))
+    if ((buttons || []).some(function (r) { return r.some(function (b) {
+          return b.data === ICU_AGAIN || b.data === ICU_RECHECK; }); }))
       icuChecklist(el);
     return el;
   }
@@ -1668,9 +1669,19 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // history - read from Intervals.icu every 20 s while it's on screen (/api/icu/checklist).
   // Each open line has its own Open in Intervals link. All four ticked: Check again is
   // tapped for them and sign-up carries on.
-  var ICU_AGAIN = 'ob:icu_fix:again';
+  // Since 15 Oct 2026 sign-up doesn't stop here ("can carry on as they do it"): the same
+  // checklist comes after sign-up with ICU_RECHECK, which just re-reads it here. History
+  // is optional: it never holds "All set" back, and polling stops once the rest is in.
+  var ICU_AGAIN = 'ob:icu_fix:again', ICU_RECHECK = 'peak:icu:check';
   function icuChecklist(el) {
     var again = el.querySelector('button[data-cb="' + ICU_AGAIN + '"]');
+    var recheck = el.querySelector('button[data-cb="' + ICU_RECHECK + '"]');
+    var timer = null;
+    if (recheck) recheck.addEventListener('click', function (e) {
+      e.stopPropagation(); e.preventDefault();
+      recheck.disabled = true; recheck.textContent = 'Checking\u2026';
+      clearTimeout(timer); tick(true);
+    }, true);
     var box = document.createElement('div');
     box.className = 'icu-check';
     el.insertBefore(box, el.querySelector('.btns'));
@@ -1679,7 +1690,8 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       el.classList.add('has-icu-check');
       box.innerHTML = (j.done ? '<p class="icu-check-h">All set \u2713</p>' : '') +
         j.items.map(function (c) {
-          return '<div class="icu-row' + (c.ok ? ' ok' : '') + '"><span class="icu-tick">' +
+          return '<div class="icu-row' + (c.ok ? ' ok' : '') + (c.optional ? ' opt' : '') +
+            '"><span class="icu-tick">' +
             (c.ok ? '\u2713' : '') + '</span><div><b>' + esc(c.label) + '</b>' +
             (c.ok ? '' : '<p>' + md(c.fix) + '</p><a href="' + esc(c.url) +
               '" target="_blank" rel="noopener">Open in Intervals \u2197</a>') + '</div></div>';
@@ -1689,18 +1701,24 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
         again.click();
       }
     }
-    function tick() {
+    function tick(manual) {
       if (!el.isConnected || tapped) return;
-      if (document.hidden) { setTimeout(tick, 20000); return; }
+      if (document.hidden && !manual) { timer = setTimeout(tick, 20000); return; }
       fetch('/api/icu/checklist', { cache: 'no-store' })
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (j) {
+          if (recheck) { recheck.disabled = false; recheck.textContent = 'Check again'; }
           if (j && j.items) draw(j);
           else if (!box.innerHTML) box.innerHTML = '<p class="icu-check-h">Couldn\u2019t read ' +
             'Intervals.icu just now. Tap Check again in a minute.</p>';
-          setTimeout(tick, 20000);
+          if (j && j.all) { if (recheck) recheck.closest('.btns').style.display = 'none'; return; }
+          if (j && j.done && recheck) return;            // only the optional history left
+          timer = setTimeout(tick, 20000);
         })
-        .catch(function () { setTimeout(tick, 30000); });
+        .catch(function () {
+          if (recheck) { recheck.disabled = false; recheck.textContent = 'Check again'; }
+          timer = setTimeout(tick, 30000);
+        });
     }
     tick();
   }
@@ -2025,6 +2043,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       streamTurn('/api/dev/chat', JSON.stringify({ text: cb.slice(8) }), 'application/json');
       return;
     }
+    if (cb === ICU_RECHECK) return;                   // icuChecklist re-reads it
     if (cb.indexOf('peak:install:') === 0) {          // handled here, not by the coach
       b.classList.add('picked');
       showInstall(cb.slice(13), b.closest('.msg'));
@@ -6027,6 +6046,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
     ["4.012", "2026-10-15", "Sign-up: tick every box on Intervals.icu; Connect Strava only for an Apple Watch; the checklist reads cleaner", 0],
+    ["4.012", "2026-10-15", "Sign-up no longer waits for Intervals.icu set-up; older training is optional, asked for afterwards", 0],
     ["4.011", "2026-10-15", "Sign-up links Intervals.icu with one Connect button and a checklist that ticks itself; Settings offers Reconnect Intervals.icu", 0],
     ["4.011", "2026-10-15", "Another athlete\u2019s chat draws their load chart live, like your own", 1],
     ["4.010", "2026-10-15", "A queued message survives Peak reloading or updating", 0],

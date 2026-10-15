@@ -5485,7 +5485,10 @@ def _icu_checks(profile, acts, well, connections=None):
     days = sorted(str(a.get("start_date_local") or "")[:10] for a in acts if a.get("start_date_local"))
     seen = (date.today() - date.fromisoformat(days[0])).days if days else 0
     weeks = max(1, seen // 7)
-    checks.append({"key": "history", "label": "History", "ok": seen >= _HISTORY_WANTED_DAYS,
+    # Optional (Jamie, 15 Oct 2026): people waited days for Garmin's export email before
+    # carrying on. It never holds anything up; it is asked for once coaching has started.
+    checks.append({"key": "history", "label": "History (optional)", "optional": True,
+                   "ok": seen >= _HISTORY_WANTED_DAYS,
                    "fix": (f"I can only see your last *{weeks} week{'s' if weeks != 1 else ''}* of "
                            f"training -- the more history, the better I can coach you. Under "
                            f"{watch}, tap _Download old data_ (activities and wellness)"
@@ -5544,7 +5547,7 @@ def _icu_setup_issues(icu_id, icu_key, chat_id=None):
             isinstance(a, dict) and str(a.get("source") or "").upper() != "STRAVA"
             for a in (acts if isinstance(acts, list) else [])):
         return [checks[0]["fix"]]           # nothing arrives at all: the watch comes first
-    return [x["fix"] for x in checks if not x["ok"]]
+    return [x["fix"] for x in checks if not x["ok"] and not x.get("optional")]
 
 
 def _strava_offer(chat_id, issues) -> bool:
@@ -5673,19 +5676,57 @@ def _ob_icu_linked(token, chat_id, ob_state, session, icu_id, icu_key):
         save_onboarding_state(ob_state)
         return True
     session["icu_data"], session["icu_summary"] = icu_data, summary
+    # Sign-up carries on whatever Intervals.icu still needs (Jamie, 15 Oct 2026: "can
+    # carry on as they do it"): linking the watch, sleep and history are done alongside
+    # the questions, and the checklist comes once they have signed up (_icu_after_signup).
     try:
-        issues = _icu_setup_issues(icu_id, icu_key, chat_id)
+        if _icu_setup_issues(icu_id, icu_key, chat_id):
+            send(token, chat_id, _OB_CARRY_ON)
     except Exception as e:
         log(f"Onboarding ICU set-up check failed for {chat_id}: {e}")
-        issues = []
-    if issues:
-        session["current_key"] = "icu_fix"
-        save_onboarding_state(ob_state)
-        offer = _strava_offer(chat_id, issues)
-        _ob_ask(token, chat_id, "icu_fix", _icu_fix_question(
-            issues, strava=offer, web=str(chat_id).startswith("web-")), strava=offer)
-        return True
     return _ob_after_icu(token, chat_id, ob_state, session)
+
+
+_OB_CARRY_ON = ("Connected ✓ If your watch isn't linked in Intervals.icu yet, do it while we "
+                "carry on: *Settings* -> *Connections*. I'll show you anything still missing "
+                "once you're signed up.")
+# The checklist after sign-up: live in Peak (app.js icuChecklist, ticks itself), a button
+# that re-reads it rather than going to the coach.
+ICU_RECHECK = "peak:icu:check"
+
+
+def _icu_after_signup(token, chat_id, slug):
+    """Once signed up: what Intervals.icu still needs, history last and optional. Nothing
+    sent when all is in. Never raises."""
+    try:
+        a = json.loads(ATHLETES_CONFIG.read_text()).get(slug) or {}
+        checks = _icu_checklist(a.get("icu_athlete_id"), a.get("icu_api_key") or "", chat_id)
+    except Exception as e:
+        log(f"[{slug}] post-sign-up Intervals.icu check failed: {e}")
+        return
+    todo = [c for c in checks if not c["ok"]]
+    if not todo:
+        return
+    web = str(chat_id).startswith("web-")
+    only_history = all(c.get("optional") for c in todo)
+    head = ("One optional extra: *bring in your older training*, so I can see more than "
+            "a few weeks. There's no need to wait for it: coaching carries on meanwhile."
+            if only_history else
+            "Last bit, in your own time: finish linking *Intervals.icu*, so I see your "
+            "sessions and sleep. Nothing waits on it.")
+    if web:
+        rows = [[{"text": "Check again", "callback_data": ICU_RECHECK}]]
+        try:
+            if _strava_offer(chat_id, [c["fix"] for c in todo]):
+                import strava_link
+                rows.insert(0, [{"text": "I use an Apple Watch: connect Strava",
+                                 "url": strava_link.CONNECT_URL}])
+        except Exception:
+            pass
+        send(token, chat_id, head, reply_markup={"inline_keyboard": rows})
+    else:
+        send(token, chat_id, head + "\n\n" + "\n\n".join("• " + c["fix"] for c in todo)
+             + "\n\nAll in *Settings* -> *Connections*.")
 
 
 def handle_onboarding(token, chat_id, text):
@@ -5933,6 +5974,7 @@ def handle_onboarding(token, chat_id, text):
              reply_markup={"inline_keyboard": [[
                  {"text": "Android", "callback_data": "peak:install:android"},
                  {"text": "iPhone", "callback_data": "peak:install:iphone"}]]})
+    _icu_after_signup(token, chat_id, slug)
 
     config_data = load_config()
     admin_id = admin_chat_id(config_data)

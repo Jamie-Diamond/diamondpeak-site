@@ -1030,28 +1030,35 @@ _ICU_CHECKLIST: dict = {}       # chat id -> (checked at, result): Peak polls wh
 @app.get("/api/icu/checklist")
 def icu_checklist(request: Request):
     """Sign-up's live checklist (watch, sleep & HRV, workouts to watch, history), read from
-    Intervals.icu for the person signing up. Cached 20 s: Peak asks every 20 s while the
+    Intervals.icu for the person signing up, or signed up (sent after sign-up since 15 Oct
+    2026; history is optional and doesn't hold "done" back). Cached 20 s: Peak asks every 20 s while the
     checklist is on screen, and each check is 4 Intervals.icu calls."""
     import icu_link
-    cid, _slug, st = own_chat(request_email(request))
-    if not cid or st != "onboarding":
-        raise HTTPException(404, "not signing up")
+    cid, slug, st = own_chat(request_email(request))
+    if not cid:
+        raise HTTPException(404, "not signed up")
     hit = _ICU_CHECKLIST.get(cid)
     if hit and time.time() - hit[0] < 20:
         return JSONResponse(hit[1], headers=NO_STORE)
     b = chat.bot()
-    ans = (b.load_onboarding_state().get(cid) or {}).get("answers") or {}
-    tok = icu_link.load(cid)
-    aid = (tok or {}).get("icu_athlete_id") or ans.get("icu_id")
+    if st == "onboarding":
+        ans = (b.load_onboarding_state().get(cid) or {}).get("answers") or {}
+        tok = icu_link.load(cid)
+        aid, key = (tok or {}).get("icu_athlete_id") or ans.get("icu_id"), "" if tok else ans.get("icu_key", "")
+    else:   # signed up: the checklist sent after sign-up (bot._icu_after_signup)
+        a = _load(ATHLETES_CONFIG).get(slug) or {}
+        aid, key = a.get("icu_athlete_id"), a.get("icu_api_key") or ""
     if not aid:
         raise HTTPException(404, "Intervals.icu isn't linked yet")
     try:
-        items = b._icu_checklist(aid, "" if tok else ans.get("icu_key", ""), cid)
+        items = b._icu_checklist(aid, key, cid)
     except Exception as e:
         print(f"[icu] checklist failed for {cid}: {e}", flush=True)
         raise HTTPException(502, "Intervals.icu didn't answer")
-    out = {"items": [{k: c[k] for k in ("key", "label", "ok", "fix", "url")} for c in items],
-           "done": all(c["ok"] for c in items)}
+    out = {"items": [dict({k: c[k] for k in ("key", "label", "ok", "fix", "url")},
+                          optional=bool(c.get("optional"))) for c in items],
+           "done": all(c["ok"] or c.get("optional") for c in items),
+           "all": all(c["ok"] for c in items)}
     _ICU_CHECKLIST[cid] = (time.time(), out)
     return JSONResponse(out, headers=NO_STORE)
 
