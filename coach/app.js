@@ -1943,6 +1943,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
             : 'No messages yet') + '</div>';
         }
         renderQueued();
+        if (!j.readonly) setTimeout(flushQueue, 0);   // left queued before a reload
         if (earlier) window.scrollTo(0, document.body.scrollHeight - fromBottom);
         else chatScroll();
       })
@@ -2100,18 +2101,49 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   /* Queue (Jamie, 15 Oct 2026: "allow me to queue messages"): a message sent while a reply
      is still being written waits, shown faded as Queued, and goes the moment the reply
      finishes, in order. Text only; a photo still waits for the reply. Per tab. */
+  /* 15 Oct 2026: Jamie's first queued message vanished: a new Peak version reloaded the
+     page and the queue lived only in memory. It is kept on the phone now, so a reload,
+     an update or closing Peak doesn't lose it; it goes once the reply in flight is done. */
+  var QUEUE_KEY = 'cc.chatQueue';
+  function saveQueue() {
+    try {
+      localStorage.setItem(QUEUE_KEY, JSON.stringify(chatState.queue.map(function (q) {
+        return { dev: q.dev, text: q.text }; })));
+    } catch (e) { /* ok */ }
+  }
+  function restoreQueue() {
+    try {
+      chatState.queue = (JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]') || []).filter(function (q) {
+        return q && typeof q.text === 'string' && q.text; }).map(function (q) {
+        return { dev: !!q.dev, text: q.text, el: null }; });
+    } catch (e) { chatState.queue = []; }
+  }
+  restoreQueue();
+  function queuedEl(q) {
+    var d = document.createElement('div');
+    d.className = 'msg me queued';
+    d.innerHTML = esc(q.text).replace(/\n/g, '<br>');
+    d.setAttribute('data-q', 'Queued');
+    if (q.dev) d.setAttribute('data-t', 'Queued');
+    return d;
+  }
   function queueMsg(text) {
-    var el = bubble('me', text, 'queued');
-    el.setAttribute('data-q', 'Queued');
-    if (devTab()) el.setAttribute('data-t', 'Queued');
-    chatState.queue.push({ dev: devTab(), text: text, el: el });
+    var q = { dev: devTab(), text: text, el: null };
+    q.el = queuedEl(q);
+    $('#chatLog').appendChild(q.el);
+    chatState.queue.push(q);
+    saveQueue();
     var ta = $('#chatIn'); ta.value = ''; ta.style.height = 'auto'; composerMode();
     chatScroll();
   }
   function renderQueued() {
     var log = $('#chatLog');
     if (!log) return;
-    chatState.queue.forEach(function (q) { if (q.dev === devTab()) log.appendChild(q.el); });
+    chatState.queue.forEach(function (q) {
+      if (q.dev !== devTab()) return;
+      if (!q.el) q.el = queuedEl(q);
+      log.appendChild(q.el);
+    });
   }
   function flushQueue() {
     if (chatState.busy || (devTab() && chatState.devBusy)) return;
@@ -2119,6 +2151,8 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     chatState.queue.some(function (q, k) { if (q.dev === devTab()) { i = k; return true; } return false; });
     if (i < 0) return;
     var q = chatState.queue.splice(i, 1)[0];
+    saveQueue();
+    if (!q.el || !q.el.isConnected) { q.el = queuedEl(q); $('#chatLog').appendChild(q.el); }
     q.el.classList.remove('queued'); q.el.removeAttribute('data-q');
     if (q.dev) q.el.setAttribute('data-t', devStamp());
     if (q.dev) {
@@ -5945,6 +5979,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.010", "2026-10-15", "A queued message survives Peak reloading or updating", 0],
     ["4.009", "2026-10-15", "Chats show the last 7 days, 100 messages at most", 0],
     ["4.008", "2026-10-15", "Chats show the last 7 days, a week more per tap", 0],
     ["4.007", "2026-10-15", "Chats show the last 50 messages; queue a message while a reply is written; session graphs scaled to the session", 0],
