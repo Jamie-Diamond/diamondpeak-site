@@ -221,9 +221,26 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     return r ? r.prof : null;
   }
   var profSeq = 0;
+  /* The bar scale for one session (Jamie, 15 Oct 2026: "increase the y axis scale"). It was
+     a fixed 0-160% of threshold, so a steady run's laps at 81-86% all looked the same.
+     Now the session's own range: 8 points under its easiest effort to 6 over its hardest
+     (plan included), at least 20 points tall. Rests and stops sit at the floor. Returns
+     bar height as a share of the chart. Thumbnails keep the fixed scale. */
+  function profScale(blocks, plan) {
+    var v = [];
+    (blocks || []).concat(plan || []).forEach(function (b) { if (b[1] > 20) v.push(b[1]); });
+    if (!v.length) return function () { return 0.06; };
+    var lo = Math.max(0, Math.min.apply(null, v) - 8), hi = Math.max.apply(null, v) + 6;
+    if (hi - lo < 20) lo = Math.max(0, hi - 20);
+    return function (p) {
+      return !p || p <= lo ? 0.06 : 0.06 + 0.94 * Math.min(1, (p - lo) / (hi - lo));
+    };
+  }
+
   function profSvg(blocks, o) {
     o = o || {};
     if (!blocks || !blocks.length) return '';
+    var sc = o.mini ? null : profScale(blocks, o.plan);
     // Gradient ids are per SVG: a shared id resolves to the first copy in the page, and
     // when that one sits in a hidden view the bars paint with nothing.
     var uid = 'pz' + (++profSeq) + '_';
@@ -235,7 +252,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     var ribbon = o.mini && document.documentElement.classList.contains('glass');
     blocks.forEach(function (b) {
       var w = W * (b[0] || 0) / tot;
-      var hgt = ribbon ? H : Math.max(6, Math.min(CAP, b[1] || 0) / CAP * H);
+      var hgt = ribbon ? H : sc ? sc(b[1]) * H : Math.max(6, Math.min(CAP, b[1] || 0) / CAP * H);
       var z = Math.max(1, Math.min(7, b[2] || 1));
       rects += '<rect x="' + (x + gap / 2).toFixed(1) + '" y="' + (H - hgt).toFixed(1) +
         '" width="' + Math.max(1, w - gap).toFixed(1) + '" height="' + hgt.toFixed(1) +
@@ -247,8 +264,10 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
         '<stop offset="0" stop-color="' + c + '"/><stop offset="1" stop-color="' + c +
         '" stop-opacity="' + (o.mini ? '.85' : '.55') + '"/></linearGradient>';
     }).join('') + '</defs>';
-    var thr = o.mini ? '' : '<line x1="0" x2="' + W + '" y1="' + (H - 100 / CAP * H).toFixed(1) +
-      '" y2="' + (H - 100 / CAP * H).toFixed(1) + '" class="pf-thr"/>';
+    // The threshold line only where 100% is inside this session's range.
+    var thrY = sc && sc(100) > 0.06 && sc(100) < 1 ? H - sc(100) * H : null;
+    var thr = thrY == null ? '' : '<line x1="0" x2="' + W + '" y1="' + thrY.toFixed(1) +
+      '" y2="' + thrY.toFixed(1) + '" class="pf-thr"/>';
     // The plan over a done session. plan_fit (lib/workout_profile.fit_plan) is the plan
     // re-timed onto what was done - efforts pinned to the efforts, easy parts stretched or
     // cut. Time run OVER the plan (flag 2) is drawn red; a part CUT short (flag -1) is drawn
@@ -256,7 +275,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     var plan = '';
     if (o.plan && o.plan.length && !o.mini) {
       var pt = o.plan.reduce(function (a, b) { return a + (b[0] || 0); }, 0) || 1, px = 0;
-      var yOf = function (b) { return (H - Math.max(6, Math.min(CAP, b[1] || 0) / CAP * H)).toFixed(1); };
+      var yOf = function (b) { return (H - sc(b[1]) * H).toFixed(1); };
       var risers = '', red = '', short = '';
       o.plan.forEach(function (b, i) {
         var w = W * (b[0] || 0) / pt, y = yOf(b);
@@ -854,7 +873,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
      that's not practical"). Two labels at most: the fastest lap, and the slowest of the
      laps run near that effort (so a recovery jog is never called the slowest lap). Pace
      from threshold pace for runs and swims, watts from FTP for rides; nothing otherwise. */
-  function lapMarks(blocks, fam) {
+  function lapMarks(blocks, fam, plan) {
     var th = (state.data || {}).thresholds || {};
     var secs = function (t) { var m = /(\d+):(\d\d)/.exec(t || ''); return m ? +m[1] * 60 + +m[2] : null; };
     var mmss = function (v) { v = Math.round(v); return Math.floor(v / 60) + ':' + ('0' + v % 60).slice(-2); };
@@ -862,11 +881,12 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       : fam === 'swim' && secs(th.css) ? function (p) { return mmss(secs(th.css) / (p / 100)); }
       : fam === 'bike' && th.ftp ? function (p) { return Math.round(th.ftp * p / 100) + 'w'; } : null;
     if (!fmt) return '';
-    var tot = blocks.reduce(function (a, b) { return a + (b[0] || 0); }, 0) || 1, x = 0, CAP = 160;
+    var tot = blocks.reduce(function (a, b) { return a + (b[0] || 0); }, 0) || 1, x = 0;
+    var sc = profScale(blocks, plan);
     var laps = [];
     blocks.forEach(function (b) {
       var w = (b[0] || 0) / tot;
-      if (b[0] >= 60 && b[1] >= 40) laps.push({ x: (x + w / 2) * 1000, y: (1 - Math.min(CAP, b[1]) / CAP) * 100, v: b[1] });
+      if (b[0] >= 60 && b[1] >= 40) laps.push({ x: (x + w / 2) * 1000, y: (1 - sc(b[1])) * 100, v: b[1] });
       x += w;
     });
     if (laps.length < 3) return '';
@@ -1172,8 +1192,9 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
      (the reply as it is written), message (the checked reply, which replaces the
      draft), error, done. History is shared with Telegram. */
 
-  var chatState = { loaded: false, busy: false, limit: 80, slug: null, dev: false };
-  var CHAT_PAGE = 80;          // messages per "Show earlier messages" tap
+  // The last 50 messages, more on request (Jamie, 15 Oct 2026: "otherwise it will grow forever").
+  var chatState = { loaded: false, busy: false, limit: 50, slug: null, dev: false, queue: [] };
+  var CHAT_PAGE = 50;          // messages per "Show earlier messages" tap
   // The coach's second tab, Dev (Jamie, 4 Oct 2026): building Peak, kept apart from
   // coaching. Its own history and Claude session (ClaudeCoach/api/dev_chat.py).
   var CHAT_TAB_KEY = 'cc.chatTab';
@@ -1477,7 +1498,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // status shows and the chat checks back every few seconds until it is done.
   function loadDevHistory() {
     clearTimeout(chatState.devPoll);
-    fetch('/api/dev/history', { cache: 'no-store' })
+    fetch('/api/dev/history?limit=' + CHAT_PAGE, { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : { history: [] }; })
       .then(function (j) {
         if (!devTab() || chatState.busy) return;
@@ -1511,8 +1532,9 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
             'separate from your coaching.</div>';
         }
         chatState.devBusy = !!j.busy;
-        $('#chatSend').disabled = !!j.busy;
         showStop(!!j.busy || !!chatState.busy);
+        renderQueued();
+        if (!j.busy) setTimeout(flushQueue, 0);
         if (j.busy) {
           if (j.draft) bubble('coach', '', 'draft').innerHTML = md(j.draft);
           chatSetStatus(j.status || 'Working\u2026');
@@ -1910,6 +1932,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
             ? 'Welcome to Peak. Send any message to start setting up your coaching.'
             : 'No messages yet') + '</div>';
         }
+        renderQueued();
         if (earlier) window.scrollTo(0, document.body.scrollHeight - fromBottom);
         else chatScroll();
       })
@@ -2029,7 +2052,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
 
   function chatBusy(on) {
     chatState.busy = on;
-    ['#chatSend', '#chatMic', '#chatCam'].forEach(function (id) { var b = $(id); if (b) b.disabled = on; });
+    ['#chatMic', '#chatCam'].forEach(function (id) { var b = $(id); if (b) b.disabled = on; });
     showStop(on);
     if (!on) chatSetStatus('');
   }
@@ -2039,7 +2062,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     if (!st) return;
     st.hidden = !on;
     st.disabled = false;
-    if (on) { $('#chatSend').hidden = true; $('#chatMic').hidden = true; } else composerMode();
+    if (on) { $('#chatMic').hidden = true; $('#chatSend').hidden = !$('#chatIn').value.trim(); } else composerMode();
   }
   function stopReply() {
     var st = $('#chatStop');
@@ -2053,16 +2076,55 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Composer: typed text shows Send; an empty box shows the mic. A chosen photo sits
   // above the box as a thumbnail and the text becomes its caption.
   function composerMode() {
-    if ((chatState.busy || chatState.devBusy) && $('#chatStop') && !$('#chatStop').hidden) return;
+    if ((chatState.busy || chatState.devBusy) && $('#chatStop') && !$('#chatStop').hidden) {
+      $('#chatSend').hidden = !$('#chatIn').value.trim();      // typing while a reply runs: queue it
+      $('#chatMic').hidden = true;
+      return;
+    }
     if (devTab()) { $('#chatSend').hidden = false; $('#chatMic').hidden = true; return; }
     var has = !!($('#chatIn').value.trim() || chatState.photo || (chatState.devPhotos || []).length);
     $('#chatSend').hidden = !has || chatState.rec != null;
     $('#chatMic').hidden = has && chatState.rec == null;
   }
 
+  /* Queue (Jamie, 15 Oct 2026: "allow me to queue messages"): a message sent while a reply
+     is still being written waits, shown faded as Queued, and goes the moment the reply
+     finishes, in order. Text only; a photo still waits for the reply. Per tab. */
+  function queueMsg(text) {
+    var el = bubble('me', text, 'queued');
+    el.setAttribute('data-q', 'Queued');
+    if (devTab()) el.setAttribute('data-t', 'Queued');
+    chatState.queue.push({ dev: devTab(), text: text, el: el });
+    var ta = $('#chatIn'); ta.value = ''; ta.style.height = 'auto'; composerMode();
+    chatScroll();
+  }
+  function renderQueued() {
+    var log = $('#chatLog');
+    if (!log) return;
+    chatState.queue.forEach(function (q) { if (q.dev === devTab()) log.appendChild(q.el); });
+  }
+  function flushQueue() {
+    if (chatState.busy || (devTab() && chatState.devBusy)) return;
+    var i = -1;
+    chatState.queue.some(function (q, k) { if (q.dev === devTab()) { i = k; return true; } return false; });
+    if (i < 0) return;
+    var q = chatState.queue.splice(i, 1)[0];
+    q.el.classList.remove('queued'); q.el.removeAttribute('data-q');
+    if (q.dev) q.el.setAttribute('data-t', devStamp());
+    if (q.dev) {
+      chatState.devBusy = true;
+      streamTurn('/api/dev/chat', JSON.stringify({ text: q.text, photos: [] }), 'application/json');
+    } else {
+      streamTurn('/api/chat', JSON.stringify({ text: q.text }), 'application/json');
+    }
+  }
+
   function sendChat() {
-    if (chatState.busy) return;
     var ta = $('#chatIn'), text = (ta.value || '').trim();
+    if (chatState.busy || (devTab() && chatState.devBusy)) {
+      if (text && !(chatState.devPhotos || []).length && !chatState.photo) queueMsg(text);
+      return;
+    }
     if (devTab()) {
       var shots = chatState.devPhotos || [];
       if ((!text && !shots.length) || chatState.devBusy) return;
@@ -2179,7 +2241,9 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       .then(function () {
         if (chatState.ctrl !== ctrl) return;           // a tab switch already reset it
         chatState.ctrl = null;
+        if (url.indexOf('/api/dev/') === 0) chatState.devBusy = false;
         chatBusy(false);
+        setTimeout(flushQueue, 400);
       });
   }
 
@@ -4867,7 +4931,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       '<h2>' + esc(sportWord(pl.sport || a.type || sport) || 'Session') + (done ? '' : ' · planned') + '</h2></header>' +
       '<div class="sx-figs">' + figRow.join('') + '</div>' +
       (prof && prof.length ? '<div class="sx-pf">' + profSvg(prof, { plan: done ? (pl.plan_fit || pl.plan_prof) : null }) +
-        (done ? lapMarks(prof, fam2) : '') + '</div>' +
+        (done ? lapMarks(prof, fam2, pl.plan_fit || pl.plan_prof) : '') + '</div>' +
         (done && pl.plan_prof && pl.plan_prof.length ? '<p class="sx-k"><i class="sx-dash"></i>planned' +
           ((pl.plan_fit || []).some(function (b) { return b[2] === 2; })
             ? '<i class="sx-dash x"></i>too long' : '') +
@@ -5871,6 +5935,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.007", "2026-10-15", "Chats show the last 50 messages; queue a message while a reply is written; session graphs scaled to the session", 0],
     ["4.006", "2026-10-15", "Done sessions show laps, with the fastest and slowest labelled", 0],
     ["4.005", "2026-10-15", "Today note without a title", 0],
     ["4.004", "2026-10-15", "Today note: no status label", 0],

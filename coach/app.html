@@ -16,7 +16,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <!-- Glass style (glass.css) and Plus Jakarta Sans: the only look since 3.78 (Jamie,
      14 Oct 2026). Set before first paint. -->
-<link rel="stylesheet" href="glass.css?v=166">
+<link rel="stylesheet" href="glass.css?v=167">
 <script>try{document.documentElement.classList.add('glass');
 var gf="jakarta";document.documentElement.setAttribute("data-font",gf);
 var GF={inter:'Inter:wght@400;500;600;700',manrope:'Manrope:wght@400;500;600;700',jakarta:'Plus+Jakarta+Sans:wght@400;500;600;700'};
@@ -630,6 +630,8 @@ body.in-chat main{padding-bottom:calc(var(--tab-h) + 86px + env(safe-area-inset-
 .msg.coach{align-self:flex-start;background:var(--paper);color:var(--ink);border:1px solid var(--rule);
   border-bottom-left-radius:3px}
 .msg.draft{color:var(--muted)}
+.msg.queued{opacity:.55}
+#v-chat:not(.dev) .msg.queued::after{content:attr(data-q);display:block;margin-top:3px;font-size:10.5px;opacity:.85}
 .msg.err{border-color:var(--amber);color:var(--ink-2)}
 .msg pre,.msg code{font-family:'DM Mono',monospace;font-size:12px;white-space:pre-wrap}
 .msg a{color:var(--accent)}
@@ -1448,6 +1450,6 @@ body.drawn{overflow:hidden}
      broken launch. A new URL cannot hit that cache entry. It always equals the
      number in sw.js CACHE (peak-vN): bump both on every release, enforced by
      ClaudeCoach/ironman-analysis/tests/test_peak_release.py. -->
-<script src="app.js?v=166" defer></script>
+<script src="app.js?v=167" defer></script>
 </body>
 </html>
