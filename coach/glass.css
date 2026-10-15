@@ -5,7 +5,7 @@
    sheets. Always on since 3.77/3.78 (html.glass, set in app.html); the Dev tab gets the
    dark glass version at the end of this file. */
 
-html.glass{--glass-v:'162'}
+html.glass{--glass-v:'163'}
 html.glass body:not(.dev-chat){
   --paper:rgba(255,255,255,.62);
   --paper-2:transparent;

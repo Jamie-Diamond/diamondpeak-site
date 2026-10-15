@@ -65,7 +65,7 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
             )
         if cycle.get("phase") in ("menstrual", "luteal"):
             cycle_card_line = (
-                "[🌸 One plain-English line from the cycle block above — what today may "
+                "[**Cycle:** one plain-English line from the cycle block above — what today may "
                 "feel like and how to approach targets. No cycle-day numbers, no jargon.]\n"
             )
         if cycle.get("overdue"):
@@ -154,7 +154,7 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
         f"\n## Today's wellness (pre-fetched — for your judgement only; do not print these "
         f"numbers: the only wellness numbers on the card are the 'Off your normal' line "
         f"below, when there is one)\n{wellness_line}\n"
-        + (f"\n## Off your normal (pre-computed — the fact for the 📉 line; say it in words)\n{off_normal}\n"
+        + (f"\n## Off your normal (pre-computed — the fact for the Recovery line; say it in words)\n{off_normal}\n"
            if off_normal else "")
         if wellness_line else
         "\n## Today's wellness\nNot yet synced — say nothing about sleep, HRV or resting HR.\n"
@@ -177,12 +177,12 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
         # Kathryn two opposite things on one card (shadow week, 14 Oct 2026). Training
         # freshness says nothing about recovery when wellness is off, so no green line.
         form_line_rule = """[Form line — only include if notable:
-  · Form < −20: ⚠️ Heavy load today — keep intensity in check
+  · Form < −20: **Load:** a heavy run of training, so keep intensity in check
   · Otherwise omit entirely: wellness is off normal today, so never call it a good day for quality]"""
     else:
         form_line_rule = """[Form line — only include if notable:
-  · Form < −20: ⚠️ Heavy load today — keep intensity in check
-  · Form > +10: 🟢 Fresh legs — good day for quality work
+  · Form < −20: **Load:** a heavy run of training, so keep intensity in check
+  · Form > +10: fresh legs, a good day for quality work (say it in the opening, not its own line)
   · Form −1 to −20: omit entirely, that's normal training]"""
     heat_card_line = ""
     if heat_protocol:
@@ -199,7 +199,7 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
                 f"the athlete, and do not recompute it.\n"
             )
         heat_card_line = ("[If sessions_this_week < 2 AND today is Wednesday or later: "
-                          "🌡️ Heat bath due — [N] this week (target 2–3×)]")
+                          "**Heat:** a heat bath is due, [N] so far this week (aim for 2 or 3)]")
 
     # Pre-verified in Python against the calendar fetched JUST NOW for this send (see
     # run_athlete) — never against the events the 05:00 run saw. The file is written
@@ -268,19 +268,19 @@ Use the recovery score and signals ONLY to decide what to flag — do NOT show t
  day: say what the rest is doing for them, in one sentence.]
 
 {form_line_rule}
-[If the "Off your normal" block above is present: 📉 that fact in plain words, e.g. "📉 Your HRV has been low this week."]
-[If recovery ORANGE or RED: ⚠️ [one plain-English sentence on what to do differently — no scores]]
-[For EACH flag in the "Watchdog flags to show" block: ⚠️ [that flag in plain English, one line]. None listed: no flag line.]
-[If the pre-verified 05:00 prescription check block above is present and says today's session was modified or swapped: 🔁 [what changed and why — one plain line, e.g. "Swapped to easy spin — HRV low". If it confirmed the session as planned, or the block is absent, say nothing]]
+[If the "Off your normal" block above is present: **Recovery:** that fact in plain words and what it means today, e.g. "**Recovery:** HRV has been low this week, so keep today easy."]
+[If recovery ORANGE or RED: **Recovery:** [one plain-English sentence on what to do differently — no scores]]
+[For EACH flag in the "Watchdog flags to show" block: **[one-word label]:** [that flag in plain English, one line]. None listed: no flag line.]
+[If the pre-verified 05:00 prescription check block above is present and says today's session was modified or swapped: **Changed:** [what changed and why — one plain line, e.g. "Swapped to an easy spin because HRV is low". If it confirmed the session as planned, or the block is absent, say nothing]]
 {cycle_card_line}
-[If today's session is Ride or Brick >90 min: 🍌 Nutrition — target {fuel_target_g_hr}g/hr (progress toward {nutrition_race}g/hr {nutrition_label}) · eat at 15 min then every 25 min]
-[If any travel block, race, or constraint from current-state.md "Travel & training blocks" STARTS or ENDS within 5 days, or a training plan or goal block starts within 5 days: 📌 [what] in [N] days — [one-line impact], e.g. "Back from your trip in 2 days. Monday's hamstring strength starts the week."]
-[If open action is due within 3 days: 📌 [action] due [date]]
+[If today's session is Ride or Brick >90 min: **Fuel:** aim for {fuel_target_g_hr}g/hr (progress toward {nutrition_race}g/hr {nutrition_label}) · eat at 15 min then every 25 min]
+[If any travel block, race, or constraint from current-state.md "Travel & training blocks" STARTS or ENDS within 5 days, or a training plan or goal block starts within 5 days: **Coming up:** [what] in [N] days — [one-line impact], e.g. "Back from your trip in 2 days. Monday's hamstring strength starts the week."]
+[If open action is due within 3 days: **To do:** [action] by [day]]
 {heat_card_line}
 
 [Question if applicable — one line, LAST]
 
-ORDER is fixed: the opening, the flag/📌/🍌 lines, then the question (if any) last. No
+ORDER is fixed: the opening, the labelled lines, then the question (if any) last. No
 greeting, no date line, no "Today:" line, no countdown: Peak shows those right beside it.
 
 Rules:
@@ -292,18 +292,26 @@ Rules:
   ride, a short sharp run, HRV a bit low. Use a number only where a coach naturally would and
   it helps the athlete act, e.g. "aim for 60g of carbs an hour", "race in 5 days"; never
   minutes and Load read off the plan.
+- NO EMOJI (Jamie, 15 Oct 2026: "too many emojis looks like a kid or an AI writing"). Each
+  line after the opening starts with a short **bold label** instead.
+- EVERY INSTRUCTION CARRIES ITS REAL REASON (Jamie, 15 Oct 2026, on "you missed sessions,
+  keep it easy": "if that's because of a recovery metric it needs to say so"). Never say
+  keep it easy / hold back / skip quality without the why in the same sentence, and the why
+  must be the actual signal in the data above (low HRV, high resting HR, short sleep, heavy
+  load, the plan). Missed sessions are NEVER a reason to go easy; they only mean don't
+  make them up.
 - Say each thing ONCE: if the opening already mentions it (low HRV, a missed session), no
   flag line repeats it.
 - CONCISE (Jamie, 15 Oct 2026: "ensure it really is concise so as not to take over the home
   page"): the WHOLE note is at most 45 words and at most FOUR lines: the opening plus at
-  most THREE of the flag / 📉 / 📌 / 🍌 / question lines. When more qualify, keep the ones
+  most THREE of the labelled lines and the question. When more qualify, keep the ones
   that change what the athlete does today and drop the rest; never merge two into one long line.
 - SHORT (Jamie, 15 Oct 2026: "it's like an essay"): the card is read in five seconds.
-  Every ⚠️ / 📌 / 🔁 line is ONE sentence of at most 18 words: what to do, and why in a
+  Every labelled line is ONE sentence of at most 18 words: what to do, and why in a
   few words. No reasoning, no dates of individual readings, no "I'd offer". At most TWO
-  ⚠️ lines: keep the two that change what the athlete does today; drop the rest.
-  e.g. "⚠️ HRV is down on last week, so keep today easy."
-  e.g. "⚠️ Two sessions missed this week; don't make them up."
+  warning lines: keep the two that change what the athlete does today; drop the rest.
+  e.g. "**Recovery:** HRV is down on last week, so keep today easy."
+  e.g. "**Missed:** two sessions this week; don't make them up."
 - Sleep/HRV/RHR: use ONLY the pre-fetched wellness line above — never infer or estimate values yourself.
 - Omit any section that has nothing to say — do not pad with dashes or "N/A".
 - Never ask for subjective mood, fatigue, or motivation scores.

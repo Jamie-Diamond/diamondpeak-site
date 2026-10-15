@@ -16,7 +16,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <!-- Glass style (glass.css) and Plus Jakarta Sans: the only look since 3.78 (Jamie,
      14 Oct 2026). Set before first paint. -->
-<link rel="stylesheet" href="glass.css?v=162">
+<link rel="stylesheet" href="glass.css?v=163">
 <script>try{document.documentElement.classList.add('glass');
 var gf="jakarta";document.documentElement.setAttribute("data-font",gf);
 var GF={inter:'Inter:wght@400;500;600;700',manrope:'Manrope:wght@400;500;600;700',jakarta:'Plus+Jakarta+Sans:wght@400;500;600;700'};
@@ -597,11 +597,15 @@ table.tbl td.down{color:var(--red)}
 }
 .mini.warn b{color:var(--amber)}
 .tnote{display:block;color:inherit;text-decoration:none}
-.tnote .card-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.tnote .card-h{display:flex;align-items:center;gap:10px}
+.tnote .card-h h2{margin-right:auto}
 .tnote-w{font-size:11px;color:var(--muted)}
+.tnote-c{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;flex:0 0 auto;
+  background:rgba(16,101,107,.1);color:var(--accent)}
+.tnote-c svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round}
+.card.tnote > .tnote-b b{color:var(--accent);font-weight:600}
 .card.tnote > .tnote-b{margin:11px 16px 10px;padding:0;font-size:13.5px;line-height:1.45;color:var(--ink-2);
   display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:6;overflow:hidden}
-html body .card.tnote > .card-f{font-family:inherit;font-size:13px;letter-spacing:0;color:var(--accent);font-weight:600}
 .mini i{display:block;margin-top:2px;font-style:normal;font-size:11px;color:var(--ink-2)}
 
 .flag{
@@ -1445,6 +1449,6 @@ body.drawn{overflow:hidden}
      broken launch. A new URL cannot hit that cache entry. It always equals the
      number in sw.js CACHE (peak-vN): bump both on every release, enforced by
      ClaudeCoach/ironman-analysis/tests/test_peak_release.py. -->
-<script src="app.js?v=162" defer></script>
+<script src="app.js?v=163" defer></script>
 </body>
 </html>
