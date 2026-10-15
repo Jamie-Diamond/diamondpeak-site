@@ -106,7 +106,7 @@
     // it there was. They share the seasons, the sport chips and the race alignment, so
     // they are one view of one thing rather than two tabs (Jamie, 13 Aug 2026).
     { id: 'fit',  label: 'Fitness' },
-    { id: 'load', label: '±7 days' },
+    { id: 'load', label: 'Load' },
     { id: 'heat', label: 'Heat' },
     { id: 'fuel', label: 'Fuel' },
     { id: 'plan', label: 'Plan' },
@@ -706,7 +706,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     // and what is left" without changing tab, which is why it sits above Coming Up
     // rather than below it (Jamie, 21 Aug 2026).
     if ((d.loadChart || []).length) {
-      h += card('Seven days either side',
+      h += card('Load and fatigue',
         '<div class="readout" id="ro-today"><b></b><span></span></div>' +
         '<div class="chartbox"><canvas id="c-today"></canvas></div>',
         {});
@@ -1480,7 +1480,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   function liveLoad(el) {
     var box = document.createElement('div');
     box.className = 'msg-chart';
-    box.innerHTML = '<p class="msg-chart-h">Seven days either side</p>' +
+    box.innerHTML = '<p class="msg-chart-h">Load and fatigue</p>' +
       '<div class="readout"><b></b><span></span></div><div class="chartbox"><canvas></canvas></div>';
     el.insertBefore(box, el.firstChild);
     el.classList.add('has-chart');
@@ -2769,7 +2769,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
               ? 'CTL by calendar date, against the same dates in earlier years. Pinch, scroll or ' +
                 'drag to zoom.'
               : 'CTL by calendar date. Pinch, scroll or drag to zoom; the shaded band is the race-day target.' },
-      load: { title: 'Seven days either side',
+      load: { title: 'Load and fatigue',
               foot: 'Faded = planned.' },
       heat: { title: 'Heat acclimation',
               foot: 'Dots are heat sessions.' },
@@ -5753,6 +5753,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.94", "2026-10-15", "Load chart renamed \"Load and fatigue\"", 0],
     ["3.93", "2026-10-15", "Fatigue shown as a line in the load chart legend", 0],
     ["3.92", "2026-10-15", "Form shown as dots on the load chart", 0],
     ["3.91", "2026-10-15", "The coach's load chart is live in the chat: tap a day for its numbers", 0],

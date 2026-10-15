@@ -447,7 +447,7 @@ def load_chart(payload, coaching_level="mid"):
     ax.set_ylabel("Daily load", fontsize=10, color=MUTED, family=fam, labelpad=8)
     ax1.set_ylabel("Form", fontsize=10, color=ACCENT, family=fam, labelpad=8)
     ax1.tick_params(axis="y", colors=ACCENT)
-    fig.text(0.02, 0.985, "Seven days either side", fontsize=13.5, fontweight="bold",
+    fig.text(0.02, 0.985, "Load and fatigue", fontsize=13.5, fontweight="bold",
              color=INK, family=fam, va="top")
 
     handles = [mpatches.Patch(facecolor=BASE[s], label=s) for s in present]
