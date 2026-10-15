@@ -4660,7 +4660,8 @@ _OB_CONSENT_NO = (
 
 # Phase 1: always asked, in order. Intervals.icu (15 Oct 2026): one Connect button
 # (OAuth, lib/icu_link.py) instead of "do you use it?" + "paste your API key"; the
-# Intervals.icu page it opens signs them up too. Pasting a key stays as a fallback.
+# Intervals.icu page it opens signs them up too. No API-key option is offered (Jamie,
+# 15 Oct 2026), but a key pasted here anyway still links them.
 # Screenshots are onboarding/img/ (Jamie's account, key and personal details removed).
 _OB_ICU_KEY_Q = ("Link me with your *API key* instead:\n\n"
                  "1. On intervals.icu, open *Settings* (in the ☰ menu)\n"
@@ -4757,7 +4758,7 @@ _OB_LEVEL = ("level",
 # (button text, value) rows per question; a tap arrives as "ob:<question>:<value>".
 _OB_BUTTONS = {
     "consent":   [[("I agree", "yes"), ("Not now", "no")]],
-    "icu_connect": [[("I'll paste an API key", "key")]],     # Connect is a link: _ob_markup
+    "icu_connect": [],      # one Connect link (_ob_markup); no API-key button (Jamie, 15 Oct 2026)
     "icu_has":   [[("Yes, I use it", "yes"), ("No, not yet", "no")]],
     "icu_setup": [[("I've done it", "done")]],
     "icu_fix":   [[("Check again", "again"), ("Carry on for now", "skip")]],
@@ -4934,8 +4935,7 @@ def _validate_ob_answer(key, answer):
     if key == "consent" and answer not in ("yes", "no"):
         return "Tap *I agree* or *Not now*."
     if key == "icu_connect" and answer not in ("done", "key"):
-        return ("Tap *Connect Intervals.icu* above and allow Peak in. Or tap *I'll paste an "
-                "API key*.")
+        return "Tap *Connect Intervals.icu* above, sign in and tap *Allow*."
     if key == "icu_has":
         if not re.match(r"^\s*(y|yes|yep|yeah|n|no|nope|not yet)\b", answer, re.I):
             return "Just _yes_ or _no_ -- do you already use Intervals.icu?"
@@ -5363,8 +5363,9 @@ def _scaffold_athlete(chat_id, answers, icu_data, race_data=None, sports=None, r
 
 def _ob_markup(key, picked=()):
     rows = _OB_BUTTONS.get(key)
-    if not rows:
+    if not rows and key != "icu_connect":
         return None
+    rows = rows or []
     kb = [[{"text": ("✓ " + t) if v in picked else t, "callback_data": f"ob:{key}:{v}"}
            for t, v in row] for row in rows]
     if key == "icu_connect":

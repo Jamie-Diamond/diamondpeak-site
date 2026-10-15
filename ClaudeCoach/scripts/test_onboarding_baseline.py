@@ -155,7 +155,7 @@ check("after agreeing, the question it was on is asked again",
 
 # ── 1. a 70.3 athlete: wrist HR, rides with power, one tested swim number ──────
 fake_icu(ICU_TRI, TRI)
-asked = onboard("123", ["Sam Smith", "70.3 Test, 2027-06-01", "ob:icu_connect:key", KEY,
+asked = onboard("123", ["Sam Smith", "70.3 Test, 2027-06-01", KEY,
                         "sub 5", "3 years, longest a marathon", "none", "10",
                         "7",             # invalid HR answer
                         "2",             # wrist
@@ -258,9 +258,9 @@ for a in ["Pat Lee", "70.3 Test, 2027-06-01"]:
 q, mk = [(t, m) for c, t, m in SENT[n:] if c == "125"][-1]
 check("after the race: Connect Intervals.icu, saying why it's needed",
       "Connect Intervals.icu" in q and "free training log" in q and "can't coach you without it" in q, q)
-check("the Connect button is a link to Peak's OAuth start, then the key fallback",
-      mk["inline_keyboard"][0][0].get("url", "").endswith("/api/icu/connect")
-      and mk["inline_keyboard"][1][0]["callback_data"] == "ob:icu_connect:key", mk)
+check("one button: a link to Peak's OAuth start, no API-key option",
+      mk["inline_keyboard"] == [[{"text": "Connect Intervals.icu",
+                                  "url": "https://coach.diamondpeak.uk/api/icu/connect"}]], mk)
 n = len(SENT)
 B.handle_onboarding("t", "125", "ob:icu_connect:done")          # Peak's tap, but no token
 check("'done' with no token: not linked yet, Connect offered again",
@@ -270,14 +270,7 @@ n = len(SENT)
 B.handle_onboarding("t", "125", "maybe later")
 check("anything else: asked to tap Connect", any("Tap *Connect Intervals.icu*" in t for c, t, _ in SENT[n:]))
 n = len(SENT)
-B.handle_onboarding("t", "125", "ob:icu_connect:key")
-check("I'll paste a key: the API key steps, with their screenshots",
-      any("API key" in t for c, t, _ in SENT[n:]) and len(PHOTOS) == 3, (PHOTOS, SENT[n:]))
-n = len(SENT)
-B.handle_onboarding("t", "125", "not a key")
-check("a non-key is refused", any("doesn't look like an API key" in t for c, t, _ in SENT[n:]))
-n = len(SENT)
-B.handle_onboarding("t", "125", KEY)
+B.handle_onboarding("t", "125", KEY)                            # a key pasted anyway still links
 fix = [(t, m) for c, t, m in SENT[n:] if c == "125"]
 check("set-up problems are listed with Check again", any("workout upload" in t or "Garmin" in t for t, _ in fix)
       and fix[-1][1] and fix[-1][1]["inline_keyboard"][0][0]["callback_data"] == "ob:icu_fix:again", fix)
@@ -297,7 +290,7 @@ check("tapped level saved", prof.get("coaching_level") == "pro", prof.get("coach
 check("heat yes / fuelling no saved as the switches",
       prof.get("heat_protocol") is True and prof.get("fuelling_coaching") is False, prof)
 check("tap from a sign-up goes to onboarding, not athlete handlers",
-      B.dispatch_callback("t", "126", "ob:icu_connect:key", 1, {}, {}) is True)
+      B.dispatch_callback("t", "126", "ob:icu_connect:done", 1, {}, {}) is True)
 
 # ── 3c. the set-up check itself, on made-up Intervals.icu accounts ──────────
 import types
@@ -348,7 +341,7 @@ B._outbox = OB
 WEB = "web-00aa11bb22"
 ISSUES[:] = [["Your activities only come in through *Strava*, and Strava hides them from me."], []]
 B.save_pending([WEB])
-for a in ["hi", "ob:consent:yes", "Robin Apple", "70.3 Test, 2027-06-01", "ob:icu_connect:key"]:
+for a in ["hi", "ob:consent:yes", "Robin Apple", "70.3 Test, 2027-06-01"]:
     B.handle_onboarding("t", WEB, a)
 n = len(SENT)
 B.handle_onboarding("t", WEB, KEY)
@@ -465,7 +458,7 @@ asked = onboard("606", ["Tess Goal", "none",
                         "banana",          # not a goal: asked again
                         "ob:goal:ftp",     # the Raise my FTP button
                         "2 3",             # bike and run
-                        "ob:icu_connect:key", KEY,
+                        KEY,
                         "2 years riding", "none", "8",
                         "1",               # strap
                         "yes",             # power
@@ -521,7 +514,7 @@ check("no question still says 'Reply with the number'",
 fake_icu(ICU_TRI, {})
 B._lookup_race = lambda name, d: {}
 SENT.clear()
-asked = onboard("808", ["Fred Test", "none", "ob:goal:ftp", "2", "ob:icu_connect:key", KEY,
+asked = onboard("808", ["Fred Test", "none", "ob:goal:ftp", "2", KEY,
                         "8 years, half Ironman. I am recovering from ACL surgery and want my FTP up",
                         "No"])
 blob = "\n".join(asked)
@@ -534,7 +527,7 @@ check("'No' to the injury question is no injury, not an injury called No",
 # ── 9. an active injury: asked specifically, the physio plan becomes a rule (2 Oct) ─
 fake_icu(ICU_TRI, {})
 SENT.clear()
-asked = onboard("909", ["Ivy Test", "none", "ob:goal:ftp", "2", "ob:icu_connect:key", KEY,
+asked = onboard("909", ["Ivy Test", "none", "ob:goal:ftp", "2", KEY,
                         "3 years riding", "ACL surgery on my left knee in July",
                         "one hamstring and one quad session a week", "6", "ob:hr_source:1",
                         "yes", "0", "about 200", "no", "no", "no", "2", "ivy"])
