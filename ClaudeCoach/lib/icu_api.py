@@ -1,9 +1,20 @@
 """Direct Intervals.icu REST API client.
 
-Auth: HTTP Basic with username "API_KEY" and the athlete's API key as password.
+Auth, either:
+  - HTTP Basic with username "API_KEY" and the athlete's API key as password, or
+  - "Authorization: Bearer <token>" for an athlete linked through Peak's Connect
+    Intervals.icu (OAuth, lib/icu_link.py). Pass token=, or pass no key and the token
+    stored for that athlete id is found. A key, when there is one, still wins.
 All reads can be parallelised via fetch_all().
+
+Every call is counted, one line per request in
+~/Library/Logs/ClaudeCoach/icu-requests/<UTC date>.log (scripts/icu-request-count.py
+sums it), because Intervals.icu's coming rate limits count per athlete per UTC day.
 """
 
+import os
+import sys
+import time
 import requests
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -35,11 +46,54 @@ def _wellness_row_finalized(row: dict) -> bool:
     return bool(row_date and updated and updated > row_date)
 
 
+_COUNT_DIR = os.path.expanduser(os.environ.get("CC_ICU_COUNT_DIR", "~/Library/Logs/ClaudeCoach/icu-requests"))
+_CALLER = os.path.basename(sys.argv[0] or "") or "python"
+
+
+def count_request(athlete_id: str, auth: str, r) -> None:
+    """One line per Intervals.icu call: time, athlete, key/oauth, caller, method, path,
+    status, and the rate-limit headers once Intervals.icu sends them. Never raises."""
+    if os.environ.get("CC_ICU_COUNT", "1") == "0" or not os.path.isdir(os.path.dirname(_COUNT_DIR)):
+        return
+    try:
+        os.makedirs(_COUNT_DIR, exist_ok=True)
+        path = (getattr(r.request, "path_url", "") or "").split("?")[0]
+        left = r.headers.get("X-RateLimit-Remaining", "-")
+        line = (f"{time.strftime('%H:%M:%S', time.gmtime())} {athlete_id} {auth} {_CALLER} "
+                f"{r.request.method} {path} {r.status_code} {left}\n")
+        f = os.path.join(_COUNT_DIR, time.strftime("%Y-%m-%d", time.gmtime()) + ".log")
+        if not os.path.exists(f):                      # first call of a UTC day: keep 21 days
+            cutoff = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 21 * 86400))
+            for old in os.listdir(_COUNT_DIR):
+                if old.endswith(".log") and old[:10] < cutoff:
+                    os.remove(os.path.join(_COUNT_DIR, old))
+        fd = os.open(f, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+        try:
+            os.write(fd, line.encode())
+        finally:
+            os.close(fd)
+    except Exception:
+        pass
+
+
 class IcuClient:
-    def __init__(self, athlete_id: str, api_key: str):
+    def __init__(self, athlete_id: str, api_key: str = "", token: str | None = None):
         self.athlete_id = athlete_id
         self.session = requests.Session()
-        self.session.auth = ("API_KEY", api_key)
+        if not token and not api_key:
+            try:
+                import icu_link
+                token = icu_link.token_for_athlete(athlete_id)
+            except Exception:
+                token = None
+        if token:
+            self.session.headers["Authorization"] = f"Bearer {token}"
+            self.auth = "oauth"
+        else:                         # no key either: Intervals.icu answers 401, as before
+            self.session.auth = ("API_KEY", api_key)
+            self.auth = "key"
+        self.session.hooks["response"].append(
+            lambda r, *a, **k: count_request(str(athlete_id), self.auth, r))
 
     def _get(self, path: str, params: dict = None, base: str = None) -> dict | list:
         url = (base or f"{BASE_URL}/athlete/{self.athlete_id}") + ("/" + path.lstrip("/") if path else "")

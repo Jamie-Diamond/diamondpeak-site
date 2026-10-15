@@ -40,6 +40,9 @@ Paths mirror the GitHub Pages layout so Peak runs unchanged:
   POST /api/rules/<slug>                      keep / change / drop one rule (archived first)
   GET  /api/media/<name>                      a photo/chart from your chat
   GET  /api/push/key, POST /api/push/(un)subscribe, POST /api/push/test
+  GET  /api/icu/connect -> Intervals.icu -> /api/icu/callback   link Intervals.icu by OAuth
+  POST /api/icu/webhook                      Intervals.icu's webhooks: NO sign-in (needs a
+                                             Cloudflare Access bypass); the app's secret is the proof
   /api/admin/...                              coach only: athletes, Telegram switch, invites
 Anything else (the site's other tools) redirects to https://diamondpeak.uk.
 
@@ -392,12 +395,12 @@ async def ride_indoors(slug: str, request: Request):
     if not event_id:
         raise HTTPException(400, "which session?")
     cfg = _load(ATHLETES_CONFIG).get(slug) or {}
-    if not cfg.get("icu_api_key"):
+    if not _icu_linked(cfg):
         raise HTTPException(409, "no Intervals.icu link for this athlete")
     import indoor
     from icu_api import IcuClient
     try:
-        out = indoor.switch(slug, IcuClient(cfg["icu_athlete_id"], cfg["icu_api_key"]),
+        out = indoor.switch(slug, IcuClient(cfg["icu_athlete_id"], cfg.get("icu_api_key") or ""),
                             event_id, bool(body.get("indoor", True)))
     except (LookupError, ValueError) as e:
         raise HTTPException(409, str(e))
@@ -443,13 +446,13 @@ def track(slug: str, request: Request, date: str = "", sport: str = "", name: st
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
         raise HTTPException(400, "which day?")
     cfg = _load(ATHLETES_CONFIG).get(slug) or {}
-    if not cfg.get("icu_api_key"):
+    if not _icu_linked(cfg):
         raise HTTPException(404, "no Intervals.icu link")
     import activity_stats
     import track as track_lib
     import workout_profile as wp
     from icu_api import IcuClient
-    client = IcuClient(cfg["icu_athlete_id"], cfg["icu_api_key"])
+    client = IcuClient(cfg["icu_athlete_id"], cfg.get("icu_api_key") or "")
     try:
         acts = client._get("activities", {"oldest": date, "newest": date})
     except Exception:
@@ -720,23 +723,38 @@ def media(name: str, request: Request, slug: str = ""):
 
 # ── Intervals.icu link, for Settings → Connections ──
 
-_ICU_STATUS: dict = {}          # slug -> (checked at, key tail, state)
+_ICU_STATUS: dict = {}          # slug -> (checked at, credential tail, state)
 
 
-def _icu_check(athlete_id: str, key: str) -> str:
-    """"ok" when the key opens this athlete's Intervals.icu, "rejected" when it doesn't
-    (changed, cleared, or someone else's), "unknown" when Intervals.icu didn't answer."""
+def _icu_token(cfg: dict) -> str | None:
+    """The athlete's OAuth token (lib/icu_link.py), if they linked through Peak."""
+    try:
+        import icu_link
+        return icu_link.token_for_athlete(cfg.get("icu_athlete_id"))
+    except Exception:
+        return None
+
+
+def _icu_linked(cfg: dict) -> bool:
+    return bool(cfg.get("icu_athlete_id")) and bool(cfg.get("icu_api_key") or _icu_token(cfg))
+
+
+def _icu_check(athlete_id: str, key: str = "", token: str = "") -> str:
+    """"ok" when the key (or OAuth token) opens this athlete's Intervals.icu, "rejected"
+    when it doesn't (changed, cleared, revoked, or someone else's), "unknown" when
+    Intervals.icu didn't answer."""
     import base64
     import urllib.error
     import urllib.request
-    req = urllib.request.Request(
-        "https://intervals.icu/api/v1/athlete/0",
-        headers={"Authorization": "Basic " + base64.b64encode(f"API_KEY:{key}".encode()).decode(),
-                 "User-Agent": "ClaudeCoach"})
+    auth = (f"Bearer {token}" if token else
+            "Basic " + base64.b64encode(f"API_KEY:{key}".encode()).decode())
+    req = urllib.request.Request("https://intervals.icu/api/v1/athlete/0",
+                                 headers={"Authorization": auth, "User-Agent": "ClaudeCoach"})
     try:
         with urllib.request.urlopen(req, timeout=8) as r:
             got = str(json.loads(r.read()).get("id") or "")
-        return "ok" if got == str(athlete_id) else "rejected"
+        import icu_link
+        return "ok" if icu_link.same_athlete(got, athlete_id) else "rejected"
     except urllib.error.HTTPError as e:
         return "rejected" if e.code in (401, 403) else "unknown"
     except Exception:
@@ -746,13 +764,15 @@ def _icu_check(athlete_id: str, key: str) -> str:
 def _icu_state(slug: str | None) -> str:
     a = _load(ATHLETES_CONFIG).get(slug or "") or {}
     key, aid = str(a.get("icu_api_key") or ""), str(a.get("icu_athlete_id") or "")
-    if not slug or not key or not aid:
+    token = "" if key else (_icu_token(a) or "")
+    cred = key or token
+    if not slug or not cred or not aid:
         return "missing"
     hit = _ICU_STATUS.get(slug)
-    if hit and hit[1] == key[-4:] and time.time() - hit[0] < (600 if hit[2] == "ok" else 60):
+    if hit and hit[1] == cred[-4:] and time.time() - hit[0] < (600 if hit[2] == "ok" else 60):
         return hit[2]
-    state = _icu_check(aid, key)
-    _ICU_STATUS[slug] = (time.time(), key[-4:], state)
+    state = _icu_check(aid, key) if key else _icu_check(aid, token=token)
+    _ICU_STATUS[slug] = (time.time(), cred[-4:], state)
     return state
 
 
@@ -775,6 +795,7 @@ def _settings(slug: str) -> dict:
     import coaching_prefs
     import planning_pause
     return {"slug": slug, "icu": _icu_state(slug), "strava": _slug_strava(slug),
+            "icu_oauth": bool(_icu_token(_load(ATHLETES_CONFIG).get(slug) or {})),
             "prefs": coaching_prefs.prefs(slug),
             "tracking_only": planning_pause.is_paused(slug)}
 
@@ -908,6 +929,101 @@ def strava_disconnect(slug: str, request: Request):
     print(f"[strava] {slug} disconnected by {email} (Strava revoke {'ok' if revoked else 'failed'})",
           flush=True)
     return JSONResponse(_settings(slug), headers=NO_STORE)
+
+
+# ── Connect Intervals.icu by OAuth (lib/icu_link.py), instead of pasting an API key ──
+
+ICU_WEBHOOK_LOG = Path(os.path.expanduser("~/Library/Logs/ClaudeCoach/icu-webhooks.jsonl"))
+
+
+@app.get("/api/icu/connect")
+def icu_connect(request: Request):
+    """Connect Intervals.icu: off to Intervals.icu's approval page."""
+    import icu_link
+    cid, _, _ = own_chat(request_email(request))
+    if not cid:
+        raise HTTPException(403, "this email has no athlete")
+    if not icu_link.configured():
+        return _page("Not ready yet", "Peak can't connect Intervals.icu just now. Ask your coach.", 503)
+    return RedirectResponse(icu_link.authorize_url(cid))
+
+
+@app.get("/api/icu/callback")
+def icu_callback(request: Request, code: str = "", state: str = "", error: str = ""):
+    """Intervals.icu sends the athlete back here after they approve (or don't). The code
+    is only good for 2 minutes, so it is swapped for a token at once."""
+    import icu_link
+    cid, slug, _ = own_chat(request_email(request))
+    again = '<a href="/api/icu/connect">Connect Intervals.icu</a> again'
+    if not cid or not icu_link.check_state(state, cid):
+        return _page("That link has expired",
+                     "Go back to Peak and tap <b>Connect Intervals.icu</b> again.", 400)
+    if error or not code:
+        return _page("Intervals.icu not connected",
+                     "No problem. Peak needs it to see your training, so you can connect it any "
+                     "time from Peak.")
+    try:
+        tok = icu_link.exchange(code)
+    except Exception as e:
+        print(f"[icu] connect failed for {cid}: {e}", flush=True)
+        return _page("That didn't work", f"Intervals.icu didn't accept the connection. {again} "
+                     "in a minute.", 502)
+    got = str((tok.get("athlete") or {}).get("id") or "")
+    athletes = _load(ATHLETES_CONFIG)
+    cfg = athletes.get(slug) if slug else None
+    if not tok.get("access_token") or not got:
+        return _page("That didn't work", f"Intervals.icu didn't say whose account it was. {again}.", 502)
+    if isinstance(cfg, dict) and cfg.get("icu_athlete_id") and not icu_link.same_athlete(got, cfg["icu_athlete_id"]):
+        # Signed in to a different Intervals.icu account than the one we coach from.
+        icu_link.revoke_token(tok["access_token"])
+        print(f"[icu] {slug}: approved from {got}, but coached from {cfg['icu_athlete_id']} - not kept",
+              flush=True)
+        return _page("That's a different Intervals.icu account",
+                     f"You approved Peak from another account than the one your coaching uses. Sign "
+                     f"out of Intervals.icu, sign in with your usual account, and {again}.", 409)
+    try:
+        icu_link.save_tokens(cid, tok)
+    except LookupError:
+        raise HTTPException(403, "this email has no athlete")
+    if isinstance(cfg, dict) and not cfg.get("icu_athlete_id"):
+        cfg["icu_athlete_id"] = got
+        cfg.setdefault("icu_api_key", "")
+        _write_json(ATHLETES_CONFIG, athletes)
+    if slug:
+        _ICU_STATUS.pop(slug, None)
+    print(f"[icu] connected {slug or cid} as {got} (scope {tok.get('scope')})", flush=True)
+    missing = icu_link.missing_scopes(tok.get("scope") or "")
+    if missing:
+        names = {"ACTIVITY": "your activities", "WELLNESS": "your sleep and wellness",
+                 "CALENDAR": "your calendar", "SETTINGS": "your settings"}
+        return _page("Nearly - one more tick",
+                     "Peak also needs " + " and ".join(names[m] for m in missing) + f". {again} "
+                     "and leave every box ticked.")
+    return _page("✓ Intervals.icu connected", "You can close this and go back to Peak.")
+
+
+@app.post("/api/icu/webhook")
+async def icu_webhook(request: Request):
+    """Intervals.icu's webhooks (Manage App -> Webhooks). Server to server, so NOT behind a
+    Cloudflare Access sign-in: the path needs an Access bypass, and the app's webhook secret
+    in the body is the only proof. Logged (secret removed) and answered at once; nothing
+    acts on them yet. They will replace polling (new activity, wellness, calendar)."""
+    import icu_link
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(400, "not JSON")
+    if not isinstance(body, dict) or not icu_link.webhook_ok(body, request.headers.get("authorization", "")):
+        print("[icu] webhook refused: bad secret", flush=True)
+        raise HTTPException(403, "bad secret")
+    body.pop("secret", None)
+    try:
+        ICU_WEBHOOK_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with open(ICU_WEBHOOK_LOG, "a") as fh:
+            fh.write(json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), **body}) + "\n")
+    except OSError:
+        pass
+    return JSONResponse({"ok": True})
 
 
 # ── Food tab chat (api/food.py): the food bot's own brain ──

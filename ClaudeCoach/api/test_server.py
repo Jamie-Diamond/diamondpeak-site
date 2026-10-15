@@ -50,6 +50,9 @@ def env(tmp_path, monkeypatch):
     # writes its fake messages into the real athletes' chats (4 Oct 2026).
     import chat_archive                     # lib/, on sys.path once server is imported
     monkeypatch.setattr(chat_archive, "CC", cc)
+    import icu_link                         # OAuth tokens are looked up under athletes/
+    monkeypatch.setattr(icu_link, "BASE", cc)
+    icu_link._INDEX["sig"] = None
     monkeypatch.setattr(server.dev_chat, "CC", cc)
     server.chat.bot()                       # imported from the real tree, then cached
     monkeypatch.setattr(server.chat, "CC", cc)
@@ -719,3 +722,101 @@ def test_several_photos_in_one_coaching_message(env, monkeypatch):
     assert isinstance(got[1][2], bytes)                      # one photo: the old single path
     assert env.post("/api/chat/photos", json={"photos": []}, headers=h).status_code == 400
     assert env.post("/api/chat/photos", json={"photos": [jpg] * 7}, headers=h).status_code == 400
+
+
+# ── Connect Intervals.icu by OAuth (lib/icu_link.py) ──
+
+@pytest.fixture()
+def icu(env, monkeypatch):
+    import icu_link
+    import outbox
+    cc = server.CC
+    app_cfg = cc / "config" / "icu-app.json"
+    app_cfg.write_text(json.dumps({"client_id": "1374", "client_secret": "s3cret", "webhook_secret": "wh",
+                                   "redirect_uri": "https://coach.diamondpeak.uk/api/icu/callback"}))
+    monkeypatch.setattr(outbox, "BASE", cc)
+    monkeypatch.setattr(outbox, "ATHLETES_CONFIG", server.ATHLETES_CONFIG)
+    monkeypatch.setattr(outbox, "SIGNUP_DIR", cc / "config" / "web-signup")
+    outbox._CACHE.update(mtime=None, data={})
+    monkeypatch.setattr(icu_link, "APP_CONFIG", app_cfg)
+    monkeypatch.setattr(server, "ICU_WEBHOOK_LOG", cc / "icu-webhooks.jsonl")
+    reply = {"token_type": "Bearer", "access_token": "tok1",
+             "scope": "ACTIVITY:WRITE,WELLNESS:READ,CALENDAR:WRITE,SETTINGS:WRITE",
+             "athlete": {"id": "i22", "name": "Kathryn X"}}
+    got, revoked = [], []
+    monkeypatch.setattr(icu_link, "exchange", lambda code: got.append(code) or dict(reply))
+    monkeypatch.setattr(icu_link, "revoke_token", lambda t: revoked.append(t) or True)
+    return icu_link, reply, got, revoked
+
+
+def _state(env):
+    r = env.get("/api/icu/connect")
+    assert r.status_code in (302, 307)
+    return r.headers["location"], r.headers["location"].split("state=")[1].replace("%2E", ".")
+
+
+def test_connect_intervals_signing_up_stores_the_token_for_the_signup(env, icu, monkeypatch):
+    icu_link, reply, got, _ = icu
+    h = {"x-peak": "1"}
+    dev(monkeypatch, "coach@example.com")
+    cid = env.post("/api/admin/invite", json={"email": "robin@example.com"}, headers=h).json()["chat_id"]
+    dev(monkeypatch, "robin@example.com")
+    loc, state = _state(env)
+    assert loc.startswith("https://intervals.icu/oauth/authorize?client_id=1374")
+    assert "CALENDAR%3AWRITE" in loc
+    assert env.get("/api/icu/callback", params={"state": "web-x.1.zz", "code": "c"}).status_code == 400
+    assert "not connected" in env.get("/api/icu/callback", params={"state": state, "error": "access_denied"}).text
+    reply["athlete"]["id"] = "i777"
+    r = env.get("/api/icu/callback", params={"state": state, "code": "c"})
+    assert r.status_code == 200 and "Intervals.icu connected" in r.text and got == ["c"]
+    tok = json.loads((server.CC / "config" / "web-signup" / cid / "icu_tokens.json").read_text())
+    assert tok["access_token"] == "tok1" and tok["icu_athlete_id"] == "i777"
+    assert icu_link.token_for_athlete("i777") == "tok1"
+
+
+def test_connect_intervals_for_a_coached_athlete_keeps_their_key_and_checks_the_account(env, icu, monkeypatch):
+    icu_link, reply, got, revoked = icu
+    ath = json.loads(server.ATHLETES_CONFIG.read_text())
+    ath["kathryn"].update(icu_api_key="k1", icu_athlete_id="i22")
+    server.ATHLETES_CONFIG.write_text(json.dumps(ath))
+    dev(monkeypatch, "kat@example.com")
+    _, state = _state(env)
+    reply["athlete"]["id"] = "i99"                       # signed in as someone else
+    r = env.get("/api/icu/callback", params={"state": state, "code": "c"})
+    assert r.status_code == 409 and "different Intervals.icu account" in r.text
+    assert revoked == ["tok1"] and not icu_link.connected(slug="kathryn")
+
+    reply["athlete"]["id"] = "22"                        # the same account, id without the i
+    reply["scope"] = "ACTIVITY:WRITE,CALENDAR:WRITE"
+    r = env.get("/api/icu/callback", params={"state": state, "code": "c"})
+    assert "one more tick" in r.text and "sleep and wellness" in r.text and "your settings" in r.text
+    assert icu_link.connected(slug="kathryn")
+    kat = json.loads(server.ATHLETES_CONFIG.read_text())["kathryn"]
+    assert kat["icu_api_key"] == "k1" and kat["icu_athlete_id"] == "i22"     # key untouched
+    monkeypatch.setattr(server, "_icu_check", lambda aid, key: "ok")
+    dev(monkeypatch, "coach@example.com")
+    assert env.get("/api/settings/kathryn").json()["icu_oauth"] is True
+
+
+def test_an_athlete_with_only_a_token_reads_as_linked(env, icu, monkeypatch):
+    icu_link, *_ = icu
+    ath = json.loads(server.ATHLETES_CONFIG.read_text())
+    ath["kathryn"].update(icu_api_key="", icu_athlete_id="i22")
+    server.ATHLETES_CONFIG.write_text(json.dumps(ath))
+    server._ICU_STATUS.clear()
+    dev(monkeypatch, "kat@example.com")
+    assert env.get("/api/icu/status").json() == {"state": "missing"}
+    icu_link.save_tokens("222", {"access_token": "tok-k", "athlete": {"id": "i22"}})
+    seen = []
+    monkeypatch.setattr(server, "_icu_check", lambda aid, key="", token="": seen.append((key, token)) or "ok")
+    assert env.get("/api/icu/status").json() == {"state": "ok"} and seen == [("", "tok-k")]
+    assert server._icu_linked(json.loads(server.ATHLETES_CONFIG.read_text())["kathryn"])
+
+
+def test_intervals_webhook_needs_the_secret_and_is_logged_without_it(env, icu):
+    body = {"secret": "wh", "events": [{"athlete_id": "i22", "type": "ACTIVITY_UPLOADED"}]}
+    assert env.post("/api/icu/webhook", json={**body, "secret": "bad"}).status_code == 403
+    assert env.post("/api/icu/webhook", content=b"nope").status_code == 400
+    assert env.post("/api/icu/webhook", json=body).json() == {"ok": True}
+    logged = json.loads(server.ICU_WEBHOOK_LOG.read_text().splitlines()[-1])
+    assert "secret" not in logged and logged["events"][0]["type"] == "ACTIVITY_UPLOADED"

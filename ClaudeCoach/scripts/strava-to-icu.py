@@ -33,7 +33,9 @@ import requests
 
 CC = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(CC / "lib"))
+import icu_link  # noqa: E402
 import outbox  # noqa: E402
+from icu_api import count_request  # noqa: E402
 from strava_client import StravaClient  # noqa: E402
 
 try:
@@ -180,7 +182,13 @@ class Icu:
     def __init__(self, athlete_id: str, key: str):
         self.id = athlete_id
         self.s = requests.Session()
-        self.s.auth = ("API_KEY", key)
+        tok = None if key else icu_link.token_for_athlete(athlete_id)   # linked by OAuth
+        if tok:
+            self.s.headers["Authorization"] = f"Bearer {tok}"
+        else:
+            self.s.auth = ("API_KEY", key)
+        self.s.hooks["response"].append(
+            lambda r, *a, **k: count_request(athlete_id, "oauth" if tok else "key", r))
 
     def profile(self) -> dict:
         r = self.s.get(f"{ICU}/athlete/{self.id}", timeout=30)
@@ -283,7 +291,7 @@ def run_athlete(slug: str, a: dict, dry: bool = False) -> None:
         return
     now = int(time.time())
     st = _load_state(adir, now)
-    icu = Icu(str(a["icu_athlete_id"]), str(a["icu_api_key"]))
+    icu = Icu(str(a["icu_athlete_id"]), str(a.get("icu_api_key") or ""))
     if icu.profile().get("strava_sync_activities"):
         if not st.get("warned_double") and not dry:
             outbox.record(a.get("chat_id"), DOUBLE_MSG, source="strava-to-icu")
