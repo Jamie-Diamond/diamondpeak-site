@@ -757,7 +757,11 @@
      with a ring on the point; the highest and lowest points labelled small. HTML over the
      SVG, placed in %, because text inside a stretched SVG would stretch with it. */
   function sparkMarks(W, H, marks) {
-    return marks.filter(Boolean).map(function (m) {
+    var end = marks.filter(function (m) { return m && m.kind === 'end'; })[0];
+    return marks.filter(Boolean).filter(function (m) {
+      // a high / low label too close to the end tag would sit under it: the tag wins
+      return m.kind === 'end' || !end || Math.abs(m.x - end.x) / W > 0.14 || Math.abs(m.y - end.y) / H > 0.35;
+    }).map(function (m) {
       var lx = m.x / W * 100, ty = m.y / H * 100;
       var ax = lx > 88 ? '-100%' : lx < 12 ? '0' : '-50%';
       var ay = m.kind === 'lo' ? '45%' : '-145%';
@@ -862,26 +866,41 @@
         ]) + '</div>';
     }
     var today = rows.filter(function (r) { return r.date === last; })[0] || {};
+    // The tile shows what is JUDGED (Jamie, 15 Oct 2026: "the numbers say one thing, the
+    // graph the other" - the tile showed this morning while its red came from the 7-day
+    // average): big = the 7-day average, the same number as the graph's end tag, red when
+    // it has left the normal band; small = today and usual, today red when that morning
+    // alone is off. Sleep's morning rule is the morning card's (1h+ short and under 7h).
     function state(k) {
       var b = base(k, tL), a = roll(k, tL);
-      if (!b) return { usual: null, off: false };
+      if (!b) return null;
       var v = today[k] > 0 ? fwd(k, today[k]) : null, bad = BAD[k];
       var dayOff = v != null && (bad < 0 ? v < b.m - DAY_SD * b.sd : v > b.m + DAY_SD * b.sd);
-      var trendOff = a != null && (bad < 0 ? a < b.m - BAND_SD * b.sd : a > b.m + BAND_SD * b.sd);
       if (k === 'sleep') {
-        var h = today.sleep, u = inv(k, b.m);
-        return { usual: u, off: h > 0 && h <= u - 1 && h < 7 };
+        var u = inv(k, b.m), hs = today.sleep;
+        dayOff = hs > 0 && hs <= u - 1 && hs < 7;
       }
-      return { usual: inv(k, b.m), off: dayOff || trendOff };
+      var trendOff = a != null && (bad < 0 ? a < b.m - BAND_SD * b.sd : a > b.m + BAND_SD * b.sd);
+      return { usual: inv(k, b.m), avg: a != null ? inv(k, a) : null, trendOff: trendOff, dayOff: dayOff };
     }
-    var sh = state('hrv'), sr = state('rhr'), ss = state('sleep');
+    function tile(k, label, unit) {
+      var st = state(k), t = today[k];
+      var f = function (x) { return k === 'sleep' ? Number(x).toFixed(1) + 'h' : String(Math.round(x)); };
+      if (!st || st.avg == null) {
+        return fig(t != null ? f(t) : '-', label, unit, '');
+      }
+      return '<div class="fig"><span class="n' + (st.trendOff ? ' neg' : '') + '">' + esc(f(st.avg)) + '</span>' +
+        '<span class="l">' + esc(label) + '</span>' +
+        '<span class="d">7-day avg<br><span class="' + (st.dayOff ? 'neg' : '') + '">today ' + esc(t != null ? f(t) : '-') +
+        '</span> \u00b7 usual ' + esc(f(st.usual)) + '</span></div>';
+    }
     var sH = spark('hrv'), sR = spark('rhr'), sS = spark('sleep');
     if (!sH && !sR && !sS) return '';
     return card('Recovery',
       '<div class="figures">' +
-        (sH ? fig(today.hrv != null ? Math.round(today.hrv) : '-', 'HRV', sh.usual ? 'usual ' + Math.round(sh.usual) : 'ms', sh.off ? 'neg' : '') : '') +
-        (sR ? fig(today.rhr != null ? Math.round(today.rhr) : '-', 'Resting HR', sr.usual ? 'usual ' + Math.round(sr.usual) : 'bpm', sr.off ? 'neg' : '') : '') +
-        (sS ? fig(today.sleep != null ? Number(today.sleep).toFixed(1) + 'h' : '-', 'Sleep', ss.usual ? 'usual ' + ss.usual.toFixed(1) + 'h' : 'hours', ss.off ? 'neg' : '') : '') +
+        (sH ? tile('hrv', 'HRV', 'ms') : '') +
+        (sR ? tile('rhr', 'Resting HR', 'bpm') : '') +
+        (sS ? tile('sleep', 'Sleep', 'hours') : '') +
       '</div>' +
       (sH ? '<p class="wl-h">HRV</p>' + sH : '') +
       (sR ? '<p class="wl-h">Resting HR</p>' + sR : '') +
@@ -5662,6 +5681,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.87", "2026-10-15", "Recovery tiles show the 7-day average the graph shows, with today and usual underneath", 0],
     ["3.86", "2026-10-15", "Stop button while the coach is replying; weigh-ins left out show on the graph as outliers", 0],
     ["3.85", "2026-10-15", "Weigh-ins that can't be you are left out of the weight trend until you confirm them", 0],
     ["3.84", "2026-10-15", "Weight shows the 28-day change; cleaner athlete picker", 0],
