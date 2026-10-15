@@ -3673,8 +3673,10 @@
     ds.push({
       type: 'line', label: 'Form', yAxisID: 'y1', order: 1,
       data: lc.map(function (r) { return r.tsb; }),
-      borderColor: C.ink2, borderWidth: 1.4, tension: 0.3, fill: false,
-      pointRadius: 3, pointBorderColor: '#fff', pointBorderWidth: 1,
+      // Dots, no joining line (Jamie, 15 Oct 2026): Form is a daily reading, and the line
+      // read as a second trend competing with Fatigue.
+      showLine: false, borderColor: C.ink2, borderWidth: 0, fill: false,
+      pointRadius: 4.5, pointHoverRadius: 6, pointBorderColor: '#fff', pointBorderWidth: 1.5,
       pointBackgroundColor: lc.map(function (r) {
         var v = r.tsb == null ? 0 : r.tsb;
         return v > 5 ? '#2aa6a0' : (v >= -20 ? '#c08428' : '#ba3c32');
@@ -5731,6 +5733,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.92", "2026-10-15", "Form shown as dots on the load chart", 0],
     ["3.91", "2026-10-15", "The coach's load chart is live in the chat: tap a day for its numbers", 0],
     ["3.90", "2026-10-15", "±7 days legend shows every sport's colour", 0],
     ["3.89", "2026-10-15", "Fitness tile shows this week's change; the separate ramp tile is gone", 0],

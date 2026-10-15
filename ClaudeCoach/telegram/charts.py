@@ -423,8 +423,7 @@ def load_chart(payload, coaching_level="mid"):
     lo, hi = min(tsb + [-10]), max(tsb + [10])
     pad = max(3, (hi - lo) * 0.14)
     ax1.set_ylim(lo - pad, hi + pad)
-    ax1.plot(x, tsb, color=ACCENT, linewidth=2.4, zorder=4, solid_joinstyle="round")
-    ax1.scatter(x, tsb, s=22, color=ACCENT, edgecolors="white", linewidths=1.2, zorder=5)
+    ax1.scatter(x, tsb, s=46, color=ACCENT, edgecolors="white", linewidths=1.4, zorder=5)
     ax1.annotate(f"{tsb[-1]:+.0f}", (x[-1], tsb[-1]), xytext=(0, 12), textcoords="offset points",
                  ha="center", fontsize=10, fontweight="bold", color="white", family=fam,
                  bbox=dict(boxstyle="round,pad=0.35,rounding_size=0.6", fc=ACCENT, ec="none"),
@@ -452,7 +451,7 @@ def load_chart(payload, coaching_level="mid"):
              color=INK, family=fam, va="top")
 
     handles = [mpatches.Patch(facecolor=BASE[s], label=s) for s in present]
-    handles += [Line2D([0], [0], color=ACCENT, lw=2.4, marker="o", markersize=5,
+    handles += [Line2D([0], [0], color=ACCENT, lw=0, marker="o", markersize=6,
                        markeredgecolor="white", label="Form"),
                 Line2D([0], [0], color="#6b7380", lw=1.8, linestyle=(0, (4, 3)),
                        label="Fatigue (7-day load)"),
