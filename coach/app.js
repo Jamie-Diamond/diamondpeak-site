@@ -1655,7 +1655,47 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       }
       logCard(el, id, form, extra || {}, false);
     } else addButtons(el, buttons);
+    if ((buttons || []).some(function (r) { return r.some(function (b) { return b.data === ICU_AGAIN; }); }))
+      icuChecklist(el);
     return el;
+  }
+
+  // Sign-up's Intervals.icu checklist ticks itself (Jamie, 15 Oct 2026): the fix-it message
+  // (its Check again button) becomes four lines - watch, sleep & HRV, workouts to watch,
+  // history - read from Intervals.icu every 20 s while it's on screen (/api/icu/checklist).
+  // Each open line has its own Open in Intervals link. All four ticked: Check again is
+  // tapped for them and sign-up carries on.
+  var ICU_AGAIN = 'ob:icu_fix:again';
+  function icuChecklist(el) {
+    var again = el.querySelector('button[data-cb="' + ICU_AGAIN + '"]');
+    var box = document.createElement('div');
+    box.className = 'icu-check';
+    el.insertBefore(box, el.querySelector('.btns'));
+    var tapped = false;
+    function draw(j) {
+      el.classList.add('has-icu-check');
+      box.innerHTML = '<p class="icu-check-h">' + (j.done ? 'All set \u2713'
+        : 'These tick themselves as you switch them on in Intervals.icu:') + '</p>' +
+        j.items.map(function (c) {
+          return '<div class="icu-row' + (c.ok ? ' ok' : '') + '"><span class="icu-tick">' +
+            (c.ok ? '\u2713' : '') + '</span><div><b>' + esc(c.label) + '</b>' +
+            (c.ok ? '' : '<p>' + md(c.fix) + '</p><a href="' + esc(c.url) +
+              '" target="_blank" rel="noopener">Open in Intervals \u2197</a>') + '</div></div>';
+        }).join('');
+      if (j.done && again && !tapped && !again.disabled && !chatState.busy) {
+        tapped = true;
+        again.click();
+      }
+    }
+    function tick() {
+      if (!el.isConnected || tapped) return;
+      if (document.hidden) { setTimeout(tick, 20000); return; }
+      fetch('/api/icu/checklist', { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) { if (j && j.items) draw(j); setTimeout(tick, 20000); })
+        .catch(function () { setTimeout(tick, 30000); });
+    }
+    tick();
   }
 
   /* ── the Log it card (29-30 Sep 2026) ── */
@@ -5979,6 +6019,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.011", "2026-10-15", "Sign-up links Intervals.icu with one Connect button and a checklist that ticks itself; Settings offers Reconnect Intervals.icu", 0],
     ["4.010", "2026-10-15", "A queued message survives Peak reloading or updating", 0],
     ["4.009", "2026-10-15", "Chats show the last 7 days, 100 messages at most", 0],
     ["4.008", "2026-10-15", "Chats show the last 7 days, a week more per tap", 0],
@@ -6360,8 +6401,21 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       var icu = as ? ({ ok: ['Connected ✓', 'ok'], rejected: ['Key not working', 'bad'],
                         missing: ['Not set up', 'bad'] }[as.icu] || ['Couldn\u2019t check', ''])
                    : ['checking…', ''];
-      rows += '<div class="crow"><span class="crow-i">i</span><span class="crow-n">Intervals.icu</span>' +
-        '<span class="crow-s ' + icu[1] + '">' + icu[0] + '</span></div>';
+      // Reconnect (Jamie, 15 Oct 2026): Peak's own Intervals.icu link (OAuth) replaces the
+      // pasted API key. Offered on your own row until you have it; a missing or broken key
+      // is fixed by the same tap.
+      if (mine && as && !as.icu_oauth) {
+        rows += '<a class="crow" href="/api/icu/connect" target="_blank" rel="noopener">' +
+          '<span class="crow-i">i</span><span class="crow-n">Intervals.icu</span>' +
+          '<span class="crow-s ' + (as.icu === 'ok' ? '' : 'bad') + '">' +
+          (as.icu === 'missing' ? 'Connect \u2197' : 'Reconnect \u2197') + '</span></a>' +
+          '<div class="crow-sub">' + (as.icu === 'ok'
+            ? 'Peak has a new link to Intervals.icu. Tap, sign in, tap Allow. Nothing else changes.'
+            : 'Peak can\u2019t read your Intervals.icu. Tap, sign in, tap Allow.') + '</div>';
+      } else {
+        rows += '<div class="crow"><span class="crow-i">i</span><span class="crow-n">Intervals.icu</span>' +
+          '<span class="crow-s ' + icu[1] + '">' + icu[0] + '</span></div>';
+      }
       var sv = as && as.strava;
       rows += sv
         ? '<div class="crow"><span class="crow-i">S</span><span class="crow-n">Strava</span>' +

@@ -954,7 +954,7 @@ def icu_callback(request: Request, code: str = "", state: str = "", error: str =
     """Intervals.icu sends the athlete back here after they approve (or don't). The code
     is only good for 2 minutes, so it is swapped for a token at once."""
     import icu_link
-    cid, slug, _ = own_chat(request_email(request))
+    cid, slug, st = own_chat(request_email(request))
     again = '<a href="/api/icu/connect">Connect Intervals.icu</a> again'
     if not cid or not icu_link.check_state(state, cid):
         return _page("That link has expired",
@@ -1000,7 +1000,47 @@ def icu_callback(request: Request, code: str = "", state: str = "", error: str =
         return _page("Nearly - one more tick",
                      "Peak also needs " + " and ".join(names[m] for m in missing) + f". {again} "
                      "and leave every box ticked.")
+    if st == "onboarding":
+        # Carry the sign-up on now, so the checklist is waiting when they're back in Peak.
+        try:
+            chat.start_turn(cid, button="ob:icu_connect:done")
+        except chat.Busy:
+            import outbox
+            outbox.record(cid, "✓ *Intervals.icu connected.* Send _done_ to carry on.",
+                          source="icu-link")
     return _page("✓ Intervals.icu connected", "You can close this and go back to Peak.")
+
+
+_ICU_CHECKLIST: dict = {}       # chat id -> (checked at, result): Peak polls while it's open
+
+
+@app.get("/api/icu/checklist")
+def icu_checklist(request: Request):
+    """Sign-up's live checklist (watch, sleep & HRV, workouts to watch, history), read from
+    Intervals.icu for the person signing up. Cached 20 s: Peak asks every 20 s while the
+    checklist is on screen, and each check is 4 Intervals.icu calls."""
+    import icu_link
+    cid, _slug, st = own_chat(request_email(request))
+    if not cid or st != "onboarding":
+        raise HTTPException(404, "not signing up")
+    hit = _ICU_CHECKLIST.get(cid)
+    if hit and time.time() - hit[0] < 20:
+        return JSONResponse(hit[1], headers=NO_STORE)
+    b = chat.bot()
+    ans = (b.load_onboarding_state().get(cid) or {}).get("answers") or {}
+    tok = icu_link.load(cid)
+    aid = (tok or {}).get("icu_athlete_id") or ans.get("icu_id")
+    if not aid:
+        raise HTTPException(404, "Intervals.icu isn't linked yet")
+    try:
+        items = b._icu_checklist(aid, "" if tok else ans.get("icu_key", ""), cid)
+    except Exception as e:
+        print(f"[icu] checklist failed for {cid}: {e}", flush=True)
+        raise HTTPException(502, "Intervals.icu didn't answer")
+    out = {"items": [{k: c[k] for k in ("key", "label", "ok", "fix", "url")} for c in items],
+           "done": all(c["ok"] for c in items)}
+    _ICU_CHECKLIST[cid] = (time.time(), out)
+    return JSONResponse(out, headers=NO_STORE)
 
 
 @app.post("/api/icu/webhook")

@@ -746,6 +746,10 @@ def icu(env, monkeypatch):
     got, revoked = [], []
     monkeypatch.setattr(icu_link, "exchange", lambda code: got.append(code) or dict(reply))
     monkeypatch.setattr(icu_link, "revoke_token", lambda t: revoked.append(t) or True)
+    turns = []
+    monkeypatch.setattr(server.chat, "start_turn", lambda cid, **k: turns.append((cid, k)))
+    monkeypatch.setattr(server, "_ICU_TURNS", turns, raising=False)
+    monkeypatch.setattr(server, "_ICU_CHECKLIST", {})
     return icu_link, reply, got, revoked
 
 
@@ -772,6 +776,27 @@ def test_connect_intervals_signing_up_stores_the_token_for_the_signup(env, icu, 
     tok = json.loads((server.CC / "config" / "web-signup" / cid / "icu_tokens.json").read_text())
     assert tok["access_token"] == "tok1" and tok["icu_athlete_id"] == "i777"
     assert icu_link.token_for_athlete("i777") == "tok1"
+    assert server._ICU_TURNS == [(cid, {"button": "ob:icu_connect:done"})]   # sign-up carries on
+
+    class FakeBot:
+        calls = []
+
+        def load_onboarding_state(self):
+            return {cid: {"answers": {"icu_id": "i777"}}}
+
+        def _icu_checklist(self, aid, key, chat_id):
+            self.calls.append((aid, key, chat_id))
+            return [{"key": "watch", "label": "Watch linked", "ok": True, "fix": "", "url": "u", "x": 1},
+                    {"key": "wellness", "label": "Sleep & HRV", "ok": False, "fix": "Tick it", "url": "u"}]
+    fb = FakeBot()
+    monkeypatch.setattr(server.chat, "bot", lambda: fb)
+    j = env.get("/api/icu/checklist").json()
+    assert j["done"] is False and [c["key"] for c in j["items"]] == ["watch", "wellness"]
+    assert "x" not in j["items"][0] and fb.calls == [("i777", "", cid)]
+    env.get("/api/icu/checklist")
+    assert len(fb.calls) == 1                                          # cached for 20 s
+    dev(monkeypatch, "kat@example.com")
+    assert env.get("/api/icu/checklist").status_code == 404           # not signing up
 
 
 def test_connect_intervals_for_a_coached_athlete_keeps_their_key_and_checks_the_account(env, icu, monkeypatch):
@@ -790,7 +815,7 @@ def test_connect_intervals_for_a_coached_athlete_keeps_their_key_and_checks_the_
     reply["scope"] = "ACTIVITY:WRITE,CALENDAR:WRITE"
     r = env.get("/api/icu/callback", params={"state": state, "code": "c"})
     assert "one more tick" in r.text and "sleep and wellness" in r.text and "your settings" in r.text
-    assert icu_link.connected(slug="kathryn")
+    assert icu_link.connected(slug="kathryn") and server._ICU_TURNS == []   # not a sign-up
     kat = json.loads(server.ATHLETES_CONFIG.read_text())["kathryn"]
     assert kat["icu_api_key"] == "k1" and kat["icu_athlete_id"] == "i22"     # key untouched
     monkeypatch.setattr(server, "_icu_check", lambda aid, key: "ok")

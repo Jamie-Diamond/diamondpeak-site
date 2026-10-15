@@ -4658,22 +4658,33 @@ _OB_CONSENT_NO = (
     "No problem. I can't coach you without it, so sign-up waits here. Tap *I agree* "
     f"whenever you're ready, or read the [privacy policy]({PRIVACY_URL}) first.")
 
-# Phase 1: always asked, in order. Intervals.icu (30 Sep 2026): asked whether they use
-# it; a "no" adds the set-up walk-through. The athlete ID is no longer asked - the API
-# key alone identifies the athlete. Screenshots are onboarding/img/ (Jamie's account,
-# key and personal details removed).
+# Phase 1: always asked, in order. Intervals.icu (15 Oct 2026): one Connect button
+# (OAuth, lib/icu_link.py) instead of "do you use it?" + "paste your API key"; the
+# Intervals.icu page it opens signs them up too. Pasting a key stays as a fallback.
+# Screenshots are onboarding/img/ (Jamie's account, key and personal details removed).
+_OB_ICU_KEY_Q = ("Link me with your *API key* instead:\n\n"
+                 "1. On intervals.icu, open *Settings* (in the ☰ menu)\n"
+                 "2. Scroll down to *Developer Settings* and tap *(view)* next to API Key\n"
+                 "3. Copy the key and paste it here\n\n"
+                 "Don't tap *Clear* or *Generate* -- that changes the key and I lose access.")
+# Why Intervals.icu (Jamie, 15 Oct 2026: sign-up must say why it is required).
+_OB_ICU_CONNECT_Q = (
+    "Now link your *Intervals.icu*. It's a free training log: it's how your watch's "
+    "sessions, sleep and heart rate reach me, and how my sessions get onto your watch. "
+    "I can't coach you without it.\n\n"
+    "Tap *Connect Intervals.icu*, sign in (or sign up free on the same page) and tap "
+    "*Allow*. Then come back here.")
 _OB_PHASE1 = [
     ("consent", _OB_CONSENT_Q),
     ("name",    "Thanks! Just a few questions to get you set up.\n\nWhat's your *full name*?"),
     ("race",    "What's your *target race* -- name and date? (e.g. _IM Frankfurt, 2027-06-29_)\n\n"
                 "Not training for a race? Reply _none_."),
-    ("icu_has", "Do you already use *Intervals.icu*? It's the free training log I read your sessions, sleep and fitness from, and where I put your plan."),
-    ("icu_key", "Now link me to it with your *API key*:\n\n"
-                "1. On intervals.icu, open *Settings* (in the ☰ menu)\n"
-                "2. Scroll down to *Developer Settings* and tap *(view)* next to API Key\n"
-                "3. Copy the key and paste it here\n\n"
-                "Don't tap *Clear* or *Generate* -- that changes the key and I lose access."),
+    ("icu_connect", _OB_ICU_CONNECT_Q),
 ]
+# Sign-ups that were already past the race question before 15 Oct still get these.
+_OB_ICU_HAS = ("icu_has", "Do you already use *Intervals.icu*? It's the free training log I read your sessions, sleep and fitness from, and where I put your plan.")
+_OB_ICU_KEY = ("icu_key", _OB_ICU_KEY_Q.replace("Link me with your *API key* instead:",
+                                                "Now link me to it with your *API key*:"))
 _OB_ICU_SETUP = ("icu_setup",
     "No problem -- it takes about 10 minutes:\n\n"
     "1. Sign up free at intervals.icu\n"
@@ -4692,7 +4703,7 @@ _OB_ICU_SETUP = ("icu_setup",
     "• _Import all Garmin data_ for everything: Garmin emails you a link to paste in")
 # Sign-ups already under way when the consent step arrived (15 Oct 2026) agree before
 # going on; then the question they were on is asked again.
-_OB_RESUME = dict(_OB_PHASE1 + [_OB_ICU_SETUP])
+_OB_RESUME = dict(_OB_PHASE1 + [_OB_ICU_SETUP, _OB_ICU_HAS, _OB_ICU_KEY])
 _OB_RESUME_DEFAULT = "Thanks! Let's carry on: send your answer to my last question again."
 # Coaching extras (30 Sep 2026, lib/coaching_prefs.py): opt in or out at sign-up,
 # switchable later in Peak -> Settings -> Coaching extras.
@@ -4746,6 +4757,7 @@ _OB_LEVEL = ("level",
 # (button text, value) rows per question; a tap arrives as "ob:<question>:<value>".
 _OB_BUTTONS = {
     "consent":   [[("I agree", "yes"), ("Not now", "no")]],
+    "icu_connect": [[("I'll paste an API key", "key")]],     # Connect is a link: _ob_markup
     "icu_has":   [[("Yes, I use it", "yes"), ("No, not yet", "no")]],
     "icu_setup": [[("I've done it", "done")]],
     "icu_fix":   [[("Check again", "again"), ("Carry on for now", "skip")]],
@@ -4895,6 +4907,11 @@ def _ob_normalise(key, answer):
             return "yes"
         if re.match(r"^\s*(not now|no|n|nope|not yet|later)\b", a, re.I):
             return "no"
+    if key == "icu_connect":
+        if re.match(r"^\s*(done|connected|allowed|linked|ok|okay|finished)\b", a, re.I):
+            return "done"
+        if re.match(r"^\s*(key|api key|paste)", a, re.I):
+            return "key"
     if key == "hr_source" and not re.search(r"[1-4]", a):
         for pat, digit in _HR_WORDS:
             if re.search(pat, a, re.I):
@@ -4916,6 +4933,9 @@ def _validate_ob_answer(key, answer):
             return "That doesn't look right -- the athlete ID starts with 'i' followed by numbers (e.g. _i196362_). Check intervals.icu -> Profile."
     if key == "consent" and answer not in ("yes", "no"):
         return "Tap *I agree* or *Not now*."
+    if key == "icu_connect" and answer not in ("done", "key"):
+        return ("Tap *Connect Intervals.icu* above and allow Peak in. Or tap *I'll paste an "
+                "API key*.")
     if key == "icu_has":
         if not re.match(r"^\s*(y|yes|yep|yeah|n|no|nope|not yet)\b", answer, re.I):
             return "Just _yes_ or _no_ -- do you already use Intervals.icu?"
@@ -5345,9 +5365,15 @@ def _ob_markup(key, picked=()):
     rows = _OB_BUTTONS.get(key)
     if not rows:
         return None
-    return {"inline_keyboard": [[{"text": ("✓ " + t) if v in picked else t,
-                                  "callback_data": f"ob:{key}:{v}"} for t, v in row]
-                                for row in rows]}
+    kb = [[{"text": ("✓ " + t) if v in picked else t, "callback_data": f"ob:{key}:{v}"}
+           for t, v in row] for row in rows]
+    if key == "icu_connect":
+        try:
+            import icu_link
+            kb.insert(0, [{"text": "Connect Intervals.icu", "url": icu_link.CONNECT_URL}])
+        except Exception:
+            pass
+    return {"inline_keyboard": kb}
 
 
 def _ob_ask(token, chat_id, key, question, answers=None, strava=False):
@@ -5358,6 +5384,9 @@ def _ob_ask(token, chat_id, key, question, answers=None, strava=False):
     if key == "icu_key" and (answers or {}).get("icu_has") == "yes":
         images.insert(0, "icu-settings.png")        # the "no" path showed it already
     markup = _ob_markup(key)
+    if key == "icu_fix" and markup:
+        markup["inline_keyboard"].append([{"text": "Open Intervals.icu settings",
+                                           "url": _icu_settings_url()}])
     if strava and markup:
         try:
             import strava_link
@@ -5402,62 +5431,115 @@ def _strava_linked(chat_id) -> bool:
         return False
 
 
+def _icu_checks(profile, acts, well, connections=None):
+    """The four things coaching needs from Intervals.icu, each {"key", "label", "ok",
+    "fix"} with "fix" in the athlete's words: their watch linked directly, sleep / HRV
+    coming in, planned sessions going to the watch, and enough history. Read from what
+    actually arrives (activity sources - a watch brand, or only Strava, which the API
+    hides - and 14 days of wellness) and from the watch's own settings, so ticking a
+    box in Intervals.icu ticks the line. `connections` (GET /athlete/{id}/connections)
+    ticks the watch as soon as it is linked, before any activity has arrived."""
+    profile = profile if isinstance(profile, dict) else {}
+    acts = [a for a in (acts if isinstance(acts, list) else []) if isinstance(a, dict)
+            and str(a.get("source") or "").upper() != "STRAVA"]      # hidden from the API
+    well = [w for w in (well if isinstance(well, list) else []) if isinstance(w, dict)]
+    sources = {str(a.get("source") or "").upper() for a in acts}
+    devices = [d for d in _ICU_DEVICES if any(d[0] in src for src in sources)]
+    linked = [d for d in _ICU_DEVICES if (connections or {}).get(
+        "garmin_health_connected" if d[0] == "GARMIN" else d[2].lower() + "_connected")
+        or (d[0] == "GARMIN" and (connections or {}).get("garmin_training_connected"))]
+    for d in linked:
+        if d not in devices:
+            devices.append(d)
+    watch = devices[0][2] if devices else "your watch"
+    apple = ("On an Apple Watch, the Intervals.icu Companion or HealthFit app on your "
+             "iPhone does this.")
+    checks = []
+    if not acts and not linked:
+        checks.append({"key": "watch", "label": "Watch linked", "ok": False, "fix": (
+            "Your activities only come in through *Strava*, and Strava hides them from me. "
+            "Connect your watch (Garmin, Coros, Suunto...) directly as well. " + apple
+            if profile.get("strava_authorized") else
+            "I can't see any activities yet. Connect your watch (Garmin, Coros, Suunto...) "
+            "-- if you just did, give it a few minutes. " + apple)})
+    elif acts and sources <= _ICU_INDOOR_ONLY and not linked:
+        checks.append({"key": "watch", "label": "Watch linked", "ok": False, "fix":
+                       "I can only see your indoor sessions. Connect your watch too, so I "
+                       "see everything. " + apple})
+    else:
+        checks.append({"key": "watch", "label": "Watch linked", "ok": True, "fix": ""})
+    wellness_on = any(profile.get(prefix + "download_wellness") for _s, prefix, _n in devices)
+    has_wellness = any(w.get("hrv") or w.get("sleepSecs") or w.get("restingHR") for w in well)
+    checks.append({"key": "wellness", "label": "Sleep & HRV", "ok": has_wellness or wellness_on,
+                   "fix": f"I can't see your *sleep, HRV or resting heart rate*. Tick "
+                          f"_Download wellness data_ under {watch}."
+                          + ("" if devices else " " + apple)})
+    off = [name for _src, prefix, name in devices if profile.get(prefix + "upload_workouts") is False]
+    checks.append({"key": "workouts", "label": "Workouts to watch", "ok": not off,
+                   "fix": " ".join(f"Your planned sessions won't reach your watch. Tick _Upload "
+                                   f"planned workouts_ under {name}." for name in off)})
+    days = sorted(str(a.get("start_date_local") or "")[:10] for a in acts if a.get("start_date_local"))
+    seen = (date.today() - date.fromisoformat(days[0])).days if days else 0
+    weeks = max(1, seen // 7)
+    checks.append({"key": "history", "label": "History", "ok": seen >= _HISTORY_WANTED_DAYS,
+                   "fix": (f"I can only see your last *{weeks} week{'s' if weeks != 1 else ''}* of "
+                           f"training -- the more history, the better I can coach you. Under "
+                           f"{watch}, tap _Download old data_ (activities and wellness)"
+                           + (f", or _Import all {watch} data_ for everything."
+                              if watch in ("Garmin", "Polar") else ".")) if days else
+                          "Your history arrives once your watch is linked: then tap _Download "
+                          "old data_ under it."})
+    for c in checks:
+        c["url"] = _icu_settings_url(watch if devices else "")
+    return checks
+
+
+# Intervals.icu's connections page, showing just their watch's block (deep link per the
+# Intervals.icu forum, API thread post #728, 30 Jul 2026).
+_ICU_SETTINGS = "https://intervals.icu/settings/connections"
+
+
+def _icu_settings_url(brand: str = "") -> str:
+    return _ICU_SETTINGS + (f"?services={brand.lower()}" if brand and brand != "your watch" else "")
+
+
+def _icu_checklist(icu_id, icu_key="", chat_id=None):
+    """The four checks for this athlete, read live. All ticked once they have connected
+    Strava in Peak: scripts/strava-to-icu.py copies it."""
+    import sys as _sys
+    _sys.path.insert(0, str(BASE.parent / "lib"))
+    from icu_api import IcuClient
+    c = IcuClient(icu_id, (icu_key or "").strip())
+    profile, acts, well = c.fetch_all(
+        "get_athlete_profile", ("get_training_history", 400), ("get_wellness", 14))
+    try:
+        conns = c._get("connections")
+    except Exception:
+        conns = None
+    checks = _icu_checks(profile, acts, well, conns)
+    if _strava_linked(chat_id):
+        for x in checks:
+            x["ok"] = True
+    return checks
+
+
 def _icu_setup_issues(icu_id, icu_key, chat_id=None):
     """What still needs switching on in Intervals.icu for coaching to work, in the
-    athlete's words; [] when nothing does. Read from what actually arrives: activity
-    sources (a watch brand, or only Strava, which the API hides), 14 days of wellness,
-    the watch's own workout-upload setting, and how far back the history goes. Nothing
-    to fix once they have connected Strava in Peak: scripts/strava-to-icu.py copies it."""
+    athlete's words; [] when nothing does (see _icu_checks). Nothing to fix once they
+    have connected Strava in Peak: scripts/strava-to-icu.py copies it."""
     if _strava_linked(chat_id):
         return []
     import sys as _sys
     _sys.path.insert(0, str(BASE.parent / "lib"))
     from icu_api import IcuClient
-    profile, acts, well = IcuClient(icu_id, icu_key.strip()).fetch_all(
+    profile, acts, well = IcuClient(icu_id, (icu_key or "").strip()).fetch_all(
         "get_athlete_profile", ("get_training_history", 400), ("get_wellness", 14))
-    profile = profile if isinstance(profile, dict) else {}
-    acts = acts if isinstance(acts, list) else []
-    well = well if isinstance(well, list) else []
-    acts = [a for a in acts if isinstance(a, dict)
-            and str(a.get("source") or "").upper() != "STRAVA"]      # hidden from the API
-    sources = {str(a.get("source") or "").upper() for a in acts}
-    devices = [d for d in _ICU_DEVICES if any(d[0] in src for src in sources)]
-    watch = devices[0][2] if devices else "your watch"
-    apple = ("On an Apple Watch, the Intervals.icu Companion or HealthFit app on your "
-             "iPhone does this.")
-    if not acts:
-        if profile.get("strava_authorized"):
-            return ["Your activities only come in through *Strava*, and Strava hides them "
-                    "from me. Connect your watch (Garmin, Coros, Suunto...) directly as well. "
-                    + apple]
-        return ["I can't see any activities yet. Connect your watch (Garmin, Coros, "
-                "Suunto...) -- if you just did, give it a few minutes. " + apple]
-    issues = []
-    if sources <= _ICU_INDOOR_ONLY:
-        issues.append("I can only see your indoor sessions. Connect your watch too, so "
-                      "I see everything. " + apple)
-    if not any(w.get("hrv") or w.get("sleepSecs") or w.get("restingHR")
-               for w in well if isinstance(w, dict)):
-        issues.append(f"I can't see your *sleep, HRV or resting heart rate*. Tick "
-                      f"_Download wellness data_ under {watch}."
-                      + ("" if devices else " " + apple))
-    for _src, prefix, name in devices:
-        if profile.get(prefix + "upload_workouts") is False:
-            issues.append(f"Your planned sessions won't reach your watch. Tick _Upload "
-                          f"planned workouts_ under {name}.")
-    days = sorted(str(a.get("start_date_local") or "")[:10] for a in acts
-                  if isinstance(a, dict) and a.get("start_date_local"))
-    if days:
-        seen = (date.today() - date.fromisoformat(days[0])).days
-        if seen < _HISTORY_WANTED_DAYS:
-            weeks = max(1, seen // 7)
-            tip = (f"I can only see your last *{weeks} week{'s' if weeks != 1 else ''}* of "
-                   f"training -- the more history, the better I can coach you. Under "
-                   f"{watch}, tap _Download old data_ (activities and wellness)"
-                   + (f", or _Import all {watch} data_ for everything."
-                      if watch in ("Garmin", "Polar") else "."))
-            issues.append(tip)
-    return issues
+    checks = _icu_checks(profile, acts, well)
+    if not checks[0]["ok"] and not any(
+            isinstance(a, dict) and str(a.get("source") or "").upper() != "STRAVA"
+            for a in (acts if isinstance(acts, list) else [])):
+        return [checks[0]["fix"]]           # nothing arrives at all: the watch comes first
+    return [x["fix"] for x in checks if not x["ok"]]
 
 
 def _strava_offer(chat_id, issues) -> bool:
@@ -5547,6 +5629,47 @@ def _estimates_due(key, answer, session):
     return []
 
 
+def _icu_oauth_token(chat_id):
+    """The Intervals.icu token this sign-up got from Connect Intervals.icu, or None."""
+    try:
+        import icu_link
+        tok = icu_link.load(chat_id)
+        return tok if tok and tok.get("icu_athlete_id") else None
+    except Exception:
+        return None
+
+
+def _ob_icu_linked(token, chat_id, ob_state, session, icu_id, icu_key):
+    """Intervals.icu is linked (a key, or OAuth with icu_key ""): read what it holds,
+    check the set-up, then the fix step or the rest of the questions."""
+    try:
+        icu_data, summary = _fetch_icu_data(icu_id, icu_key)
+    except Exception as e:
+        log(f"Onboarding ICU fetch failed for {chat_id}: {e}")
+        if icu_key:
+            send(token, chat_id,
+                 "Couldn't connect with that key -- check you copied all of it, then paste it again.")
+            session["answers"].pop("icu_key", None)
+        else:
+            send(token, chat_id, "Intervals.icu didn't answer just now. Tap *Connect "
+                 "Intervals.icu* again in a minute.", reply_markup=_ob_markup("icu_connect"))
+        save_onboarding_state(ob_state)
+        return True
+    session["icu_data"], session["icu_summary"] = icu_data, summary
+    try:
+        issues = _icu_setup_issues(icu_id, icu_key, chat_id)
+    except Exception as e:
+        log(f"Onboarding ICU set-up check failed for {chat_id}: {e}")
+        issues = []
+    if issues:
+        session["current_key"] = "icu_fix"
+        save_onboarding_state(ob_state)
+        offer = _strava_offer(chat_id, issues)
+        _ob_ask(token, chat_id, "icu_fix", _icu_fix_question(issues, strava=offer), strava=offer)
+        return True
+    return _ob_after_icu(token, chat_id, ob_state, session)
+
+
 def handle_onboarding(token, chat_id, text):
     """Returns True if chat_id is pending and the message was handled. `text` is a
     typed answer, or a sign-up button tap: "ob:<question>:<value>"."""
@@ -5582,6 +5705,8 @@ def handle_onboarding(token, chat_id, text):
         return True
     if text.startswith("ob:"):
         _, tkey, value = (text.split(":", 2) + ["", ""])[:3]
+        if tkey == "icu_connect" and key in ("icu_has", "icu_key", "icu_setup"):
+            key = session["current_key"] = "icu_connect"   # began before Connect existed
         if tkey != key:
             return True                 # a button on an earlier question
         if key == "goal_sports" and value in ("1", "2", "3", "done"):
@@ -5605,7 +5730,12 @@ def handle_onboarding(token, chat_id, text):
         shown = next((t for row in _OB_BUTTONS.get(key, []) for t, v in row if v == value), value)
     else:
         answer = text.strip()
+        if key == "icu_connect" and re.fullmatch(r"[A-Za-z0-9]{16,64}", answer):
+            key = session["current_key"] = "icu_key"      # pasted a key straight away
+            session["answers"]["icu_has"] = "yes"
         shown = "🔑 API key sent" if key == "icu_key" else answer
+    if key == "icu_connect" and answer == "done":
+        shown = "Connected Intervals.icu"
     _outbox_answer(chat_id, shown)
 
     answer = _ob_normalise(key, answer)
@@ -5659,6 +5789,22 @@ def handle_onboarding(token, chat_id, text):
         if q[0] not in session["answers"] and all(k != q[0] for k, _ in session["queue"]):
             session["queue"].insert(0, list(q))
 
+    # Connect Intervals.icu: the tap that offers a key instead, or "done" - sent by Peak
+    # itself (api/server.py icu_callback) once Intervals.icu has handed over the token.
+    if key == "icu_connect":
+        if answer == "key":
+            session["answers"]["icu_has"] = "yes"         # the key screenshots start at Settings
+            session["queue"].insert(0, ["icu_key", _OB_ICU_KEY_Q])
+        else:
+            tok = _icu_oauth_token(chat_id)
+            if not tok:
+                save_onboarding_state(ob_state)
+                send(token, chat_id, "I can't see the link yet. Tap *Connect Intervals.icu*, "
+                     "sign in and tap *Allow*.", reply_markup=_ob_markup("icu_connect"))
+                return True
+            session["answers"].update(icu_id=tok["icu_athlete_id"], icu_key="", icu_auth="oauth")
+            return _ob_icu_linked(token, chat_id, ob_state, session, tok["icu_athlete_id"], "")
+
     # After ICU key: verify, fetch everything, check the set-up, build rest of queue
     if key == "icu_key":
         save_onboarding_state(ob_state)
@@ -5666,7 +5812,6 @@ def handle_onboarding(token, chat_id, text):
         try:
             icu_id = _icu_id_for_key(answer)
             session["answers"]["icu_id"] = icu_id
-            icu_data, summary = _fetch_icu_data(icu_id, answer)
         except Exception as e:
             log(f"Onboarding ICU fetch failed for {chat_id}: {e}")
             send(token, chat_id,
@@ -5674,19 +5819,7 @@ def handle_onboarding(token, chat_id, text):
             session["answers"].pop("icu_key", None)
             save_onboarding_state(ob_state)
             return True
-        session["icu_data"], session["icu_summary"] = icu_data, summary
-        try:
-            issues = _icu_setup_issues(icu_id, answer, chat_id)
-        except Exception as e:
-            log(f"Onboarding ICU set-up check failed for {chat_id}: {e}")
-            issues = []
-        if issues:
-            session["current_key"] = "icu_fix"
-            save_onboarding_state(ob_state)
-            offer = _strava_offer(chat_id, issues)
-            _ob_ask(token, chat_id, "icu_fix", _icu_fix_question(issues, strava=offer), strava=offer)
-            return True
-        return _ob_after_icu(token, chat_id, ob_state, session)
+        return _ob_icu_linked(token, chat_id, ob_state, session, icu_id, answer)
 
     if key == "icu_fix":
         if re.match(r"^\s*(again|check|done)", answer, re.I):

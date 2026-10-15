@@ -155,7 +155,7 @@ check("after agreeing, the question it was on is asked again",
 
 # ── 1. a 70.3 athlete: wrist HR, rides with power, one tested swim number ──────
 fake_icu(ICU_TRI, TRI)
-asked = onboard("123", ["Sam Smith", "70.3 Test, 2027-06-01", "yes", KEY,
+asked = onboard("123", ["Sam Smith", "70.3 Test, 2027-06-01", "ob:icu_connect:key", KEY,
                         "sub 5", "3 years, longest a marathon", "none", "10",
                         "7",             # invalid HR answer
                         "2",             # wrist
@@ -234,7 +234,7 @@ check("/approve records when coaching began (history before it is never debriefe
 fake_icu({"ftp_watts": None, "run_threshold_pace_per_km": "4:30", "swim_css_per_100m": None,
           "weight_kg": 60, "has_power": False},
          {"race_type": "Running Marathon", "run_km": 42.2})
-asked = onboard("124", ["Ali Run", "London Marathon, 2027-04-25", "y", KEY,
+asked = onboard("124", ["Ali Run", "London Marathon, 2027-04-25", KEY,
                         "sub 3:30", "5 years", "none", "6", "1", "1", "no", "yes", "no", "beginner", "ali"])
 blob = "\n".join(asked)
 check("runner: no power question", "ride with *power*" not in blob)
@@ -245,32 +245,34 @@ check("runner: stated recent test of the ICU pace = tested, no test",
       st["sports_state"]["run"]["confidence"] == "tested" and st["sports_state"]["run"]["test"] is None,
       st["sports_state"]["run"])
 
-# ── 3b. no Intervals.icu yet: set-up walk-through, taps, the set-up check ────
+# ── 3b. Connect Intervals.icu: why it's needed, the link, the key fallback ────
 fake_icu(ICU_TRI, TRI)
 PHOTOS.clear()
 ISSUES[:] = [["Planned workouts aren't set to go to your *Garmin*."], []]
 B.save_pending(["125"])
 B.handle_onboarding("t", "125", "hi")
 B.handle_onboarding("t", "125", "ob:consent:yes")
+n = len(SENT)
 for a in ["Pat Lee", "70.3 Test, 2027-06-01"]:
     B.handle_onboarding("t", "125", a)
+q, mk = [(t, m) for c, t, m in SENT[n:] if c == "125"][-1]
+check("after the race: Connect Intervals.icu, saying why it's needed",
+      "Connect Intervals.icu" in q and "free training log" in q and "can't coach you without it" in q, q)
+check("the Connect button is a link to Peak's OAuth start, then the key fallback",
+      mk["inline_keyboard"][0][0].get("url", "").endswith("/api/icu/connect")
+      and mk["inline_keyboard"][1][0]["callback_data"] == "ob:icu_connect:key", mk)
 n = len(SENT)
-B.handle_onboarding("t", "125", "ob:icu_has:no")
-setup_msgs = [t for c, t, _ in SENT[n:] if c == "125"]
-check("'No' tap gives the set-up steps", any("Sign up free at intervals.icu" in t for t in setup_msgs), setup_msgs)
-check("set-up steps come with screenshots (settings, Garmin)", len(PHOTOS) == 2, PHOTOS)
-check("set-up asks for the history", any("Download old data" in t for t in setup_msgs), setup_msgs)
-check("set-up says Strava isn't needed, and never asks for a Strava import",
-      any("Strava isn't needed" in t for t in setup_msgs)
-      and not any("Import all Strava data" in t for t in setup_msgs), setup_msgs)
-check("set-up ends on an I've done it button",
-      SENT[-1][2] and SENT[-1][2]["inline_keyboard"][0][0]["callback_data"] == "ob:icu_setup:done", SENT[-1])
+B.handle_onboarding("t", "125", "ob:icu_connect:done")          # Peak's tap, but no token
+check("'done' with no token: not linked yet, Connect offered again",
+      any("can't see the link yet" in t for c, t, _ in SENT[n:])
+      and B.load_onboarding_state()["125"]["current_key"] == "icu_connect", SENT[n:])
 n = len(SENT)
-B.handle_onboarding("t", "125", "ob:icu_has:yes")              # the old question's button
-check("a tap on an earlier question is ignored", len(SENT) == n)
-B.handle_onboarding("t", "125", "ob:icu_setup:done")
-check("then the API key steps, with their screenshots",
-      any("API key" in t for c, t, _ in SENT[n:]) and len(PHOTOS) == 4, (PHOTOS, SENT[n:]))
+B.handle_onboarding("t", "125", "maybe later")
+check("anything else: asked to tap Connect", any("Tap *Connect Intervals.icu*" in t for c, t, _ in SENT[n:]))
+n = len(SENT)
+B.handle_onboarding("t", "125", "ob:icu_connect:key")
+check("I'll paste a key: the API key steps, with their screenshots",
+      any("API key" in t for c, t, _ in SENT[n:]) and len(PHOTOS) == 3, (PHOTOS, SENT[n:]))
 n = len(SENT)
 B.handle_onboarding("t", "125", "not a key")
 check("a non-key is refused", any("doesn't look like an API key" in t for c, t, _ in SENT[n:]))
@@ -295,7 +297,7 @@ check("tapped level saved", prof.get("coaching_level") == "pro", prof.get("coach
 check("heat yes / fuelling no saved as the switches",
       prof.get("heat_protocol") is True and prof.get("fuelling_coaching") is False, prof)
 check("tap from a sign-up goes to onboarding, not athlete handlers",
-      B.dispatch_callback("t", "126", "ob:icu_has:yes", 1, {}, {}) is True)
+      B.dispatch_callback("t", "126", "ob:icu_connect:key", 1, {}, {}) is True)
 
 # ── 3c. the set-up check itself, on made-up Intervals.icu accounts ──────────
 import types
@@ -346,7 +348,7 @@ B._outbox = OB
 WEB = "web-00aa11bb22"
 ISSUES[:] = [["Your activities only come in through *Strava*, and Strava hides them from me."], []]
 B.save_pending([WEB])
-for a in ["hi", "ob:consent:yes", "Robin Apple", "70.3 Test, 2027-06-01", "ob:icu_has:yes"]:
+for a in ["hi", "ob:consent:yes", "Robin Apple", "70.3 Test, 2027-06-01", "ob:icu_connect:key"]:
     B.handle_onboarding("t", WEB, a)
 n = len(SENT)
 B.handle_onboarding("t", WEB, KEY)
@@ -368,6 +370,57 @@ check("signed up through Strava: copying switched on and the tokens moved in",
       and not (OB.SIGNUP_DIR / WEB).exists(), ath)
 check("a Telegram sign-up is never offered the Peak-only Strava link",
       B._strava_offer("555", ["Your activities only come in through *Strava*"]) is False)
+
+# ── 3e. Connect Intervals.icu (OAuth): the token arrives, sign-up carries on ──
+import icu_link as IL  # noqa: E402
+IL.BASE = tmp
+WEB2 = "web-00cc11dd22"
+ISSUES[:] = [["I can't see your *sleep, HRV or resting heart rate*."], []]
+B.save_pending([WEB2])
+for a in ["hi", "ob:consent:yes", "Kim Oauth", "70.3 Test, 2027-06-01"]:
+    B.handle_onboarding("t", WEB2, a)
+IL.save_tokens(WEB2, {"access_token": "tok", "scope": "ACTIVITY:WRITE",
+                      "athlete": {"id": "i777", "name": "Kim"}})
+n = len(SENT)
+B.handle_onboarding("t", WEB2, "ob:icu_connect:done")
+st2 = B.load_onboarding_state()[WEB2]
+fix = [(t, m) for c, t, m in SENT[n:] if c == WEB2]
+check("token there: linked with no key, then the fix step with Check again and Open Intervals.icu",
+      st2["answers"].get("icu_id") == "i777" and st2["answers"].get("icu_key") == ""
+      and st2["current_key"] == "icu_fix"
+      and fix[-1][1]["inline_keyboard"][0][0]["callback_data"] == "ob:icu_fix:again"
+      and fix[-1][1]["inline_keyboard"][-1][0]["url"].startswith("https://intervals.icu/settings"), fix)
+check("the athlete's side of the chat says they connected",
+      any(e.get("who") == "me" and e.get("text") == "Connected Intervals.icu"
+          for e in OB.read_chat(WEB2)), OB.read_chat(WEB2)[-3:])
+B.handle_onboarding("t", WEB2, "ob:icu_fix:again")
+for a in ["sub 5", "2 years", "none", "8", "2", "yes", "0", "220", "no", "half 1:52", "no", "400m 8:30",
+          "no", "no", "no", "ob:level:beginner", "kim"]:
+    B.handle_onboarding("t", WEB2, a)
+ath = json.loads(B.ATHLETES_CONFIG.read_text()).get("kim", {})
+check("signed up by OAuth: no API key stored, the token moved into the athlete's folder",
+      ath.get("icu_athlete_id") == "i777" and ath.get("icu_api_key") == ""
+      and (tmp / "athletes/kim/icu_tokens.json").exists() and IL.token_for_athlete("i777") == "tok", ath)
+
+B.save_pending(["127"])
+_st = B.load_onboarding_state()
+_st["127"] = {"current_key": "icu_has", "queue": [["icu_key", "paste"]],
+              "answers": {"consent": "yes", "name": "Old Way"}, "icu_data": {}, "started_at": "x"}
+B.save_onboarding_state(_st)
+B.handle_onboarding("t", "127", "ob:icu_connect:done")
+check("a sign-up from before Connect that connects anyway is moved on to it",
+      B.load_onboarding_state()["127"]["current_key"] == "icu_connect")
+
+# ── 3f. the four checklist lines ─────────────────────────────────────────────
+ck = {c["key"]: c for c in B._icu_checks({}, [], [], {"garmin_health_connected": True})}
+check("watch linked ticks from Intervals.icu's connections before any activity arrives",
+      ck["watch"]["ok"] and not ck["history"]["ok"], ck)
+check("a link per line goes to their watch's settings",
+      ck["wellness"]["url"].endswith("/settings/connections?services=garmin"), ck["wellness"])
+ck = {c["key"]: c for c in B._icu_checks({"icu_garmin_download_wellness": True,
+                                          "icu_garmin_upload_workouts": False}, LONG, [])}
+check("ticking Download wellness ticks Sleep & HRV before the data lands; upload off is open",
+      ck["wellness"]["ok"] and not ck["workouts"]["ok"] and ck["history"]["ok"], ck)
 B._outbox = None
 
 # ── 4. race sports from name when the lookup has no distances ────────────────
@@ -412,7 +465,7 @@ asked = onboard("606", ["Tess Goal", "none",
                         "banana",          # not a goal: asked again
                         "ob:goal:ftp",     # the Raise my FTP button
                         "2 3",             # bike and run
-                        "yes", KEY,
+                        "ob:icu_connect:key", KEY,
                         "2 years riding", "none", "8",
                         "1",               # strap
                         "yes",             # power
@@ -468,7 +521,7 @@ check("no question still says 'Reply with the number'",
 fake_icu(ICU_TRI, {})
 B._lookup_race = lambda name, d: {}
 SENT.clear()
-asked = onboard("808", ["Fred Test", "none", "ob:goal:ftp", "2", "yes", KEY,
+asked = onboard("808", ["Fred Test", "none", "ob:goal:ftp", "2", "ob:icu_connect:key", KEY,
                         "8 years, half Ironman. I am recovering from ACL surgery and want my FTP up",
                         "No"])
 blob = "\n".join(asked)
@@ -481,7 +534,7 @@ check("'No' to the injury question is no injury, not an injury called No",
 # ── 9. an active injury: asked specifically, the physio plan becomes a rule (2 Oct) ─
 fake_icu(ICU_TRI, {})
 SENT.clear()
-asked = onboard("909", ["Ivy Test", "none", "ob:goal:ftp", "2", "yes", KEY,
+asked = onboard("909", ["Ivy Test", "none", "ob:goal:ftp", "2", "ob:icu_connect:key", KEY,
                         "3 years riding", "ACL surgery on my left knee in July",
                         "one hamstring and one quad session a week", "6", "ob:hr_source:1",
                         "yes", "0", "about 200", "no", "no", "no", "2", "ivy"])

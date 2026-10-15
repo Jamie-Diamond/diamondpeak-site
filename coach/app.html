@@ -16,7 +16,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <!-- Glass style (glass.css) and Plus Jakarta Sans: the only look since 3.78 (Jamie,
      14 Oct 2026). Set before first paint. -->
-<link rel="stylesheet" href="glass.css?v=170">
+<link rel="stylesheet" href="glass.css?v=171">
 <script>try{document.documentElement.classList.add('glass');
 var gf="jakarta";document.documentElement.setAttribute("data-font",gf);
 var GF={inter:'Inter:wght@400;500;600;700',manrope:'Manrope:wght@400;500;600;700',jakarta:'Plus+Jakarta+Sans:wght@400;500;600;700'};
@@ -791,6 +791,15 @@ body.signup.in-chat main{padding-bottom:calc(86px + env(safe-area-inset-bottom,0
 .spark.wl{height:86px;margin-top:-4px}
 .fig .d.warn{color:var(--amber);font-weight:600}
 .msg.has-chart{max-width:100%;align-self:stretch}
+.icu-check{margin:10px 0 2px}
+.icu-check-h{margin:0 0 6px;font-size:13px;color:var(--ink-2)}
+.icu-row{display:flex;gap:10px;padding:8px 0;border-top:1px solid var(--rule-soft)}
+.icu-row b{font-weight:600}
+.icu-row p{margin:3px 0 4px;font-size:13px;color:var(--ink-2)}
+.icu-row a{font-family:'DM Mono',monospace;font-size:11px;color:var(--accent)}
+.icu-tick{flex:0 0 auto;width:20px;height:20px;border-radius:50%;border:1.5px solid var(--rule);
+  display:flex;align-items:center;justify-content:center;font-size:12px;margin-top:1px}
+.icu-row.ok .icu-tick{border-color:var(--accent);background:var(--accent);color:#fff}
 .msg-chart{position:relative;margin:-2px -4px 8px}
 .msg-chart-h{margin:0 0 4px;font-weight:600;font-size:13px;color:var(--ink-2)}
 .msg-chart .chartbox{height:230px;padding:0}
@@ -1450,6 +1459,6 @@ body.drawn{overflow:hidden}
      broken launch. A new URL cannot hit that cache entry. It always equals the
      number in sw.js CACHE (peak-vN): bump both on every release, enforced by
      ClaudeCoach/ironman-analysis/tests/test_peak_release.py. -->
-<script src="app.js?v=170" defer></script>
+<script src="app.js?v=171" defer></script>
 </body>
 </html>
