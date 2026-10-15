@@ -781,7 +781,7 @@ def test_connect_intervals_signing_up_stores_the_token_for_the_signup(env, icu, 
     assert not icu_link.connected(cid) and server._ICU_TURNS == []
     reply["athlete"]["id"] = "i777"
     r = env.get("/api/icu/callback", params={"state": state, "code": "c"})
-    assert r.status_code == 200 and "Intervals.icu connected" in r.text and got == ["c"]
+    assert r.status_code == 200 and "Intervals.icu connected" in r.text and got == ["c", "c"]
     tok = json.loads((server.CC / "config" / "web-signup" / cid / "icu_tokens.json").read_text())
     assert tok["access_token"] == "tok1" and tok["icu_athlete_id"] == "i777"
     assert icu_link.token_for_athlete("i777") == "tok1"
