@@ -759,11 +759,9 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
 
   function todayNoteHtml(n) {
     if (!n || !n.text) return '';
-    var at = n.ts ? n.ts.slice(11, 16) : '';
-    var when = n.stage === 'plan' ? 'From your plan' : 'Updated ' + at;
     return '<a class="card tnote" href="#chat" data-tnote="1">' +
       // A small chat glyph, not a footer row (Jamie, 15 Oct 2026); the whole card taps.
-      '<div class="card-h"><h2>Today</h2><span class="tnote-w">' + esc(when) + '</span>' +
+      '<div class="card-h"><h2>Today</h2>' +
         '<span class="tnote-c" aria-label="Talk about it"><svg viewBox="0 0 24 24">' +
         '<path d="M4 5.5h16v10H9.5L5 19.5v-4H4z"/></svg></span></div>' +
       // One block (no paragraph gaps) so the line limit cuts at a whole line.
@@ -5843,6 +5841,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.004", "2026-10-15", "Today note: no status label", 0],
     ["4.003", "2026-10-15", "Today note: a small chat button, bold labels instead of emoji", 0],
     ["4.002", "2026-10-15", "Dev messages shown as chat bubbles", 1],
     ["4.001", "2026-10-15", "W/kg under eFTP for everyone, from the profile weight when there's no recent weigh-in", 0],
