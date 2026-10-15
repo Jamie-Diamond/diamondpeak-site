@@ -5753,6 +5753,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.95", "2026-10-15", "Privacy policy linked from Settings", 0],
     ["3.94", "2026-10-15", "Load chart renamed \"Load and fatigue\"", 0],
     ["3.93", "2026-10-15", "Fatigue shown as a line in the load chart legend", 0],
     ["3.92", "2026-10-15", "Form shown as dots on the load chart", 0],
@@ -6159,7 +6160,11 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       }
     }
 
-    var sessionH = '<div class="drawers"><button type="button" class="crow" id="logout">' +
+    // Privacy policy one tap from Settings (Jamie, 15 Oct 2026), above Log out.
+    var sessionH = '<div class="drawers"><a class="crow" href="https://diamondpeak.uk/privacy.html" target="_blank" rel="noopener">' +
+      '<span class="crow-i">§</span><span class="crow-n">Privacy policy</span>' +
+      '<span class="crow-s">what we keep and why</span></a>' +
+      '<button type="button" class="crow" id="logout">' +
       '<span class="crow-i">⏻</span><span class="crow-n">Log out</span>' +
       '<span class="crow-s">' + (state.me ? 'sign out of Peak' : 'choose again') + '</span></button></div>';
 
