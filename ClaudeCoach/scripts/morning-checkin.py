@@ -153,7 +153,7 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
         f"\n## Today's wellness (pre-fetched — for your judgement only; do not print these "
         f"numbers: the only wellness numbers on the card are the 'Off your normal' line "
         f"below, when there is one)\n{wellness_line}\n"
-        + (f"\n## Off your normal (pre-computed — copy EXACTLY as one card line)\n{off_normal}\n"
+        + (f"\n## Off your normal (pre-computed — the fact for the 📉 line; say it in words)\n{off_normal}\n"
            if off_normal else "")
         if wellness_line else
         "\n## Today's wellness\nNot yet synced — say nothing about sleep, HRV or resting HR.\n"
@@ -262,14 +262,14 @@ Use the recovery score and signals ONLY to decide what to flag — do NOT show t
 [Opening: TWO sentences at most, in a coach's voice. How training is going right now (the
  week so far, how fresh or loaded they are) and what that means for today's session: the one
  thing to think about. e.g. "Big ride today, and you're fresh after an easy week: hold the
- first hour back and finish strong." Any session name, duration or Load comes ONLY from the
- pre-computed planned-sessions block above, verbatim; never estimate Load. Rest day: say what
- the rest is doing for them, in one sentence.]
+ first hour back and finish strong." Judge long/short and hard/easy from the pre-computed
+ planned-sessions block above (never guess), then say it in words: no minutes, no Load. Rest
+ day: say what the rest is doing for them, in one sentence.]
 
 {form_line_rule}
-[If the "Off your normal" block above is present: 📉 that line, word for word]
+[If the "Off your normal" block above is present: 📉 that fact in plain words, e.g. "📉 Your HRV has been low this week."]
 [If recovery ORANGE or RED: ⚠️ [one plain-English sentence on what to do differently — no scores]]
-[For EACH flag in the "Watchdog flags to show" block: ⚠️ [that flag in plain English, one line, keeping its numbers]. None listed: no flag line.]
+[For EACH flag in the "Watchdog flags to show" block: ⚠️ [that flag in plain English, one line]. None listed: no flag line.]
 [If the pre-verified 05:00 prescription check block above is present and says today's session was modified or swapped: 🔁 [what changed and why — one plain line, e.g. "Swapped to easy spin — HRV low". If it confirmed the session as planned, or the block is absent, say nothing]]
 {cycle_card_line}
 [If today's session is Ride or Brick >90 min: 🍌 Nutrition — target {fuel_target_g_hr}g/hr (progress toward {nutrition_race}g/hr {nutrition_label}) · eat at 15 min then every 25 min]
@@ -283,15 +283,22 @@ ORDER is fixed: the opening, the flag/📌/🍌 lines, then the question (if any
 greeting, no date line, no "Today:" line, no countdown: Peak shows those right beside it.
 
 Rules:
+- TALK LIKE A COACH TEXTING (Jamie, 15 Oct 2026: "imagine a human speaking ... they would
+  say long, short, big, small, hard, easy. Not 63m and 47tss"): NO minutes, durations,
+  Load, TSS, percentages, bpm or wellness numbers anywhere in the note. Describe sessions
+  and readings in words: a long easy ride, a short sharp run, a big week, HRV a bit low.
+  The only numbers allowed are the fuelling target and a count of days until something.
+- Say each thing ONCE: if the opening already mentions it (low HRV, a missed session), no
+  flag line repeats it.
 - CONCISE (Jamie, 15 Oct 2026: "ensure it really is concise so as not to take over the home
   page"): the WHOLE note is at most 45 words and at most FOUR lines: the opening plus at
   most THREE of the flag / 📉 / 📌 / 🍌 / question lines. When more qualify, keep the ones
   that change what the athlete does today and drop the rest; never merge two into one long line.
 - SHORT (Jamie, 15 Oct 2026: "it's like an essay"): the card is read in five seconds.
-  Every ⚠️ / 📌 / 🔁 line is ONE sentence of at most 18 words: what to do, then the number
-  that says why. No reasoning, no dates of individual readings, no "I'd offer". At most TWO
+  Every ⚠️ / 📌 / 🔁 line is ONE sentence of at most 18 words: what to do, and why in a
+  few words. No reasoning, no dates of individual readings, no "I'd offer". At most TWO
   ⚠️ lines: keep the two that change what the athlete does today; drop the rest.
-  e.g. "⚠️ HRV is down 8% on last week, so keep today easy."
+  e.g. "⚠️ HRV is down on last week, so keep today easy."
   e.g. "⚠️ Two sessions missed this week; don't make them up."
 - Sleep/HRV/RHR: use ONLY the pre-fetched wellness line above — never infer or estimate values yourself.
 - Omit any section that has nothing to say — do not pad with dashes or "N/A".
