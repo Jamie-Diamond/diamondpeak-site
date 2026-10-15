@@ -761,9 +761,9 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     if (!n || !n.text) return '';
     return '<a class="card tnote" href="#chat" data-tnote="1">' +
       // A small chat glyph, not a footer row (Jamie, 15 Oct 2026); the whole card taps.
-      '<div class="card-h"><h2>Today</h2>' +
-        '<span class="tnote-c" aria-label="Talk about it"><svg viewBox="0 0 24 24">' +
-        '<path d="M4 5.5h16v10H9.5L5 19.5v-4H4z"/></svg></span></div>' +
+      // No title: it is plainly today's note (Jamie, 15 Oct 2026).
+      '<span class="tnote-c" aria-label="Talk about it"><svg viewBox="0 0 24 24">' +
+        '<path d="M4 5.5h16v10H9.5L5 19.5v-4H4z"/></svg></span>' +
       // One block (no paragraph gaps) so the line limit cuts at a whole line.
       '<div class="tnote-b">' + md(String(n.text).replace(/\n{2,}/g, '\n')) + '</div></a>';
   }
@@ -5841,6 +5841,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.005", "2026-10-15", "Today note without a title", 0],
     ["4.004", "2026-10-15", "Today note: no status label", 0],
     ["4.003", "2026-10-15", "Today note: a small chat button, bold labels instead of emoji", 0],
     ["4.002", "2026-10-15", "Dev messages shown as chat bubbles", 1],
