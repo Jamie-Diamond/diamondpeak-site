@@ -635,8 +635,15 @@
         : '<h2 class="hero-t">Rest day</h2><p class="hero-m">Nothing scheduled.</p>') +
       '</section>';
 
+    var rcap = d.rampCap != null ? d.rampCap : 5;
     h += '<div class="figures">' +
-      fig(Number(k.ctl).toFixed(1), 'Fitness', 'CTL') +
+      // The ramp lives on Fitness, as its weekly change (Jamie, 15 Oct 2026: its own tile
+      // "looks silly"); amber when it runs past the athlete's weekly guide either way.
+      (ramp != null
+        ? '<div class="fig"><span class="n">' + esc(Number(k.ctl).toFixed(1)) + '</span>' +
+          '<span class="l">Fitness</span><span class="d' + (Math.abs(ramp) > rcap ? ' warn' : '') + '">' +
+          esc(signed(ramp) + ' / wk') + '</span></div>'
+        : fig(Number(k.ctl).toFixed(1), 'Fitness', 'CTL')) +
       fig(Number(k.atl).toFixed(1), 'Fatigue', 'ATL') +
       fig(signed(k.tsb), 'Form', 'TSB', k.tsb >= 0 ? 'pos' : (k.tsb <= -20 ? 'neg' : 'flat')) +
       '</div>';
@@ -656,10 +663,6 @@
     // The guide is per-athlete config (rampCap), not a hard-coded 5.
     var cap = d.rampCap != null ? d.rampCap : 5;
     var signals = '';
-    if (ramp != null) {
-      signals += mini(signed(ramp) + ' / ' + cap.toFixed(0), 'ramp vs target',
-                      Math.abs(ramp) > cap ? 'warn' : '');
-    }
     if (ha.current != null && heatOn()) {
       signals += mini(Number(ha.current).toFixed(0) + '%', 'heat accl');
     }
@@ -5681,6 +5684,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.89", "2026-10-15", "Fitness tile shows this week's change; the separate ramp tile is gone", 0],
     ["3.88", "2026-10-15", "Athlete picker readable when opened from the Dev tab", 1],
     ["3.87", "2026-10-15", "Recovery tiles show the 7-day average the graph shows, with today and usual underneath", 0],
     ["3.86", "2026-10-15", "Stop button while the coach is replying; weigh-ins left out show on the graph as outliers", 0],

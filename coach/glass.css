@@ -5,7 +5,7 @@
    sheets. Always on since 3.77/3.78 (html.glass, set in app.html); the Dev tab gets the
    dark glass version at the end of this file. */
 
-html.glass{--glass-v:'148'}
+html.glass{--glass-v:'149'}
 html.glass body:not(.dev-chat){
   --paper:rgba(255,255,255,.62);
   --paper-2:transparent;
@@ -480,3 +480,4 @@ html.glass body:not(.dev-chat) .spark.wt .wt-d.out{stroke:#e0a800;stroke-width:7
    light-on-dark text and showed near-invisible names (Jamie, 15 Oct 2026). */
 html.glass .gate{--ink:#0b0d10;--ink-2:rgba(30,34,40,.78);--muted:rgba(60,60,67,.6);
   --rule:rgba(255,255,255,.75);--rule-soft:rgba(60,60,67,.12);--accent:#10656b;--paper:#fff;color:#0b0d10}
+html.glass body:not(.dev-chat) .fig .d.warn{color:var(--amber);font-weight:600}
