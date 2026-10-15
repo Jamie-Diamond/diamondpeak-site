@@ -3156,7 +3156,18 @@
             font: { family: CHART_FONT, size: CHART_FS },
             // Datasets whose label starts with _ are structural (the lower edge of a
             // band, for instance) and must not appear as legend entries.
-            filter: function (item) { return item.text && item.text[0] !== '_'; }
+            filter: function (item) { return item.text && item.text[0] !== '_'; },
+            // A bar coloured per day (faded where planned, clear on empty days) has no
+            // single colour, and Chart.js took the FIRST day's: a sport with nothing on
+            // day one showed no swatch (Jamie, 15 Oct 2026). Datasets can name their own.
+            generateLabels: function (chart) {
+              var items = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+              items.forEach(function (it) {
+                var d = chart.data.datasets[it.datasetIndex];
+                if (d && d.legendColor) { it.fillStyle = d.legendColor; it.strokeStyle = d.legendColor; }
+              });
+              return items;
+            }
           }
         },
         // Off on touch devices - see setReadout(). Kept for mouse, where a tooltip
@@ -3606,7 +3617,7 @@
       if (!vals.some(function (v) { return v > 0; })) return;
       ds.push({
         type: 'bar', label: sport, stack: 'tss', yAxisID: 'y', order: 3,
-        data: vals,
+        data: vals, legendColor: 'rgba(' + BASE[sport] + ',.87)',
         backgroundColor: lc.map(function (r, i) {
           if (!vals[i]) return 'transparent';
           var planned = r.projected || r.date > t ||
@@ -5684,6 +5695,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.90", "2026-10-15", "±7 days legend shows every sport's colour", 0],
     ["3.89", "2026-10-15", "Fitness tile shows this week's change; the separate ramp tile is gone", 0],
     ["3.88", "2026-10-15", "Athlete picker readable when opened from the Dev tab", 1],
     ["3.87", "2026-10-15", "Recovery tiles show the 7-day average the graph shows, with today and usual underneath", 0],
