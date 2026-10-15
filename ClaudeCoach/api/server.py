@@ -407,6 +407,31 @@ async def ride_indoors(slug: str, request: Request):
     return JSONResponse(out, headers=NO_STORE)
 
 
+# ── the Today note: the morning card on the Today tab (lib/today_note.py) ──
+
+@app.get("/api/today/{slug}")
+def today_get(slug: str, request: Request):
+    require_slug(request, slug)
+    import today_note
+    n = today_note.read(slug)
+    return JSONResponse({"note": n and {k: n[k] for k in ("text", "stage", "ts")}}, headers=NO_STORE)
+
+
+@app.post("/api/today/{slug}/open")
+def today_open(slug: str, request: Request):
+    """Tapped: put the note into the chat (once per version, no notification), so the
+    coach and the athlete can talk about it. Peak then opens the chat."""
+    require_slug(request, slug)
+    import outbox
+    import today_note
+    n = today_note.mark_opened(slug)
+    if n:
+        cid = (_load(ATHLETES_CONFIG).get(slug) or {}).get("chat_id")
+        if cid:
+            outbox.record(cid, n["text"], source=today_note.CARD, parse_mode="Markdown")
+    return JSONResponse({"ok": True}, headers=NO_STORE)
+
+
 # ── GPS track for the session sheet's map (lib/track.py, Jamie 14 Oct 2026) ──
 
 @app.get("/api/track/{slug}")

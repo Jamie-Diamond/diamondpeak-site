@@ -303,7 +303,7 @@ def adopt(chat_id, slug: str) -> None:
 
 # Sources that are not the coaching conversation: dev talk lives in the Dev tab, and a
 # sign-up's question-and-answer flow is not coaching.
-_NOT_CHAT_SOURCES = {"bug-fixer", "dev-session", "web-signup"}
+_NOT_CHAT_SOURCES = {"bug-fixer", "dev-session", "web-signup", "today-ping"}
 
 
 def with_sent(history: list, slug: str, days: int = 8) -> list:
@@ -337,6 +337,16 @@ def with_sent(history: list, slug: str, days: int = 8) -> list:
                 continue
             have.add(key)
             extra.append({"user": "", "assistant": text, "ts": o.get("ts") or "", "kind": "sent"})
+        # Today's note on Peak's Today tab: the athlete has read it whether or not they
+        # tapped it into the chat, so the coach must know what it said.
+        try:
+            import today_note
+            n = today_note.read(slug)
+            key = re.sub(r"\s+", " ", (n or {}).get("text") or "")[:80]
+            if n and key and key not in have:
+                extra.append({"user": "", "assistant": n["text"], "ts": n["ts"], "kind": "sent"})
+        except Exception:
+            pass
         if not extra:
             return history
         return sorted(list(history) + extra, key=lambda h: h.get("ts") or "")

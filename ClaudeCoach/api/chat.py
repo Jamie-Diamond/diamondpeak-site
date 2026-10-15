@@ -634,6 +634,8 @@ def timeline(slug: str | None, limit: int = 80, chat_id: str | None = None,
         if coach and (e.get("kind") == "drill" or not _in_outbox(coach, ts, user, out_texts, out_at)):
             items.append({"who": "coach", "text": coach, "ts": ts, "key": hk + ":c"})
     for o in out:
+        if o.get("source") == "today-ping":        # the Today note's notification only
+            continue
         if o.get("deleted") or is_dev(o, "o:" + str(o.get("id") or ""), dev_keys) != want_dev:
             continue
         items.append({"who": o.get("who") or "coach", "text": o.get("text") or "", "ts": o.get("ts") or "",

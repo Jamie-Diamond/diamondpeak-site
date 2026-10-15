@@ -17,6 +17,7 @@ sys.path.insert(0, str(BASE / "lib"))
 import coaching_prefs  # noqa: E402  heat / fuelling switches
 import fuel_basis      # noqa: E402  race vs non-race fuelling figure
 import shadow          # noqa: E402  shadow week (Haiku twin, never sent)
+import today_note      # noqa: E402  the card lives on Peak's Today tab, not the chat
 sys.path.insert(0, str(BASE / "telegram"))
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 import claude_call
@@ -250,16 +251,20 @@ reworded back in:
 {injury_question or "- (none authorised today)"}
 - Else: no question. A card with no question is a complete card.
 
-Step 4 — Output the morning card in Telegram Markdown (no preamble, no sign-off):
+Step 4 — Output the Today note in Markdown (no preamble, no sign-off). It sits at the top
+of the athlete's Today tab in Peak, directly above today's session, the date and the race
+countdown, so it never repeats them as headings (Jamie, 15 Oct 2026: "just describe how
+training's going, for example you've got a big session today but you're fresh from the
+week, this is what to think about").
 
-Use the recovery score and signals ONLY to decide what to flag — do NOT show the score, label, HRV ratio, or any internal metric to the athlete. Write like a coach sending a morning text, not a dashboard.
+Use the recovery score and signals ONLY to decide what to flag — do NOT show the score, label, HRV ratio, or any internal metric to the athlete. Write like a coach talking, not a dashboard.
 
-*Good morning — [Day date, e.g. Sat 9 May]*
-
-*Today:* [session name] — [duration] min · [Load] Load
-  Name, duration and Load come ONLY from the pre-computed planned-sessions block above — copy them
-  verbatim. NEVER estimate, recompute, or round Load yourself. If that block is absent, omit the
-  Load part entirely rather than guessing.
+[Opening: TWO sentences at most, in a coach's voice. How training is going right now (the
+ week so far, how fresh or loaded they are) and what that means for today's session: the one
+ thing to think about. e.g. "Big ride today, and you're fresh after an easy week: hold the
+ first hour back and finish strong." Any session name, duration or Load comes ONLY from the
+ pre-computed planned-sessions block above, verbatim; never estimate Load. Rest day: say what
+ the rest is doing for them, in one sentence.]
 
 {form_line_rule}
 [If the "Off your normal" block above is present: 📉 that line, word for word]
@@ -272,12 +277,10 @@ Use the recovery score and signals ONLY to decide what to flag — do NOT show t
 [If open action is due within 3 days: 📌 [action] due [date]]
 {heat_card_line}
 
-[Question if applicable — one line]
+[Question if applicable — one line, LAST]
 
-{countdown_line}
-
-ORDER is fixed: greeting, Today, the flag/📌/🍌 lines, then the question (if any), then the
-countdown line above, copied exactly, as the LAST line. It is always there; nothing goes after it.
+ORDER is fixed: the opening, the flag/📌/🍌 lines, then the question (if any) last. No
+greeting, no date line, no "Today:" line, no countdown: Peak shows those right beside it.
 
 Rules:
 - SHORT (Jamie, 15 Oct 2026: "it's like an essay"): the card is read in five seconds.
@@ -287,12 +290,11 @@ Rules:
   e.g. "⚠️ HRV is down 8% on last week, so keep today easy."
   e.g. "⚠️ Two sessions missed this week; don't make them up."
 - Sleep/HRV/RHR: use ONLY the pre-fetched wellness line above — never infer or estimate values yourself.
-- If no planned session: say "Rest day" and skip the Today line.
 - Omit any section that has nothing to say — do not pad with dashes or "N/A".
 - Never ask for subjective mood, fatigue, or motivation scores.
 - Never put two questions in the card, and never re-ask something the athlete already
   told you — if a value is in the data above, state it or leave it, don't ask for it.
-- The countdown line appears exactly once, at the end.
+
 Wrap your entire output in <telegram> and </telegram> tags. Output nothing outside those tags — no preamble, no reasoning, no tool commentary."""
 
 
@@ -633,7 +635,10 @@ def _block_fact(athlete_cfg, today):
     return f"You have {weeks} weeks of work behind you for this one"
 
 
-def run_athlete(slug, athlete_cfg):
+def run_athlete(slug, athlete_cfg, early=False):
+    """early=True is the just-after-midnight run: the Today note from the plan and the
+    load, before any wellness exists. The morning runs then rewrite it once sleep / HRV /
+    resting HR land, and notify (lib/today_note.py)."""
     adir = BASE / f"athletes/{slug}"
     chat_id = athlete_cfg.get("chat_id", "")
     log_file = LOG_DIR / "morning-checkin.log"
@@ -646,6 +651,8 @@ def run_athlete(slug, athlete_cfg):
     # Sentinel: skip if card already sent today
     sentinel = LOG_DIR / f"morning-sent-{slug}-{today_str}.flag"
     if sentinel.exists():
+        return
+    if early and today_note.read(slug):
         return
 
     profile = {}
@@ -877,7 +884,7 @@ def run_athlete(slug, athlete_cfg):
 
     # Wait for Garmin sync only if the athlete has a sleep device and it hasn't synced yet.
     # Athletes with no sleep device (sleepSecs always null) send immediately.
-    if wellness_line is None and has_sleep_device and datetime.now().hour < 9:
+    if not early and wellness_line is None and has_sleep_device and datetime.now().hour < 9:
         print(f"[{slug}] wellness not yet synced — will retry", file=sys.stderr)
         return
 
@@ -993,7 +1000,8 @@ def run_athlete(slug, athlete_cfg):
         )
 
     raw = (result.stdout or "").strip()
-    shadow.launch("morning", slug, prompt, raw)     # Haiku twin, never sent (lib/shadow.py)
+    if not early:
+        shadow.launch("morning", slug, prompt, raw)     # Haiku twin, never sent (lib/shadow.py)
     import re as _re
     m = _re.search(r"<telegram>(.*?)</telegram>", raw, _re.DOTALL)
     output = m.group(1).strip() if m else ""
@@ -1001,7 +1009,7 @@ def run_athlete(slug, athlete_cfg):
     # Atomic sentinel claim: write BEFORE notifying so a second cron instance
     # that slips past the 20-min process lock (slow multi-athlete run) can never
     # also deliver. If Claude failed, skip — allow retry on next poll.
-    if result.returncode == 0:
+    if result.returncode == 0 and not early:
         _sl_lock_path = LOG_DIR / f"morning-sent-{slug}-{today_str}.flag.lock"
         with open(_sl_lock_path, "w") as _sl_fd:
             fcntl.flock(_sl_fd, fcntl.LOCK_EX)
@@ -1018,7 +1026,7 @@ def run_athlete(slug, athlete_cfg):
     # sentinel already guarantees once-per-day, so this needs no idempotence of its
     # own. Zero extra pushes: the morning card was going out anyway.
     _hours_ask_appended = False
-    if output and date.today().weekday() == 6:
+    if output and not early and date.today().weekday() == 6:
         try:
             _ask = weekly_availability.sunday_hours_ask(
                 slug, date.today() + timedelta(days=1), coaching_level=coaching_level)
@@ -1055,7 +1063,7 @@ def run_athlete(slug, athlete_cfg):
     # At most one per card, and never on a Sunday that already carries the hours ask:
     # two appended lines is the pile-up this whole change exists to stop.
     _passive_sent_for = None
-    if output and passive_lines and not _hours_ask_appended:
+    if output and not early and passive_lines and not _hours_ask_appended:
         _passive_sent_for, _passive_text = passive_lines[0]
         output = f"{output}\n\n_{_passive_text}_"
 
@@ -1065,7 +1073,7 @@ def run_athlete(slug, athlete_cfg):
     # Appended in Python like the lines above, so the model can neither nag nor guess.
     # Never alongside the other appended lines, never during illness or post-race.
     _cons_case = None
-    if output and not _hours_ask_appended and not _passive_sent_for:
+    if output and not early and not _hours_ask_appended and not _passive_sent_for:
         try:
             _cons_case = _consistency_line(slug, adir, athlete_cfg, baseline_rows, output)
             # Not when the card has already raised the misses itself (15 Oct: both said it),
@@ -1075,15 +1083,29 @@ def run_athlete(slug, athlete_cfg):
             if _cons_case:
                 _body, _sep, _last = output.rpartition("\n\n")
                 _line = consistency.LINES[_cons_case]
-                output = (f"{_body}\n\n{_line}\n\n{_last}" if _sep and _last.startswith("_")
+                # Above the question, which stays the last line.
+                output = (f"{_body}\n\n{_line}\n\n{_last}"
+                          if _sep and (_last.startswith("_") or _last.rstrip().endswith("?"))
                           else f"{output}\n\n{_line}")
         except Exception as exc:
             print(f"[{slug}] consistency check failed: {exc}", file=sys.stderr)
             _cons_case = None
 
+    # TODAY NOTE, not a chat message (Jamie, 15 Oct 2026). The midnight version is silent;
+    # the morning one replaces it and sends the day's one notification. The chat gets the
+    # note only when the athlete taps it (api/server.py /api/today/open).
+    if output and early:
+        today_note.write(slug, output, "plan")
+        ops_log.record_run("morning-checkin", athlete=slug, ok=True, detail="today note (plan)")
+        return
     sent = False
     if output:
-        sent = notify(output, chat_id, slug=slug)
+        try:
+            today_note.write(slug, output, "wellness" if wellness_line else "final")
+            today_note.ping(slug, chat_id, output)
+            sent = True
+        except Exception as exc:
+            ops_log.alert("morning-checkin", f"today note not written: {exc}", athlete=slug)
         if sent and _cons_case:
             consistency.mark(adir, date.today(), _cons_case)
         if sent:
@@ -1103,11 +1125,6 @@ def run_athlete(slug, athlete_cfg):
                 except Exception as exc:
                     print(f"[{slug}] could not record passive line: {exc}", file=sys.stderr)
             ops_log.record_run("morning-checkin", athlete=slug, ok=True, detail="card sent")
-            try:
-                _log_to_history(slug, output)
-            except Exception:
-                pass
-            _send_morning_load_chart(chat_id, slug, wellness_rows, coaching_level=coaching_level)
     elif result.returncode == 0:
         ops_log.alert("morning-checkin", "claude produced no card output", athlete=slug)
     else:
@@ -1116,6 +1133,7 @@ def run_athlete(slug, athlete_cfg):
 
 
 def main():
+    early = "--early" in sys.argv
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{ts}] morning-checkin starting", file=sys.stderr)
 
@@ -1142,7 +1160,7 @@ def main():
                 print(planning_pause.skip_line(slug, "morning-checkin", cfg), file=sys.stderr)
                 continue
             try:
-                run_athlete(slug, cfg)
+                run_athlete(slug, cfg, early=early)
             except Exception as exc:
                 print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] morning-checkin error: {exc}", file=sys.stderr)
                 ops_log.alert("morning-checkin", f"exception: {exc}", athlete=slug)

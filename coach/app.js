@@ -726,7 +726,8 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
         ' or pull down</p>';
     }
 
-    $('#v-today').innerHTML = setupCard() + h;
+    $('#v-today').innerHTML = setupCard() + '<div id="todayNote">' + todayNoteHtml(TODAY_NOTE[state.slug]) + '</div>' + h;
+    loadTodayNote();
     var sgo = $('#v-today').querySelector('.notify-go');
     if (sgo) sgo.onclick = function () { turnOnFromGuide(sgo); setTimeout(renderToday, 2500); };
     var rb = $('#refreshNow');
@@ -736,6 +737,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       th.dataset.sessNav = '1';
       th.addEventListener('click', function (e) {
         try {
+          if (e.target.closest('[data-tnote]')) { openTodayNote(e); return; }
           var head = e.target.closest('[data-sess]');
           if (head && head.dataset.d) openDetail(head.dataset.d, head.dataset.sp, head.dataset.n);
         } catch (err) {
@@ -743,6 +745,55 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
         }
       });
     }
+  }
+
+  /* The Today note: the morning card, moved out of the chat to the top of Today (Jamie,
+     15 Oct 2026). Written just after midnight from the plan, rewritten when sleep / HRV /
+     resting HR land (lib/today_note.py). Tapping it puts it in the chat and opens it. No
+     note yet: nothing shown. */
+  var TODAY_NOTE = {};
+
+  function todayNoteHtml(n) {
+    if (!n || !n.text) return '';
+    var at = n.ts ? n.ts.slice(11, 16) : '';
+    var when = n.stage === 'plan' ? 'From your plan \u00b7 updates when your sleep syncs'
+      : (n.stage === 'wellness' ? 'Updated with your sleep \u00b7 ' + at : 'Updated ' + at);
+    return '<a class="card tnote" href="#chat" data-tnote="1">' +
+      '<div class="card-h"><h2>Today</h2><span class="tnote-w">' + esc(when) + '</span></div>' +
+      '<div class="tnote-b">' + md(n.text) + '</div>' +
+      '<div class="card-f">Talk about it \u2192</div></a>';
+  }
+
+  function loadTodayNote() {
+    var slug = state.slug;
+    if (!state.me || !slug) return;
+    fetch('/api/today/' + encodeURIComponent(slug), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j || slug !== state.slug) return;
+        var n = j.note, old = TODAY_NOTE[slug];
+        TODAY_NOTE[slug] = n;
+        var box = $('#todayNote');
+        if (box && (!old || !n || old.ts !== n.ts)) box.innerHTML = todayNoteHtml(n);
+      })
+      .catch(function () { /* the rest of Today stands without it */ });
+  }
+
+  function openTodayNote(e) {
+    e.preventDefault();
+    var slug = state.slug;
+    var own = !state.me.coach || !state.me.own || slug === state.me.own;
+    // Only your own note goes into the chat; the coach looking at someone else's just
+    // opens their chat (read only) rather than posting into it.
+    var go = function () {
+      if (state.me.coach && chatState.dev) switchChatTab('coach');
+      show('chat');
+      chatState.loaded = false;
+      loadChatHistory();
+    };
+    if (!own) { go(); return; }
+    fetch('/api/today/' + encodeURIComponent(slug) + '/open', { method: 'POST' })
+      .then(go, go);
   }
 
   /* Private-only fields (29 Sep 2026). Both cards are left out entirely when the
@@ -5756,6 +5807,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.96", "2026-10-15", "The morning card is now the Today note at the top of Today; tap it to talk about it", 0],
     ["3.95", "2026-10-15", "eFTP tile shows W/kg; LTHR tile added", 0],
     ["3.95", "2026-10-15", "Privacy policy linked from Settings", 0],
     ["3.94", "2026-10-15", "Load chart renamed \"Load and fatigue\"", 0],

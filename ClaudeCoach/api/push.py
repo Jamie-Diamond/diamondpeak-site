@@ -24,7 +24,7 @@ KEY_FILE = STATE_DIR / "vapid-private.pem"
 SUBS_FILE = STATE_DIR / "push-subs.json"
 OFFSETS_FILE = STATE_DIR / "push-offsets.json"
 CLAIM_SUB = "https://coach.diamondpeak.uk"
-QUIET_SOURCES = {"web-turn"}        # recorded during a live chat; the athlete is looking
+QUIET_SOURCES = {"web-turn", "today-card"}  # today-card: put in the chat by a tap on Today        # recorded during a live chat; the athlete is looking
 
 _lock = threading.Lock()
 
@@ -203,6 +203,10 @@ def start(cc_home: Path, own_slug, athletes_file: Path, interval: float = 5.0) -
                         except ValueError:
                             continue
                         if e.get("source") in QUIET_SOURCES:
+                            continue
+                        if e.get("source") == "today-ping":     # lib/today_note.py
+                            notify(slug, e.get("text") or "", title="Today",
+                                   url="/coach/app.html#today")
                             continue
                         dev = e.get("source") in DEV_SOURCES or e.get("tab") == "dev"
                         notify(slug, plain(e.get("text") or "") or ("📷 Photo" if e.get("photo") else ""),
