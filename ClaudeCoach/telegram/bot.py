@@ -4684,6 +4684,10 @@ _OB_ICU_SETUP = ("icu_setup",
     "Tap the links ringed in *green*:\n"
     "• _Download old data_, under activities and under wellness\n"
     "• _Import all Garmin data_ for everything: Garmin emails you a link to paste in")
+# Sign-ups already under way when the consent step arrived (15 Oct 2026) agree before
+# going on; then the question they were on is asked again.
+_OB_RESUME = dict(_OB_PHASE1 + [_OB_ICU_SETUP])
+_OB_RESUME_DEFAULT = "Thanks! Let's carry on: send your answer to my last question again."
 # Coaching extras (30 Sep 2026, lib/coaching_prefs.py): opt in or out at sign-up,
 # switchable later in Peak -> Settings -> Coaching extras.
 # Fitness chart comparison (Jamie, 1 Oct 2026): a past race to line this season up
@@ -5562,6 +5566,14 @@ def handle_onboarding(token, chat_id, text):
 
     session = ob_state[chat_id]
     key     = session["current_key"]
+    if key != "consent" and "consent" not in session.get("answers", {}):
+        session["queue"].insert(0, [key, _OB_RESUME.get(key, _OB_RESUME_DEFAULT)])
+        session["current_key"] = "consent"
+        save_onboarding_state(ob_state)
+        _outbox_clear_buttons(chat_id)
+        _ob_ask(token, chat_id, "consent", _OB_CONSENT_Q.replace(
+            "Hi! I'm your Peak coach. Before we start,", "Before we carry on,"))
+        return True
     if text.startswith("ob:"):
         _, tkey, value = (text.split(":", 2) + ["", ""])[:3]
         if tkey != key:

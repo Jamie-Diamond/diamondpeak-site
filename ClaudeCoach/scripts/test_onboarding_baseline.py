@@ -136,6 +136,23 @@ check("typed 'I agree' records consent, its time and the policy version, then as
       ans.get("consent") == "yes" and ans.get("consent_at") and ans.get("consent_policy") == B.PRIVACY_VERSION
       and any("*full name*" in t for c, t, _ in SENT[n:]), (ans, SENT[n:]))
 
+# ── 0b. a sign-up already under way before consent existed agrees, then carries on ──
+B.save_pending(["121"])
+_st = B.load_onboarding_state()
+_st["121"] = {"current_key": "icu_key", "queue": [], "answers": {"name": "Old Start", "icu_has": "yes"},
+              "icu_data": {}, "started_at": "2026-10-13T09:00:00"}
+B.save_onboarding_state(_st)
+n = len(SENT)
+B.handle_onboarding("t", "121", KEY)
+check("an earlier sign-up is asked to agree before its key is used",
+      any("Before we carry on" in t for c, t, _ in SENT[n:] if c == "121")
+      and "icu_key" not in B.load_onboarding_state()["121"]["answers"], SENT[n:])
+n = len(SENT)
+B.handle_onboarding("t", "121", "ob:consent:yes")
+check("after agreeing, the question it was on is asked again",
+      any("API key" in t for c, t, _ in SENT[n:] if c == "121")
+      and B.load_onboarding_state()["121"]["current_key"] == "icu_key", SENT[n:])
+
 # ── 1. a 70.3 athlete: wrist HR, rides with power, one tested swim number ──────
 fake_icu(ICU_TRI, TRI)
 asked = onboard("123", ["Sam Smith", "70.3 Test, 2027-06-01", "yes", KEY,
