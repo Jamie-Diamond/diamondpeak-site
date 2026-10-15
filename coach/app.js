@@ -1192,9 +1192,18 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
      (the reply as it is written), message (the checked reply, which replaces the
      draft), error, done. History is shared with Telegram. */
 
-  // The last 50 messages, more on request (Jamie, 15 Oct 2026: "otherwise it will grow forever").
-  var chatState = { loaded: false, busy: false, limit: 50, slug: null, dev: false, queue: [] };
-  var CHAT_PAGE = 50;          // messages per "Show earlier messages" tap
+  // The last 7 days, a week more per tap (Jamie, 15 Oct 2026: "otherwise it will grow
+  // forever", then "maybe it's the last 7 days rolling"). Never fewer than CHAT_MIN, so a
+  // quiet week doesn't open on an empty chat.
+  var chatState = { loaded: false, busy: false, limit: 200, slug: null, dev: false, queue: [], days: 7 };
+  var CHAT_PAGE = 200;         // messages fetched; the day window does the trimming
+  var CHAT_MIN = 10;
+  function lastDays(hist, days) {
+    var cut = Date.now() - days * 864e5, keep = 0;
+    hist.forEach(function (m, i) { if (!keep && Date.parse(m.ts || '') >= cut) keep = hist.length - i; });
+    keep = Math.max(keep, Math.min(CHAT_MIN, hist.length));
+    return hist.slice(hist.length - keep);
+  }
   // The coach's second tab, Dev (Jamie, 4 Oct 2026): building Peak, kept apart from
   // coaching. Its own history and Claude session (ClaudeCoach/api/dev_chat.py).
   var CHAT_TAB_KEY = 'cc.chatTab';
@@ -1504,7 +1513,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
         if (!devTab() || chatState.busy) return;
         var log = $('#chatLog');
         log.innerHTML = '';
-        var hist = j.history || [], lastMe = -1;
+        var hist = lastDays(j.history || [], 7), lastMe = -1;
         hist.forEach(function (m, i) { if (m.who === 'me') lastMe = i; });
         hist.forEach(function (m, i) {
           if (m.who === 'me') {
@@ -1876,7 +1885,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   function loadChatHistory(earlier) {
     if (devTab()) { loadDevHistory(); return; }
     var other = chatSlug();
-    if (chatState.slug !== other) { chatState.slug = other; chatState.limit = CHAT_PAGE; }
+    if (chatState.slug !== other) { chatState.slug = other; chatState.limit = CHAT_PAGE; chatState.days = 7; }
     var q = ['limit=' + chatState.limit];
     if (other) q.push('slug=' + encodeURIComponent(other));
     fetch('/api/chat/history?' + q.join('&'), { cache: 'no-store' })
@@ -1899,17 +1908,18 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
         $('#chatLog').innerHTML = '';
         // history.json keeps 30 exchanges; the rest come from the chat archive, a page
         // at a time (Jamie, 4 Oct 2026: Fred's older messages could not be reached).
-        if (j.more) {
+        var all = j.history || [], hist = lastDays(all, chatState.days), lastMe = -1;
+        if (j.more || hist.length < all.length) {
           var mb = document.createElement('button');
-          mb.type = 'button'; mb.className = 'chat-more'; mb.textContent = 'Show earlier messages';
+          mb.type = 'button'; mb.className = 'chat-more'; mb.textContent = 'Show the week before';
           mb.onclick = function () {
             mb.disabled = true; mb.textContent = 'Loading\u2026';
-            chatState.limit += CHAT_PAGE;
+            chatState.days += 7;
+            if (hist.length >= all.length) chatState.limit += CHAT_PAGE;
             loadChatHistory(true);
           };
           $('#chatLog').appendChild(mb);
         }
-        var hist = j.history || [], lastMe = -1;
         hist.forEach(function (m, i) { if (m.who === 'me') lastMe = i; });
         hist.forEach(function (m, i) {
           var el = m.who === 'me' ? bubble('me', m.text)
@@ -1927,7 +1937,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
             lockOptions(box, hit || null);
           }
         });
-        if (!(j.history || []).length) {
+        if (!all.length) {
           $('#chatLog').innerHTML = '<div class="empty">' + (state.me && state.me.state === 'onboarding'
             ? 'Welcome to Peak. Send any message to start setting up your coaching.'
             : 'No messages yet') + '</div>';
@@ -5935,6 +5945,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.008", "2026-10-15", "Chats show the last 7 days, a week more per tap", 0],
     ["4.007", "2026-10-15", "Chats show the last 50 messages; queue a message while a reply is written; session graphs scaled to the session", 0],
     ["4.006", "2026-10-15", "Done sessions show laps, with the fastest and slowest labelled", 0],
     ["4.005", "2026-10-15", "Today note without a title", 0],
