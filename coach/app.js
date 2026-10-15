@@ -6046,7 +6046,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
     ["4.012", "2026-10-15", "Sign-up: tick every box on Intervals.icu; Connect Strava only for an Apple Watch; the checklist reads cleaner", 0],
-    ["4.012", "2026-10-15", "Sign-up no longer waits for Intervals.icu set-up; older training is optional, asked for afterwards", 0],
+    ["4.012", "2026-10-15", "Sign-up no longer waits for your older training to arrive: it is optional, asked for afterwards", 0],
     ["4.011", "2026-10-15", "Sign-up links Intervals.icu with one Connect button and a checklist that ticks itself; Settings offers Reconnect Intervals.icu", 0],
     ["4.011", "2026-10-15", "Another athlete\u2019s chat draws their load chart live, like your own", 1],
     ["4.010", "2026-10-15", "A queued message survives Peak reloading or updating", 0],

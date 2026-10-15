@@ -1,6 +1,6 @@
-"""Sign-up doesn't stop for Intervals.icu set-up (Jamie, 15 Oct 2026: people waited days
-for Garmin's export email; "can carry on as they do it"). History is optional, and the
-checklist comes after sign-up."""
+"""Sign-up stops for Intervals.icu set-up (watch, sleep, workouts) but never for history
+(Jamie, 15 Oct 2026: people waited days for Garmin's export email). History is optional
+and asked for after sign-up."""
 from __future__ import annotations
 
 import sys
@@ -39,17 +39,24 @@ def test_setup_issues_never_include_history(monkeypatch):
                    for i in bot._icu_setup_issues("i1", "", "web-x"))
 
 
-def test_sign_up_carries_on_with_set_up_still_open(monkeypatch):
-    sent, after = [], []
+def _linked(monkeypatch, issues):
+    asked, after = [], []
     monkeypatch.setattr(bot, "_fetch_icu_data", lambda i, k: ({}, "summary"))
-    monkeypatch.setattr(bot, "_icu_setup_issues", lambda *a: ["I can't see any activities yet."])
-    monkeypatch.setattr(bot, "send", lambda t, c, text, **k: sent.append(text))
+    monkeypatch.setattr(bot, "_icu_setup_issues", lambda *a: issues)
+    monkeypatch.setattr(bot, "_ob_ask", lambda t, c, key, q, **k: asked.append(key))
     monkeypatch.setattr(bot, "save_onboarding_state", lambda s: None)
     monkeypatch.setattr(bot, "_ob_after_icu", lambda *a: after.append(1) or True)
     session = {"answers": {}}
-    assert bot._ob_icu_linked("t", "web-x", {"web-x": session}, session, "i1", "")
-    assert after == [1] and session.get("current_key") != "icu_fix"
-    assert sent == [bot._OB_CARRY_ON]
+    bot._ob_icu_linked("t", "web-x", {"web-x": session}, session, "i1", "")
+    return asked, after
+
+
+def test_sign_up_stops_for_the_watch(monkeypatch):
+    assert _linked(monkeypatch, ["I can't see any activities yet."]) == (["icu_fix"], [])
+
+
+def test_sign_up_goes_on_when_only_history_is_short(monkeypatch):
+    assert _linked(monkeypatch, []) == ([], [1])   # history never reaches the issues
 
 
 def test_after_sign_up_nothing_sent_when_all_in(monkeypatch):

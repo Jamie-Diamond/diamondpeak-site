@@ -5676,20 +5676,24 @@ def _ob_icu_linked(token, chat_id, ob_state, session, icu_id, icu_key):
         save_onboarding_state(ob_state)
         return True
     session["icu_data"], session["icu_summary"] = icu_data, summary
-    # Sign-up carries on whatever Intervals.icu still needs (Jamie, 15 Oct 2026: "can
-    # carry on as they do it"): linking the watch, sleep and history are done alongside
-    # the questions, and the checklist comes once they have signed up (_icu_after_signup).
+    # Sign-up stops here for the watch, sleep and workouts, but never for history (Jamie,
+    # 15 Oct 2026: "stop for intervals sign up, just not for historic data dump"):
+    # _icu_setup_issues leaves the optional history out; it is asked for after sign-up.
     try:
-        if _icu_setup_issues(icu_id, icu_key, chat_id):
-            send(token, chat_id, _OB_CARRY_ON)
+        issues = _icu_setup_issues(icu_id, icu_key, chat_id)
     except Exception as e:
         log(f"Onboarding ICU set-up check failed for {chat_id}: {e}")
+        issues = []
+    if issues:
+        session["current_key"] = "icu_fix"
+        save_onboarding_state(ob_state)
+        offer = _strava_offer(chat_id, issues)
+        _ob_ask(token, chat_id, "icu_fix", _icu_fix_question(
+            issues, strava=offer, web=str(chat_id).startswith("web-")), strava=offer)
+        return True
     return _ob_after_icu(token, chat_id, ob_state, session)
 
 
-_OB_CARRY_ON = ("Connected ✓ If your watch isn't linked in Intervals.icu yet, do it while we "
-                "carry on: *Settings* -> *Connections*. I'll show you anything still missing "
-                "once you're signed up.")
 # The checklist after sign-up: live in Peak (app.js icuChecklist, ticks itself), a button
 # that re-reads it rather than going to the coach.
 ICU_RECHECK = "peak:icu:check"
