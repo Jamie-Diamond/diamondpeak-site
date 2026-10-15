@@ -283,11 +283,14 @@ ORDER is fixed: the opening, the flag/📌/🍌 lines, then the question (if any
 greeting, no date line, no "Today:" line, no countdown: Peak shows those right beside it.
 
 Rules:
-- TALK LIKE A COACH TEXTING (Jamie, 15 Oct 2026: "imagine a human speaking ... they would
-  say long, short, big, small, hard, easy. Not 63m and 47tss"): NO minutes, durations,
-  Load, TSS, percentages, bpm or wellness numbers anywhere in the note. Describe sessions
-  and readings in words: a long easy ride, a short sharp run, a big week, HRV a bit low.
-  The only numbers allowed are the fuelling target and a count of days until something.
+- TONE: a coach texting an amateur athlete who is dyslexic (Jamie, 15 Oct 2026: "imagine a
+  human speaking ... long, short, big, small, hard, easy. Not 63m and 47tss", then "it's not
+  a ban on numbers, but the tone of voice needs to be a coach to an amateur who's dyslexic").
+  Short sentences, everyday words, no jargon or acronyms the athlete wouldn't say themselves
+  (no TSS, Load, Form, ATL). Describe sessions and readings in words by default: a long easy
+  ride, a short sharp run, HRV a bit low. Use a number only where a coach naturally would and
+  it helps the athlete act, e.g. "aim for 60g of carbs an hour", "race in 5 days"; never
+  minutes and Load read off the plan.
 - Say each thing ONCE: if the opening already mentions it (low HRV, a missed session), no
   flag line repeats it.
 - CONCISE (Jamie, 15 Oct 2026: "ensure it really is concise so as not to take over the home
