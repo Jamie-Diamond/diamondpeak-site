@@ -1709,8 +1709,15 @@ def _thresholds_tile(slug, client) -> dict | None:
     # beside the power and paces (Jamie, 15 Oct 2026).
     kg = lthr = None
     try:
-        kg = next((w["weight"] for w in reversed(client.get_wellness(days=30) or [])
+        # Latest weigh-in in 90 days, else the profile's weight: James and Calum rarely
+        # weigh in, and their eFTP tile showed no W/kg at all (Jamie, 15 Oct 2026).
+        kg = next((w["weight"] for w in reversed(client.get_wellness(days=90) or [])
                    if w.get("weight")), None)
+        if not kg:
+            try:
+                kg = json.loads((BASE / "athletes" / slug / "profile.json").read_text()).get("weight_kg")
+            except Exception:
+                kg = None
         for sp in (("Run", "Ride") if "run" in sports else ("Ride", "Run")):
             st = client.get_sport_settings(sp) or {}
             st = (st[0] if st else {}) if isinstance(st, list) else st
