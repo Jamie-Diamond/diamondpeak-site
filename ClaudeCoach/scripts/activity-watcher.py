@@ -540,6 +540,11 @@ def _run_durability_note(slug: str, activity_id: str) -> tuple[str, bool]:
         return "", False
 
 
+_TERRAIN_DENIAL = re.compile(
+    r"(climbs?|hills?|terrain|gradient)\W[^.\n]*\b(don'?t|doesn'?t|do not|does not|did not|didn'?t|not)\b[^.\n]*\bexplain"
+    r"|\b(don'?t|doesn'?t|do not|does not|not)\b[^.\n]*\bexplain[^.\n]*(climbs?|hills?|terrain|gradient)", re.I)
+
+
 def _terrain_pass(slug: str, session_log_f: Path) -> str:
     """lib/terrain.py for each run in the last 2 days not yet in the session log: whether
     real climbs explain its time above Z2. The debrief may only blame terrain where this
@@ -567,8 +572,12 @@ def _terrain_pass(slug: str, session_log_f: Path) -> str:
         for a in runs:
             ceiling = zones.get(a.get("type")) or float(cfg.get("run_hr_cap") or 150)
             st = hr_quality.streams_by_type(client.get_activity_streams(str(a["id"])))
-            lines.append(terrain.note(a.get("name") or "Run", str(a["id"]),
-                                      terrain.check(st, ceiling), ceiling))
+            res = terrain.check(st, ceiling)
+            lines.append(terrain.note(a.get("name") or "Run", str(a["id"]), res, ceiling))
+            tbl = terrain.table(a.get("name") or "Run", str(a["id"]), st, ceiling,
+                                "Run" in str(a.get("type")), res and res["share"])
+            if tbl:
+                lines.append(tbl)
         return ("TERRAIN CHECK (computed from the altitude and HR streams - authoritative):\n"
                 + "\n".join(lines))
     except Exception as exc:
@@ -2022,6 +2031,11 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
             pass
 
     analysis = "\n".join(analysis_lines).strip()
+    if "EXCURSIONS above" not in hr_note:
+        # No per-excursion table was computed: a "the climbs don't explain it" verdict is unevidenced.
+        analysis = "\n".join(
+            ln for ln in analysis.split("\n")
+            if not _TERRAIN_DENIAL.search(ln)).strip()
     already_discussed = analysis.lower().startswith("discussed")
     if not already_discussed and analysis and analysis != "none":
         # Evening window: the trailing question moves to the 21:00 check-in.
