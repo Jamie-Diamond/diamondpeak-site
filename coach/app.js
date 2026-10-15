@@ -187,7 +187,25 @@
      threshold pace or LTHR), colour = the athlete's own zone. Drawn as one SVG so it
      scales from the session sheet down to a calendar thumbnail. */
   // Chart font: DM Mono, or the glass style's sans (set in init).
-  var CHART_FONT = 'DM Mono', CHART_FS = 9;
+  // Legend key drawn as a short line (Chart.js only offers dots and boxes at legend size).
+// An image at 2x so it stays sharp; the chart redraws once it has loaded.
+var LINE_KEYS = {};
+function lineKey(color, dash, chart) {
+  var k = color + '|' + (dash || []).join(',');
+  var im = LINE_KEYS[k];
+  if (!im) {
+    var c = document.createElement('canvas'); c.width = 28; c.height = 6;
+    var g = c.getContext('2d');
+    g.strokeStyle = color; g.lineWidth = 3.2; g.lineCap = 'round';
+    g.setLineDash((dash || []).map(function (v) { return v * 2; }));
+    g.beginPath(); g.moveTo(2, 3); g.lineTo(26, 3); g.stroke();
+    im = new Image(); im.width = 14; im.height = 3; im.src = c.toDataURL();
+    LINE_KEYS[k] = im;
+  }
+  if (!im.complete) im.addEventListener('load', function () { chart.draw(); }, { once: true });
+  return im;
+}
+var CHART_FONT = 'DM Mono', CHART_FS = 9;
   var ZONE_COL = ['#9aa7b4', '#22b3a6', '#f2c14e', '#f5913e', '#ec5a5a', '#c04de0', '#6f5cf0'];
   function profFor(x) {
     if (!x) return null;
@@ -3201,6 +3219,8 @@
               items.forEach(function (it) {
                 var d = chart.data.datasets[it.datasetIndex];
                 if (d && d.legendColor) { it.fillStyle = d.legendColor; it.strokeStyle = d.legendColor; }
+                // A line dataset keys as a short line, not a dot (Jamie, 15 Oct 2026).
+                if (d && d.legendLine) it.pointStyle = lineKey(d.borderColor, d.borderDash, chart);
               });
               return items;
             }
@@ -3668,7 +3688,7 @@
     ds.push({
       type: 'line', label: 'Fatigue (7-day load)', yAxisID: 'y', order: 2, data: roll,
       borderColor: 'rgba(20,24,29,.55)', borderWidth: 1.6, borderDash: [5, 3],
-      pointRadius: 0, tension: 0.3, fill: false
+      pointRadius: 0, tension: 0.3, fill: false, legendLine: true
     });
     ds.push({
       type: 'line', label: 'Form', yAxisID: 'y1', order: 1,
@@ -5733,6 +5753,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.93", "2026-10-15", "Fatigue shown as a line in the load chart legend", 0],
     ["3.92", "2026-10-15", "Form shown as dots on the load chart", 0],
     ["3.91", "2026-10-15", "The coach's load chart is live in the chat: tap a day for its numbers", 0],
     ["3.90", "2026-10-15", "±7 days legend shows every sport's colour", 0],
