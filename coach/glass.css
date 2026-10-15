@@ -5,7 +5,7 @@
    sheets. Always on since 3.77/3.78 (html.glass, set in app.html); the Dev tab gets the
    dark glass version at the end of this file. */
 
-html.glass{--glass-v:'143'}
+html.glass{--glass-v:'144'}
 html.glass body:not(.dev-chat){
   --paper:rgba(255,255,255,.62);
   --paper-2:transparent;
@@ -459,3 +459,19 @@ html.glass body:not(.dev-chat) .composer{background:rgba(238,242,246,.86);
 html.glass body.dev-chat .masthead{background:rgba(13,17,23,.86)}
 html.glass body.dev-chat .composer{background:rgba(13,17,23,.86);border-radius:22px;margin:0 8px;
   backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px)}
+
+/* Athlete picker: a solid page with the same quiet wash, the list as one glass pane
+   (Jamie, 15 Oct 2026: "too see-through" - it sat over the app at 62% white). */
+html.glass .gate{
+  background:#eef1f5;
+  background-image:
+    radial-gradient(40vmax 40vmax at 10% 6%, rgba(34,179,166,.20), transparent 70%),
+    radial-gradient(44vmax 44vmax at 95% 24%, rgba(111,92,240,.14), transparent 70%),
+    radial-gradient(42vmax 42vmax at 80% 92%, rgba(242,193,78,.16), transparent 70%),
+    linear-gradient(170deg,#f3f5f8,#e9edf3);
+}
+html.glass .gate-list{border:0;border-radius:22px;overflow:hidden;background:rgba(255,255,255,.72);
+  box-shadow:var(--rim, inset 0 1px 0 rgba(255,255,255,.95)), 0 10px 28px rgba(15,25,40,.08)}
+html.glass .gate-row{border-bottom:.5px solid rgba(60,60,67,.12);padding-left:16px;padding-right:16px}
+html.glass .gate-row:last-child{border-bottom:0}
+html.glass .gate-kicker,html.glass .gate-foot{text-transform:none;letter-spacing:0;font-size:12.5px}

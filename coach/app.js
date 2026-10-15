@@ -917,7 +917,11 @@
     var kg = pts.map(function (p) { return Number(p.kg); });
     var last = kg[kg.length - 1];
     var mean14 = avg14(tLast);
-    var change = last - kg[0];
+    // Right tile: 28-day change of the 14-day average (Jamie, 15 Oct 2026), so one
+    // heavy or light morning at either end can't make the number.
+    var t28 = tLast - 28 * 864e5;
+    var had28 = all.some(function (q) { var tq = Date.parse(q.date); return tq <= t28 && tq > t28 - 14 * 864e5; });
+    var change28 = had28 ? mean14 - avg14(t28) : null;
     // Dots for each reading, a line for the 14-day moving average: a day-to-day line made
     // water swings look like trend. Placed by DATE, so a gap in weigh-ins shows as a gap.
     var avgs = pts.map(function (p) { return avg14(Date.parse(p.date)); });
@@ -937,7 +941,7 @@
       '<div class="figures">' +
         fig(last.toFixed(1), 'Latest', 'kg') +
         fig(mean14.toFixed(1), '14-day mean', 'kg') +
-        fig(signed(change), 'Change', pts.length + ' readings') +
+        fig(change28 != null ? signed(change28) : '\u2014', '28-day change', change28 != null ? 'kg, 14-day avg' : 'not enough readings') +
       '</div>' +
       '<div class="spk"><svg class="spark wt" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
         '<polyline points="' + line + '"/><path class="wt-d" d="' + dots + '"/></svg>' +
@@ -5616,6 +5620,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.84", "2026-10-15", "Weight shows the 28-day change; cleaner athlete picker", 0],
     ["3.83", "2026-10-14", "Today shows your eFTP, run threshold and CSS", 0],
     ["3.82", "2026-10-14", "Coach / Dev switch is solid, so chat text doesn't show through", 1],
     ["3.81", "2026-10-14", "Recovery card: sleep joins HRV and resting HR, against your own normal", 0],
@@ -6237,8 +6242,7 @@
     $('#gateList').innerHTML = ATHLETES.map(function (a) {
       return '<button type="button" class="gate-row" data-slug="' + a.slug + '">' +
         '<span class="gate-mark">' + esc(a.name.charAt(0)) + '</span>' +
-        '<span class="gate-row-t"><b>' + esc(a.name) + '</b>' +
-        '<span>Training almanac</span></span>' +
+        '<span class="gate-row-t"><b>' + esc(a.name) + '</b></span>' +
         '<span class="gate-go" aria-hidden="true">→</span></button>';
     }).join('');
 
