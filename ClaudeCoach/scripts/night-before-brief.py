@@ -232,7 +232,7 @@ Step 4 — Output the night-before brief in Telegram Markdown (no preamble, no s
 *Tomorrow — [session name]*
 
 [Sport-specific targets — 2-4 bullets:]
-Ride: • NP target [W] (IF [X.XX]) • HR cap [bpm]
+Ride: • NP target [W] (IF [X.XX]) • HR cap [bpm] only if the planned event sets one; otherwise leave that bullet out, never write that none is set
 Run: • Target pace [/km] • HR cap [bpm]{run_note}
 Swim: • Target pace [/100m] vs CSS {css or '?'} • Main set structure
 Strength: • Main focus • Key movements
