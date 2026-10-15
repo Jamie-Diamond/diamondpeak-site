@@ -770,6 +770,15 @@ def test_connect_intervals_signing_up_stores_the_token_for_the_signup(env, icu, 
     assert "CALENDAR%3AWRITE" in loc
     assert env.get("/api/icu/callback", params={"state": "web-x.1.zz", "code": "c"}).status_code == 400
     assert "not connected" in env.get("/api/icu/callback", params={"state": state, "error": "access_denied"}).text
+    ath = json.loads(server.ATHLETES_CONFIG.read_text())
+    ath["jamie"].update(icu_athlete_id="i196362")
+    server.ATHLETES_CONFIG.write_text(json.dumps(ath))
+    icu_link.save_tokens("111", {"access_token": "jamie-old", "athlete": {"id": "i196362"}})
+    reply["athlete"]["id"] = "196362"                    # the coach's own Intervals.icu account
+    r = env.get("/api/icu/callback", params={"state": state, "code": "c"})
+    assert r.status_code == 409 and "already in Peak" in r.text
+    assert icu_link.load(slug="jamie")["access_token"] == "tok1"      # his token was replaced
+    assert not icu_link.connected(cid) and server._ICU_TURNS == []
     reply["athlete"]["id"] = "i777"
     r = env.get("/api/icu/callback", params={"state": state, "code": "c"})
     assert r.status_code == 200 and "Intervals.icu connected" in r.text and got == ["c"]

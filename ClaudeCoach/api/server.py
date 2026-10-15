@@ -982,6 +982,19 @@ def icu_callback(request: Request, code: str = "", state: str = "", error: str =
         return _page("That's a different Intervals.icu account",
                      f"You approved Peak from another account than the one your coaching uses. Sign "
                      f"out of Intervals.icu, sign in with your usual account, and {again}.", 409)
+    owner = next((s for s, a in athletes.items() if isinstance(a, dict) and s != slug
+                  and icu_link.same_athlete(a.get("icu_athlete_id"), got)), None)
+    if owner:
+        # A sign-up (or another athlete) approved from an Intervals.icu account Peak already
+        # coaches. Intervals.icu has just replaced that athlete's token with this one, so
+        # it goes to them, and this person is asked for their own account.
+        ocid = str(athletes[owner].get("chat_id") or "")
+        if ocid and icu_link.connected(ocid):
+            icu_link.save_tokens(ocid, tok)
+        print(f"[icu] {slug or cid} approved from {got}, which is {owner}'s account - not linked", flush=True)
+        return _page("That Intervals.icu account is already in Peak",
+                     "It belongs to another athlete. Sign out of Intervals.icu, sign in (or sign up "
+                     f"free) with your own account, and {again}.", 409)
     try:
         icu_link.save_tokens(cid, tok)
     except LookupError:
