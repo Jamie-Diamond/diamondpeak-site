@@ -283,6 +283,10 @@ ORDER is fixed: the opening, the flag/📌/🍌 lines, then the question (if any
 greeting, no date line, no "Today:" line, no countdown: Peak shows those right beside it.
 
 Rules:
+- CONCISE (Jamie, 15 Oct 2026: "ensure it really is concise so as not to take over the home
+  page"): the WHOLE note is at most 45 words and at most FOUR lines: the opening plus at
+  most THREE of the flag / 📉 / 📌 / 🍌 / question lines. When more qualify, keep the ones
+  that change what the athlete does today and drop the rest; never merge two into one long line.
 - SHORT (Jamie, 15 Oct 2026: "it's like an essay"): the card is read in five seconds.
   Every ⚠️ / 📌 / 🔁 line is ONE sentence of at most 18 words: what to do, then the number
   that says why. No reasoning, no dates of individual readings, no "I'd offer". At most TWO
@@ -1100,6 +1104,10 @@ def run_athlete(slug, athlete_cfg, early=False):
         return
     sent = False
     if output:
+        _words = len(output.split())
+        if _words > 60:
+            # A prompt finding, not something to trim silently: log it for the dev inbox.
+            ops_log.alert("morning-checkin", f"Today note ran to {_words} words (limit 45)", athlete=slug)
         try:
             today_note.write(slug, output, "wellness" if wellness_line else "final")
             today_note.ping(slug, chat_id, output)

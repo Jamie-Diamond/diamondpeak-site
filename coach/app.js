@@ -107,6 +107,10 @@
     // they are one view of one thing rather than two tabs (Jamie, 13 Aug 2026).
     { id: 'fit',  label: 'Fitness' },
     { id: 'load', label: 'Load' },
+    // Weight, HRV, resting HR and sleep over the 90 days published (Jamie, 15 Oct 2026:
+    // "need to also go in trends"): the Today cards, drawn over the longer window. Third,
+    // so it is on screen without scrolling the tab strip.
+    { id: 'body', label: 'Body' },
     { id: 'heat', label: 'Heat' },
     { id: 'fuel', label: 'Fuel' },
     { id: 'plan', label: 'Plan' },
@@ -856,7 +860,8 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
      a dot per morning, a 7-day average line, and a dashed line at the athlete's NORMAL -
      the 28 days before today, the same normal and thresholds as the morning card's
      "Off your normal" line (HRV 10%+ below, resting HR 6%+ above), so the two agree. */
-  function wellnessCard(wt) {
+  function wellnessCard(wt, days) {
+    days = days || 28;   // Today shows 28; Trends > Body shows everything published (90)
     var rows = (wt || []).filter(function (r) { return r && r.date; });
     if (rows.length < 7) return '';
     var last = rows[rows.length - 1].date, tL = Date.parse(last);
@@ -887,7 +892,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       }).map(function (r) { return fwd(k, Number(r[k])); });
       return v.length >= 3 ? v.reduce(function (a, b) { return a + b; }, 0) / v.length : null;
     };
-    var shown = rows.filter(function (r) { return Date.parse(r.date) > tL - 28 * 864e5; });   // the last 28 days
+    var shown = rows.filter(function (r) { return Date.parse(r.date) > tL - days * 864e5; });   // the last `days`
     function spark(k) {
       var pts = shown.filter(function (r) { return r[k] > 0; });
       if (pts.length < 3) return '';
@@ -907,8 +912,8 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       var pad = (hi - lo) * 0.18 || 1;
       lo -= pad; hi += pad;
       var span = hi - lo;
-      var W = 300, H = 60, t0 = tL - 27 * 864e5;
-      var x = function (r) { return ((Date.parse(r.date) - t0) / (27 * 864e5) * W).toFixed(1); };
+      var W = 300, H = 60, t0 = tL - (days - 1) * 864e5;
+      var x = function (r) { return ((Date.parse(r.date) - t0) / ((days - 1) * 864e5) * W).toFixed(1); };
       var y = function (v) { v = Math.max(lo, Math.min(hi, v)); return (H - 3 - (v - lo) / span * (H - 6)).toFixed(1); };
       var bandPath = band.length > 1 ? 'M' + band.map(function (b) { return x(b.r) + ' ' + y(b.hi); }).join(' L') +
         ' L' + band.slice().reverse().map(function (b) { return x(b.r) + ' ' + y(b.lo); }).join(' L') + 'Z' : '';
@@ -995,14 +1000,15 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     return win.reduce(function (a, r) { return a + Number(r.kg); }, 0) / win.length;
   }
 
-  function weightCard(wt, held) {
+  function weightCard(wt, held, days) {
+    var SHOW = days || WEIGHT_SHOW_DAYS;
     var all = (wt || []).filter(function (p) { return p && p.kg != null; });
     if (all.length < 2) return '';
     // Draw the last WEIGHT_SHOW_DAYS; the 14-day average uses EVERY published reading,
     // so the line's left end is a true 14-day mean, not one cut short at the chart's edge
     // (Jamie, 14 Oct 2026). refresh-site-data publishes 90 days for this.
     var tLast = Date.parse(all[all.length - 1].date);
-    var pts = all.filter(function (p) { return Date.parse(p.date) > tLast - WEIGHT_SHOW_DAYS * 864e5; });
+    var pts = all.filter(function (p) { return Date.parse(p.date) > tLast - SHOW * 864e5; });
     if (pts.length < 2) return '';
     var avg14 = function (t) {
       var win = all.filter(function (q) { var tq = Date.parse(q.date); return tq <= t && tq > t - 14 * 864e5; });
@@ -1014,7 +1020,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     (held || []).forEach(function (g) {
       (g.readings || g.dates.map(function (d) { return { date: d, kg: g.kg }; })).forEach(function (r) {
         var tr = Date.parse(r.date);
-        if (tr > tLast - WEIGHT_SHOW_DAYS * 864e5 && tr <= tLast) out.push(r);
+        if (tr > tLast - SHOW * 864e5 && tr <= tLast) out.push(r);
       });
     });
     var last = kg[kg.length - 1];
@@ -2783,6 +2789,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     var fs = focusSports();
     return TRENDS.filter(function (t) {
       if (t.id === 'heat' && !heatOn()) return false;
+      if (t.id === 'body') return !!(bodyCards(state.data || {}));
       return t.id !== 'longrun' || fs.indexOf('run') >= 0;
     });
   }
@@ -2800,6 +2807,10 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     if (state.fitSport !== 'all' && fitChipSports().indexOf(state.fitSport) < 0) {
       state.fitSport = 'all';
     }
+  }
+
+  function bodyCards(d) {
+    return weightCard(d.weightTrend, d.weightHeld, 90) + wellnessCard(d.wellnessTrend, 90);
   }
 
   function renderTrends() {
@@ -2868,6 +2879,18 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       // highlights a window the view then falls back out of is a lie about the numbers.
       var wins = zoneWindows(d);
       if (wins.length) sportBar = subSeg('zoneWin', zoneWinSel(d), wins);
+    }
+
+    if (sel === 'body') {
+      $('#v-trends').innerHTML = seg + bodyCards(d);
+      $('#trendSeg').onclick = function (e) {
+        var b = e.target.closest('button');
+        if (!b) return;
+        state.trend = b.dataset.t;
+        renderTrends();
+        drawTrend();
+      };
+      return;
     }
 
     var zoomable = (sel === 'fit' || sel === 'heat');
@@ -5807,6 +5830,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.97", "2026-10-15", "Trends > Body: weight, HRV, resting HR and sleep over 90 days; Today note kept short", 0],
     ["3.96", "2026-10-15", "The morning card is now the Today note at the top of Today; tap it to talk about it", 0],
     ["3.95", "2026-10-15", "eFTP tile shows W/kg; LTHR tile added", 0],
     ["3.95", "2026-10-15", "Privacy policy linked from Settings", 0],
