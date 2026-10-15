@@ -48,20 +48,28 @@ def _by_date(rows) -> dict:
     return {str(r.get("id") or r.get("date") or "")[:10]: r for r in rows or []}
 
 
-def _vals(by: dict, key: str, start: date, end: date) -> list:
-    """Transformed readings for dates in [start, end)."""
+def _skipped(d: date, exclude) -> bool:
+    """`d` is inside a profile.json baseline exclude_ranges window for this reading
+    ({"key": "restingHR", "start": "2026-07-31", "end": "2026-09-05"}; end optional = open)."""
+    return any(d.isoformat() >= x["start"] and d.isoformat() <= (x.get("end") or "9999")
+               for x in exclude or [])
+
+
+def _vals(by: dict, key: str, start: date, end: date, exclude=None) -> list:
+    """Transformed readings for dates in [start, end), minus excluded windows for `key`."""
+    ex = [x for x in exclude or [] if x.get("key") == key]
     out, d = [], start
     while d < end:
         v = (by.get(d.isoformat()) or {}).get(key)
-        if isinstance(v, (int, float)) and v > 0:
+        if isinstance(v, (int, float)) and v > 0 and not _skipped(d, ex):
             out.append(_f(key)(v))
         d += timedelta(days=1)
     return out
 
 
-def baseline(rows, key: str, day: date):
+def baseline(rows, key: str, day: date, exclude=None):
     """(mean, sd) on the transformed scale over the BASELINE_DAYS before `day`, or None."""
-    v = _vals(_by_date(rows), key, day - timedelta(days=BASELINE_DAYS), day)
+    v = _vals(_by_date(rows), key, day - timedelta(days=BASELINE_DAYS), day, exclude)
     if len(v) < MIN_BASELINE:
         return None
     m = sum(v) / len(v)
@@ -69,16 +77,16 @@ def baseline(rows, key: str, day: date):
     return m, max(sd, MIN_SD[key])
 
 
-def assess(rows, key: str, day: date) -> dict | None:
+def assess(rows, key: str, day: date, exclude=None) -> dict | None:
     """{"usual", "today", "avg7", "lo", "hi", "trend_off", "day_off"} in natural units."""
-    b = baseline(rows, key, day)
+    b = baseline(rows, key, day, exclude)
     if not b:
         return None
     m, sd = b
     by = _by_date(rows)
     inv, f = _finv(key), _f(key)
     t = (by.get(day.isoformat()) or {}).get(key)
-    roll = _vals(by, key, day - timedelta(days=ROLL_DAYS - 1), day + timedelta(days=1))
+    roll = _vals(by, key, day - timedelta(days=ROLL_DAYS - 1), day + timedelta(days=1), exclude)
     avg = sum(roll) / len(roll) if len(roll) >= 3 else None
     bad = BAD[key]
     lo, hi = m - BAND_SD * sd, m + BAND_SD * sd
@@ -89,10 +97,10 @@ def assess(rows, key: str, day: date) -> dict | None:
             "lo": inv(lo), "hi": inv(hi), "trend_off": bool(trend_off), "day_off": bool(day_off)}
 
 
-def off_any(rows, day: date) -> bool:
+def off_any(rows, day: date, exclude=None) -> bool:
     """HRV or resting HR off normal (trend or that morning) on `day`."""
     for key in ("hrv", "restingHR"):
-        a = assess(rows, key, day)
+        a = assess(rows, key, day, exclude)
         if a and (a["trend_off"] or a["day_off"]):
             return True
     return False
