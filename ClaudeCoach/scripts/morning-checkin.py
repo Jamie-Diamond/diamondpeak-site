@@ -882,8 +882,23 @@ def run_athlete(slug, athlete_cfg):
     try:
         from icu_api import IcuClient as _Icu
         _a = json.loads(ATHLETES_CONFIG.read_text())[slug]
-        _events = _Icu(_a["icu_athlete_id"], _a["icu_api_key"]).get_events(today_str, today_str)
+        _cl = _Icu(_a["icu_athlete_id"], _a["icu_api_key"])
+        _events = _cl.get_events(today_str, today_str)
+        # A session already ridden or run this morning is DONE, not today's plan (Fred,
+        # 15 Oct 2026: the 08:00 card announced a cut threshold session he'd finished at 07:00).
+        _fam = lambda t: next((f for f in ("Ride", "Run", "Swim") if f in str(t or "")), str(t or ""))
+        _acts_today = [x for x in (_cl.get_training_history(days=1) or [])
+                       if str(x.get("start_date_local") or "")[:10] == today_str]
+        _done_fams = {_fam(x.get("type")) for x in _acts_today}
+        _done_names = [str(x.get("name") or x.get("type")) for x in _acts_today]
+        _events = [e for e in _events
+                   if not ((e.get("category") or "WORKOUT").upper() == "WORKOUT"
+                           and (e.get("paired_activity_id") or _fam(e.get("type")) in _done_fams))]
         planned_block = planned_sessions_block(_events)
+        if _done_names:
+            planned_block = ((planned_block + "\n") if planned_block else "") + (
+                "Already done today (say so in one line if relevant; never present it as still to do "
+                "or describe changes to it): " + "; ".join(_done_names))
     except Exception as exc:
         print(f"[{slug}] planned-TSS prefetch failed: {exc}", file=sys.stderr)
 

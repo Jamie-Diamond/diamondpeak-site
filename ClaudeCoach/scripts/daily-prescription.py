@@ -170,9 +170,11 @@ Also extract from the planned session event:
 Step 5 — Call the modulation engine:
   python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/ironman-analysis/scripts/modulate.py '<json with planned and readiness keys>' '''}
 
-Step 6 — If modified or swapped_to_z2: push the adjusted session to Intervals.icu via Bash:
-  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --authority coach-auto --endpoint push_workout --payload '{{"sport":"...", "event_date":"{today}", "name":"...", "description":"...", "planned_training_load": N}}'
-  If go == false: push a recovery note workout with description "BLOCKED: [R1 reason from reasoning trail]".
+Step 6 — If modified or swapped_to_z2: EDIT today's planned event IN PLACE (its id is in the events
+  fetch above), never push a second session beside it - an added session leaves the original on
+  the athlete's watch and Zwift and shows the new one as missed (Fred, 15 Oct 2026):
+  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --authority coach-auto --endpoint edit_workout --event-id <id> --payload '{{"name":"...", "description":"...", "icu_training_load": N}}'
+  If go == false: edit that same event into a recovery note with description "BLOCKED: [R1 reason from reasoning trail]".
   If no rules fired: no push needed.
   --authority coach-auto is REQUIRED and its limits are enforced in code, not just here:
   this run adjusts TODAY'S session ({today}) and nothing else. You may push or edit today;
@@ -804,6 +806,20 @@ def _python_card(engine: dict) -> str:
             f"Planned: {planned['total_duration_min']} min, intensity {planned['target_intensity']}.")
 
 
+def _todays_session_done(slug: str) -> bool:
+    """True when every planned workout today already has a same-sport activity."""
+    today = date.today().isoformat()
+    evs = [e for e in (_icu(slug, "events", "--start", today, "--end", today) or [])
+           if isinstance(e, dict) and (e.get("category") or "WORKOUT") == "WORKOUT"]
+    if not evs:
+        return False
+    acts = [a for a in (_icu(slug, "history", "--days", "1") or [])
+            if isinstance(a, dict) and str(a.get("start_date_local") or "")[:10] == today]
+    fam = lambda t: next((f for f in ("Ride", "Run", "Swim") if f in str(t or "")), str(t or ""))
+    done = {fam(a.get("type")) for a in acts}
+    return all(e.get("paired_activity_id") or fam(e.get("type")) in done for e in evs)
+
+
 def run_for_athlete(slug: str, cfg: dict) -> str | None:
     name      = cfg.get("name", slug)
     race_name = cfg.get("race_name", "upcoming race")
@@ -821,6 +837,17 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
             coaching_level = profile.get("coaching_level", "mid")
         except Exception:
             pass
+
+    # Already done (Fred, 15 Oct 2026: the 05:00 check cut a threshold session he rode at
+    # 06:32 from the version already on Zwift, and the 08:00 card then told him it was cut):
+    # a session with a completed activity of its sport today is history, not prescribable.
+    try:
+        if _todays_session_done(slug):
+            print(f"[daily-prescription] {slug}: today's session already done, not modulated",
+                  file=sys.stderr)
+            return None
+    except Exception as exc:
+        print(f"[{slug}] done-check failed (continuing): {exc}", file=sys.stderr)
 
     # ICU preflight — if intervals.icu is unreachable (outage, revoked key) the
     # LLM must not prescribe on null CTL/HRV/sleep. Standing rule: say so and
