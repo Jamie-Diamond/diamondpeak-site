@@ -17,7 +17,6 @@ tune against logged history if they drift from ICU's post-hoc numbers.
 """
 from __future__ import annotations
 
-import math
 import re
 
 from primitives.modulation import classify_session_type
@@ -373,84 +372,7 @@ def rpe_cue(sport: str, lo: float, hi: float) -> str:
     return "All out, RPE 9"
 
 
-# Run laps (Jamie, 15 Oct 2026: "each run needs at least three different laps ... a
-# warm-up, main session and warm-down ... a maximum of 5K per lap. If the main session was
-# 8k it would make sense to split into four and four rather than 5 and 3"). Every step is a
-# lap on the watch and a block on Peak's session graph, so a one-step run showed nothing.
-RUN_MIN_LAPS = 3
-RUN_MAX_LAP_KM = 5.0
-RUN_DEFAULT_THRESHOLD_MPS = 3.3     # ~5:03/km, when the athlete's threshold is unknown
-
-
-def _seg_minutes(seg) -> float:
-    return float(seg.get("minutes") or seg.get("min") or 0)
-
-
-def _with_minutes(seg, minutes) -> dict:
-    out = {k: v for k, v in seg.items() if k != "min"}
-    out["minutes"] = minutes
-    return out
-
-
-def _split_even(seg, n) -> list:
-    """n equal parts in whole minutes (the remainder goes to the first parts)."""
-    total = int(round(_seg_minutes(seg)))
-    base, extra = divmod(total, n)
-    return [_with_minutes(seg, base + (1 if i < extra else 0)) for i in range(n)]
-
-
-def run_laps(segments: list, threshold_mps: float | None = None) -> list:
-    """Restructure a RUN's flat segments so it has at least RUN_MIN_LAPS steps and no
-    step longer than RUN_MAX_LAP_KM, splitting evenly (8 km -> 4 + 4, not 5 + 3).
-
-    Only splits, never changes a zone, so the pushed load is the planned load. A run
-    with one long step becomes warm-up / main / warm-down at that same intensity; repeat
-    blocks are left alone (an interval session already has its laps)."""
-    mps = threshold_mps or RUN_DEFAULT_THRESHOLD_MPS
-    segs = [dict(x) for x in segments or []]
-
-    def steps(ss):
-        return sum(int(x["repeat"]) * len(x["steps"]) if x.get("repeat") and x.get("steps") else 1
-                   for x in ss)
-
-    def km(seg):
-        lo, hi = (_band("run", seg.get("zone"), float(seg["if"])) if seg.get("if") is not None
-                  else _band("run", seg.get("zone")))
-        return _seg_minutes(seg) * 60 * mps * (lo + hi) / 200 / 1000
-
-    flat_idx = [i for i, x in enumerate(segs) if not x.get("repeat")]
-    if steps(segs) < RUN_MIN_LAPS and flat_idx:
-        i = max(flat_idx, key=lambda j: _seg_minutes(segs[j]))
-        seg, total = segs[i], int(round(_seg_minutes(segs[i])))
-        if steps(segs) == 1 and total >= 20:
-            wu = max(5, min(15, round(total * 0.15)))
-            cd = max(5, min(10, round(total * 0.10)))
-            segs[i:i + 1] = [_with_minutes(seg, wu), _with_minutes(seg, total - wu - cd),
-                             _with_minutes(seg, cd)]
-        elif steps(segs) == 2 and total >= 20:
-            # A warm-up and a long main (or a long main and a warm-down): carve off the
-            # missing end rather than halving the main.
-            end = max(5, min(10, round(total * 0.10)))
-            if i == 0:   # the long step comes first: the missing piece is a warm-up
-                parts = [_with_minutes(seg, end), _with_minutes(seg, total - end)]
-            else:        # it comes last: the missing piece is a warm-down
-                parts = [_with_minutes(seg, total - end), _with_minutes(seg, end)]
-            segs[i:i + 1] = parts
-        elif total >= 10:
-            segs[i:i + 1] = _split_even(seg, RUN_MIN_LAPS - steps(segs) + 1)
-    out = []
-    for seg in segs:
-        if seg.get("repeat"):
-            out.append(seg)
-            continue
-        # A lap a touch over 5 km (5.1) stays whole: two 2.5 km laps would be sillier.
-        n = max(1, math.ceil(km(seg) / RUN_MAX_LAP_KM - 0.1))
-        out.extend(_split_even(seg, n) if n > 1 else [seg])
-    return out
-
-
-def render_workout(sport: str, segments: list, name: str = "", rpe_only: bool = False,
-                   threshold_mps: float | None = None) -> dict:
+def render_workout(sport: str, segments: list, name: str = "", rpe_only: bool = False) -> dict:
     """Render time-at-intensity segments into an Intervals.icu STRUCTURED workout
     (the `description` text push_workout sends → parsed into steps → synced to
     Garmin). Bike steps are %FTP power; run/swim are %threshold pace.
@@ -465,11 +387,7 @@ def render_workout(sport: str, segments: list, name: str = "", rpe_only: bool = 
     build path, and owned by a concurrent ticket).
 
     `rpe_only` renders every step as an RPE cue with no target (see _RPE_CUES); the
-    TSS is computed exactly as before, so the week's load arithmetic is unchanged.
-
-    Runs are split into laps first (run_laps): 3 at least, none over 5 km."""
-    if _norm_sport(sport) == "run":
-        segments = run_laps(segments, threshold_mps)
+    TSS is computed exactly as before, so the week's load arithmetic is unchanged."""
     sp = _norm_sport(sport)
     suffix = "" if sp == "bike" else " Pace"   # bare % = power; "% Pace" = pace
     claim_zone = claimed_zone(sport, name) if name else None

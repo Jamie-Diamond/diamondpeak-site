@@ -198,19 +198,6 @@ def _sport_family(sport: str) -> str:
         "ride" in s or "bike" in s or "cycl" in s) else s
 
 
-def _run_threshold_mps(slug: str) -> float | None:
-    """Run threshold speed from profile.json ("4:02" per km), for sizing run laps
-    (planned_tss.run_laps: no lap over 5 km). None when unset; laps then assume ~5:03."""
-    import re as _re
-    try:
-        v = json.loads((BASE / "athletes" / slug / "profile.json").read_text()).get(
-            "run_threshold_pace_per_km") or ""
-        m = _re.match(r"\s*(\d{1,2}):(\d{2})", str(v))
-        return 1000 / (int(m.group(1)) * 60 + int(m.group(2))) if m else None
-    except Exception:
-        return None
-
-
 def build_sessions(slug: str, proposal: dict) -> dict:
     """Turn a Stage-1 proposal into push-ready, validated sessions. Pure except
     for reading athlete config/session-log; never pushes."""
@@ -241,8 +228,7 @@ def build_sessions(slug: str, proposal: dict) -> dict:
             # both tempo and sweetspot the label Z3), so "Sweetspot 2x20" renders at 88-94%
             # FTP instead of 76-84% and stops hard-blocking on name_intensity_mismatch.
             r = render_workout(sport, segs, s.get("name", ""),
-                               rpe_only=_sport_family(sport) in _rpe_only,
-                               threshold_mps=_run_threshold_mps(slug))
+                               rpe_only=_sport_family(sport) in _rpe_only)
             desc, load, dur = r["description"], r["tss"], r["duration_min"]
         else:
             # No structured segments (Strength, or a session Stage 1 left unstructured):
