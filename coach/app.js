@@ -1399,7 +1399,18 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     var tabs = $('#chatTabs');
     if (!tabs) return;
     var mast = $('.masthead');
-    if (mast) tabs.style.setProperty('--mast', mast.offsetHeight + 'px');
+    if (mast) {
+      tabs.style.setProperty('--mast', mast.offsetHeight + 'px');
+      // The header's height changes after it is measured (the name and countdown fill in,
+      // the countdown wraps), which slid the Coach/Dev tabs under it. Keep it measured.
+      if (window.ResizeObserver && !mast._ro) {
+        mast._ro = new ResizeObserver(function () {
+          var t = $('#chatTabs');
+          if (t) t.style.setProperty('--mast', mast.offsetHeight + 'px');
+        });
+        mast._ro.observe(mast);
+      }
+    }
     Array.prototype.forEach.call(tabs.querySelectorAll('button'), function (b) {
       b.setAttribute('aria-selected', String((b.getAttribute('data-ct') === 'dev') === chatState.dev));
     });
@@ -5830,6 +5841,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.99", "2026-10-15", "Header on one line: your name beside the logo", 0],
     ["3.98", "2026-10-15", "Today note in a smaller font", 0],
     ["3.97", "2026-10-15", "Trends > Body: weight, HRV, resting HR and sleep over 90 days; Today note kept short", 0],
     ["3.96", "2026-10-15", "The morning card is now the Today note at the top of Today; tap it to talk about it", 0],
