@@ -692,7 +692,7 @@
     }
 
 
-    h += weightCard(d.weightTrend);
+    h += weightCard(d.weightTrend, d.weightHeld);
     h += wellnessCard(d.wellnessTrend);
     h += currentStateCard(d.currentState);      // at the bottom (Jamie, 14 Oct 2026)
 
@@ -901,7 +901,7 @@
     return win.reduce(function (a, r) { return a + Number(r.kg); }, 0) / win.length;
   }
 
-  function weightCard(wt) {
+  function weightCard(wt, held) {
     var all = (wt || []).filter(function (p) { return p && p.kg != null; });
     if (all.length < 2) return '';
     // Draw the last WEIGHT_SHOW_DAYS; the 14-day average uses EVERY published reading,
@@ -951,7 +951,11 @@
           wEnd
         ]) + '</div>' +
       '<p class="wt-k"><i class="wt-dot"></i>reading<i class="wt-avg"></i>14-day average</p>',
-      {});
+      // Weigh-ins that can't be the athlete are left out until they say they were
+      // (lib/weight_check.py, 15 Oct 2026); say so, so a gap never looks like lost data.
+      { foot: (held || []).length ? (held.reduce(function (n, g) { return n + g.dates.length; }, 0)) +
+          ' weigh-in(s) left out (' + held.map(function (g) { return g.kg.toFixed(1) + ' kg'; }).join(', ') +
+          ') as they don\u2019t fit your trend. Tell the coach if they were you.' : '' });
   }
   var WEIGHT_SHOW_DAYS = 60;
 
@@ -5620,6 +5624,7 @@
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["3.85", "2026-10-15", "Weigh-ins that can't be you are left out of the weight trend until you confirm them", 0],
     ["3.84", "2026-10-15", "Weight shows the 28-day change; cleaner athlete picker", 0],
     ["3.83", "2026-10-14", "Today shows your eFTP, run threshold and CSS", 0],
     ["3.82", "2026-10-14", "Coach / Dev switch is solid, so chat text doesn't show through", 1],

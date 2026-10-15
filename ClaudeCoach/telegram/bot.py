@@ -68,6 +68,7 @@ import write_verify            # verify-after-write for Strava / ICU calendar cl
 import baseline as baseline_lib   # new athletes' baseline block (onboarding, 27 Sep 2026)
 import duplicates                   # a session in Intervals.icu twice: delete or merge (2 Oct 2026)
 import did_happen                   # Yes / No buttons on the evening check-in (2 Oct 2026)
+import weight_check                 # "Was that you?" on a weigh-in that can't be (15 Oct 2026)
 import goals as goals_lib         # a goal without a race (1 Oct 2026)
 import chat_limits                # per-athlete monthly chat allowance (29 Sep 2026)
 from engine import call_claude, call_claude_with_image, stream_claude
@@ -3358,6 +3359,29 @@ def _handle_duplicate(token, chat_id, data, message_id, athletes):
         edit_keyboard_confirm(token, chat_id, message_id, f"Duplicate: {done}")
     send(token, chat_id, reply)
     _append_capture_history(chat_id, slug, f"[tapped: duplicate {action}]", reply)
+    return True
+
+
+def _handle_weight_check(token, chat_id, data, message_id, athletes):
+    """wt:y|n:<slug>:<date,date> from lib/weight_check.py's "Was that you?". Yes puts the
+    weigh-ins back in the weight trend, No keeps them out; the next refresh redraws."""
+    if not data.startswith("wt:"):
+        return False
+    parts = data.split(":")
+    if len(parts) != 4 or parts[1] not in ("y", "n"):
+        return False
+    _, verb, slug, dates = parts
+    athlete = athletes.get(chat_id)
+    if not athlete or athlete["slug"] != slug:
+        return False
+    weight_check.answer(slug, [d for d in dates.split(",") if d], verb == "y")
+    reply = ("Thanks, they're back in your weight trend." if verb == "y"
+             else "Got it, they stay out of your weight trend.")
+    if message_id:
+        edit_keyboard_confirm(token, chat_id, message_id,
+                              "✅ That was me" if verb == "y" else "Left out")
+    send(token, chat_id, reply)
+    _append_capture_history(chat_id, slug, f"[tapped: weigh-in {'mine' if verb == 'y' else 'not mine'}]", reply)
     return True
 
 
@@ -7714,6 +7738,8 @@ def dispatch_callback(token, chat_id, text, msg_id, athletes, config):
     if _handle_rule_check(token, chat_id, text, msg_id, athletes):
         return True
     if _handle_duplicate(token, chat_id, text, msg_id, athletes):
+        return True
+    if _handle_weight_check(token, chat_id, text, msg_id, athletes):
         return True
     if _handle_did_happen(token, chat_id, text, msg_id, athletes):
         return True

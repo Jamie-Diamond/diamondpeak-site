@@ -757,8 +757,7 @@ def _build_jamie_data(client) -> dict:
                 _entry["projected"] = True
 
     # weightTrend (last 30 days where weight not null)
-    weight_trend = [{"date":w.get("id","")[:10],"kg":w["weight"]}
-                    for w in wellness_60 if w.get("weight")]
+    weight_trend, weight_held = _weight_trend("jamie", wellness_60)
 
     # Route outlines. Shape only, normalised into a unit box - see lib/route_shape.py
     # for why nothing positional is published.
@@ -886,6 +885,7 @@ def _build_jamie_data(client) -> dict:
         "weekCalendar": week_calendar,
         "loadChart":    load_chart,
         "weightTrend":  weight_trend,
+        "weightHeld":   weight_held,
         "wellnessTrend": _wellness_trend(wellness_60),
         "thresholds":   _thresholds_tile("jamie", client),
         "powerCurve":   power_curve,
@@ -1709,6 +1709,30 @@ def _thresholds_tile(slug, client) -> dict | None:
             "sports": sports, "untested": untested}
 
 
+def _weight_trend(slug, rows, ask: bool = True) -> tuple[list, list]:
+    """Weigh-ins for Peak, minus any that can't be the athlete (lib/weight_check.py) until
+    they say they were; and, in the daytime, the one-off "Was that you?" for a new group."""
+    readings = [{"date": str(w.get("id", ""))[:10], "kg": w["weight"]} for w in rows or []
+                if w.get("weight")]
+    try:
+        import weight_check as _wc
+        kept, held = _wc.keep(slug, readings)
+        if ask and 8 <= datetime.now().hour < 20:
+            new = _wc.to_ask(slug, readings)
+            if new:
+                import outbox as _ob
+                cfg = json.loads(ATHLETES_CONFIG.read_text()).get(slug, {})
+                s0 = new[0]
+                if _ob.record(cfg.get("chat_id", ""), _wc.question(s0),
+                              reply_markup=_wc.buttons(slug, s0), source="weight-check"):
+                    _wc.mark_asked(slug, s0["dates"])
+                    log(f"[{slug}] asked about weigh-ins {s0['dates']}")
+        return kept, held
+    except Exception as e:
+        log(f"[{slug}] weight check skipped: {e}")
+        return readings, []
+
+
 def _wellness_trend(rows) -> list:
     """Daily HRV and resting HR for Peak's HRV & resting HR card (Jamie, 14 Oct 2026).
     All of the ~60 days fetched, so the app can draw the last 30 against a 28-day normal."""
@@ -1984,8 +2008,8 @@ def _build_athlete_training_data(slug, athlete_cfg):
 
     data = {
         "generated":    today.isoformat(),
-        "weightTrend":  [{"date": w.get("id", "")[:10], "kg": w["weight"]}
-                         for w in wellness_60 if w.get("weight")],
+        "weightTrend":  _weight_trend(slug, wellness_60)[0],
+        "weightHeld":   _weight_trend(slug, wellness_60, ask=False)[1],
         "wellnessTrend": _wellness_trend(wellness_60),
         "thresholds":   _thresholds_tile(slug, client),
         "kpi":          kpi,
