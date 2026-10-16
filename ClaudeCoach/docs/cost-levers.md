@@ -113,3 +113,30 @@ does get wrong, all behaviour, so prompt-fixable:
 | Hedges and caveats instead of answering ("I haven't checked", "I can't say") | Jamie's "better than Runna" took 4 messages | rebalance the "say what you didn't do" lines |
 | Missed the scheduled question it was answering | Jamie's "No", 2 Oct | fixed 2 Oct (engine._missed_since) |
 | Shallower digging on a debugging question | missing chat messages, 4 Oct: Opus found the 30-exchange trim next turn | dev work, Dev tab runs Opus |
+
+## 16 Oct 2026: after the Haiku move, and the chat model picker
+
+**Projection** (last 7 days repriced, same tokens on Haiku 5.5): moving the morning card,
+night-before brief and activity debrief to Haiku takes a coached athlete from ~$18 to
+~$11 a month (Fred $20 -> $13, James $15 -> $9). Those three drop from ~$2-3 to ~$0.15
+each. Chat is then about two-thirds of what is left.
+
+**Chat, last 14 days:** Fred $19/month (75% of it Opus), James $18 (35%), Kathryn $9 (71%).
+Today's picker (`select_model` in telegram/bot.py) is a word list with stickiness over the
+last three messages, which is why most of Fred's chat runs on Opus.
+
+**Decided (Jamie, 16 Oct):** build an AI model picker (Haiku reads each message: Haiku
+for simple ones, Sonnet by default, Opus for plan changes, illness/injury or pushback),
+judged on ~20 real messages side by side first. Opus -> Sonnet everywhere: undecided,
+"more shadowing required". Leaving chat as it is: no.
+
+**Running:** `lib/chat_shadow.py` to 26 Oct. After every real chat reply the picker
+chooses, and the reply is written again read-only and never sent, on the picker's model
+and on Sonnet whenever Opus answered. The Dev tab is told at 20 pairs; then review with
+`python3 ClaudeCoach/lib/chat_shadow.py --report`. Measured on the VM: the picker takes
+~3 s through the CLI, so a live picker needs a faster call (direct API) or to run while
+the prompt is assembled.
+
+**Activity watcher (same day):** no longer runs the model blind (Intervals.icu
+unreadable = wait) or in a loop (the same unlogged activities = at most 3 passes 30 min
+apart). Kathryn's 15 Oct was 139 Sonnet runs, ~$31.
