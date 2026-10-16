@@ -56,13 +56,13 @@ def test_title_built_from_names_in_calendar_order():
 
 def test_targets_only_tomorrows_sports_and_no_labels():
     s = _ev("WeightTraining", "Kettlebells")
-    lines = nb._target_lines([RIDE, s], "1:41", 305, "4:02")
+    lines = nb._target_lines([RIDE, s], "1:41", 305, "4:02", level="pro")
     assert len(lines) == 2 and all(l.startswith("•") for l in lines)
     assert lines[0].startswith("• NP target 188 W (IF 0.62) • Main set power")
     assert lines[1] == "• Main focus • Key movements"
     assert not any(l.startswith(("Ride", "Run", "Swim", "Strength")) for l in lines)
-    swim = nb._target_lines([SWIM], "1:38", 190, "5:04")
-    assert swim == ["• Target pace [the /100m band above] vs CSS 1:38 • Main set structure"]
+    swim = nb._target_lines([SWIM], "1:38", 190, "5:04", level="pro")
+    assert swim == ["• Target pace [the /100m band above, the pace only] vs CSS 1:38 • Main set structure"]
 
 
 def test_prompt_carries_title_targets_and_power_without_sport_templates():
@@ -70,7 +70,7 @@ def test_prompt_carries_title_targets_and_power_without_sport_templates():
     p = nb._build_prompt("jamie", "Jamie", 305, "1:41", "4:02", "IM", [],
                          pace_bands=[], power_bands=nb._power_bands([RIDE], 305),
                          sessions=nb._sessions_line([RIDE]), title=title,
-                         targets=nb._target_lines([RIDE], "1:41", 305, "4:02"))
+                         targets=nb._target_lines([RIDE], "1:41", 305, "4:02", level="pro"), level="pro")
     assert title in p and "[session name]" not in p
     assert "Ride 60-70% FTP = 183-214 W" in p and "NP target 188 W (IF 0.62)" in p
     for label in ("\nRide:", "\nRun:", "\nSwim:", "\nStrength:"):
@@ -106,3 +106,14 @@ def test_ride_ftp_comes_from_intervals_sport_settings_in_the_same_call():
     assert nb._power_bands([RIDE], ftp)[1] == "Ride 60-70% FTP = 178-208 W"   # matches ICU's Z2 watts
     assert nb._np_if(RIDE, ftp) == "NP target 183 W (IF 0.62)"
     assert nb._form_and_cap(_FakeIcu(None), date(2026, 10, 16))[2] is None    # caller falls back to profile
+
+
+def test_jargon_follows_the_coaching_level():
+    """Minimal jargon, by the level the athlete chose (Jamie, 16 Oct 2026)."""
+    pro, mid, beg = (nb._target_lines([RIDE, SWIM], "1:41", 305, "4:02", level=lv)
+                     for lv in ("pro", "mid", "beginner"))
+    assert "NP target" in pro[0] and "W band" in pro[0] and "vs CSS" in pro[1]
+    assert "NP" not in mid[0] and "IF" not in mid[0] and "W band" in mid[0] and "CSS" not in mid[1]
+    assert "W" not in beg[0].split("HR cap")[0] and "How it should feel" in beg[0]
+    p = nb._build_prompt("calum", "Calum", 305, "1:41", "4:02", "x", [], targets=beg, level="beginner")
+    assert "Coaching level: BEGINNER" in p and "only, no number" in p

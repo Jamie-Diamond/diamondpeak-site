@@ -20,6 +20,14 @@ _BLOCKS = {
         "Use plain-English labels throughout: Fitness (not CTL), Fatigue (not ATL), "
         "Load (not TSS), Form (not TSB). "
         "Include supporting numbers (pace, HR, power, zone %) but always contextualise them. "
+        # Minimal jargon, not none (Jamie, 16 Oct 2026: "should depend on the level of detail
+        # the athlete asked for"). The shadow review found mid athletes getting NP, IF,
+        # "decoupling" and "% Pace" because the sport templates ask for them; this wins.
+        "These wording rules override any sport-specific format instructions in this prompt: "
+        "never print NP, IF, VI, W' or a '% Pace' / '% FTP' figure - give the watts or the pace "
+        "itself instead. Say 'heart-rate drift' for decoupling (the % is fine), 'pace adjusted "
+        "for hills' the first time you give GAP, and 'Zone 2' etc. with a word for what it means "
+        "(easy, steady, hard). "
         "Tone: direct and informative — matter-of-fact, never gushing, occasionally dry."
     ),
     "pro": (
