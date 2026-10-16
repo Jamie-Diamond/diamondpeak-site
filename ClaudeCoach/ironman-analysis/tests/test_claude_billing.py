@@ -426,3 +426,19 @@ class TestUsageSplit:
                                           {"fred": {"name": "Fred Hayes"}})
         assert line["month"] == 1.23 and line["credit"] == 100.0
         assert line["on_key"] == ["Fred Hayes"] and line["by_athlete"] == {"fred": 1.23}
+
+    def test_key_spend_belongs_to_the_athlete_the_ledger_names(self, billing, tmp_path,
+                                                              monkeypatch):
+        import usage_ledger
+        ur = usage_ledger._report()
+        proj = tmp_path / "projects" / "-Users-x"
+        proj.mkdir(parents=True)
+        _transcript(proj / "s3.jsonl", "s3", ["2026-10-16T08:00:05.000Z"])
+        monkeypatch.setattr(ur, "PROJECTS", tmp_path / "projects")
+        monkeypatch.setattr(ur, "PROJECT_GLOBS", ("-Users-x",))
+        monkeypatch.setattr(ur, "dev_tab_texts", lambda: set())
+        cb.LEDGER.write_text(json.dumps({"session": "s3", "athlete": "fred",
+                                         "start": "2026-10-16T08:00:00+00:00",
+                                         "end": "2026-10-16T08:00:10+00:00"}) + "\n")
+        d = usage_ledger.daily({})              # the prompt names nobody it knows
+        assert d["fred"]["api"] == {"2026-10-16": pytest.approx(2.0)}

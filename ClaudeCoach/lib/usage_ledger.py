@@ -52,22 +52,26 @@ def _ts(iso: str) -> float:
         return 0.0
 
 
-def _key_windows() -> tuple[dict, list]:
-    """({session: ((start, end), ...)}, [(day, athlete, usd)]) from the billing ledger."""
+def _key_windows() -> tuple[dict, list, dict]:
+    """({session: ((start, end), ...)}, [(day, athlete, usd)], {session: athlete}) from the
+    billing ledger. The ledger's athlete is who the call was billed for, so it names the
+    owner of the key's spend; the transcript's own attribution is a guess from the prompt."""
     try:
         import claude_billing
         entries = claude_billing.ledger()
     except Exception:
-        return {}, []
-    wins, flat = defaultdict(list), []
+        return {}, [], {}
+    wins, flat, owner = defaultdict(list), [], {}
     for e in entries:
         if e.get("session"):
+            if e.get("athlete"):
+                owner[e["session"]] = e["athlete"]
             # Slack for the CLI writing a row a moment before / after our clock reads.
             wins[e["session"]].append((_ts(e.get("start", "")) - 1, _ts(e.get("end", "")) + 2))
         elif e.get("usd") is not None:
             flat.append(((e.get("start") or "")[:10], e.get("athlete") or "system",
                          float(e["usd"] or 0)))
-    return {k: tuple(v) for k, v in wins.items()}, flat
+    return {k: tuple(v) for k, v in wins.items()}, flat, owner
 
 
 def _price_file(f: str, athletes: dict, dev_texts: set, wins: dict | None = None) -> tuple:
@@ -121,7 +125,7 @@ def daily(athletes: dict) -> dict:
                                      "api": defaultdict(float)})
     start = LOG_START.isoformat()
     dev_texts = ur.dev_tab_texts()
-    wins, flat = _key_windows()
+    wins, flat, owner = _key_windows()
     with _lock:
         for pat in ur.PROJECT_GLOBS:
             for f in glob.glob(str(ur.PROJECTS / pat / "*.jsonl")):
@@ -141,7 +145,7 @@ def daily(athletes: dict) -> dict:
                     _cache[f] = hit
                 ath, job, days, dev_days, api_days = hit[1]
                 for day, usd in api_days.items():
-                    out[ath]["api"][day] += usd
+                    out[owner.get(sid) or ath]["api"][day] += usd
                 for day, usd in days.items():
                     if day >= start:
                         out[ath]["all"][day] += usd
