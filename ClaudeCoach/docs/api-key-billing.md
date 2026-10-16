@@ -44,8 +44,9 @@ no transcript, so its ledger line carries the CLI's own cost instead.
 | Spoken rewrite (voice mode), race lookup at sign-up | **no, still Max** | no athlete to hand; pennies |
 | Dev tab, bug fixer, shadow runs, rule tidy | **no, by design** | dev work |
 
-Food logging must move before the public launch (a customer's coaching on a personal
-subscription).
+Food logging is Jamie's alone today: only a profile with `nutrition_tracker: true` gets the
+Food tab, and the API refuses food calls for anyone else (`api/food.py enabled`). It needs
+moving to the key only if the Food tab is offered to athletes.
 
 ## Moving athletes
 
