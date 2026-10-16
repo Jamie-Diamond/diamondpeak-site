@@ -1,8 +1,9 @@
 {
-  "_README": "Which Claude account pays for each athlete's coaching. Read by ClaudeCoach/lib/claude_billing.py; tracked in git so a change deploys through cc-gitpull. enabled:false keeps EVERY call on Jamie's Max subscription. When true, athletes in api_athletes (a list, or \"all\" so a new sign-up lands on the key with no action) are coached on the business API key in /etc/claudecoach/anthropic-api-key; anyone in subscription_athletes always stays on Max. Dev work, bug fixes, shadow runs and rule tidy never use the key. monthly_credit_usd is the monthly API credit, shown against the key's spend on Peak's usage page. Fred moved to the key 16 Oct 2026 (Jamie); the rest wait for the daily messages to be on Haiku.",
+  "_README": "Which Claude account pays for each athlete's coaching. Read by ClaudeCoach/lib/claude_billing.py; tracked in git so a change deploys through cc-gitpull. enabled:false keeps EVERY call on Jamie's Max subscription. When true, athletes in api_athletes (a list, or \"all\" so a new sign-up lands on the key with no action) are coached on the business API key in /etc/claudecoach/anthropic-api-key; anyone in subscription_athletes always stays on Max. Dev work, bug fixes, shadow runs and rule tidy never use the key. monthly_credit_usd is the monthly API credit, shown against the key's spend on Peak's usage page. Fred and James moved to the key 16 Oct 2026 (Jamie); the rest wait for the daily messages to be on Haiku.",
   "enabled": true,
   "api_athletes": [
-    "fred"
+    "fred",
+    "jmccabe"
   ],
   "subscription_athletes": [
     "jamie"

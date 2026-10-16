@@ -1,6 +1,6 @@
 # Claude API key for athletes' coaching
 
-Set up 16 Oct 2026. **Fred is on the key** (Jamie, 16 Oct); everyone else waits for the
+Set up 16 Oct 2026. **Fred and James are on the key** (Jamie, 16 Oct); everyone else waits for the
 daily messages to be on Haiku.
 
 ## How it works
