@@ -2695,8 +2695,8 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
               '</td><td>' + money(r.usd) + '</td><td>' +
               (r.per_msg != null ? '$' + Number(r.per_msg).toFixed(3) : '\u2014') + '</td></tr>';
           }).join('');
+          // No margin on the page (Jamie, 16 Oct 2026: "remove the margin bit").
           modelH = '<p class="uapi"><b>Average coached athlete: ' + money(bm.avg_month) + ' a month' +
-            (bm.margin != null ? ' \u00b7 ' + Math.round(bm.margin * 100) + '% margin at \u00a3' + bm.price_gbp : '') +
             '</b><small>' + esc((bm.athletes || []).join(', ')) + '. Per athlete per month, from the last ' +
             bm.window_days + ' days. Not you, not dev work.</small></p>' +
             '<table class="tbl utbl"><thead><tr><th>By model</th><th>Messages</th><th>Cost</th><th>Each</th>' +
@@ -6078,6 +6078,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.016", "2026-10-16", "Athletes & usage: the margin is no longer shown", 1],
     ["4.015", "2026-10-16", "Athletes & usage shows the average coached athlete's month by model (messages, cost, cost each) and the margin at \u00a345", 1],
     ["4.014", "2026-10-16", "Athletes & usage shows what the API key spent this month against the $100 credit, and who is on it", 1],
     ["4.013", "2026-10-16", "Today shows Fitness and Form, each with a word for where you are", 0],

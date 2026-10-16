@@ -214,6 +214,16 @@ few days of alerts on the VM and fix what is real before other work:
 `ssh -i ~/.ssh/id_rsa -o IdentitiesOnly=yes root@178.105.95.208 'tail -80 /root/Library/Logs/ClaudeCoach/ops-alerts.log'`
 Tell Jamie only what needs his decision, in athlete terms.
 
+## Claude costs - API key, per-model tracking, chat model picker (16 Oct 2026)
+
+| What | Where |
+|---|---|
+| Who pays: Max or the business API key (Fred and James are on the key) | `ClaudeCoach/config/claude-billing.json`, `lib/claude_billing.py`; notes in `ClaudeCoach/docs/api-key-billing.md`. **Never put `ANTHROPIC_API_KEY` in `cc.env`**: the CLI prefers it, so all dev work would bill the key |
+| Every call on the key, and its spend against the $100 monthly credit | ledger `~/Library/Logs/ClaudeCoach/claude-billing.jsonl` on the VM; Peak → Settings → Athletes & usage |
+| Cost and messages per model, average coached athlete (last 7 days) | `lib/usage_ledger.py` `model_view`; same Peak page |
+| Chat model picker | **Shadow only, not live**, to 26 Oct (`lib/chat_shadow.py`): every chat turn is re-answered, never sent, on the picker's model and on Sonnet when Opus answered. Dev tab is told at 20 pairs; review with `python3 ClaudeCoach/lib/chat_shadow.py --report`. Live chat still uses `select_model` in `telegram/bot.py` |
+| The numbers and Jamie's decisions | `ClaudeCoach/docs/cost-levers.md`, 16 Oct section |
+
 ## Git Workflow
 
 - Push directly to `main` — GitHub Pages deploys automatically
