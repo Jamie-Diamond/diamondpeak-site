@@ -6201,6 +6201,8 @@ def _classify_tool(name, hint):
         if has("log-strength"):
             return ("logstrength", "Logging your strength session",
                     "logged your strength work")
+        if has("log-weight"):
+            return ("logweight", "Saving your weight", "saved your weight")
         if has("render-workout"):
             return ("render", "Writing the workout to intervals.icu",
                     "wrote the workout")

@@ -257,6 +257,8 @@ _TOOL_WRITES = {
     # (lib/plan_tools.py:1266) calls IcuClient.create_manual_activity: a genuine ICU write.
     # This is exactly the fragment somebody would wave into _TOOL_LOCAL.
     "logged your strength work": {"icu"},
+    # plan_tools log-weight PUTs wellness/{date} (16 Oct 2026).
+    "saved your weight": {"icu"},
     # plan_tools render-workout is in fact a PURE renderer: lib/plan_tools.py:1276 returns
     # a description string plus a "how_to_push" note, and primitives/planned_tss.py:348
     # says the result is what push_workout sends separately. Listed as a write ANYWAY, so

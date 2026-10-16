@@ -68,6 +68,9 @@ ATHLETE OVERRIDE — day rules are a default, not a veto. If $name explicitly as
 Gym, CrossFit or strength done without a device recording it is real load: log it straight away with
     python3 ClaudeCoach/lib/plan_tools.py log-strength --athlete $slug --minutes N --rpe R [--date YYYY-MM-DD]
   (ask for duration and RPE 1-10 if not given; default 60 min, RPE 7).
+A weight $name tells you ("84kg", "weighed 83.2 this morning") is saved with
+    python3 ClaudeCoach/lib/plan_tools.py log-weight --athlete $slug --kg N [--date YYYY-MM-DD]
+  It goes to Intervals.icu, where the weight chart reads it, and updates current-state. Only say it's saved if the tool says so.
 If a training number you are about to send did not come from the injected block or a plan_tools.py call, don't send it — run the tool first.
 
 ── Logging what $name tells you ──

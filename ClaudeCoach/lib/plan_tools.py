@@ -3122,6 +3122,40 @@ def cmd_log_strength(args) -> dict:
             "status": "manual activity created — counts toward CTL/ATL"}
 
 
+def cmd_log_weight(args) -> dict:
+    """A weight the athlete tells the coach goes to Intervals.icu wellness for that day
+    (Jamie, 16 Oct 2026: James typed 84 kg twice, the coach said "Saved", but it only
+    reached current-state, so Peak's weight chart - read from Intervals.icu - stayed
+    empty). Only the weight field is written; read back to confirm. current-state.json
+    keeps the latest reading as before."""
+    cfg = _load_cfg(args.athlete)
+    kg = round(float(args.kg), 1)
+    if not 30 <= kg <= 250:
+        raise SystemExit(_err(f"{kg} kg is not a body weight - check the number with the athlete"))
+    d = args.date or date.today().isoformat()
+    try:
+        date.fromisoformat(d)
+    except ValueError:
+        raise SystemExit(_err(f"--date {d!r} is not YYYY-MM-DD"))
+    from icu_api import IcuClient
+    client = IcuClient(cfg["icu_athlete_id"], cfg.get("icu_api_key") or "")
+    before = (client._get(f"wellness/{d}") or {}).get("weight")
+    client._put(f"wellness/{d}", {"weight": kg})
+    after = (client._get(f"wellness/{d}") or {}).get("weight")
+    if after is None or abs(float(after) - kg) > 0.05:
+        raise SystemExit(_err(f"Intervals.icu did not keep the weight (reads {after}) - say it isn't saved"))
+    cs = BASE / "athletes" / args.athlete / "current-state.json"
+    try:
+        state = json.loads(cs.read_text())
+        if d >= str(state.get("weight_date") or ""):
+            state["weight_kg"], state["weight_date"] = kg, d
+            cs.write_text(json.dumps(state, indent=2) + "\n")
+    except (OSError, ValueError):
+        pass
+    return {"athlete": args.athlete, "date": d, "kg": kg, "was": before,
+            "status": "saved to Intervals.icu; shows in Peak's weight chart at the next refresh"}
+
+
 def cmd_render_workout(args) -> dict:
     """Render time-at-intensity segments into an ICU STRUCTURED workout string.
     Push the returned `description` via icu_fetch push_workout so it syncs to the
@@ -3270,6 +3304,11 @@ def main():
     pls.add_argument("--date", help="YYYY-MM-DD; default today")
     pls.add_argument("--name")
 
+    plw = sub.add_parser("log-weight", help="save a weight the athlete tells you to Intervals.icu (and current-state)")
+    plw.add_argument("--athlete", required=True)
+    plw.add_argument("--kg", required=True, type=float)
+    plw.add_argument("--date", help="YYYY-MM-DD; default today")
+
     ppr = sub.add_parser("post-race-ready",
                          help="athlete says they are ready to train after an A-race: ends the recovery hold")
     ppr.add_argument("--athlete", required=True)
@@ -3351,6 +3390,7 @@ def main():
                "wetsuit": cmd_wetsuit, "race-predict": cmd_race_predict,
                "ctl-sweep": cmd_ctl_sweep,
                "sweat-rate": cmd_sweat_rate, "log-strength": cmd_log_strength,
+               "log-weight": cmd_log_weight,
                "windowed-np": cmd_windowed_np, "wbal": cmd_wbal,
                "post-race-ready": cmd_post_race_ready,
                "fitness-choice": cmd_fitness_choice,

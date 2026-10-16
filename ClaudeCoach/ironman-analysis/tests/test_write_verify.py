@@ -490,6 +490,7 @@ class TestACompoundBashCommandCannotHideItsWrite:
         ("scripts/generate-blueprint.py --athlete jamie", "rebuilt your plan"),
         ("scripts/stage1-plan.py --athlete jamie", "rebuilt your plan"),
         ("plan_tools.py log-strength --athlete jamie", "logged your strength work"),
+        ("plan_tools.py log-weight --athlete jamie --kg 80", "saved your weight"),
         ("plan_tools.py render-workout --athlete jamie", "wrote the workout"),
     ]
     # The local command the write used to hide behind, and its fragment.
