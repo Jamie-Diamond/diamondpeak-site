@@ -1,6 +1,7 @@
 # Claude API key for athletes' coaching
 
-Set up 16 Oct 2026, **switched off** until the daily messages are on Haiku (Jamie, 16 Oct).
+Set up 16 Oct 2026. **Fred is on the key** (Jamie, 16 Oct); everyone else waits for the
+daily messages to be on Haiku.
 
 ## How it works
 
@@ -10,6 +11,8 @@ Set up 16 Oct 2026, **switched off** until the daily messages are on Haiku (Jami
 | The switch and who is on the key | `config/claude-billing.json` (tracked; deploys through cc-gitpull) |
 | Routing, retry, breaker | `lib/claude_billing.py` |
 | Breaker state | `~/Library/Logs/ClaudeCoach/claude-billing-tripped.json` |
+| Ledger: every call that ran on the key | `~/Library/Logs/ClaudeCoach/claude-billing.jsonl` |
+| What the key spent this month vs the credit | Peak → Settings → Athletes & usage (`lib/usage_ledger.py`) |
 
 - **One key, not one per athlete.** A self sign-up needs no action: with `api_athletes: "all"`
   every registered athlete is on the key. Per-athlete cost comes from `scripts/usage-report.py`.
@@ -19,6 +22,14 @@ Set up 16 Oct 2026, **switched off** until the daily messages are on Haiku (Jami
 - **A refused key** (credit used up, spend limit, revoked) is retried once on Max. The breaker
   then keeps everyone on Max for an hour and tries the key again. One ops-log line per outage,
   and a Dev-tab note at most once a day. The athlete never sees the refusal.
+
+## Tracking what the key spends
+
+The CLI's transcripts look the same whichever account paid (checked 16 Oct), so each call
+on the key is written to the ledger: the transcript session (pinned with `--session-id`,
+or read from the chat's own output) and the time window. `lib/usage_ledger.py` prices the
+transcript rows inside those windows, as recorded, as the key's spend. A photo reply keeps
+no transcript, so its ledger line carries the CLI's own cost instead.
 
 ## What is on the key once switched on
 
@@ -36,12 +47,9 @@ Set up 16 Oct 2026, **switched off** until the daily messages are on Haiku (Jami
 Food logging must move before the public launch (a customer's coaching on a personal
 subscription).
 
-## Switching on
+## Moving athletes
 
-1. Key saved and `python3 ClaudeCoach/lib/claude_billing.py --test-key` passes.
-2. Set `"enabled": true` in `config/claude-billing.json`, commit, push. Cron jobs pick it up
-   on the next cc-gitpull (:05 / :35); chat after the API restarts (nightly, or by hand).
-3. `python3 ClaudeCoach/lib/claude_billing.py` shows who is on `api`.
-4. After a week, compare the Console bill with `usage-report.py` for those athletes.
-
-To move more athletes, add their slugs to `api_athletes` (or set it to `"all"`).
+Add their slugs to `api_athletes` in `config/claude-billing.json` (or set it to `"all"`),
+commit, push. Cron jobs pick it up on the next cc-gitpull (:05 / :35); chat once
+claudecoach-api restarts. `python3 ClaudeCoach/lib/claude_billing.py` shows who is on `api`.
+After a week, compare the Console bill with Peak's "API key this month" line.

@@ -241,17 +241,29 @@ def run_claude(prompt, model=SONNET, *, fallback=None, allowed_tools=None,
     run_env = _billing.env_for(athlete, env) if _billing else env
 
     def _spawn(cmd):
-        # The prompt goes on stdin, never argv: a single argv element is
-        # capped at MAX_ARG_STRLEN (128 KiB on Linux) and exec() fails
-        # outright with E2BIG once a generated prompt crosses it. stdin has
-        # no such limit.
-        return subprocess.run(
-            cmd,
-            input=prompt,
-            stdout=subprocess.PIPE,
-            stderr=(stderr if stderr is not None else subprocess.PIPE),
-            text=True, cwd=cwd, timeout=timeout, env=run_env,
-        )
+        # A call on the API key is pinned to a session id and written to the billing
+        # ledger, so its cost can be told apart from Max (lib/claude_billing.py). In a
+        # finally: a timed-out call was still billed.
+        keyed = bool(_billing) and _billing.uses_key(run_env)
+        sid = None
+        if keyed:
+            cmd, sid = _billing.pin(cmd)
+            t0 = _billing.now()
+        try:
+            # The prompt goes on stdin, never argv: a single argv element is
+            # capped at MAX_ARG_STRLEN (128 KiB on Linux) and exec() fails
+            # outright with E2BIG once a generated prompt crosses it. stdin has
+            # no such limit.
+            return subprocess.run(
+                cmd,
+                input=prompt,
+                stdout=subprocess.PIPE,
+                stderr=(stderr if stderr is not None else subprocess.PIPE),
+                text=True, cwd=cwd, timeout=timeout, env=run_env,
+            )
+        finally:
+            if keyed:
+                _billing.record(sid, t0, athlete or "", label)
 
     for i, m in enumerate(chain):
         cmd = [CLAUDE, "-p", "--model", m] + effort_args(m)

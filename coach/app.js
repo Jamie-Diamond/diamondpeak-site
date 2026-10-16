@@ -2673,7 +2673,18 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
           '<tr class="utot"><td class="lbl"><b>Total</b></td><td></td><td class="t">' +
           money(tot.last7) + '</td><td>' + money(tot.avg_week) +
           '</td><td>' + money(tot.avg_month) + '</td></tr>';
-        box.innerHTML = '<table class="tbl utbl"><thead><tr><th>Athlete</th><th>Chat this month</th>' +
+        // API key this month (Jamie, 16 Oct 2026): what the key really spent - the calls
+        // that ran on it, from lib/claude_billing.py's ledger - against the monthly credit.
+        var a = j.api, apiLine = '';
+        if (a && (a.enabled || a.month)) {
+          apiLine = '<p class="uapi"><b>API key this month: ' + money(a.month) +
+            (a.credit != null ? ' of ' + money(a.credit) : '') + '</b>' +
+            (a.on_key && a.on_key.length ? '<small>On the key: ' + esc(a.on_key.join(', ')) +
+              '. Everyone else is on your Max subscription.</small>' : '') +
+            (a.tripped ? '<small>The key was refused just now, so everyone is on Max for the moment.</small>' : '') +
+            '</p>';
+        }
+        box.innerHTML = apiLine + '<table class="tbl utbl"><thead><tr><th>Athlete</th><th>Chat this month</th>' +
           '<th>7 days</th><th>Avg / wk</th><th>Avg / mo</th></tr></thead><tbody>' + body +
           '</tbody></table><p class="card-f">API list prices, as if Peak ran on a pay-per-use key. ' +
           '7 days: the last seven days, rolling. Averages: since logging began, or since the athlete joined. Logging began ' +
@@ -6049,6 +6060,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.014", "2026-10-16", "Athletes & usage shows what the API key spent this month against the $100 credit, and who is on it", 1],
     ["4.013", "2026-10-16", "Today shows Fitness and Form, each with a word for where you are", 0],
     ["4.012", "2026-10-15", "Sign-up: tick every box on Intervals.icu; Connect Strava only for an Apple Watch; the checklist reads cleaner", 0],
     ["4.012", "2026-10-15", "Sign-up no longer waits for your older training to arrive: it is optional, asked for afterwards", 0],

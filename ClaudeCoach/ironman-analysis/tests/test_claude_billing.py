@@ -38,6 +38,7 @@ def billing(tmp_path, monkeypatch):
     monkeypatch.setattr(cb, "CONFIG", cfg)
     monkeypatch.setattr(cb, "KEY_FILE", key)
     monkeypatch.setattr(cb, "TRIP_FILE", tmp_path / "tripped.json")
+    monkeypatch.setattr(cb, "LEDGER", tmp_path / "ledger.jsonl")
     monkeypatch.setattr(cb, "_athletes", lambda: {"jamie": {}, "fred": {}, "tester": {}})
     monkeypatch.delenv(cb.KEY_VAR, raising=False)
     alerts, told = [], []
@@ -336,3 +337,92 @@ class TestStream:
         assert REFUSED not in " ".join(shown)
         assert events[-1] == ("final", "Real answer")
         assert envs[0][cb.KEY_VAR] == KEY and cb.KEY_VAR not in envs[1]
+
+
+# ---------------------------------------------------------------------------
+# The ledger: which calls ran on the key, so its spend can be shown (16 Oct 2026)
+# ---------------------------------------------------------------------------
+
+def _sid(call):
+    c = call["cmd"]
+    return c[c.index("--session-id") + 1] if "--session-id" in c else None
+
+
+class TestLedger:
+
+    def test_pin_skips_resumed_and_unpersisted_calls(self):
+        assert cb.pin(["claude", "-p", "--resume", "x"]) == (["claude", "-p", "--resume", "x"], None)
+        assert cb.pin(["claude", "-p", "--no-session-persistence"])[1] is None
+        cmd, sid = cb.pin(["claude", "-p"])
+        assert cmd[-2:] == ["--session-id", sid]
+
+    def test_keyed_run_is_pinned_and_logged(self, billing, spawns):
+        billing()
+        made = spawns(_R("fine"))
+        cb.run(["claude", "-p", "--model", "haiku"], athlete="fred", label="debrief", text=True)
+        [e] = cb.ledger()
+        assert e["session"] == _sid(made[0]) and e["athlete"] == "fred"
+        assert e["label"] == "debrief" and e["start"] <= e["end"]
+
+    def test_max_run_is_neither_pinned_nor_logged(self, billing, spawns):
+        billing()
+        made = spawns(_R("fine"))
+        cb.run(["claude", "-p", "--model", "haiku"], athlete="jamie", text=True)
+        assert _sid(made[0]) is None and cb.ledger() == []
+
+    def test_refused_then_max_logs_only_the_keyed_attempt(self, billing, spawns):
+        billing()
+        made = spawns(_R(REFUSED, returncode=1), _R("ok"))
+        claude_call.run_claude("p", model=claude_call.SONNET, athlete="fred", label="fred")
+        assert _sid(made[0]) and _sid(made[1]) is None
+        assert [e["session"] for e in cb.ledger()] == [_sid(made[0])]
+
+    def test_chat_turn_on_the_key_logs_its_session(self, billing, athlete, tmp_path, spawns):
+        billing()
+        spawns(_ok("answer", sid="sess-9"))
+        engine.call_claude("hi", {"project_dir": str(tmp_path)}, [],
+                           system_prompt_file=athlete, athlete_name="Tester")
+        [e] = cb.ledger()
+        assert (e["session"], e["athlete"], e["label"]) == ("sess-9", "tester", "chat")
+
+
+def _transcript(path, sid, rows):
+    with open(path, "w") as f:
+        f.write(json.dumps({"type": "user", "sessionId": sid,
+                            "message": {"content": "Coach fred: morning card"}}) + "\n")
+        for i, ts in enumerate(rows):
+            f.write(json.dumps({"type": "assistant", "sessionId": sid, "timestamp": ts,
+                                "message": {"id": f"m{i}", "model": "claude-sonnet-5-5",
+                                            "usage": {"input_tokens": 1_000_000,
+                                                      "output_tokens": 0}}}) + "\n")
+
+
+class TestUsageSplit:
+
+    def test_only_rows_inside_a_key_window_count_as_the_keys(self, tmp_path):
+        import usage_ledger
+        f = tmp_path / "s1.jsonl"
+        _transcript(f, "s1", ["2026-10-16T08:00:05.000Z", "2026-10-16T09:30:00.000Z"])
+        wins = {"s1": ((usage_ledger._ts("2026-10-16T08:00:00+00:00") - 1,
+                        usage_ledger._ts("2026-10-16T08:00:10+00:00") + 2),)}
+        out = usage_ledger._price_file(str(f), {"fred": {"name": "Fred Hayes"}}, set(), wins)
+        days, api = out[2], out[4]
+        assert sum(days.values()) == pytest.approx(4.0)      # both rows, $2 each
+        assert api == {"2026-10-16": pytest.approx(2.0)}      # only the 08:00 row
+
+    def test_no_window_no_key_spend(self, tmp_path):
+        import usage_ledger
+        f = tmp_path / "s2.jsonl"
+        _transcript(f, "s2", ["2026-10-16T08:00:05.000Z"])
+        assert usage_ledger._price_file(str(f), {}, set(), {})[4] == {}
+
+    def test_month_line_sums_the_key_and_names_who_is_on_it(self, billing):
+        import usage_ledger
+        billing(api=("fred",))
+        cb.CONFIG.write_text(json.dumps({**json.loads(cb.CONFIG.read_text()),
+                                         "monthly_credit_usd": 100}))
+        line = usage_ledger.api_key_month({"fred": {"api_month": 1.234},
+                                           "jamie": {"api_month": 0}},
+                                          {"fred": {"name": "Fred Hayes"}})
+        assert line["month"] == 1.23 and line["credit"] == 100.0
+        assert line["on_key"] == ["Fred Hayes"] and line["by_athlete"] == {"fred": 1.23}

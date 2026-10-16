@@ -1450,7 +1450,7 @@ def admin_usage(request: Request):
     return JSONResponse({"rows": out, "shared": costs.get("system"), "dev": costs.get("dev"),
                          "total": admin_view.totals(costs), "since": summ.get("since"),
                          "rateDays": summ.get("rate_days"), "generated": summ.get("generated"),
-                         "error": summ.get("error")}, headers=NO_STORE)
+                         "api": summ.get("api"), "error": summ.get("error")}, headers=NO_STORE)
 
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")

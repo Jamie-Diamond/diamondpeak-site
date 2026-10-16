@@ -1062,9 +1062,17 @@ def _off_key(env, sp_file, text):
     return _billing.fall_back(env, Path(sp_file).parent.name, text)
 
 
+def _ledger(env, session_id, t0, usd=None):
+    """A chat run on the API key goes in the billing ledger (lib/claude_billing.py): its
+    session and window, or its cost when it keeps no transcript. Max runs are not logged."""
+    if _billing and t0 and _billing.uses_key(env):
+        _billing.record(session_id, t0, (env or {}).get("CC_ATHLETE_SCOPE", ""), "chat", usd=usd)
+
+
 def _run_once(prompt, model, extra_args, cwd, timeout=300, env=None):
     """One non-streaming claude invocation with JSON output so the session id
     is capturable. Returns (text, session_id, returncode)."""
+    t0 = _billing.now() if _billing else None
     r = subprocess.run(
         claude_cmd(model, ["--output-format", "json"] + extra_args),
         input=prompt,
@@ -1078,6 +1086,7 @@ def _run_once(prompt, model, extra_args, cwd, timeout=300, env=None):
         _cost_add(d)
     except Exception:
         text = (r.stdout or "").strip()
+    _ledger(env, session_id, t0)
     return text or (r.stderr or "").strip(), session_id, r.returncode
 
 
@@ -1179,6 +1188,7 @@ def _stream_once(prompt, model, extra_args, cwd, env=None, run=None):
     t_init = t_first = None
     rc = -1
     on_key = bool(_billing) and _billing.uses_key(env)
+    t0 = _billing.now() if on_key else None
     try:
         # Cancel landed between registering the run and getting here (prompt
         # assembly reads a dozen files and can take a moment). Never spawn: a
@@ -1285,6 +1295,10 @@ def _stream_once(prompt, model, extra_args, cwd, env=None, run=None):
         if run is not None:
             with _RUNS_LOCK:
                 run.proc = None
+        try:
+            _ledger(env, session_id, t0)      # a cancelled run was still billed
+        except Exception:
+            pass
     return (final, streamed, session_id, rc, t_init, t_first)
 
 
@@ -1437,6 +1451,7 @@ def call_claude_with_image(img_path, caption, config, history, model=MODEL_OPUS,
     try:
         env = scoped_env(sp_file)
         for _ in range(2):      # the second pass only after a refused API key, on Max
+            t_img = _billing.now() if _billing else None
             result = subprocess.run(
                 claude_cmd(model, ["--no-session-persistence", "--output-format", "json"]),
                 input=full_prompt,
@@ -1453,6 +1468,8 @@ def call_claude_with_image(img_path, caption, config, history, model=MODEL_OPUS,
             d = json.loads(out)
             out = (d.get("result") or "").strip()
             _cost_add(d)
+            # --no-session-persistence leaves no transcript to price: log the CLI's own cost.
+            _ledger(env, None, t_img, usd=d.get("total_cost_usd") or 0)
         except Exception:
             pass
         _meter(sp_file)

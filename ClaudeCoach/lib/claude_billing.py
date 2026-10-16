@@ -21,6 +21,12 @@ If the key is refused (credit used up, spend limit, revoked key), the call is re
 the subscription and the breaker trips for an hour, so later calls skip the key. One line
 goes to the ops log and, at most once a day, to Jamie's Dev tab. An athlete never sees it.
 
+Which account paid is not in the CLI's own transcripts (checked 16 Oct: a Max run and a key
+run write identical rows), so every call that ran on the key is written to LEDGER: its
+transcript session (pinned with --session-id where the call starts a session) and the time
+window it ran in. lib/usage_ledger.py prices the transcript rows inside those windows as
+the key's spend, for Peak's "API key this month" line. Everything else was Max.
+
     python3 ClaudeCoach/lib/claude_billing.py              # status: switch, key, who is on it
     python3 ClaudeCoach/lib/claude_billing.py --test-key   # one Haiku "Say OK" on the key
 """
@@ -32,13 +38,15 @@ import re
 import subprocess
 import sys
 import time
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent
 CONFIG = BASE / "config" / "claude-billing.json"
 KEY_FILE = Path("/etc/claudecoach/anthropic-api-key")
 TRIP_FILE = Path.home() / "Library/Logs/ClaudeCoach" / "claude-billing-tripped.json"
+LEDGER = Path.home() / "Library/Logs/ClaudeCoach" / "claude-billing.jsonl"
 KEY_VAR = "ANTHROPIC_API_KEY"
 TRIP_SECONDS = 3600          # skip the key this long after it is refused, then try again
 TELL_EVERY = 24 * 3600       # Dev-tab note at most once a day while it keeps failing
@@ -60,6 +68,12 @@ def _config() -> dict:
         return json.loads(CONFIG.read_text())
     except Exception:
         return {}
+
+
+def monthly_credit() -> float | None:
+    """The API credit Jamie gets each month, for Peak's "API key this month" line."""
+    v = _config().get("monthly_credit_usd")
+    return float(v) if v is not None else None
 
 
 def _key() -> str:
@@ -211,11 +225,71 @@ def _tell_jamie(reason: str) -> None:
         pass
 
 
-def run(cmd: list, *, athlete: str | None = None, env: dict | None = None, **kwargs):
+def now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+
+
+# Flags after which the CLI continues an existing session, or keeps none: --session-id
+# cannot be added to those.
+_NO_PIN = {"--resume", "-r", "--continue", "-c", "--session-id", "--no-session-persistence",
+           "--fork-session"}
+
+
+def pin(cmd: list) -> tuple[list, str | None]:
+    """(cmd with a fresh --session-id, that id), so the ledger can name the transcript this
+    call writes. Unchanged and None when the call resumes a session or keeps none."""
+    if any(a in _NO_PIN for a in cmd):
+        return cmd, None
+    sid = str(uuid.uuid4())
+    return list(cmd) + ["--session-id", sid], sid
+
+
+def record(session: str | None, start: str, athlete: str = "", label: str = "",
+           usd: float | None = None) -> None:
+    """One call that ran on the key: its transcript session and the window it ran in
+    (usage_ledger prices those rows). `usd` instead, for a call that keeps no transcript.
+    Never raises."""
+    if not session and usd is None:
+        return
+    entry = {"session": session, "start": start, "end": now(),
+             "athlete": athlete or "", "label": label or ""}
+    if usd is not None:
+        entry["usd"] = round(float(usd or 0), 6)
+    try:
+        LEDGER.parent.mkdir(parents=True, exist_ok=True)
+        with open(LEDGER, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception:
+        pass
+
+
+def ledger() -> list[dict]:
+    try:
+        lines = LEDGER.read_text().splitlines()
+    except Exception:
+        return []
+    out = []
+    for line in lines:
+        try:
+            out.append(json.loads(line))
+        except ValueError:
+            pass
+    return out
+
+
+def run(cmd: list, *, athlete: str | None = None, env: dict | None = None, label: str = "",
+        **kwargs):
     """subprocess.run for a `claude -p` call, billed to `athlete`'s account, with the one
     retry on Max if the key is refused. Same return value as subprocess.run."""
     use = env_for(athlete, env)
-    r = subprocess.run(cmd, env=use, **kwargs)
+    keyed = uses_key(use)
+    run_cmd, sid = pin(cmd) if keyed else (cmd, None)
+    t0 = now()
+    try:
+        r = subprocess.run(run_cmd, env=use, **kwargs)
+    finally:
+        if keyed:
+            record(sid, t0, athlete or "", label)
     out = r.stdout if isinstance(r.stdout, str) else ""
     err = r.stderr if isinstance(r.stderr, str) else ""
     if failed(use, out, err):
