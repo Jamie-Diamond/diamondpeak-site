@@ -34,7 +34,7 @@ from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent             # ClaudeCoach/
 SHADOW_DIR = Path.home() / "Library/Logs/ClaudeCoach/shadow"
-SHADOW_UNTIL = date(2026, 10, 16)                           # 7 days from 10 Oct
+SHADOW_UNTIL = date(2026, 10, 19)                           # 10-16 Oct, then 3 days on the fixed prompts (Jamie, 16 Oct)
 # strava_fetch too: without it every Haiku debrief fell back to ICU swim paces and flagged
 # them "~2-4s pessimistic" for Jamie, who has Strava (13 Oct 2026). It only reads Strava.
 TOOLS = "Read,Grep,Bash(python3 ClaudeCoach/lib/icu_fetch.py:*),Bash(python3 ClaudeCoach/lib/strava_fetch.py:*)"
