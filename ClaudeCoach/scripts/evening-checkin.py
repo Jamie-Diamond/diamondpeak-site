@@ -37,6 +37,7 @@ from strength_ask import strength_ask  # noqa: E402  strength debrief question
 from coaching_levels import level_block as _level_block
 import illness as illness_lib   # structured illness/compromised flag (surfacing gate)
 import ops_log
+import claude_billing
 import planning_pause    # tracking-only athletes: no prescribing, no adherence
 import did_happen        # Yes / No buttons on "Did the [session] happen today?"
 
@@ -424,8 +425,9 @@ def run_athlete(slug, athlete_cfg):
     prompt += coaching_prefs.prompt_note(slug)
 
     with open(log_file, "a") as lf:
-        result = subprocess.run(
+        result = claude_billing.run(
             [CLAUDE, "-p", "--allowedTools", TOOLS, "--model", "haiku", "--effort", "high"],
+            athlete=slug,
             input=prompt,  # prompt on stdin, not argv (MAX_ARG_STRLEN)
             stdout=subprocess.PIPE, stderr=lf, text=True,
             cwd=PROJECT_DIR, timeout=180,

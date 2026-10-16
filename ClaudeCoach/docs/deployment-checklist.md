@@ -129,3 +129,23 @@ systemctl restart claudecoach-bot expense-bot
 # 4. revoke the OLD token in the Anthropic console (rotation is not complete
 #    until the old token is revoked)
 ```
+
+---
+
+## 8. Secrets — Claude API key (athletes' coaching, 16 Oct 2026)
+
+The business API key lives only in `/etc/claudecoach/anthropic-api-key` (chmod 600,
+root:root). **Never put `ANTHROPIC_API_KEY` in `cc.env`, a unit's EnvironmentFile or any
+shell profile**: in `claude -p` the CLI always uses an API key over the OAuth token, so
+every dev session would move onto the credit. `lib/claude_billing.py` adds the key per
+spawn, only for athletes billed to it in `config/claude-billing.json`. Full notes:
+`docs/api-key-billing.md`.
+
+```bash
+# save or rotate the key (hidden prompt; nothing lands in shell history)
+read -rsp "Paste key: " k && umask 077 && printf "%s\n" "$k" > /etc/claudecoach/anthropic-api-key
+# prove it works (one Haiku call on the key, whatever the switch says)
+python3 ClaudeCoach/lib/claude_billing.py --test-key
+# status: switch, key, breaker, who is on which account
+python3 ClaudeCoach/lib/claude_billing.py
+```

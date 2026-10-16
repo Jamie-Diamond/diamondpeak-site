@@ -1231,7 +1231,7 @@ def _plan(args):
             proc = claude_call.run_claude(
                 prompt, model=args.model,
                 fallback=[claude_call.FABLE if args.model == claude_call.OPUS else claude_call.OPUS],
-                cwd=PROJECT_DIR, timeout=840, label=args.athlete,
+                cwd=PROJECT_DIR, timeout=840, label=args.athlete, athlete=args.athlete,
             )
             try:
                 proposal = extract_json(proc.stdout.strip())

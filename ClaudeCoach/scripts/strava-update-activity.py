@@ -19,6 +19,7 @@ from icu_api import IcuClient
 from strava_client import StravaClient, safe_to_auto_write_description
 import public_text_guard
 import ops_log
+import claude_billing
 from claude_call import is_auth_failure
 
 
@@ -165,8 +166,10 @@ Total under 300 characters. Output nothing else."""
     fallback = f"Aim: {entry.get('name', sport)}.\n{metrics_str}"
     try:
         claude_env = _resolve_claude_env()
-        result = subprocess.run(
+        # label is the athlete's slug (the one caller passes label=slug): it says who pays.
+        result = claude_billing.run(
             [CLAUDE, "-p", "--model", "haiku", "--effort", "high"],
+            athlete=label or None,
             input=prompt,  # prompt on stdin, not argv (MAX_ARG_STRLEN)
             capture_output=True, text=True, cwd=PROJECT_DIR, timeout=60,
             env=claude_env,

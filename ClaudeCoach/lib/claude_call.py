@@ -81,6 +81,14 @@ try:
 except Exception:
     _ops_log = None
 
+# Which account pays (lib/claude_billing.py): the API key for an athlete billed to it,
+# else the Max subscription. Soft for the same reason as ops_log; without it every call
+# simply stays on Max, as before 16 Oct 2026.
+try:
+    import claude_billing as _billing
+except Exception:
+    _billing = None
+
 
 def is_limit_message(text: str) -> bool:
     """True if `text` looks like a rate-limit / overload notice rather than a
@@ -197,7 +205,8 @@ class ClaudeResult:
 
 def run_claude(prompt, model=SONNET, *, fallback=None, allowed_tools=None,
                extra_args=None, cwd=None, timeout=300,
-               no_session_persistence=False, stderr=None, label="", env=None):
+               no_session_persistence=False, stderr=None, label="", env=None,
+               athlete=None):
     """Run `claude -p`, retrying down the fallback chain on a limit/overload.
 
     prompt              : the prompt, piped to the CLI on stdin (not argv)
@@ -219,12 +228,30 @@ def run_claude(prompt, model=SONNET, *, fallback=None, allowed_tools=None,
                           {**os.environ, "CC_ATHLETE_SCOPE": slug} so lib/icu_fetch.py
                           refuses calendar writes to any other athlete. Per-spawn by
                           design — os.environ must not be mutated for this.
+    athlete             : slug of the athlete this call coaches. Names who pays: an athlete
+                          billed to the API key in config/claude-billing.json runs on it,
+                          everyone else (and every call without one: dev work, bug fixes,
+                          shadow runs) on Max. A refused key is retried once on Max.
 
     Returns a ClaudeResult. On a fully-capped chain, returns the last (limited)
     result so callers can still inspect/relay it.
     """
     chain = [model] + (fallback if fallback is not None else list(DEFAULT_FALLBACK.get(model, [])))
     last = None
+    run_env = _billing.env_for(athlete, env) if _billing else env
+
+    def _spawn(cmd):
+        # The prompt goes on stdin, never argv: a single argv element is
+        # capped at MAX_ARG_STRLEN (128 KiB on Linux) and exec() fails
+        # outright with E2BIG once a generated prompt crosses it. stdin has
+        # no such limit.
+        return subprocess.run(
+            cmd,
+            input=prompt,
+            stdout=subprocess.PIPE,
+            stderr=(stderr if stderr is not None else subprocess.PIPE),
+            text=True, cwd=cwd, timeout=timeout, env=run_env,
+        )
 
     for i, m in enumerate(chain):
         cmd = [CLAUDE, "-p", "--model", m] + effort_args(m)
@@ -237,17 +264,15 @@ def run_claude(prompt, model=SONNET, *, fallback=None, allowed_tools=None,
 
         _t0 = time.monotonic()
         try:
-            # The prompt goes on stdin, never argv: a single argv element is
-            # capped at MAX_ARG_STRLEN (128 KiB on Linux) and exec() fails
-            # outright with E2BIG once a generated prompt crosses it. stdin has
-            # no such limit.
-            r = subprocess.run(
-                cmd,
-                input=prompt,
-                stdout=subprocess.PIPE,
-                stderr=(stderr if stderr is not None else subprocess.PIPE),
-                text=True, cwd=cwd, timeout=timeout, env=env,
-            )
+            r = _spawn(cmd)
+            # A refused API key (credit used up, spend limit, revoked) is not a model cap
+            # or an expired subscription: the same model again, on Max, answers. Checked
+            # first, because "spend limit reached" also matches _LIMIT_RE.
+            if _billing and _billing.failed(run_env, r.stdout or "",
+                                            r.stderr if isinstance(r.stderr, str) else ""):
+                run_env = _billing.fall_back(run_env, athlete or label,
+                                             (r.stdout or "") or (r.stderr or ""))
+                r = _spawn(cmd)
             out = r.stdout or ""
             err = r.stderr or ""
             rc = r.returncode

@@ -1,0 +1,6 @@
+{
+  "_README": "Which Claude account pays for each athlete's coaching. Read by ClaudeCoach/lib/claude_billing.py; tracked in git so a change deploys through cc-gitpull. enabled:false keeps EVERY call on Jamie's Max subscription. When true, athletes in api_athletes (a list, or \"all\" so a new sign-up lands on the key with no action) are coached on the business API key in /etc/claudecoach/anthropic-api-key; anyone in subscription_athletes always stays on Max. Dev work, bug fixes, shadow runs and rule tidy never use the key. On hold until the daily messages are on Haiku (Jamie, 16 Oct 2026).",
+  "enabled": false,
+  "api_athletes": ["fred", "jmccabe"],
+  "subscription_athletes": ["jamie"]
+}

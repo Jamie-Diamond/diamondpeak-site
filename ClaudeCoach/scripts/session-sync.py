@@ -511,7 +511,7 @@ def run_athlete(slug: str, athlete_cfg: dict, claude_pass: bool = False) -> None
             # claude_call falls back to Sonnet if Haiku fails.
             result = claude_call.run_claude(
                 prompt, model=claude_call.HAIKU, allowed_tools=TOOLS,
-                stderr=lf, cwd=PROJECT_DIR, timeout=300, label=slug,
+                stderr=lf, cwd=PROJECT_DIR, timeout=300, label=slug, athlete=slug,
             )
         model_ok = result.returncode == 0
 

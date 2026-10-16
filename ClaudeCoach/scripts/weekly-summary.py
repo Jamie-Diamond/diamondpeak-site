@@ -860,7 +860,7 @@ Wrap your entire output in <telegram> and </telegram> tags. Output nothing outsi
     prompt += coaching_prefs.prompt_note(slug)
     result = claude_call.run_claude(
         prompt, model=claude_call.SONNET, allowed_tools=TOOLS,
-        cwd=PROJECT_DIR, timeout=900, label=slug,
+        cwd=PROJECT_DIR, timeout=900, label=slug, athlete=slug,
     )
 
     if result.stderr:

@@ -551,6 +551,7 @@ def run_athlete(slug, athlete_cfg):
         result = claude_call.run_claude(
             prompt, model=claude_call.SONNET, fallback=[claude_call.OPUS],
             allowed_tools=TOOLS, stderr=lf, cwd=PROJECT_DIR, timeout=180, label=slug,
+            athlete=slug,
         )
 
     import re as _re

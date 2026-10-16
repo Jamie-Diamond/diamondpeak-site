@@ -24,6 +24,7 @@ LOG_DIR         = Path.home() / "Library/Logs/ClaudeCoach"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(BASE / "lib"))
 import ops_log
+import claude_billing
 
 TOOLS = "Read,Bash"
 
@@ -84,8 +85,9 @@ def run_athlete(slug, athlete_cfg):
     prompt = _build_prompt(slug, first_name, reminded_ids)
 
     with open(log_file, "a") as lf:
-        result = subprocess.run(
+        result = claude_billing.run(
             [CLAUDE, "-p", "--allowedTools", TOOLS, "--model", "haiku", "--effort", "high"],
+            athlete=slug,
             input=prompt,  # prompt on stdin, not argv (MAX_ARG_STRLEN)
             stdout=subprocess.PIPE, stderr=lf, text=True,
             cwd=PROJECT_DIR, timeout=120,

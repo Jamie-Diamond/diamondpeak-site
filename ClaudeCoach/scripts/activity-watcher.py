@@ -105,6 +105,7 @@ import write_verify            # read-back verdicts for the Strava writes below
 import heat as heat_lib
 import profile_fields
 import claude_call
+import claude_billing
 import hr_quality              # per-activity HR trust (wrist-sensor artefacts)
 import baseline as baseline_lib   # new athletes' baseline block: test capture + close
 import duplicates                  # a session in Intervals.icu twice: ask, then delete or merge
@@ -1684,8 +1685,9 @@ def _strava_description(first_name: str, sport: str, analysis: str,
                          plan_delta_raw: str | None, session_entry: dict | None,
                          laps: list | None = None, splits: list | None = None,
                          segment_prs: list | None = None,
-                         coaching_level: str = "mid") -> str:
-    """Call Claude to write a neutral, factual 3-line Strava description."""
+                         coaching_level: str = "mid", slug: str | None = None) -> str:
+    """Call Claude to write a neutral, factual 3-line Strava description. `slug` says
+    which account pays (lib/claude_billing.py)."""
     import re as _re
 
     clean_analysis = _re.sub(r"[*_]", "", analysis or "").strip()
@@ -1782,8 +1784,11 @@ Examples of the right tone:
 Total under 300 characters. Output nothing else."""
 
     try:
-        result = subprocess.run(
+        # claude_billing.run, not subprocess.run: on a refused API key the CLI prints the
+        # refusal to stdout, and it must never become the athlete's public description.
+        result = claude_billing.run(
             [CLAUDE, "-p", "--model", "haiku", "--effort", "high"],
+            athlete=slug,
             input=prompt,  # prompt on stdin, not argv (MAX_ARG_STRLEN)
             capture_output=True, text=True, cwd=PROJECT_DIR, timeout=60,
         )
@@ -1820,8 +1825,9 @@ If no rule covers this date, output exactly: ask
 Output only the name or "ask". Nothing else."""
 
     try:
-        result = subprocess.run(
+        result = claude_billing.run(
             [CLAUDE, "-p", "--model", "haiku", "--effort", "high"],
+            athlete=slug,
             input=prompt,  # prompt on stdin, not argv (MAX_ARG_STRLEN)
             capture_output=True, text=True, cwd=PROJECT_DIR, timeout=60,
         )
@@ -1960,7 +1966,7 @@ def _strava_update(slug: str, icu_activity_id: str, analysis: str,
         description = _strava_description(
             first_name, sport, analysis, plan_delta_raw, session_entry,
             laps=laps, splits=splits, segment_prs=segment_prs,
-            coaching_level=coaching_level,
+            coaching_level=coaching_level, slug=slug,
         )
 
         _verified_strava_write(sc, slug, strava_id, "description", description)
@@ -2196,6 +2202,7 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
         # run holds Bash, and the loop serves every athlete in turn, so a per-spawn
         # env (never os.environ) keeps one athlete's scope out of the next one's run.
         env={**os.environ, "CC_ATHLETE_SCOPE": slug},
+        athlete=slug,
     )
     if result.returncode == -1:
         # A single timeout is almost always transient (API/CPU contention — e.g. an

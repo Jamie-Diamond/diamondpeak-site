@@ -95,6 +95,12 @@ except Exception:
     def _is_limit_message(text: str) -> bool:  # type: ignore[misc]
         return False
 
+# Who pays for a chat turn (lib/claude_billing.py). Without it every turn stays on Max.
+try:
+    import claude_billing as _billing
+except Exception:
+    _billing = None
+
 
 def _resolve_claude_bin() -> str:
     found = shutil.which("claude")
@@ -1036,9 +1042,24 @@ def scoped_env(sp_file):
     ONCE per turn (call_claude/stream_claude), so a resume-fallback or model-fallback retry
     within the same turn reuses this same env and the same id, while the NEXT turn — even
     seconds later, even mid-replan — gets a fresh one and cannot be authorised by evidence
-    left over from the turn before it."""
+    left over from the turn before it.
+
+    The same slug says who pays (16 Oct 2026, lib/claude_billing.py): an athlete billed to
+    the API key gets it here, everyone else has it removed, so the turn and every Bash
+    child of it bill to one account."""
     slug = Path(sp_file).parent.name
-    return {**os.environ, "CC_ATHLETE_SCOPE": slug, "CC_TURN_ID": uuid.uuid4().hex}
+    env = {**os.environ, "CC_ATHLETE_SCOPE": slug, "CC_TURN_ID": uuid.uuid4().hex}
+    return _billing.env_for(slug, env) if _billing else env
+
+
+def _key_refused(env, *texts) -> bool:
+    """This turn ran on the API key and the key was refused (credit used up, spend limit,
+    revoked). Retry it once on Max with _off_key(); the athlete never sees the refusal."""
+    return bool(_billing) and _billing.failed(env, *texts)
+
+
+def _off_key(env, sp_file, text):
+    return _billing.fall_back(env, Path(sp_file).parent.name, text)
 
 
 def _run_once(prompt, model, extra_args, cwd, timeout=300, env=None):
@@ -1082,6 +1103,11 @@ def call_claude(user_message, config, history, model=MODEL_OPUS,
     _cost_reset()
     try:
         text, sid, rc = _run_once(prompt, model, extra, config["project_dir"], env=env)
+        if _key_refused(env, text):
+            # Before the resume check: a refused key also ends rc != 0, and clearing the
+            # session for it would throw away a conversation that was never at fault.
+            env = _off_key(env, sp_file, text)
+            text, sid, rc = _run_once(prompt, model, extra, config["project_dir"], env=env)
         if (rc != 0 or not text) and mode == "resume":
             log(f"[session] resume failed rc={rc} — retrying with fresh session")
             _clear_session(sp_file, session_model)
@@ -1152,6 +1178,7 @@ def _stream_once(prompt, model, extra_args, cwd, env=None, run=None):
     session_id = None
     t_init = t_first = None
     rc = -1
+    on_key = bool(_billing) and _billing.uses_key(env)
     try:
         # Cancel landed between registering the run and getting here (prompt
         # assembly reads a dozen files and can take a moment). Never spawn: a
@@ -1240,6 +1267,10 @@ def _stream_once(prompt, model, extra_args, cwd, env=None, run=None):
             else:
                 continue
             if streamed.strip():
+                # A refused API key arrives as a short assistant message; stream_claude
+                # retries the turn on Max, so the athlete must not watch it flash up.
+                if on_key and _billing.is_billing_failure(streamed):
+                    continue
                 if t_first is None:
                     t_first = time.time()
                 yield ("chunk", streamed.strip())
@@ -1297,6 +1328,11 @@ def stream_claude(user_message, config, history, model=MODEL_OPUS,
         _cost_reset()
         final, streamed, sid, rc, t_init, t_first = yield from _stream_once(
             prompt, model, extra, config["project_dir"], env=env, run=run)
+        if not run.cancelled and _key_refused(env, final or "", streamed):
+            # Before the resume check, for the reason given in call_claude.
+            env = _off_key(env, sp_file, final or streamed)
+            final, streamed, sid, rc, t_init, t_first = yield from _stream_once(
+                prompt, model, extra, config["project_dir"], env=env, run=run)
 
         # A dead resume fails before any text streams — fall back to a fresh session.
         # `not run.cancelled` first: a killed process looks EXACTLY like a dead
@@ -1399,13 +1435,18 @@ def call_claude_with_image(img_path, caption, config, history, model=MODEL_OPUS,
     t0 = time.time()
     _cost_reset()
     try:
-        result = subprocess.run(
-            claude_cmd(model, ["--no-session-persistence", "--output-format", "json"]),
-            input=full_prompt,
-            capture_output=True, text=True,
-            cwd=config["project_dir"], timeout=300,
-            env=scoped_env(sp_file),
-        )
+        env = scoped_env(sp_file)
+        for _ in range(2):      # the second pass only after a refused API key, on Max
+            result = subprocess.run(
+                claude_cmd(model, ["--no-session-persistence", "--output-format", "json"]),
+                input=full_prompt,
+                capture_output=True, text=True,
+                cwd=config["project_dir"], timeout=300,
+                env=env,
+            )
+            if not _key_refused(env, result.stdout, result.stderr):
+                break
+            env = _off_key(env, sp_file, result.stdout or result.stderr)
         _log_timing("image", model, "stateless", t0, None, None)
         out = result.stdout.strip()
         try:

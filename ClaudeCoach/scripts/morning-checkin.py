@@ -1209,6 +1209,7 @@ def run_athlete(slug, athlete_cfg, early=False):
             # run holds Bash, and the loop serves every athlete in turn, so a per-spawn
             # env (never os.environ) keeps one athlete's scope out of the next one's run.
             env={**os.environ, "CC_ATHLETE_SCOPE": slug},
+            athlete=slug,
         )
 
     raw = (result.stdout or "").strip()

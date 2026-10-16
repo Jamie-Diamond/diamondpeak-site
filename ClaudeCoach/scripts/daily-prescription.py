@@ -922,6 +922,7 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
             # other slug (reads are unrestricted). Per-spawn env; the loop runs every
             # athlete in turn, so mutating os.environ would leak the previous one's scope.
             env={**os.environ, "CC_ATHLETE_SCOPE": slug},
+            athlete=slug,
         )
         output = result.stdout.strip()
         stderr = result.stderr.strip()

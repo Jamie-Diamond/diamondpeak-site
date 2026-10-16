@@ -238,9 +238,13 @@ check(f"every subprocess spawn in engine.py passes env= ({len(_spawns)} found)",
 check("_run_once and _stream_once both take env",
       "def _run_once(prompt, model, extra_args, cwd, timeout=300, env=None" in _eng_src
       and "def _stream_once(prompt, model, extra_args, cwd, env=None" in _eng_src)
+# Since 16 Oct 2026 the env is passed as run_env: the caller's env (scope intact) with the
+# API key added or removed by lib/claude_billing.py, never a fresh one.
+_cc_src = (BASE / "lib" / "claude_call.py").read_text()
 check("run_claude takes env and passes it to subprocess.run",
-      "env=None" in (BASE / "lib" / "claude_call.py").read_text()
-      and "timeout=timeout, env=env" in (BASE / "lib" / "claude_call.py").read_text())
+      "env=None" in _cc_src
+      and "run_env = _billing.env_for(athlete, env) if _billing else env" in _cc_src
+      and "timeout=timeout, env=run_env" in _cc_src)
 check("daily-prescription scopes its own spawn (its prompt instructs a push_workout)",
       'CC_ATHLETE_SCOPE": slug' in (BASE / "scripts" / "daily-prescription.py").read_text())
 

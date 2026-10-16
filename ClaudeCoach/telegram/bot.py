@@ -3617,7 +3617,7 @@ def _capture_model_call(slug):
     def call(prompt):
         r = claude_call.run_claude(prompt, model=claude_call.SONNET, allowed_tools="",
                                    cwd=str(PROJECT_DIR), timeout=_READER_TIMEOUT,
-                                   label=f"capture-read:{slug}")
+                                   label=f"capture-read:{slug}", athlete=slug)
         if r.returncode != 0 or r.limited or r.auth_failed:
             raise RuntimeError(f"capture read failed ({r.model}, rc {r.returncode})")
         return r.stdout or ""
