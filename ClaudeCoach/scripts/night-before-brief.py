@@ -63,46 +63,174 @@ def _block_fact(athlete_cfg, today):
     return f"You have {weeks} weeks of work behind you for this one" if weeks >= 2 else ""
 
 
-def _pace_bands(events, run_threshold) -> list[str]:
-    """Each "NN-MM% Pace" in tomorrow's run steps as a /km band, worked out here so the model
-    quotes it rather than doing the sum (9 Oct 2026: two models gave 4:35-5:10 and
-    4:36-5:12 for the same 78-88% of 4:02). Pace = threshold / fraction."""
-    import re
-    m = re.match(r"\s*(\d+):(\d{2})", str(run_threshold or ""))
-    if not m:
-        return []
-    thr = int(m.group(1)) * 60 + int(m.group(2))
+SWIM_SPORTS = ("Swim", "OpenWaterSwim")
 
-    def fmt(sec):
-        sec = int(round(sec))
-        return f"{sec // 60}:{sec % 60:02d}"
+
+def _sport_family(sport) -> str:
+    """"ride" / "run" / "swim" / "strength" / "other" for an ICU event type."""
+    sport = str(sport or "")
+    if sport in RIDE_SPORTS or sport.endswith("Ride"):
+        return "ride"
+    if sport in RUN_SPORTS:
+        return "run"
+    if sport in SWIM_SPORTS:
+        return "swim"
+    if sport == "WeightTraining":
+        return "strength"
+    return "other"
+
+
+def _pace_s(value):
+    """Seconds from the first "M:SS" (or "M:SS.s") in a field that may carry prose
+    (Kathryn's run threshold is a whole note). None if there is no pace in it."""
+    import re
+    m = re.search(r"(?<![\d.])(\d{1,2}):([0-5]\d(?:\.\d+)?)", str(value or ""))
+    return int(m.group(1)) * 60 + float(m.group(2)) if m else None
+
+
+def _mmss(sec) -> str:
+    sec = int(sec + 0.5)            # half up: 122.5 s is 2:03, not round()'s 2:02
+    return f"{sec // 60}:{sec % 60:02d}"
+
+
+def _workouts(events):
+    return [e for e in events or [] if (e.get("category") or "WORKOUT").upper() == "WORKOUT"]
+
+
+def _pace_bands(events, run_threshold, css=None) -> list[str]:
+    """Each "NN-MM% Pace" in tomorrow's steps as a pace band, worked out here so the model
+    quotes it rather than doing the sum (9 Oct 2026: two models gave 4:35-5:10 and
+    4:36-5:12 for the same 78-88% of 4:02). Pace = threshold / fraction.
+    By sport (Jamie, 16 Oct 2026: shadow review): a swim's "% Pace" is a share of CSS
+    and comes out /100m; it used to be worked against the RUN threshold, so Kathryn's
+    technique swim was given "58-66% Pace = 7:41-8:44/km". Rides get no pace bands.
+    CSS is profile.json swim_css_per_100m, the source this file already quotes."""
+    import re
     out = []
-    for e in events or []:
-        if (e.get("category") or "WORKOUT").upper() != "WORKOUT":
+    for e in _workouts(events):
+        fam = _sport_family(e.get("type"))
+        if fam == "run":
+            thr, unit = _pace_s(run_threshold), "/km"
+        elif fam == "swim":
+            thr, unit = _pace_s(css), "/100m"
+        else:
+            continue
+        if not thr:
             continue
         for lo, hi in re.findall(r"(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)%\s*Pace",
                                  str(e.get("description") or "")):
-            band = f"{lo}-{hi}% Pace = {fmt(thr / (float(hi) / 100))}-{fmt(thr / (float(lo) / 100))}/km"
+            band = (f"{'Run' if fam == 'run' else 'Swim'} {lo}-{hi}% Pace = "
+                    f"{_mmss(thr / (float(hi) / 100))}-{_mmss(thr / (float(lo) / 100))}{unit}")
             if band not in out:
                 out.append(band)
     return out
 
 
-def _form_and_cap(client, today: date) -> tuple[str, str]:
-    """("+20.9 (Fresh)", "146") from Intervals.icu: today's Form (CTL - ATL) with the
-    morning card's bands (> +10 Fresh, < -20 Heavy, else In training), and the top of the
-    run Z2 HR zone. Worked out here so the brief quotes them: left to the model, two runs
-    of the same prompt gave Form +21 and +14.5, and one gave no HR cap at all."""
+def _power_bands(events, ftp) -> list[str]:
+    """Each %FTP step in tomorrow's rides ("50-58%", "95%", "88-94% FTP") as watts, worked
+    out here (Jamie, 16 Oct 2026: shadow review: left to the model, Sonnet derived
+    "187-199 W" from FTP against "never re-derive" and Haiku left the watts out).
+    W = FTP x fraction, same FTP as the thresholds line (profile.json ftp_watts).
+    % HR / % LTHR / % Pace / % MMP steps are not power and are skipped."""
+    import re
+    try:
+        ftp = float(ftp)
+    except (TypeError, ValueError):
+        return []
+    if ftp <= 0:
+        return []
+    out = []
+    for e in _workouts(events):
+        if _sport_family(e.get("type")) != "ride":
+            continue
+        for lo, hi in re.findall(
+                r"(?<![\d.])(\d+(?:\.\d+)?)(?:\s*-\s*(\d+(?:\.\d+)?))?\s*%(?!\s*(?:Pace|HR|LTHR|MMP))",
+                str(e.get("description") or "")):
+            if hi:
+                band = f"Ride {lo}-{hi}% FTP = {round(ftp * float(lo) / 100)}-{round(ftp * float(hi) / 100)} W"
+            else:
+                band = f"Ride {lo}% FTP = {round(ftp * float(lo) / 100)} W"
+            if band not in out:
+                out.append(band)
+    return out
+
+
+def _np_if(event, ftp) -> str:
+    """"NP target 188 W (IF 0.62)" for a planned ride, from Intervals.icu's planned
+    intensity (icu_intensity, IF x 100) and the same FTP as the power bands. Worked out
+    here, to 2 dp (Jamie, 16 Oct 2026: shadow review: the template said "(IF [X.XX])"
+    and the rules said "never round", so Haiku printed IF 0.648). "" if not planned."""
+    try:
+        i = float(event.get("icu_intensity")) / 100
+        ftp = float(ftp)
+    except (TypeError, ValueError):
+        return ""
+    if i <= 0 or ftp <= 0:
+        return ""
+    return f"NP target {round(ftp * i)} W (IF {i:.2f})"
+
+
+def _title_line(events) -> str:
+    """The brief's title, built here so the model copies it rather than reshaping the
+    sessions list (Jamie, 16 Oct 2026: shadow review: Step 3's "WeightTraining ·
+    Strength: quads · 40 min" was fed where the template wanted "[session name]").
+    Event names in calendar order, joined with " + "."""
+    names = [str(e.get("name") or "").strip() or "Session"
+             for e in sorted(events or [], key=lambda e: e.get("start_date_local") or "")]
+    return f"*Tomorrow — {' + '.join(names)}*" if names else ""
+
+
+def _target_lines(events, css, ftp, run_threshold=None, run_note="") -> list[str]:
+    """One line of target bullets per sport tomorrow, with no "Ride:" / "Strength:" label
+    (Jamie, 16 Oct 2026: shadow review: the four sport templates read like printable text,
+    so Haiku printed the labels). Only tomorrow's sports, in calendar order, once each;
+    a ride's NP/IF is filled in here (_np_if)."""
+    out, seen = [], set()
+    for e in sorted(events or [], key=lambda e: e.get("start_date_local") or ""):
+        fam = _sport_family(e.get("type"))
+        if fam == "ride":
+            np_if = _np_if(e, ftp)
+            line = ((f"• {np_if} " if np_if else "")
+                    + ("• Main set power [the W band above] " if _power_bands([e], ftp) else "")
+                    + "• HR cap [bpm] only if the planned event sets one; otherwise leave that"
+                      " bullet out, never write that none is set")
+        elif fam == "run":
+            src = "the /km band above" if _pace_bands([e], run_threshold) else "/km, as the planned event gives it"
+            line = f"• Target pace [{src}] • HR cap [bpm]{run_note}"
+        elif fam == "swim":
+            src = "the /100m band above" if _pace_bands([e], None, css) else "/100m, as the planned event gives it"
+            line = f"• Target pace [{src}] vs CSS {css or '?'} • Main set structure"
+        elif fam == "strength":
+            line = "• Main focus • Key movements"
+        else:
+            line = "• What the session is • How it should feel"
+        if line not in seen:
+            seen.add(line)
+            out.append(line)
+    return out
+
+
+def _form_and_cap(client, today: date) -> tuple[str, str, int | None]:
+    """("+20.9 (Fresh)", "146", 297) from Intervals.icu: today's Form (CTL - ATL) with the
+    morning card's bands (> +10 Fresh, < -20 Heavy, else In training), the top of the
+    run Z2 HR zone, and the Ride FTP. Worked out here so the brief quotes them: left to the
+    model, two runs of the same prompt gave Form +21 and +14.5, and one gave no HR cap at all.
+    Ride FTP is the sport-settings number the watch workout's %FTP resolves against, so
+    the brief's watts match the device (Jamie, 16 Oct 2026: shadow review: profile.json
+    said 305 W, Intervals.icu 297 W); read in the same sport-settings call as the HR cap."""
     form = cap = ""
+    ride_ftp = None
     rows = [r for r in client.get_wellness(days=2) or [] if r.get("id") == today.isoformat()]
     if rows and rows[0].get("ctl") is not None and rows[0].get("atl") is not None:
         v = float(rows[0]["ctl"]) - float(rows[0]["atl"])
         form = f"{v:+.1f} ({'Fresh' if v > 10 else 'Heavy' if v < -20 else 'In training'})"
     for ss in client.get_sport_settings() or []:
-        if "Run" in (ss.get("types") or []) and len(ss.get("hr_zones") or []) > 1:
+        types = ss.get("types") or []
+        if not cap and "Run" in types and len(ss.get("hr_zones") or []) > 1:
             cap = str(ss["hr_zones"][1])
-            break
-    return form, cap
+        if ride_ftp is None and "Ride" in types and ss.get("ftp"):
+            ride_ftp = int(ss["ftp"])
+    return form, cap, ride_ftp
 
 
 def _fuel_line(events, athlete_cfg, session_log) -> str:
@@ -162,7 +290,8 @@ def _sessions_line(events) -> str:
 
 
 def _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries, long_run_cap_km=None,
-                  pace_bands=None, form="", hr_cap="", fuel="", sessions=""):
+                  pace_bands=None, form="", hr_cap="", fuel="", sessions="",
+                  power_bands=None, title="", targets=None):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -186,7 +315,9 @@ def _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries
     if ftp:
         thresholds.append(f"FTP {ftp} W")
     if run_threshold:
-        thresholds.append(f"run threshold {run_threshold}")
+        # The pace only: Kathryn's field is a whole coaching note (Jamie, 16 Oct 2026: shadow review)
+        _rt = _pace_s(run_threshold)
+        thresholds.append(f"run threshold {_mmss(_rt)}/km" if _rt else f"run threshold {run_threshold}")
     if css:
         thresholds.append(f"swim CSS {css}/100m")
     threshold_line = f"{first_name}: " + ", ".join(thresholds) + "." if thresholds else ""
@@ -198,6 +329,8 @@ def _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries
              "Step 2 — No active injury: say nothing about injuries.")
     bands_line = ("Pace bands, already worked out (quote exactly): " + "; ".join(pace_bands)
                   if pace_bands else "")
+    power_line = ("Power bands, already worked out (quote the W exactly): " + "; ".join(power_bands)
+                  if power_bands else "")
     form_line = f"Form for the brief, already worked out (quote exactly): {form}" if form else ""
     cap_line = (f"Run HR cap for easy/Z2 running: {hr_cap} bpm (top of Z2 in Intervals.icu)"
                 if hr_cap else "")
@@ -206,6 +339,25 @@ def _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries
     run_note = ""
     if injuries:
         run_note = " Note any active injury protocols from current-state.json."
+
+    # Title and target bullets are built in code from tomorrow's events when the calendar
+    # was read (_title_line / _target_lines; Jamie, 16 Oct 2026: shadow review). Only if
+    # that read failed does the model get the generic, per-sport guide instead.
+    if title:
+        title_block = f"{title}\n(the title line: copy it exactly as written here)"
+    else:
+        title_block = "*Tomorrow — [the session name(s) from the calendar, joined with ' + ']*"
+    if targets:
+        targets_block = ("[Targets — 2-4 bullets in all, in this shape. Write only the bullets: "
+                         "no sport name or label before them.]\n" + "\n".join(targets))
+    else:
+        targets_block = (
+            "[Targets — 2-4 bullets, only for the sport(s) on tomorrow's calendar. The words "
+            "\"for a ride\" etc. are guidance, never printed: write only the bullets.]\n"
+            "for a ride: • NP target [W] (IF [X.XX], 2 decimal places) • HR cap [bpm] only if the planned event sets one; otherwise leave that bullet out, never write that none is set\n"
+            f"for a run: • Target pace [/km] • HR cap [bpm]{run_note}\n"
+            f"for a swim: • Target pace [/100m] vs CSS {css or '?'} • Main set structure\n"
+            "for strength: • Main focus • Key movements")
 
     return f"""\
 You are generating the night-before session brief for {first_name}.
@@ -222,22 +374,19 @@ Step 1 — Fetch data via Bash:
 Reference for working out targets (NEVER print these lines; they are not part of the brief):
   {threshold_line or "no thresholds on file"}
   {bands_line}
+  {power_line}
   {form_line}
   {cap_line}
 
-{"Step 3 — Tomorrow's sessions to brief, already decided (cover EVERY one of these, and no others; with two or more, title them joined with ' + '): " + sessions if sessions else "Step 3 — If no events tomorrow, or only events with planned Load < 30 AND duration < 40 min: output nothing. Stop."}
+{"Step 3 — Tomorrow's sessions to brief, already decided (cover EVERY one of these, and no others; this list is for reference, the title is given below): " + sessions if sessions else "Step 3 — If no events tomorrow, or only events with planned Load < 30 AND duration < 40 min: output nothing. Stop."}
 {long_run_cap_block}
 Step 4 — Output the night-before brief in Telegram Markdown (no preamble, no sign-off):
 
-*Tomorrow — [session name]*
+{title_block}
 
-[Sport-specific targets — 2-4 bullets:]
-Ride: • NP target [W] (IF [X.XX]) • HR cap [bpm] only if the planned event sets one; otherwise leave that bullet out, never write that none is set
-Run: • Target pace [/km] • HR cap [bpm]{run_note}
-Swim: • Target pace [/100m] vs CSS {css or '?'} • Main set structure
-Strength: • Main focus • Key movements
-Numbers (pace bands, power, HR caps, durations, Load) are copied EXACTLY as the planned
-event or the data gives them: never round, re-derive or tidy a figure.{" The Nutrition line is already worked out: copy it exactly." if fuel else ""}
+{targets_block}
+Numbers (pace bands, power bands, NP, IF, HR caps, durations, Load) are copied EXACTLY as
+this prompt, the planned event or the data gives them: never round, re-derive or tidy a figure.{" The Nutrition line is already worked out: copy it exactly." if fuel else ""}
 
 *Nutrition:* {fuel or "[g/hr carbs + ml/hr fluid — calibrated to session length and intensity. Zero if easy/recovery.]"}
 *Sleep:* ≥8h tonight
@@ -341,16 +490,24 @@ def run_athlete(slug, athlete_cfg):
         return
 
     try:
-        pace_bands = _pace_bands(events, run_threshold)
+        pace_bands = _pace_bands(events, run_threshold, css)
     except Exception:
         pace_bands = []
     form = hr_cap = ""
+    icu_ftp = None
     try:
         from icu_api import IcuClient as _Icu2
         _c = json.loads(ATHLETES_CONFIG.read_text())[slug]
-        form, hr_cap = _form_and_cap(_Icu2(_c["icu_athlete_id"], _c["icu_api_key"]), date.today())
+        form, hr_cap, icu_ftp = _form_and_cap(_Icu2(_c["icu_athlete_id"], _c["icu_api_key"]), date.today())
     except Exception as exc:
         print(f"[{slug}] form / HR cap pre-compute failed: {exc}", file=sys.stderr)
+    # Watts and NP use Intervals.icu's Ride FTP (what the device shows); profile.json
+    # ftp_watts only if ICU has none (Jamie, 16 Oct 2026: shadow review).
+    ftp = icu_ftp or ftp
+    try:
+        power_bands = _power_bands(events, ftp)
+    except Exception:
+        power_bands = []
     fuel = ""
     try:
         _sl = json.loads((adir / "session-log.json").read_text()) if (adir / "session-log.json").exists() else []
@@ -358,7 +515,8 @@ def run_athlete(slug, athlete_cfg):
     except Exception as exc:
         print(f"[{slug}] fuel pre-compute failed: {exc}", file=sys.stderr)
     # Whether to brief at all is decided here when the calendar was read (_to_brief).
-    sessions = ""
+    sessions = title = ""
+    targets = None
     if events_ok:
         _brief = _to_brief(events)
         if not _brief:
@@ -367,9 +525,13 @@ def run_athlete(slug, athlete_cfg):
                                detail="silent (no session worth a brief, decided in code)")
             return
         sessions = _sessions_line(_brief)
+        title = _title_line(_brief)
+        targets = _target_lines(_brief, css, ftp, run_threshold,
+                                " Note any active injury protocols from current-state.json." if injuries else "")
     prompt = _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries,
                            long_run_cap_km=long_run_cap, pace_bands=pace_bands,
-                           form=form, hr_cap=hr_cap, fuel=fuel, sessions=sessions)
+                           form=form, hr_cap=hr_cap, fuel=fuel, sessions=sessions,
+                           power_bands=power_bands, title=title, targets=targets)
     prompt += coaching_prefs.prompt_note(slug)
 
     with open(log_file, "a") as lf:
