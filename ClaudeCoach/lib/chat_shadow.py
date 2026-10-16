@@ -65,10 +65,14 @@ Athlete's message:
 {message}
 """
 
+# The reply must read as it would be sent, or the side-by-side compares a caveat with a
+# reply (16 Oct check: "This is a read-only run, so here's what I'd change" in the reply).
 TWIN_NOTE = ("SHADOW RE-RUN, READ-ONLY: this reply is for a side-by-side review and is "
-             "never sent. You cannot change files, the plan or the calendar here, so where "
-             "the message asks for a change, say exactly what you would change. Everything "
-             "else applies as written.\n\n")
+             "never sent. You cannot change files, the plan or the calendar here. Write the "
+             "reply exactly as you would send it, as if any change you would make had been "
+             "made, never mentioning this note. Then, only if you would have changed "
+             "something, add one last line outside the reply: WOULD CHANGE: <what>. "
+             "Everything else applies as written.\n\n")
 
 
 def model_key(model: str) -> str:
@@ -218,7 +222,11 @@ def _maybe_tell() -> None:
 
 def _tg(t: str) -> str:
     m = re.search(r"<telegram>(.*?)</telegram>", t or "", re.S)
-    return (m.group(1) if m else (t or "")).strip()
+    body = (m.group(1) if m else (t or "")).strip()
+    w = re.search(r"^WOULD CHANGE:.*$", t or "", re.M)
+    if w and w.group() not in body:
+        body += "\n[" + w.group().strip() + "]"
+    return body
 
 
 def report(days: int = 7) -> str:

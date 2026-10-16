@@ -142,3 +142,8 @@ def test_engine_hands_a_finished_turn_to_the_shadow(tmp_path, monkeypatch):
     assert out == "answer"
     [(msg, hist, sp, name, ctx, model, text, cost)] = got
     assert (msg, model, text) == ("hello", engine.MODEL_OPUS, "answer")
+
+
+def test_report_keeps_the_would_change_line():
+    t = "<telegram>45 g/hr it is.</telegram>\nWOULD CHANGE: Saturday's ride description"
+    assert cs._tg(t) == "45 g/hr it is.\n[WOULD CHANGE: Saturday's ride description]"
