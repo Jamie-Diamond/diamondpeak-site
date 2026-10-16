@@ -77,6 +77,23 @@ def _cost_add(v) -> None:
     _COST.runs.append(v)
 
 
+def _shadow(user_message, history, sp_file, athlete_name, context, model, text) -> None:
+    """Chat shadow (lib/chat_shadow.py, 16 Oct 2026): the same message answered again,
+    never sent, on the model the picker would choose and on Sonnet when Opus answered.
+    Detached and fail-soft: nothing here may delay or break the reply."""
+    try:
+        import chat_shadow
+        if not chat_shadow.active():
+            return
+        slug = Path(sp_file).parent.name
+        cost = (sum(_chat_limits.run_cost(slug, r) for r in getattr(_COST, "runs", []))
+                if _chat_limits else None)
+        chat_shadow.launch(user_message, history, sp_file, athlete_name, context, model,
+                           text, cost)
+    except Exception as e:
+        log(f"chat shadow not started: {e}")
+
+
 def _meter(sp_file) -> None:
     """Charge this thread's reply cost (the sum of its runs' own costs) to the athlete's
     chat allowance."""
@@ -1140,6 +1157,8 @@ def call_claude(user_message, config, history, model=MODEL_OPUS,
             _finish_session(sp_file, mode, st, sid, session_model)
         _log_timing("call", model, mode, t0, None, None,
                     turns=turn_idx, prompt_bytes=len(prompt or ""))
+        if rc == 0 and text:
+            _shadow(user_message, history, sp_file, athlete_name, context, model, text)
         _meter(sp_file)
         return text or "(no response)"
     except subprocess.TimeoutExpired:
@@ -1390,6 +1409,8 @@ def stream_claude(user_message, config, history, model=MODEL_OPUS,
             log(f"[cancel] run {run.run_id} stopped, {len(text)} chars discarded")
             yield ("cancelled", text)
             return
+        if rc == 0 and text:
+            _shadow(user_message, history, sp_file, athlete_name, context, model, text)
         yield ("final", text or "(no response)")
     finally:
         # finally, not a trailing call: the consumer breaks out of its loop on
