@@ -4872,7 +4872,9 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     var d = state.data, p = d.profile || {}, rp = d.racePredictor || {};
     var sv = d.season;
     var h = '';
-    var triSeason = !sv || !sv.aRace || sv.aRace.kind === 'tri';
+    // A goal with no race (Kathryn's "Run faster") gets none of the race-day cards: the
+    // splits table showed her an old triathlon (Jamie, 16 Oct 2026).
+    var triSeason = !sv || (sv.aRace ? sv.aRace.kind === 'tri' : !sv.goal);
 
     if (sv) {
       var a = sv.aRace;
@@ -4933,7 +4935,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
         '<div class="bar' + (now < lo ? ' warn' : '') + '"><i style="width:' +
         Math.min(100, now / hi * 100).toFixed(0) + '%"></i></div></div>',
         { foot: now >= lo ? 'Inside the target band.'
-                          : 'Below the band — ' + (lo - now).toFixed(1) + ' CTL to find.' });
+                          : 'Below the band: ' + (lo - now).toFixed(1) + ' Fitness still to build.' });
     }
 
     if (triSeason && rp.rows && rp.rows.length) {
@@ -6081,6 +6083,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     ["4.016", "2026-10-16", "Athletes & usage: the margin is no longer shown", 1],
     ["4.015", "2026-10-16", "Athletes & usage shows the average coached athlete's month by model (messages, cost, cost each) and the margin at \u00a345", 1],
     ["4.014", "2026-10-16", "Athletes & usage shows what the API key spent this month against the $100 credit, and who is on it", 1],
+    ["4.014", "2026-10-16", "Goals: a goal without a race no longer shows race-day cards; Fitness in plain words", 0],
     ["4.013", "2026-10-16", "Today shows Fitness and Form, each with a word for where you are", 0],
     ["4.012", "2026-10-15", "Sign-up: tick every box on Intervals.icu; Connect Strava only for an Apple Watch; the checklist reads cleaner", 0],
     ["4.012", "2026-10-15", "Sign-up no longer waits for your older training to arrive: it is optional, asked for afterwards", 0],
