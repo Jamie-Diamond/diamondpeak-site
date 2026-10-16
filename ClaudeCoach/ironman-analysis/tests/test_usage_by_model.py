@@ -75,14 +75,14 @@ def test_model_view_averages_coached_athletes_and_gives_the_margin(monkeypatch, 
                                                   "usd_per_gbp": 1.325})
     import planning_pause
     monkeypatch.setattr(planning_pause, "is_paused", lambda s, cfg=None, path=None: s == "calum")
-    today = date(2026, 10, 30)
+    today = date(2026, 10, 9)
     d = _d({"fred":  [("2026-10-03", "chat", "opus", 9.0, 30), ("2026-10-03", "scheduled", "haiku", 1.0, 100)],
             "james": [("2026-10-03", "chat", "sonnet", 4.0, 30), ("2026-10-03", "scheduled", "haiku", 1.0, 100)],
             "jamie": [("2026-10-03", "chat", "opus", 99.0, 300)],     # the coach: left out
             "calum": [("2026-10-03", "scheduled", "haiku", 0.5, 10)]})  # tracking only: left out
     v = ul.model_view(d, {s: {"name": s.title()} for s in d}, "jamie", today)
     assert v["athletes"] == ["Fred", "James"]
-    k = ul.DAYS_PER_MONTH / 28                                     # 28-day window to a month
+    k = ul.DAYS_PER_MONTH / ul.MODEL_WINDOW_DAYS                   # the window, to a month
     assert v["avg_month"] == pytest.approx((10 + 5) / 2 * k, abs=0.01)
     assert v["margin"] == pytest.approx(1 - v["avg_month"] / (45 / 1.2 * 1.325), abs=0.001)
     rows = {(r["kind"], r["model"]): r for r in v["rows"]}

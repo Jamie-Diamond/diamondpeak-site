@@ -40,6 +40,9 @@ DAYS_PER_MONTH = 365.25 / 12          # the average month, for the Avg / month c
 _ur = None
 _cache: dict = {}          # path -> ((mtime, size, windows), (athlete, job, days, dev, api, models))
 MODEL_KEYS = ("haiku", "sonnet", "opus", "fable")
+# The by-model view is "how are we doing now", and costs move week to week as jobs change
+# model; 7 days also holds exactly one of each weekly job.
+MODEL_WINDOW_DAYS = 7
 _lock = threading.Lock()
 
 
@@ -244,14 +247,14 @@ def model_view(d: dict, athletes: dict, coach: str | None, today: date) -> dict:
     """The average coached athlete's month by model, and the margin at our price.
 
     Coached: a registered athlete, not tracking-only, not the coach (whose chat is half
-    development). Each athlete's last RATE_WINDOW_DAYS (or since their first cost) is
-    scaled to a month, then averaged, so someone who joined last week is not diluted."""
+    development). Each athlete's last MODEL_WINDOW_DAYS (or since their first cost) is
+    scaled to a month, then averaged, so someone who joined this week is not diluted."""
     try:
         import planning_pause
         paused = lambda s: planning_pause.is_paused(s, athletes.get(s))   # noqa: E731
     except Exception:
         paused = lambda s: False                                           # noqa: E731
-    win_start = max(LOG_START, today - timedelta(days=RATE_WINDOW_DAYS - 1))
+    win_start = max(LOG_START, today - timedelta(days=MODEL_WINDOW_DAYS - 1))
     coached = [s for s in athletes if s != coach and not paused(s) and d.get(s, {}).get("all")]
     rows, totals = defaultdict(lambda: [0.0, 0.0]), []
     for s in coached:
