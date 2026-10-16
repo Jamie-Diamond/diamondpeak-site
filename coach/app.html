@@ -16,7 +16,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <!-- Glass style (glass.css) and Plus Jakarta Sans: the only look since 3.78 (Jamie,
      14 Oct 2026). Set before first paint. -->
-<link rel="stylesheet" href="glass.css?v=172">
+<link rel="stylesheet" href="glass.css?v=173">
 <script>try{document.documentElement.classList.add('glass');
 var gf="jakarta";document.documentElement.setAttribute("data-font",gf);
 var GF={inter:'Inter:wght@400;500;600;700',manrope:'Manrope:wght@400;500;600;700',jakarta:'Plus+Jakarta+Sans:wght@400;500;600;700'};
@@ -417,6 +417,7 @@ main{max-width:var(--sheet);margin:0 auto;padding:0 0 26px}
 /* ── hero figures ───────────────────────────────────────────────────────── */
 
 .figures{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--rule);border-radius:3px;background:var(--paper);overflow:hidden;margin:0 0 15px}
+.figures.two{grid-template-columns:repeat(2,1fr)}
 .fig{padding:13px 12px 12px;border-right:1px solid var(--rule-soft);text-align:center}
 .fig:last-child{border-right:0}
 .fig .n{font-family:'Libre Baskerville',serif;font-size:29px;line-height:1;letter-spacing:-.025em;display:block}
@@ -1460,6 +1461,6 @@ body.drawn{overflow:hidden}
      broken launch. A new URL cannot hit that cache entry. It always equals the
      number in sw.js CACHE (peak-vN): bump both on every release, enforced by
      ClaudeCoach/ironman-analysis/tests/test_peak_release.py. -->
-<script src="app.js?v=172" defer></script>
+<script src="app.js?v=173" defer></script>
 </body>
 </html>

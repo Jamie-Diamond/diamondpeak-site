@@ -678,16 +678,20 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       '</section>';
 
     var rcap = d.rampCap != null ? d.rampCap : 5;
-    h += '<div class="figures">' +
+    // Two tiles (Jamie, 16 Oct 2026: "fatigue isn't adding anything if we have form" - Form
+    // is Fitness minus Fatigue, and Fatigue is still the line in the chart below). Each
+    // gets a word instead of CTL / TSB: Fitness by its weekly change, Form by how fresh.
+    var fitWord = ramp == null ? '' : ramp >= 1 ? 'rising' : ramp <= -1 ? 'falling' : 'holding';
+    var tsb = Number(k.tsb);
+    var formWord = tsb > 5 ? 'fresh' : tsb >= -10 ? 'balanced' : tsb >= -30 ? 'building, tired' : 'very tired';
+    h += '<div class="figures two">' +
       // The ramp lives on Fitness, as its weekly change (Jamie, 15 Oct 2026: its own tile
       // "looks silly"); amber when it runs past the athlete's weekly guide either way.
-      (ramp != null
-        ? '<div class="fig"><span class="n">' + esc(Number(k.ctl).toFixed(1)) + '</span>' +
-          '<span class="l">Fitness</span><span class="d' + (Math.abs(ramp) > rcap ? ' warn' : '') + '">' +
-          esc(signed(ramp) + ' / wk') + '</span></div>'
-        : fig(Number(k.ctl).toFixed(1), 'Fitness', 'CTL')) +
-      fig(Number(k.atl).toFixed(1), 'Fatigue', 'ATL') +
-      fig(signed(k.tsb), 'Form', 'TSB', k.tsb >= 0 ? 'pos' : (k.tsb <= -20 ? 'neg' : 'flat')) +
+      '<div class="fig"><span class="n">' + esc(Number(k.ctl).toFixed(1)) + '</span>' +
+        '<span class="l">Fitness</span><span class="d' +
+        (ramp != null && Math.abs(ramp) > rcap ? ' warn' : '') + '">' +
+        esc(ramp != null ? signed(ramp) + ' / wk \u00b7 ' + fitWord : '') + '</span></div>' +
+      fig(signed(k.tsb), 'Form', formWord, k.tsb >= 0 ? 'pos' : (k.tsb <= -20 ? 'neg' : 'flat')) +
       '</div>';
 
     // These figures come from ICU's own wellness row for today, which reflects
@@ -6045,6 +6049,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.013", "2026-10-16", "Today shows Fitness and Form, each with a word for where you are", 0],
     ["4.012", "2026-10-15", "Sign-up: tick every box on Intervals.icu; Connect Strava only for an Apple Watch; the checklist reads cleaner", 0],
     ["4.012", "2026-10-15", "Sign-up no longer waits for your older training to arrive: it is optional, asked for afterwards", 0],
     ["4.011", "2026-10-15", "Sign-up links Intervals.icu with one Connect button and a checklist that ticks itself; Settings offers Reconnect Intervals.icu", 0],
