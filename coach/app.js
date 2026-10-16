@@ -4935,7 +4935,10 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
         '<div class="bar' + (now < lo ? ' warn' : '') + '"><i style="width:' +
         Math.min(100, now / hi * 100).toFixed(0) + '%"></i></div></div>',
         { foot: now >= lo ? 'Inside the target band.'
-                          : 'Below the band: ' + (lo - now).toFixed(1) + ' Fitness still to build.' });
+                          // A share, not CTL points (Jamie, 16 Oct 2026: "about 30% fitter
+                          // is easier to understand"), to the nearest 5%.
+                          : 'You need to be about ' + Math.max(5, Math.round((lo - now) / Math.max(now, 1) * 20) * 5) +
+                            '% fitter to reach the band.' });
     }
 
     if (triSeason && rp.rows && rp.rows.length) {
@@ -6082,8 +6085,9 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   var CHANGELOG = [
     ["4.016", "2026-10-16", "Athletes & usage: the margin is no longer shown", 1],
     ["4.015", "2026-10-16", "Athletes & usage shows the average coached athlete's month by model (messages, cost, cost each) and the margin at \u00a345", 1],
+    ["4.015", "2026-10-16", "Goals: how much fitter you need to be, as a percentage", 0],
     ["4.014", "2026-10-16", "Athletes & usage shows what the API key spent this month against the $100 credit, and who is on it", 1],
-    ["4.014", "2026-10-16", "Goals: a goal without a race no longer shows race-day cards; Fitness in plain words", 0],
+    ["4.014", "2026-10-16", "Goals: a goal without a race no longer shows race-day cards; the fitness gap as a percentage", 0],
     ["4.013", "2026-10-16", "Today shows Fitness and Form, each with a word for where you are", 0],
     ["4.012", "2026-10-15", "Sign-up: tick every box on Intervals.icu; Connect Strava only for an Apple Watch; the checklist reads cleaner", 0],
     ["4.012", "2026-10-15", "Sign-up no longer waits for your older training to arrive: it is optional, asked for afterwards", 0],
