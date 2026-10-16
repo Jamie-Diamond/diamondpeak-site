@@ -565,7 +565,7 @@ def _baseline_rows(slug: str) -> list:
         return []
 
 
-def _off_normal_line(wellness_rows, today: date) -> str:
+def _off_normal_line(wellness_rows, today: date, exclude=None) -> str:
     """The wellness numbers the card shows: only those off THIS athlete's normal, with the
     normal beside them (Jamie, 12 Oct 2026: "show only when off normal"). Normal = the mean
     of the previous BASELINE_DAYS days with data (needs half of them; Jamie: "7 day isn't
@@ -586,7 +586,7 @@ def _off_normal_line(wellness_rows, today: date) -> str:
     import wellness_normal as WN
     out = []
     for key, name in (("hrv", "HRV"), ("restingHR", "resting HR")):
-        a = WN.assess(wellness_rows, key, today)
+        a = WN.assess(wellness_rows, key, today, exclude)
         if not a:
             continue
         if a["day_off"]:
@@ -1009,7 +1009,8 @@ def run_athlete(slug, athlete_cfg, early=False):
                            post_race_recovery=_post_race_recovery(athlete_cfg),
                            watchdog_flags=_recent_flags(adir, date.today(), skip=_flag_skip(
                                athlete_cfg, wellness_rows)),
-                           off_normal=_off_normal_line(baseline_rows, date.today()))
+                           off_normal=_off_normal_line(baseline_rows, date.today(),
+                                                    profile.get("baseline_exclude_ranges")))
     prompt += coaching_prefs.prompt_note(slug)
 
     with open(log_file, "a") as lf:
