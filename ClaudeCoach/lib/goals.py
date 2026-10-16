@@ -41,6 +41,7 @@ import json
 import re
 from datetime import date, timedelta
 from pathlib import Path
+import profile_fields
 
 BASE = Path(__file__).resolve().parent.parent            # ClaudeCoach/
 
@@ -386,10 +387,13 @@ def start_values(profile: dict, ctl=None) -> dict:
     out = {}
     if ctl:
         out["ctl"] = round(float(ctl), 1)
+    # Paces through profile_fields.pace(): Kathryn's threshold field is a whole coaching
+    # note, and Goals > Progress showed all of it to her (Jamie, 16 Oct 2026: "What is this!").
     for k, src in (("ftp", "ftp_watts"), ("run_threshold", "run_threshold_pace_per_km"),
                    ("css", "swim_css_per_100m")):
         if profile.get(src):
-            out[k] = profile[src]
+            out[k] = profile[src] if k == "ftp" else (profile_fields.pace(profile[src]) or None)
+    out = {k: v for k, v in out.items() if v is not None}
     return out
 
 
@@ -568,10 +572,11 @@ def progress(cfg: dict, profile: dict, ctl_now=None) -> list:
         if t == "ftp":
             row("FTP", sv.get("ftp"), profile.get("ftp_watts"), True, "W")
         elif t == "run":
-            row("Threshold pace", sv.get("run_threshold"),
-                profile.get("run_threshold_pace_per_km"), False, "/km")
+            row("Threshold pace", profile_fields.pace(sv.get("run_threshold")),
+                profile_fields.pace(profile.get("run_threshold_pace_per_km")), False, "/km")
         elif t == "swim":
-            row("CSS", sv.get("css"), profile.get("swim_css_per_100m"), False, "/100m")
+            row("CSS", profile_fields.pace(sv.get("css")),
+                profile_fields.pace(profile.get("swim_css_per_100m")), False, "/100m")
     if ctl_now is not None:
         row("Fitness", sv.get("ctl"), round(float(ctl_now), 1), True)
     return rows
