@@ -48,16 +48,21 @@ def _score_hrv(today_hrv, baseline_hrv):
 
 
 def _score_tsb(tsb):
-    """TSB (form) → 0-100. Optimal window is −10 to +5."""
+    """TSB (form) → 0-100, on Peak's Form bands (coach/app.js, form_word below).
+
+    Fresh is never a recovery penalty (Jamie, 16 Oct 2026: shadow review). The old scorer
+    marked TSB ≥ +10 "too fresh → detraining" (65), which only went unnoticed because TSB
+    never reached it (see _parse_wellness). Detraining is a planning question, not a
+    readiness one: on a fresh day with good HRV and sleep the athlete IS ready. And
+    "building, tired" down to −20 is normal training, so it scores as such (the card's
+    Form rule has always called −1 to −20 normal)."""
     if tsb is None:
         return None
-    if tsb >= 10:    return 65   # too fresh → detraining risk
-    if tsb >= 5:     return 80
-    if tsb >= -5:    return 95
-    if tsb >= -15:   return 85
-    if tsb >= -25:   return 65
-    if tsb >= -35:   return 40
-    return 15
+    if tsb >= -10:   return 95   # fresh / balanced
+    if tsb >= -20:   return 85   # building, tired: normal training
+    if tsb >= -30:   return 70   # building, tired: a heavy run of training
+    if tsb >= -40:   return 45   # very tired
+    return 20
 
 
 def _score_tsb_taper(tsb):
@@ -118,6 +123,18 @@ def _score_pain(pain):
     return 15
 
 
+def form_word(tsb):
+    """Peak's Form word (coach/app.js, Peak 4.013), so the card says what Peak's Today tab
+    shows: > 5 fresh, −10..5 balanced, −30..−10 building, tired, < −30 very tired.
+    None when there is no Form figure: the card then says nothing about freshness."""
+    if tsb is None:
+        return None
+    if tsb > 5:      return "fresh"
+    if tsb >= -10:   return "balanced"
+    if tsb >= -30:   return "building, tired"
+    return "very tired"
+
+
 # ── Composite score ───────────────────────────────────────────────────────────
 
 _WEIGHTS = {"hrv": 0.35, "tsb": 0.30, "sleep": 0.25, "pain": 0.10}
@@ -145,6 +162,12 @@ def compute(hrv_today=None, hrv_baseline=None, tsb=None, sleep_hrs=None, pain=0,
         "sleep": _score_sleep(sleep_hrs, sleep_score),
         "pain":  _score_pain(pain if pain is not None else 0),
     }
+    # Form is training load, not a reading of the body (Jamie, 16 Oct 2026: shadow review,
+    # when TSB first reached this score). With no HRV and no sleep it would be the whole
+    # score, and an athlete with no sleep device would go AMBER every building week on
+    # load alone. So it only weighs in beside at least one physiological signal.
+    if raw["hrv"] is None and raw["sleep"] is None:
+        raw["tsb"] = None
 
     available   = {k: v for k, v in raw.items() if v is not None}
     missing     = [k for k, v in raw.items() if v is None]
@@ -229,7 +252,14 @@ def _parse_wellness(rows):
     today_row   = sorted_rows[-1]
 
     hrv_today    = today_row.get("hrv") or today_row.get("hrvSDNN")
-    tsb_val      = today_row.get("form") or today_row.get("atl_form")
+    # Intervals.icu wellness rows carry ctl and atl, never `form` or `atl_form`, so this
+    # was always None and Form never reached the recovery score or the morning card
+    # (Jamie, 16 Oct 2026: shadow review). Form = Fitness − Fatigue, as Peak shows it.
+    tsb_val      = today_row.get("form")
+    if tsb_val is None:
+        tsb_val = today_row.get("atl_form")
+    if tsb_val is None and today_row.get("ctl") is not None and today_row.get("atl") is not None:
+        tsb_val = round(float(today_row["ctl"]) - float(today_row["atl"]), 1)
     sleep_val    = today_row.get("hrsSleep") or today_row.get("sleepSecs")
     if sleep_val and sleep_val > 24:      # stored as seconds
         sleep_val = sleep_val / 3600

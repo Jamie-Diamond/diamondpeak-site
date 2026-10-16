@@ -478,7 +478,10 @@ T10 (Tier 2): Run weekly km increase >10% week-on-week
   - baseline = the higher of last_week_km and the average weekly km of the 4 weeks before
     this Monday (a recovery week after a race is not a baseline)
 {t10_ankle}  - Fire if this_week_km > baseline * 1.10 AND baseline > 0
-  - Fire message: "warning T10: run km +X% week-on-week ([this]km vs [last]km) — 10% cap applies"
+  - Fire message: "warning T10: run km [this] km [Mon DD]-[today Ddd DD], up X% on [the week
+    before | the 4-week average], whichever the baseline was ([baseline] km) — 10% cap
+    applies". Name the baseline actually used: never "week-on-week" when it was the 4-week
+    average (Jamie, 16 Oct 2026: shadow review)
 {t11}
 If NO triggers fire: output nothing. Silent run.
 
@@ -511,7 +514,10 @@ def build_fired_prompt(slug: str, name: str, race_name: str, new: list, data_blo
     with a suggested adjustment from the athlete's context, and does T9b when it is due."""
     today = date.today().isoformat()
     athlete_dir = BASE / "athletes" / slug
-    lines = "\n".join(f"- {f['trigger']} (Tier {f['tier']}): {f['signal']}" for f in new) or "(none)"
+    lines = "\n".join(f"- {f['trigger']} (Tier {f['tier']}): {f['signal']}"
+                      + ("" if f.get("actionable", True) else
+                         " [no action for the athlete: log it as a fact; the morning card does not show it]")
+                      for f in new) or "(none)"
     t9b_part = (f"\nAlso run T9b, the one check that reads prose:\n{t9b}\n" if t9b else "")
     return f"""You are running the daily watchdog for {name}'s {race_name} coaching system. Today is {today}.
 
@@ -526,8 +532,16 @@ For each one:
    dated lines are in the data below), skip it.
 2. Otherwise append ONE line to the "## Watchdog flags" section of current-state.md (create
    the section at the end of the file if it is missing):
-   - **{today} — Tn (Tier x):** <the signal above>. <one-sentence suggested adjustment that
-     fits what the athlete has already agreed and the block they are in>
+   - **{today} — Tn (Tier x):** <the signal above, copied exactly>. <one-sentence suggested
+     adjustment that fits what the athlete has already agreed and the block they are in>
+   The adjustment (Jamie, 16 Oct 2026: shadow review, after "Resting HR 55 today" was still
+   being read the next morning and "HRV still off baseline" sat on green days):
+   - never quotes or reasons from HRV, resting HR or sleep unless the trigger itself is T3
+     or T4: the morning card checks wellness fresh each day, so a reading quoted here is
+     stale by the time anyone reads it
+   - uses absolute dates (Mon 12 Oct), never today / yesterday / this week / last week
+   - does not reword or re-label the signal's numbers (a % over the 4-week average is not
+     "week-on-week")
    The file is long: find the section with `grep -n "^## " {athlete_dir}/current-state.md`,
    Read just that part with offset/limit, then Edit.
 3. Print one L2 trail per trigger to stdout (coaching log only, never sent to the athlete):

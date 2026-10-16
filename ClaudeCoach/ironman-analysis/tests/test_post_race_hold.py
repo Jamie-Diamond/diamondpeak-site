@@ -170,8 +170,10 @@ class TestDailySurfaces:
 
     def test_morning_card_drops_the_quality_cue_in_recovery(self):
         mc = _load(REPO / "scripts" / "morning-checkin.py", "morning_checkin")
-        normal = mc._build_prompt("jamie", "Jamie", "", "", None, [])
-        held = mc._build_prompt("jamie", "Jamie", "", "", None, [], post_race_recovery=True)
+        # A fresh Form word (16 Oct 2026: Form is decided in Python and passed as Peak's word).
+        normal = mc._build_prompt("jamie", "Jamie", "", "", None, [], form="fresh")
+        held = mc._build_prompt("jamie", "Jamie", "", "", None, [], form="fresh",
+                                post_race_recovery=True)
         assert "good day for quality work" in normal
         assert "good day for quality work" not in held
         assert "never a cue for quality work" in held

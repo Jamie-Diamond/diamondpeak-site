@@ -48,8 +48,20 @@ def _family(t: str) -> str:
     return t
 
 
-def _fire(trigger, tier, items, signal) -> dict:
-    return {"trigger": trigger, "tier": tier, "items": sorted(str(i) for i in items), "signal": signal}
+def _fire(trigger, tier, items, signal, actionable=True) -> dict:
+    """`actionable` is decided here, never read back out of prose (Jamie, 16 Oct 2026:
+    shadow review). The morning card used to drop a flag whose text said "no action", and
+    "no training action implied" sailed through. False = a fact for the coaching log that
+    asks nothing of the athlete, so the card does not show it."""
+    return {"trigger": trigger, "tier": tier, "items": sorted(str(i) for i in items),
+            "signal": signal, "actionable": bool(actionable)}
+
+
+# Wellness triggers never reach the athlete card as flags (Jamie, 16 Oct 2026: shadow
+# review). The card takes HRV, resting HR and sleep ONLY from its own off-normal check on
+# the morning's data; a T3 written the day before ("Resting HR 55 today") read as stale on
+# a green morning, beside an off-normal block that said nothing was off.
+WELLNESS_TRIGGERS = frozenset({"T3", "T4"})
 
 
 # ── the triggers ─────────────────────────────────────────────────────────────
@@ -218,9 +230,12 @@ def t7_t8_heat(heat: dict, heat_log: list, today: date, maintenance_floor: float
     out = []
     if today < starts:
         if heat.get("maintenance") and dose < maintenance_floor:
+            # Not actionable for the athlete card: the formal protocol is paused, so this
+            # is a dose floor for the coaching log (Jamie's paused-heat T7, 11 Oct 2026).
             out.append(_fire("T7", 2, [f"dose {dose:.1f}"],
-                             f"heat maintenance dose {dose:.2f} over 14 days vs floor {maintenance_floor} "
-                             f"(formal protocol paused until {starts})"))
+                             f"heat maintenance dose {dose:.2f} over 14 days to {today:%a %d %b} vs floor "
+                             f"{maintenance_floor} (formal protocol paused until {starts})",
+                             actionable=False))
         return out
     if dose < protocol_floor:
         out.append(_fire("T7", 1, [f"dose {dose:.1f}"],
@@ -248,11 +263,17 @@ def t10_run_km(acts: list, today: date) -> dict | None:
     base = max(last, chronic)
     if base <= 0 or this <= base * 1.10:
         return None
-    vs = (f"{last:.1f} km" if base == last
-          else f"{chronic:.1f} km 4-week average, {last:.1f} km last week")
+    # The label names what the % is measured against, with dates (Jamie, 16 Oct 2026:
+    # shadow review): "+24% week-on-week" went to Kathryn when the 24% was over her
+    # 4-week average and last week was 0 km.
+    span = f"{mon:%a %d %b}-{today:%a %d %b}"
+    if base == last:
+        vs = f"up {(this / base - 1) * 100:.0f}% on the week before ({last:.1f} km)"
+    else:
+        vs = (f"up {(this / base - 1) * 100:.0f}% on the 4-week average before it "
+              f"({chronic:.1f} km a week; {last:.1f} km the week before)")
     return _fire("T10", 2, [f"week of {mon}"],
-                 f"run km +{(this / base - 1) * 100:.0f}% week-on-week ({this:.1f} km vs {vs}) "
-                 f"- 10% cap applies")
+                 f"run km {this:.1f} km {span}, {vs} - 10% cap applies")
 
 
 def _is_strength(a: dict) -> bool:
@@ -272,8 +293,10 @@ def t11_strength(acts: list, today: date, target: int | None) -> dict | None:
                           and lo <= (_d(a.get("start_date_local")) or date.min) <= hi))
     if not all(c < target for c in counts):
         return None
+    w2, w1 = mon - timedelta(days=14), mon - timedelta(days=7)
     return _fire("T11", 2, [f"weeks to {mon - timedelta(days=1)}"],
-                 f"strength {counts[1]} and {counts[0]} sessions in the last 2 weeks vs target {target}/wk")
+                 f"strength {counts[1]} and {counts[0]} sessions in the weeks of {w2:%a %d %b} and "
+                 f"{w1:%a %d %b} vs target {target}/wk")
 
 
 def t9_open_actions(firing: list, render) -> dict | None:
@@ -283,13 +306,23 @@ def t9_open_actions(firing: list, render) -> dict | None:
                  "open actions: " + " / ".join(render(i) for i in firing))
 
 
-def t12_ramp(breaches: list) -> dict | None:
+def t12_ramp(breaches: list, today: date | None = None) -> dict | None:
+    """Actionable only for the week just finished, off Intervals.icu's own CTL (Jamie,
+    16 Oct 2026: shadow review). An older week in the 4-week lookback is history ("covers
+    the Ironman race week, no training action implied"), and a ramp reconstructed from the
+    session log is approximate: both stay in the coaching log, off the athlete card."""
     if not breaches:
         return None
     b = breaches[0]
+    today = today or date.today()
+    last_sunday = today - timedelta(days=today.weekday() + 1)
+    current = (b.get("week_end") == last_sunday.isoformat()
+               and b.get("source", "icu_fitness") == "icu_fitness")
     return _fire("T12", b["tier"], [b["week_end"] for b in breaches],
                  f"realised CTL {b['ctl_from']} -> {b['ctl_to']} over {b['week_start']}..{b['week_end']} "
-                 f"= +{b['ramp']}/wk vs cap {b['cap']}/wk")
+                 f"= +{b['ramp']}/wk vs cap {b['cap']}/wk"
+                 + ("" if b.get("source", "icu_fitness") == "icu_fitness" else " (approximate)"),
+                 actionable=current)
 
 
 def evaluate(today: date, wellness: list, acts: list, events: list, *, ankle: dict | None = None,
@@ -302,7 +335,7 @@ def evaluate(today: date, wellness: list, acts: list, events: list, *, ankle: di
            t5_missed(events, acts, today), t6_decoupling(acts, today, untrusted)]
     out += t7_t8_heat(heat or {}, heat_log or [], today, *heat_floors)
     out += [t9_open_actions(open_firing or [], render), t10_run_km(acts, today),
-            t11_strength(acts, today, strength_target), t12_ramp(ramp_breaches or [])]
+            t11_strength(acts, today, strength_target), t12_ramp(ramp_breaches or [], today)]
     return [f for f in out if f]
 
 
@@ -348,14 +381,36 @@ def t9b_fingerprint(slug: str) -> str | None:
 
 
 def record(slug: str, logged: list, today: date, t9b: str | None = None) -> None:
-    """Remember what the model just logged (and the T9b fingerprint it checked)."""
+    """Remember what the model just logged (and the T9b fingerprint it checked).
+
+    Each entry also keeps the Python-made fact, its tier and `actionable`, for the morning
+    card (card_flags), so the card never reads the model's log sentence back out of
+    current-state.md (Jamie, 16 Oct 2026: shadow review)."""
     st = load_state(slug)
     lo = (today - timedelta(days=KEEP_DAYS)).isoformat()
     book = {k: [e for e in v if e.get("date", "") >= lo] for k, v in (st.get("logged") or {}).items()}
     for f in logged:
-        book.setdefault(f["trigger"], []).append({"date": today.isoformat(), "items": f["items"]})
+        book.setdefault(f["trigger"], []).append({
+            "date": today.isoformat(), "items": f["items"], "tier": f.get("tier"),
+            "fact": f.get("signal"), "actionable": f.get("actionable", True)})
     st["logged"] = book
     if t9b:
         st["t9b"] = t9b
     st["updated"] = datetime.now().isoformat(timespec="seconds")
     _path(slug).write_text(json.dumps(st, indent=2))
+
+
+def card_flags(state: dict, today: date, days: int = SUPPRESS_DAYS) -> list:
+    """Structured flags logged in the last `days` days, for the morning card: one dict per
+    logged entry with trigger, date, tier, fact and actionable. Entries written before
+    16 Oct 2026 carry no fact and are left out; the card falls back to current-state.md
+    for those."""
+    out = []
+    for trig, entries in (state.get("logged") or {}).items():
+        for e in entries or []:
+            d = _d(e.get("date"))
+            if not d or not 0 <= (today - d).days <= days or not e.get("fact"):
+                continue
+            out.append({"trigger": trig, "date": d.isoformat(), "tier": e.get("tier") or 2,
+                        "fact": e["fact"], "actionable": e.get("actionable", True)})
+    return out

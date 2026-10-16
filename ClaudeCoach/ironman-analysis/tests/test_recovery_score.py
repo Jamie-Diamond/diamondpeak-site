@@ -1,8 +1,8 @@
 """Tests for lib/recovery_score.py — taper-aware TSB scoring.
 
-The normal scorer treats TSB ≥ +10 as 'too fresh' (detraining risk). During
-taper that freshness is the GOAL (+5…+15 by race eve), so correct taper days
-must not be marked AMBER.
+The normal scorer used to treat TSB ≥ +10 as 'too fresh' (detraining risk); since
+16 Oct 2026 fresh scores as ready. During taper that freshness is the GOAL (+5…+15 by
+race eve), so correct taper days must not be marked AMBER.
 """
 from __future__ import annotations
 
@@ -24,7 +24,9 @@ class TestTaperTsb:
         normal = rs.compute(hrv_today=45, hrv_baseline=44, tsb=12, sleep_hrs=8.0, pain=0)
         taper = rs.compute(hrv_today=45, hrv_baseline=44, tsb=12, sleep_hrs=8.0, pain=0,
                            in_taper=True)
-        assert normal["signals"]["tsb"]["score"] == 65       # 'too fresh' normally
+        # Fresh is no longer a recovery penalty (16 Oct 2026: shadow review); it was 65.
+        assert normal["signals"]["tsb"]["score"] == 95
+        assert normal["label"] == "GREEN"
         assert taper["signals"]["tsb"]["score"] == 95        # on target in taper
         assert taper["label"] == "GREEN"
 

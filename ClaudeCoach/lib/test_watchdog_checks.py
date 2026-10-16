@@ -99,7 +99,8 @@ def test_t10_run_km_week_on_week():
     acts = [act(4, "Run", distance=15000), act(1, "Run", distance=12000),
             act(8, "Run", distance=12600)]
     f = wc.t10_run_km(acts, TODAY)
-    assert f and "27.0 km vs 12.6 km" in f["signal"]
+    assert f and "27.0 km Mon 28 Sep-Fri 02 Oct, up 114% on the week before (12.6 km)" in f["signal"]
+    assert "week-on-week" not in f["signal"]
     assert wc.t10_run_km([act(1, "Run", distance=5000)], TODAY) is None     # no runs last week
 
 

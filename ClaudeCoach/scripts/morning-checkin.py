@@ -42,8 +42,188 @@ TOOLS = "Read,Bash"
 # removing a session, but it holds Bash, so until now nothing stopped it.
 CALLER = "morning-checkin"
 
+# The Today note's size, enforced in code by _cap_note (Jamie, 15 Oct 2026: "ensure it
+# really is concise"; restated 16 Oct 2026 after the shadow review found "the opening plus
+# at most THREE of the labelled lines and the question" read two ways).
+NOTE_MAX_WORDS = 45
+NOTE_MAX_LABELLED = 2
 
-def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, nutrition_label="race target", heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None, wellness_finalized=True, ask_morning_pain=False, race_block="", ask_weight=False, ask_ankle=True, prescription_note="", post_race_recovery=False, watchdog_flags=None, off_normal=""):
+# The card's one question, word for word. ask_gate.asked_in_text records an ask from these.
+Q_CYCLE = "Has your period started yet? Just tell me the day when it does."
+Q_MORNING_PAIN = "Ankle score this morning? (0-10)"
+Q_RUN_PAIN = "Injury pain score before heading out? (0-10)"
+Q_WEIGHT = "Weight this morning?"
+
+
+def _the_question(*, cycle_overdue=False, injuries=(), ask_ankle=False, ask_morning_pain=False,
+                  run_today=False, ankle_pain_next_morning=0, ask_weight=False) -> str:
+    """The ONE question on today's card, or "" (Jamie, 16 Oct 2026: shadow review). Was an
+    If/Else chain the model resolved ("run planned AND ankle score above 0, else weight").
+    Priority as before (12 Oct 2026): the overdue cycle anchor, then yesterday's run's
+    morning ankle score, then the run-day pain score (a run still to do today and a morning
+    ankle score above 0), then weight. `ask_ankle` / `ask_weight` arrive already gated by
+    lib/ask_gate (eligibility and the unanswered-twice backoff)."""
+    if cycle_overdue:
+        return Q_CYCLE
+    if injuries and ask_ankle and ask_morning_pain:
+        return Q_MORNING_PAIN
+    try:
+        _pain = float(ankle_pain_next_morning or 0)
+    except (TypeError, ValueError):
+        _pain = 0
+    if injuries and ask_ankle and run_today and _pain > 0:
+        return Q_RUN_PAIN
+    if ask_weight:
+        return Q_WEIGHT
+    return ""
+
+
+def _form_block(form, *, post_race_recovery=False, off_normal="", finalized=True):
+    """(prompt block, card-line slot) for Form, decided here (Jamie, 16 Oct 2026: shadow
+    review). Form never reached the prompt (lib/recovery_score._parse_wellness read keys
+    Intervals.icu does not send), yet the opening asked "how fresh or loaded they are", so
+    the model judged freshness from nothing. Now it gets Peak's word (recovery_score.
+    form_word, the same rule as the Today tab's Form figure) and what to do with it."""
+    head = "\n## Form (pre-computed — the ONLY source for how fresh or loaded they are)\n"
+    if post_race_recovery:
+        # Form is high BECAUSE the athlete is recovering, so "fresh legs, good day for
+        # quality" is exactly wrong (sent to Jamie on 25 Sep, six days after IM Italy).
+        return (head + "Say nothing about freshness: post-race recovery. High Form is expected "
+                "and is never a cue for quality work.\n", "")
+    if not form:
+        return (head + "No Form figure today: say NOTHING about how fresh, tired or loaded "
+                "they are.\n", "")
+    soft = ("" if finalized else
+            " Today's figure is still settling on Intervals.icu: say it softly, never as final.")
+    if form == "very tired":
+        return (head + f"Form: very tired (a heavy run of training).{soft}\n",
+                "[**Load:** a heavy run of training, so keep intensity in check]\n")
+    if form == "fresh":
+        if off_normal:
+            # "Fresh legs, good day for quality" beside "resting HR off your normal" told
+            # Kathryn two opposite things on one card (shadow week, 14 Oct 2026).
+            return (head + "Form: fresh from training, but wellness is off normal today: never "
+                    f"call it a good day for quality. Say nothing about freshness.{soft}\n", "")
+        return (head + "Form: fresh. Say it in the opening, not its own line: fresh legs, a "
+                f"good day for quality work if quality is planned.{soft}\n", "")
+    if form == "balanced":
+        return (head + "Form: balanced (fresh enough for the plan). At most a few words in the "
+                f"opening; no line of its own.{soft}\n", "")
+    return (head + "Form: building, tired (the normal tiredness of a training block). At most "
+            "a few words in the opening; no line of its own, and never on its own a reason to "
+            f"go easy.{soft}\n", "")
+
+
+def _hm(minutes) -> str:
+    m = int(round(minutes or 0))
+    return f"{m // 60} h {m % 60:02d} min" if m >= 60 else f"{m} min"
+
+
+def _fam(t) -> str:
+    t = str(t or "")
+    return next((f for f in ("Ride", "Run", "Swim") if f in t), t)
+
+
+def _week_so_far(events, acts, today: date) -> str:
+    """How the week is going, as one labelled fact (Jamie, 16 Oct 2026: shadow review: the
+    opening asked "how the week is going" with no data behind it). Monday to yesterday; on
+    a Monday, last week. Planned = WORKOUT events; one counts as done when Intervals.icu
+    paired it, or an activity of the same sport was done that day (as watchdog T5)."""
+    mon = today - timedelta(days=today.weekday())
+    if today.weekday() == 0:
+        lo, hi, label = mon - timedelta(days=7), mon - timedelta(days=1), "Last week"
+    else:
+        lo, hi, label = mon, today - timedelta(days=1), "Week so far"
+    span = (f"{lo:%a %d %b}" if lo == hi else f"{lo:%a %d %b} to {hi:%a %d %b}")
+
+    def _day(x):
+        try:
+            return date.fromisoformat(str(x.get("start_date_local") or "")[:10])
+        except ValueError:
+            return None
+    done = [a for a in acts or [] if (d := _day(a)) and lo <= d <= hi]
+    plan = [e for e in events or [] if (d := _day(e)) and lo <= d <= hi
+            and (e.get("category") or "WORKOUT").upper() == "WORKOUT"]
+    spare = [a for a in done if str(a.get("id")) not in
+             {str(e.get("paired_activity_id")) for e in plan if e.get("paired_activity_id")}]
+    hit = 0
+    for e in plan:
+        if e.get("paired_activity_id"):
+            hit += 1
+            continue
+        m = next((a for a in spare if _day(a) == _day(e) and _fam(a.get("type")) == _fam(e.get("type"))), None)
+        if m:
+            spare.remove(m)
+            hit += 1
+    done_min = sum((a.get("moving_time") or 0) for a in done) / 60
+    plan_min = sum((e.get("moving_time") or 0) for e in plan) / 60
+    if not done and not plan:
+        return f"{label} ({span}): no sessions done and none planned."
+    out = f"{label} ({span}): "
+    out += (f"{hit} of {len(plan)} planned sessions done" if plan
+            else f"{len(done)} session{'s' if len(done) != 1 else ''} done, none planned")
+    if done_min:
+        out += f"; {_hm(done_min)} of training"
+        if plan_min:
+            out += f" against {_hm(plan_min)} planned"
+    return out + "."
+
+
+def _done_today_line(acts) -> str:
+    """"Already done today" for the planned block: sport and duration, the name only when
+    there is one (Jamie, 16 Oct 2026: shadow review: str(None) printed "None")."""
+    out = []
+    for a in acts or []:
+        sport = _CHART_SPORT_MAP.get(str(a.get("type") or ""), str(a.get("type") or "")).strip()
+        mins = round((a.get("moving_time") or 0) / 60)
+        name = str(a.get("name") or "").strip()
+        bits = ", ".join(b for b in (sport, _hm(mins) if mins else "") if b)
+        if name and name.lower() != "none":
+            bits = f"{bits} ({name})" if bits else name
+        if bits:
+            out.append(bits)
+    return "; ".join(out)
+
+
+def _cap_note(text: str, question: str = "") -> tuple[str, list]:
+    """Hold the model's note to the opening + NOTE_MAX_LABELLED labelled lines and
+    NOTE_MAX_WORDS minus the question's words (Jamie, 16 Oct 2026: shadow review).
+
+    Whole lines are dropped, last first; nothing is ever cut mid-line or rewritten. That is
+    the least risky enforcement: a dropped line cannot put a wrong number or half a sentence
+    in front of the athlete, where a regenerate costs a second model run, can drift from the
+    first and can overrun again. The prompt asks for the labelled lines most important first,
+    so the last is the one to lose. Any question line the model wrote anyway goes too (the
+    question is the code's, _the_question). The opening is never dropped."""
+    lines = (text or "").split("\n")
+    content = [i for i, l in enumerate(lines) if l.strip()]
+    if not content:
+        return text, []
+    first_lab = next((i for i in content if i != content[0]
+                      and _is_labelled(lines[i])), None)
+    opening = [i for i in content if first_lab is None or i < first_lab]
+    labelled = [i for i in content if i not in opening]
+    drop = [i for i in labelled if lines[i].rstrip().endswith("?")]
+    labelled = [i for i in labelled if i not in drop]
+    drop += labelled[NOTE_MAX_LABELLED:]
+    labelled = labelled[:NOTE_MAX_LABELLED]
+    budget = NOTE_MAX_WORDS - len((question or "").split())
+    words = lambda idx: sum(len(lines[i].split()) for i in idx)
+    while labelled and words(opening + labelled) > budget:
+        drop.append(labelled.pop())
+    if not drop:
+        return text, []
+    kept = "\n".join(l for i, l in enumerate(lines) if i not in drop)
+    kept = re.sub(r"\n{3,}", "\n\n", kept).strip()
+    return kept, [lines[i].strip() for i in sorted(drop)]
+
+
+def _is_labelled(line: str) -> bool:
+    """A labelled line: starts with a **bold label** (optionally as a list item)."""
+    return bool(re.match(r"^\s*(?:[-*]\s+)?\*\*", line))
+
+
+def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, nutrition_label="race target", heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None, wellness_finalized=True, race_block="", prescription_note="", post_race_recovery=False, watchdog_flags=None, off_normal="", form=None, week_so_far="", question=""):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -56,7 +236,6 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
 
     cycle_block = ""
     cycle_card_line = ""
-    cycle_question = ""
     if cycle:
         if cycle.get("phase"):
             cycle_block = (
@@ -68,51 +247,14 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
                 "[**Cycle:** one plain-English line from the cycle block above — what today may "
                 "feel like and how to approach targets. No cycle-day numbers, no jargon.]\n"
             )
-        if cycle.get("overdue"):
-            cycle_question = (
-                "- FIRST PRIORITY question (overrides the ones below): the cycle anchor is "
-                "overdue — ask it the way a coach would, e.g. \"Has your period started "
-                "yet? Just tell me the day when it does.\" (Jamie, 15 Oct 2026: not the "
-                "form-style \"Reply 'period started'\"; the chat understands a plain answer.)\n"
-            )
 
-    # WHICH QUESTION, DECIDED IN PYTHON. `ask_weight` and `ask_ankle` arrive already
-    # gated by lib/ask_gate: eligibility (a weight reading older than 3 days, a run
-    # stub still missing its morning score) AND the unanswered-twice backoff. The
-    # staleness check used to be the model's job — it read current-state.json and
-    # decided — which meant the backoff counter would have been counting a condition
-    # nothing could verify. Nothing here re-checks it.
-    morning_pain_question = ""
-    if injuries and ask_ankle and ask_morning_pain:
-        morning_pain_question = (
-            "- FIRST PRIORITY (overrides the questions below): ask \"Ankle score this morning? (0-10)\" "
-            "— record the answer as injury_pain_next_morning on yesterday's run in session-log.json.\n"
-        )
-    injury_question = ""
-    if injuries and ask_ankle and not ask_morning_pain:
-        # Suppressed when the morning-score question fires: at most ONE ankle question per card.
-        injury_question = (
-            "- If a run is planned today AND ankle.pain_next_morning in current-state.json is >0 "
-            "(do NOT use pain_during — that is a run-specific score, not a morning score): "
-            "ask \"Injury pain score before heading out? (0-10)\"\n"
-        )
-    if ask_weight:
-        # "Else" only when there is something to be else to: with the ankle branches
-        # gated off, a bare "- Else:" is an instruction with no antecedent.
-        _lead = "Else: ask" if (morning_pain_question or injury_question) else "Ask"
-        injury_question += (
-            f"- {_lead} \"Weight this morning?\" (the last-3-days staleness check is "
-            "ALREADY done — do not re-check it and do not skip the question because "
-            "current-state.json looks recent to you)"
-        )
-    # ONE question, picked here in priority order (12 Oct 2026: with the cycle question
-    # marked "FIRST PRIORITY" in a list beside weight, Sonnet asked Kathryn her weight and
-    # Haiku asked about her period). Only the winner reaches the prompt. The run-day ankle
-    # question still depends on today's run, so weight stays as its stated fallback.
-    if cycle_question:
-        injury_question = cycle_question.replace("FIRST PRIORITY question (overrides the ones below): ", "")
-    elif morning_pain_question:
-        injury_question = morning_pain_question.replace("FIRST PRIORITY (overrides the questions below): ", "")
+    # THE QUESTION IS NOT THE MODEL'S (Jamie, 16 Oct 2026: shadow review). It used to get an
+    # If/Else chain ("run planned AND ankle score above 0, else weight") and resolve it
+    # itself: Sonnet and Haiku picked different questions off the same data. _the_question
+    # picks the one question in Python and run_athlete appends it after generation, the way
+    # the Sunday hours ask is added; the prompt only knows its length, for the word budget.
+    _q_words = len(question.split()) if question else 0
+    _budget = NOTE_MAX_WORDS - _q_words
 
     injuries_note = (
         "; ".join(
@@ -130,12 +272,11 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
         rec    = recovery.get("recommendation", "")
         sigs   = recovery.get("signals", {})
         hrv_r  = sigs.get("hrv",   {}).get("ratio")
-        tsb_v  = sigs.get("tsb",   {}).get("value")
         slp_v  = sigs.get("sleep", {}).get("value")
         pain_v = sigs.get("pain",  {}).get("value")
         parts  = []
         if hrv_r  is not None: parts.append(f"HRV ratio {hrv_r:.2f}")
-        if tsb_v  is not None: parts.append(f"Form {tsb_v:+.1f}")
+        # Form is not listed here: it reaches the card only as the word in the Form block.
         if slp_v  is not None: parts.append(f"sleep {slp_v:.1f}h")
         if pain_v is not None and pain_v > 0: parts.append(f"pain {pain_v}/10")
         recovery_block = (
@@ -144,10 +285,6 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
             f"Signals: {', '.join(parts) if parts else 'no data'}.\n"
             f"Use this to modulate session prescription: GREEN = train as planned; "
             f"AMBER = note and monitor; ORANGE = reduce intensity or volume; RED = flag for easy day.\n"
-            + ("Today's Form is still recalculating on Intervals.icu and can shift several "
-               "points as activities finish syncing — treat any Form-based flag as provisional, "
-               "don't state today's Fitness/Fatigue/Form as final.\n"
-               if tsb_v is not None and not wellness_finalized else "")
         )
 
     wellness_block = (
@@ -166,24 +303,11 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
     )
 
     heat_block = ""
-    # Post-race recovery (plan_tools.in_post_race_recovery): Form is high BECAUSE the
-    # athlete is recovering, so "fresh legs, good day for quality" is exactly wrong
-    # (sent to Jamie on 25 Sep, six days after IM Italy).
-    if post_race_recovery:
-        form_line_rule = ("[Form line — OMIT ENTIRELY: post-race recovery. High Form is "
-                          "expected and is never a cue for quality work.]")
-    elif off_normal:
-        # "Fresh legs, good day for quality" beside "resting HR off your normal" told
-        # Kathryn two opposite things on one card (shadow week, 14 Oct 2026). Training
-        # freshness says nothing about recovery when wellness is off, so no green line.
-        form_line_rule = """[Form line — only include if notable:
-  · Form < −20: **Load:** a heavy run of training, so keep intensity in check
-  · Otherwise omit entirely: wellness is off normal today, so never call it a good day for quality]"""
-    else:
-        form_line_rule = """[Form line — only include if notable:
-  · Form < −20: **Load:** a heavy run of training, so keep intensity in check
-  · Form > +10: fresh legs, a good day for quality work (say it in the opening, not its own line)
-  · Form −1 to −20: omit entirely, that's normal training]"""
+    form_block, form_card_line = _form_block(form, post_race_recovery=post_race_recovery,
+                                             off_normal=off_normal, finalized=wellness_finalized)
+    week_block = (f"\n## Week so far (pre-computed — the fact for \"how the week is going\"; say it in words)\n"
+                  f"{week_so_far}\n" if week_so_far else
+                  "\n## Week so far\nNot available — say nothing about how the week has gone.\n")
     heat_card_line = ""
     if heat_protocol:
         # The acclimation score is decision-support for the model, never card copy:
@@ -214,7 +338,8 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
         if prescription_note else ""
     )
 
-    flags_block = ("\n## Watchdog flags to show (pre-selected — authoritative; show each, no others)\n"
+    flags_block = ("\n## Watchdog flags to show (pre-selected — authoritative; show each, no others. "
+                   "Each is a dated fact: keep its dates, never call a past day \"today\")\n"
                    + ("\n".join(f"- {f}" for f in watchdog_flags) if watchdog_flags else "- none today")
                    + "\n")
 
@@ -230,7 +355,7 @@ You are generating the morning briefing for {first_name}'s training day.
 
 {_level_block(coaching_level)}
 {illness_lib.prompt_block(slug, first_name=first_name)}
-{recovery_block}{wellness_block}{flags_block}{cycle_block}{planned_section}{race_block}{long_run_cap_block}{heat_block}{prescription_block}
+{recovery_block}{form_block}{week_block}{wellness_block}{flags_block}{cycle_block}{planned_section}{race_block}{long_run_cap_block}{heat_block}{prescription_block}
 Step 1 — Fetch data via Bash. EVERY icu_fetch.py call you make must carry
 `--caller morning-checkin`. This job reads what is planned and asks how the athlete is; it
 does not write the calendar, and that flag is what makes the refusal automatic rather than a
@@ -245,12 +370,8 @@ Step 2 — Read:
 {"- ClaudeCoach/athletes/" + slug + "/heat-log.json (count entries in current ISO week to get sessions_this_week)" if heat_protocol else ""}
 - ClaudeCoach/athletes/{slug}/session-log.json — only if today's planned event is a Ride or Brick >90 min: extract the last 4 entries with sport Ride/GravelRide/Brick, duration_min ≥ 90, and nutrition_g_carb set. Compute each g_per_hr and the avg.
 
-Step 3 — The question. AT MOST ONE in the whole card, and ONLY from this list — the
-list is already filtered for what this athlete has recently answered and for questions
-they have stopped answering, so anything absent from it must NOT be asked, invented or
-reworded back in:
-{injury_question or "- (none authorised today)"}
-- Else: no question. A card with no question is a complete card.
+Step 3 — No question from you. Ask NOTHING: no line ending in "?". The card's one question,
+if one is due today, is chosen in code and added below your note after you write it.
 
 Step 4 — Output the Today note in Markdown (no preamble, no sign-off). It sits at the top
 of the athlete's Today tab in Peak, directly above today's session, the date and the race
@@ -260,15 +381,15 @@ week, this is what to think about").
 
 Use the recovery score and signals ONLY to decide what to flag — do NOT show the score, label, HRV ratio, or any internal metric to the athlete. Write like a coach talking, not a dashboard.
 
-[Opening: TWO sentences at most, in a coach's voice. How training is going right now (the
- week so far, how fresh or loaded they are) and what that means for today's session: the one
- thing to think about. e.g. "Big ride today, and you're fresh after an easy week: hold the
- first hour back and finish strong." Judge long/short and hard/easy from the pre-computed
- planned-sessions block above (never guess), then say it in words: no minutes, no Load. Rest
- day: say what the rest is doing for them, in one sentence.]
+[Opening: TWO sentences at most, in a coach's voice. How training is going right now and
+ what that means for today's session: the one thing to think about. e.g. "Big ride today,
+ and you're fresh after an easy week: hold the first hour back and finish strong." Every
+ part comes from a block above, never from a guess: the week so far ONLY from the "Week so
+ far" block; how fresh or loaded ONLY from the Form block (no Form word = say nothing about
+ freshness); long/short and hard/easy from the planned-sessions block. Say it in words: no
+ minutes, no Load. Rest day: say what the rest is doing for them, in one sentence.]
 
-{form_line_rule}
-[If the "Off your normal" block above is present: **Recovery:** that fact in plain words and what it means today, e.g. "**Recovery:** HRV has been low this week, so keep today easy."]
+{form_card_line}[If the "Off your normal" block above is present: **Recovery:** that fact in plain words and what it means today, e.g. "**Recovery:** HRV has been low this week, so keep today easy."]
 [If recovery ORANGE or RED: **Recovery:** [one plain-English sentence on what to do differently — no scores]]
 [For EACH flag in the "Watchdog flags to show" block: **[one-word label]:** [that flag in plain English, one line]. None listed: no flag line.]
 [If the pre-verified 05:00 prescription check block above is present and says today's session was modified or swapped: **Changed:** [what changed and why — one plain line, e.g. "Swapped to an easy spin because HRV is low". If it confirmed the session as planned, or the block is absent, say nothing]]
@@ -278,10 +399,9 @@ Use the recovery score and signals ONLY to decide what to flag — do NOT show t
 [If open action is due within 3 days: **To do:** [action] by [day]]
 {heat_card_line}
 
-[Question if applicable — one line, LAST]
-
-ORDER is fixed: the opening, the labelled lines, then the question (if any) last. No
-greeting, no date line, no "Today:" line, no countdown: Peak shows those right beside it.
+ORDER is fixed: the opening, then the labelled lines, most important first (the question,
+if any, is added after them in code). No greeting, no date line, no "Today:" line, no
+countdown: Peak shows those right beside it.
 
 Rules:
 - TONE: a coach texting an amateur athlete who is dyslexic (Jamie, 15 Oct 2026: "imagine a
@@ -303,9 +423,12 @@ Rules:
 - Say each thing ONCE: if the opening already mentions it (low HRV, a missed session), no
   flag line repeats it.
 - CONCISE (Jamie, 15 Oct 2026: "ensure it really is concise so as not to take over the home
-  page"): the WHOLE note is at most 45 words and at most FOUR lines: the opening plus at
-  most THREE of the labelled lines and the question. When more qualify, keep the ones
-  that change what the athlete does today and drop the rest; never merge two into one long line.
+  page"; the cap restated 16 Oct 2026 after the shadow review found it ambiguous): the note
+  is opening + 2 labelled lines + question = 4 lines, {NOTE_MAX_WORDS} words max. The
+  question is added in code{f" and is {_q_words} words today" if _q_words else " (none today)"}, so YOUR part is
+  the opening plus AT MOST {NOTE_MAX_LABELLED} labelled lines, AT MOST {_budget} words. When more
+  qualify, keep the ones that change what the athlete does today and drop the rest; never
+  merge two into one long line. Anything past this is cut in code, last line first.
 - SHORT (Jamie, 15 Oct 2026: "it's like an essay"): the card is read in five seconds.
   Every labelled line is ONE sentence of at most 18 words: what to do, and why in a
   few words. No reasoning, no dates of individual readings, no "I'd offer". At most TWO
@@ -315,8 +438,8 @@ Rules:
 - Sleep/HRV/RHR: use ONLY the pre-fetched wellness line above — never infer or estimate values yourself.
 - Omit any section that has nothing to say — do not pad with dashes or "N/A".
 - Never ask for subjective mood, fatigue, or motivation scores.
-- Never put two questions in the card, and never re-ask something the athlete already
-  told you — if a value is in the data above, state it or leave it, don't ask for it.
+- Never ask a question (Step 3), and never ask for something the athlete already told
+  you — if a value is in the data above, state it or leave it.
 
 Wrap your entire output in <telegram> and </telegram> tags. Output nothing outside those tags — no preamble, no reasoning, no tool commentary."""
 
@@ -512,41 +635,85 @@ def _race_focus(slug, profile, athlete_cfg):
 
 
 _FLAG_RE = None
+# A legacy flag line whose own text says it asks nothing ("no action", "no training action
+# implied", "no action unless"). Only for lines written before watchdog flags carried
+# `actionable` (16 Oct 2026); the exact phrase "no action" let the T12 race-week flag through.
+_NO_ACTION_RE = None
+
+
+def _legacy_fact(text: str) -> str:
+    """The signal from an old current-state.md flag line, without the model's adjustment
+    sentence after it (which carried the stale wellness reasoning: "Resting HR 55 today").
+    The watchdog line is "<signal>. <adjustment>", so the first sentence is the fact."""
+    import re
+    fact = re.split(r"\.\s+(?=[A-Z])", text.strip(), maxsplit=1)[0].rstrip(". ")
+    # T10's old label called a % over the 4-week average "week-on-week".
+    if "4-week average" in fact:
+        fact = fact.replace(" week-on-week (", " over the 4-week average (")
+    return fact
 
 
 def _recent_flags(adir: Path, today: date, days: int = 3, cap: int = 2,
                   skip: frozenset = frozenset()) -> list[str]:
     """Watchdog flags the card shows, chosen here (11 Oct 2026). "If watchdog flag active"
     was left to the model: on the same card Haiku showed Kathryn's real T10 run-volume flag
-    and Sonnet left it out. Flags dated within `days`, minus any whose own text says no
-    action is needed (Jamie's paused-heat T7) and T9 (the open-actions list: internal
-    housekeeping, and the card has its own open-action line), newest first then Tier 1,
-    at most `cap`."""
+    and Sonnet left it out. Flags dated within `days`, newest first then Tier 1, at most `cap`.
+
+    Since 16 Oct 2026 (shadow review) the fact comes from the watchdog's own record
+    (athletes/<slug>/watchdog-state.json, watchdog_checks.card_flags): the Python-made
+    signal with absolute dates and an `actionable` field, never the model's log sentence,
+    which carried day-old wellness reasoning and relative words. Lines in current-state.md
+    with no structured record (logged before then) still show, cut to their first sentence.
+    Never shown: anything not actionable (Jamie's paused-heat T7, a historical T12), T9 (the
+    open-actions list: the card has its own open-action line), T3/T4 (wellness: the card
+    takes it ONLY from its off-normal block) and `skip`."""
     import re
-    global _FLAG_RE
+    import watchdog_checks as wc
+    global _FLAG_RE, _NO_ACTION_RE
     _FLAG_RE = _FLAG_RE or re.compile(
         r"^- \*\*(\d{4}-\d{2}-\d{2}) — (T\d+) \(Tier (\d)\):\*\*\s*(.+)$")
+    _NO_ACTION_RE = _NO_ACTION_RE or re.compile(r"\bno\b(?:\s+\w+){0,3}\s+action\b", re.I)
+    hidden = {"T9"} | set(wc.WELLNESS_TRIGGERS) | set(skip)
+    out, seen = [], set()
+    try:
+        state = json.loads((adir / wc.STATE_NAME).read_text())
+    except (OSError, ValueError):
+        state = {}
+    for f in wc.card_flags(state, today, days):
+        seen.add((f["date"], f["trigger"]))
+        if f["trigger"] in hidden or not f.get("actionable", True):
+            continue
+        out.append((int(f["tier"] or 2), f["date"], f"{f['trigger']}: {f['fact']}"))
     try:
         text = (adir / "current-state.md").read_text()
     except OSError:
-        return []
+        text = ""
     sec = text.split("## Watchdog flags", 1)
-    if len(sec) < 2:
-        return []
-    body = sec[1].split("\n## ", 1)[0]
-    out = []
+    body = sec[1].split("\n## ", 1)[0] if len(sec) == 2 else ""
+    # A legacy T12 line shows only with the same test the watchdog now applies
+    # (wc.t12_ramp): its structured record in current-state.json is for the week just
+    # finished, off Intervals.icu. Fred's 16 Oct line was for a week two weeks gone.
+    _sun = (today - timedelta(days=today.weekday() + 1)).isoformat()
+    try:
+        _t12_now = any(isinstance(f, dict) and f.get("trigger") == "T12"
+                       and f.get("week_end") == _sun and f.get("source") == "icu_fitness"
+                       for f in json.loads((adir / "current-state.json").read_text())
+                       .get("watchdog_flags") or [])
+    except (OSError, ValueError, AttributeError):
+        _t12_now = False
     for line in body.splitlines():
         m = _FLAG_RE.match(line.strip())
-        if not m:
+        if not m or (m.group(1), m.group(2)) in seen:
             continue
         try:
             age = (today - date.fromisoformat(m.group(1))).days
         except ValueError:
             continue
-        if (not 0 <= age <= days or "no action" in m.group(4).lower() or m.group(2) == "T9"
-                or m.group(2) in skip):
+        if (not 0 <= age <= days or m.group(2) in hidden
+                or (m.group(2) == "T12" and not _t12_now)
+                or _NO_ACTION_RE.search(m.group(4)) or "historical" in m.group(4).lower()):
             continue
-        out.append((int(m.group(3)), m.group(1), f"{m.group(2)}: {m.group(4).strip()}"))
+        out.append((int(m.group(3)), m.group(1), f"{m.group(2)}: {_legacy_fact(m.group(4))}"))
     out.sort(key=lambda x: (x[1], -x[0]), reverse=True)     # newest date, then Tier 1
     return [t for _, _, t in out[:cap]]
 
@@ -766,6 +933,7 @@ def run_athlete(slug, athlete_cfg, early=False):
     wellness_rows = []
     baseline_rows = []
     wellness_finalized = True  # False = today's CTL/ATL/Form still recalculating on ICU
+    form = None               # Peak's Form word (recovery_score.form_word), or None
     has_sleep_device = False  # True if athlete has ever had sleep data
     try:
         from icu_api import IcuClient
@@ -814,6 +982,7 @@ def run_athlete(slug, athlete_cfg, early=False):
         # reads wellness_rows keeps its 8 days. Same rows feed the off-normal line.
         baseline_rows = _baseline_rows(slug) or wellness_rows
         hrv_t, hrv_b, tsb, sleep, sleep_score = rs._parse_wellness(baseline_rows)
+        form = rs.form_word(tsb)
         pain = 0
         state_f = adir / "current-state.json"
         if state_f.exists():
@@ -914,6 +1083,7 @@ def run_athlete(slug, athlete_cfg, early=False):
     # Pre-compute today's planned-session TSS in Python — the 11 Jun card guessed
     # "~35 TSS" for a swim whose plan event carried load_target=60.
     planned_block = ""
+    week_so_far = ""
     _events = []  # kept for long-run cap computation below
     try:
         from icu_api import IcuClient as _Icu
@@ -922,19 +1092,27 @@ def run_athlete(slug, athlete_cfg, early=False):
         _events = _cl.get_events(today_str, today_str)
         # A session already ridden or run this morning is DONE, not today's plan (Fred,
         # 15 Oct 2026: the 08:00 card announced a cut threshold session he'd finished at 07:00).
-        _fam = lambda t: next((f for f in ("Ride", "Run", "Swim") if f in str(t or "")), str(t or ""))
-        _acts_today = [x for x in (_cl.get_training_history(days=1) or [])
-                       if str(x.get("start_date_local") or "")[:10] == today_str]
+        # 8 days of history: today's done sessions and the week-so-far fact below.
+        _hist = _cl.get_training_history(days=8) or []
+        _acts_today = [x for x in _hist if str(x.get("start_date_local") or "")[:10] == today_str]
         _done_fams = {_fam(x.get("type")) for x in _acts_today}
-        _done_names = [str(x.get("name") or x.get("type")) for x in _acts_today]
         _events = [e for e in _events
                    if not ((e.get("category") or "WORKOUT").upper() == "WORKOUT"
                            and (e.get("paired_activity_id") or _fam(e.get("type")) in _done_fams))]
         planned_block = planned_sessions_block(_events)
-        if _done_names:
+        _done_line = _done_today_line(_acts_today)
+        if _done_line:
             planned_block = ((planned_block + "\n") if planned_block else "") + (
                 "Already done today (say so in one line if relevant; never present it as still to do "
-                "or describe changes to it): " + "; ".join(_done_names))
+                "or describe changes to it): " + _done_line)
+        try:
+            _wk_lo = date.today() - timedelta(days=date.today().weekday()
+                                              + (7 if date.today().weekday() == 0 else 0))
+            week_so_far = _week_so_far(
+                _cl.get_events(_wk_lo.isoformat(), (date.today() - timedelta(days=1)).isoformat()),
+                _hist, date.today())
+        except Exception as exc:
+            print(f"[{slug}] week-so-far fact failed: {exc}", file=sys.stderr)
     except Exception as exc:
         print(f"[{slug}] planned-TSS prefetch failed: {exc}", file=sys.stderr)
 
@@ -992,6 +1170,17 @@ def run_athlete(slug, athlete_cfg, early=False):
     except Exception as exc:
         print(f"[{slug}] long-run cap pre-compute failed: {exc}", file=sys.stderr)
 
+    # The one question, decided here and appended after generation (_the_question).
+    # `_events` is today's plan with anything already done taken out, so a run finished
+    # before the card is not "before heading out".
+    question = _the_question(
+        cycle_overdue=bool(cycle and cycle.get("overdue")), injuries=injuries,
+        ask_ankle=ask_ankle, ask_morning_pain=needs_morning_pain_ask,
+        run_today=any((e.get("category") or "WORKOUT").upper() == "WORKOUT"
+                      and "Run" in str(e.get("type") or "") for e in _events),
+        ankle_pain_next_morning=(_cs_data.get("ankle") or {}).get("pain_next_morning"),
+        ask_weight=ask_weight)
+
     prompt = _build_prompt(slug, first_name, race_name, race_date_str, days_to_race, injuries, recovery,
                            wellness_line=wellness_line, heat_protocol=heat_protocol,
                            coaching_level=coaching_level, planned_block=planned_block,
@@ -1000,8 +1189,7 @@ def run_athlete(slug, athlete_cfg, early=False):
                            fuel_target_g_hr=_fuel_target_g_hr,
                            nutrition_race=fuel_basis.ceiling(athlete_cfg),
                            nutrition_label=fuel_basis.label(athlete_cfg),
-                           ask_morning_pain=needs_morning_pain_ask,
-                           ask_weight=ask_weight, ask_ankle=ask_ankle,
+                           form=form, week_so_far=week_so_far, question=question,
                            heat_accl_pct=heat_accl_pct, heat_accl_trend=heat_accl_trend,
                            long_run_cap_km=_long_run_cap_km,
                            wellness_finalized=wellness_finalized,
@@ -1029,6 +1217,13 @@ def run_athlete(slug, athlete_cfg, early=False):
     import re as _re
     m = _re.search(r"<telegram>(.*?)</telegram>", raw, _re.DOTALL)
     output = m.group(1).strip() if m else ""
+    _note_words = len(output.split())
+    output, _trimmed = _cap_note(output, question)
+    if _trimmed and not early:
+        # A prompt finding as well as a fix: log what was cut for the dev inbox.
+        ops_log.alert("morning-checkin",
+                      f"Today note over the cap ({_note_words} words; cut {len(_trimmed)} line(s): "
+                      + " | ".join(t[:60] for t in _trimmed) + ")", athlete=slug)
 
     # Atomic sentinel claim: write BEFORE notifying so a second cron instance
     # that slips past the 20-min process lock (slow multi-athlete run) can never
@@ -1099,7 +1294,10 @@ def run_athlete(slug, athlete_cfg, early=False):
     _cons_case = None
     if output and not early and not _hours_ask_appended and not _passive_sent_for:
         try:
-            _cons_case = _consistency_line(slug, adir, athlete_cfg, baseline_rows, output)
+            # The question is appended after this, so count it now: the "ask" case is a
+            # question too, and a card carries one.
+            _cons_case = _consistency_line(slug, adir, athlete_cfg, baseline_rows,
+                                           f"{output}\n\n{question}" if question else output)
             # Not when the card has already raised the misses itself (15 Oct: both said it),
             # and above the countdown, which stays the last line.
             if _cons_case and re.search(r"\bmiss(ed)?\b", output, re.I):
@@ -1115,6 +1313,14 @@ def run_athlete(slug, athlete_cfg, early=False):
             print(f"[{slug}] consistency check failed: {exc}", file=sys.stderr)
             _cons_case = None
 
+    # THE QUESTION, LAST (_the_question; Jamie, 16 Oct 2026: shadow review). Appended in
+    # Python like the Sunday hours ask, so the model can neither drop it nor pick another.
+    # Not on a Sunday that already carries the hours ask: one question per card, and the
+    # 18:00 build depends on that one. ask_gate records the ask from the sent text, so a
+    # question held back here is not counted as asked.
+    if output and question and not _hours_ask_appended:
+        output = f"{output}\n\n{question}"
+
     # TODAY NOTE, not a chat message (Jamie, 15 Oct 2026). The midnight version is silent;
     # the morning one replaces it and sends the day's one notification. The chat gets the
     # note only when the athlete taps it (api/server.py /api/today/open).
@@ -1124,10 +1330,6 @@ def run_athlete(slug, athlete_cfg, early=False):
         return
     sent = False
     if output:
-        _words = len(output.split())
-        if _words > 60:
-            # A prompt finding, not something to trim silently: log it for the dev inbox.
-            ops_log.alert("morning-checkin", f"Today note ran to {_words} words (limit 45)", athlete=slug)
         try:
             today_note.write(slug, output, "wellness" if wellness_line else "final")
             today_note.ping(slug, chat_id, output)
