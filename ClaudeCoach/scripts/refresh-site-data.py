@@ -1419,8 +1419,10 @@ def post_process(data):
         "sick_week":        _ctl_project(current_ctl, sick_week_tss, days_to_race),
         "target_milestones": _milestones,
         "race_date": RACE_DATE.isoformat(),
-        "target_ctl_min": 105,
-        "target_ctl_max": 115,
+        # The Ironman band, only while that race is ahead (Jamie, 16 Oct 2026: "a 70+ CTL
+        # for a 10k is madness"; this 105-115 was still shown after Cervia).
+        "target_ctl_min": 105 if RACE_DATE >= today else None,
+        "target_ctl_max": 115 if RACE_DATE >= today else None,
         # What the app's Fitness chart draws forward of today: this week's booked
         # sessions run through the CTL recursion, then a straight line at the ramp
         # /form quotes. See _projection_block for why the tail stops at peak.
@@ -2172,6 +2174,12 @@ def _build_athlete_training_data(slug, athlete_cfg):
         race_min       = ctl_targets.get("race_min")
         plan_start_str = athlete_cfg.get("plan_start")
         race_dt        = date.fromisoformat(athlete_cfg["race_date"])
+        # No race-day target for a goal block or a race already run (Jamie, 16 Oct 2026:
+        # Kathryn's 10k goal was shown "target 76-80", left over from her September 70.3).
+        # The planner already skips these for a goal (plan_tools goal_active).
+        from plan_tools import goal_active as _goal_active
+        if race_dt < today or _goal_active(athlete_cfg, today):
+            race_min = None
         if race_min and plan_start_str and kpi.get("ctl"):
             plan_start_dt = date.fromisoformat(plan_start_str)
             current_ctl   = kpi["ctl"]
