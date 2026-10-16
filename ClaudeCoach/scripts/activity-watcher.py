@@ -1238,36 +1238,97 @@ def _duplicate_tick(slug: str, chat_id: str, acts: list | None) -> None:
         print(f"[{slug}] duplicate check failed: {exc}", file=sys.stderr)
 
 
+# What one athlete's analysis may cost (16 Oct 2026, Jamie: Kathryn's 139 Sonnet runs in
+# a day were "an unacceptable fall back"). Two rules, so no loop can run it every 5 min:
+#   - Intervals.icu unreadable: the model is NOT run. It reads the same Intervals.icu, so
+#     it could only answer "none"; the activity is still there when Intervals.icu answers
+#     again, so nothing is missed. An hour of it is one ops-log line.
+#   - The same unlogged activities and nothing logged since: at most MAX_PASSES passes,
+#     RETRY_GAP_S apart, then it stops (one ops-log line) until something changes. A new
+#     activity, or one getting logged, changes the set and starts the count again.
+MAX_PASSES = 3
+RETRY_GAP_S = 30 * 60
+ICU_ALERT_AFTER_S = 60 * 60
+
+
 def _has_new_activity(slug: str, existing_ids: set, acts: list | None = None) -> bool:
-    """Cheap, LLM-free pre-gate: True if ICU history shows any activity whose id
-    is not already in session-log.json. This lets the expensive analysis LLM be
-    skipped entirely on the ~99% of cycles with nothing new — so the watcher can
-    poll often without burning the Sonnet weekly bucket.
+    """True only when an unlogged activity is visible: see _new_candidates."""
+    return bool(_new_candidates(slug, existing_ids, acts))
+
+
+def _new_candidates(slug: str, existing_ids: set, acts: list | None = None) -> list | None:
+    """Cheap, LLM-free pre-gate: the ids of Intervals.icu activities not already in
+    session-log.json. This lets the expensive analysis LLM be skipped entirely on the
+    ~99% of cycles with nothing new — so the watcher can poll often cheaply.
 
     A second recording of a logged session is not new: the analysis prompt's
     duplicate guard answers ACTIVITY_ID: none for it, so letting it through would
     call Sonnet every 5 min until it leaves the 3-day window.
 
-    Fail-OPEN: any fetch/parse error returns True so we never silently miss an
-    activity (worst case = one wasted LLM call that returns ACTIVITY_ID: none,
-    exactly as before this gate existed)."""
+    None when Intervals.icu could not be read, or this check itself failed: nobody can
+    tell, the model included, so the caller waits for the next cycle (fail CLOSED since
+    16 Oct 2026; it used to fail open, and a 503 then ran Sonnet for every athlete every
+    5 minutes)."""
     try:
         acts = _recent_activities(slug) if acts is None else acts
         if acts is None:
-            return True
+            return None
         # A Strava-sourced activity comes through the API as an empty stub (no type, no
         # time, no data): there is nothing to analyse, and the watch's own copy is the
         # real one. Kathryn's 15 Oct run had one, and Sonnet answered ACTIVITY_ID: none
         # every 5 minutes for it.
         acts = [a for a in acts if str(a.get("source") or "").upper() != "STRAVA"]
         logged = [a for a in acts if duplicates.activity_ids(a) & existing_ids]
+        out = []
         for a in acts:
             if duplicates.activity_ids(a) & existing_ids or any(duplicates.same_session(a, b) for b in logged):
                 continue
-            return True
-        return False
+            out.append(str(a.get("id")))
+        return out
     except Exception:
-        return True
+        return None
+
+
+def _pass_allowed(state: dict, cands: list, now: float | None = None,
+                  manual: bool = False) -> tuple[bool, str]:
+    """(run the analysis?, why not: "wait" / "max"). Only a repeat is limited: the same
+    unlogged activities as the last pass, with nothing logged since. An athlete's own
+    "Check for activity" tap always runs."""
+    if manual:
+        return True, ""
+    last = state.get("analysis_pass") or {}
+    if last.get("set") != sorted(cands):
+        return True, ""
+    if last.get("count", 0) >= MAX_PASSES:
+        return False, "max"
+    if (now or time.time()) - float(last.get("ts") or 0) < RETRY_GAP_S:
+        return False, "wait"
+    return True, ""
+
+
+def _record_pass(state: dict, cands: list, now: float | None = None) -> None:
+    last = state.get("analysis_pass") or {}
+    same = last.get("set") == sorted(cands)
+    state["analysis_pass"] = {"set": sorted(cands), "ts": now or time.time(),
+                              "count": (last.get("count", 0) if same else 0) + 1}
+
+
+def _icu_readable(state: dict, state_file, ok: bool, slug: str = "",
+                  now: float | None = None) -> None:
+    """Track an unreadable Intervals.icu: one ops-log line once it has lasted an hour."""
+    now = now or time.time()
+    if ok:
+        if state.pop("icu_unreadable_since", None) is not None:
+            state.pop("icu_unreadable_alerted", None)
+            save_state(state, state_file)
+        return
+    since = state.setdefault("icu_unreadable_since", now)
+    if now - since >= ICU_ALERT_AFTER_S and not state.get("icu_unreadable_alerted"):
+        state["icu_unreadable_alerted"] = True
+        ops_log.alert("activity-watcher", f"Intervals.icu unreadable for "
+                      f"{int((now - since) // 60)} min: activity analysis waiting for it "
+                      f"(not run blind)", athlete=slug)
+    save_state(state, state_file)
 
 
 def _last_logged_label(session_log_f) -> str:
@@ -2136,7 +2197,26 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     _duplicate_tick(slug, chat_id, recent)
     if why in ("interval", "new-day") and recent:
         _note_webhook_misses(slug, recent, existing_ids)
-    if not _has_new_activity(slug, existing_ids, recent):
+    cands = _new_candidates(slug, existing_ids, recent)
+    _icu_readable(state, state_file, cands is not None, slug)
+    if cands is None:
+        if announce_empty and chat_id:
+            _notify("Intervals.icu isn't answering just now, so I can't check. Your "
+                    "session will be picked up as soon as it's back.", chat_id, slug=slug)
+        _send_followup_nudge(state, session_log_f, chat_id, injuries=injuries,
+                             state_file=state_file, slug=slug)
+        return
+    allowed, why_not = _pass_allowed(state, cands, manual=announce_empty) if cands else (False, "")
+    if not allowed:
+        last_pass = state.get("analysis_pass") or {}
+        if why_not == "max" and not last_pass.get("alerted"):
+            last_pass["alerted"] = True
+            save_state(state, state_file)
+            ops_log.alert("activity-watcher", f"{len(cands)} activit"
+                          f"{'y' if len(cands) == 1 else 'ies'} still not logged after "
+                          f"{MAX_PASSES} analysis passes ({', '.join(cands)}): stopped "
+                          f"until something changes", athlete=slug)
+    if not cands or not allowed:
         if announce_empty and chat_id:
             last = _last_logged_label(session_log_f)
             msg = (f"Nothing new to log — last session already logged: {last}. 👍"
@@ -2145,6 +2225,9 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
         _send_followup_nudge(state, session_log_f, chat_id, injuries=injuries,
                              state_file=state_file, slug=slug)
         return
+    # Counted before the run, so a timeout or a crash is a pass too.
+    _record_pass(state, cands)
+    save_state(state, state_file)
 
     # Looked up only now there is something to analyse: it is an Intervals.icu call, and
     # it used to run every 5 minutes for every athlete whether or not anything was new.

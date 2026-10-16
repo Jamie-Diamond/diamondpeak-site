@@ -64,10 +64,60 @@ def test_a_strava_stub_is_never_new(monkeypatch):
     assert not gate(monkeypatch, acts, {"i197461272"})
 
 
-def test_fetch_failure_fails_open(monkeypatch):
+def test_fetch_failure_does_not_run_the_model(monkeypatch):
+    # 16 Oct 2026: fail-open ran Sonnet for every athlete every 5 min during a 503.
     monkeypatch.setattr(aw.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(
-        a, 1, stdout="", stderr="boom"))
-    assert aw._has_new_activity("x", set())
+        a, 1, stdout="", stderr="503"))
+    assert aw._new_candidates("x", set()) is None
+    assert not aw._has_new_activity("x", set())
+
+
+def test_candidates_are_the_unlogged_ids(monkeypatch):
+    monkeypatch.setattr(aw.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(
+        a, 0, stdout=json.dumps([act("i1", "2026-10-01T08:00:00"),
+                                 act("i2", "2026-10-01T18:00:00")]), stderr=""))
+    assert aw._new_candidates("x", {"i1"}) == ["i2"]
+
+
+def test_a_repeat_runs_at_most_max_passes_and_waits_between():
+    st, t = {}, 1_000_000.0
+    assert aw._pass_allowed(st, ["i9"], now=t) == (True, "")
+    aw._record_pass(st, ["i9"], now=t)
+    assert aw._pass_allowed(st, ["i9"], now=t + 300) == (False, "wait")       # the 5-min loop
+    runs = 1
+    for k in range(1, 20):                                                    # ~10 hours of cycles
+        now = t + k * aw.RETRY_GAP_S
+        if aw._pass_allowed(st, ["i9"], now=now)[0]:
+            aw._record_pass(st, ["i9"], now=now)
+            runs += 1
+    assert runs == aw.MAX_PASSES
+    assert aw._pass_allowed(st, ["i9"], now=t + 99 * aw.RETRY_GAP_S) == (False, "max")
+
+
+def test_a_new_or_logged_activity_starts_the_count_again():
+    st = {}
+    for k in range(aw.MAX_PASSES):
+        aw._record_pass(st, ["i9"], now=1.0 + k)
+    assert aw._pass_allowed(st, ["i9", "i10"], now=5.0) == (True, "")        # new one arrived
+    assert aw._pass_allowed(st, [], now=5.0) == (True, "")
+
+
+def test_the_athletes_own_check_always_runs():
+    st = {}
+    for k in range(aw.MAX_PASSES):
+        aw._record_pass(st, ["i9"], now=1.0 + k)
+    assert aw._pass_allowed(st, ["i9"], now=5.0, manual=True) == (True, "")
+
+
+def test_an_hour_of_unreadable_icu_is_one_ops_line(monkeypatch, tmp_path):
+    alerts = []
+    monkeypatch.setattr(aw.ops_log, "alert", lambda *a, **k: alerts.append(a))
+    st, f = {}, tmp_path / "state.json"
+    for k in range(0, 25):                                                    # 2 hours, every 5 min
+        aw._icu_readable(st, f, False, "x", now=1_000_000.0 + k * 300)
+    assert len(alerts) == 1
+    aw._icu_readable(st, f, True, "x")
+    assert "icu_unreadable_since" not in st
 
 
 def test_prompt_drops_plan_delta_when_structure_not_executed():
