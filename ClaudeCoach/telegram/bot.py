@@ -3690,12 +3690,13 @@ def _availability_readback(ws, rec, level) -> str:
                                  "excluded_sports")):
         return weekly_availability.confirmation(rec["hours"], rec.get("constraints") or "",
                                                 coaching_level=level, after_build=built)
-    line = f"👍 Saved for w/c {ws:%a} {ws.day} {ws:%b} - *{availability_reader.describe(rec)}*"
-    if rec.get("constraints"):
-        line += f", noted: _{rec['constraints']}_"
-    tail = ("That week is already built, so say if you want it rebuilt to this."
-            if built else "That is what the plan will be built to; tell me if any of it is wrong.")
-    return f"{line}. {tail}"
+    # One short line (Jamie, 16 Oct 2026: Fred's read-back echoed his whole message and a
+    # stock sentence, then a full reply followed). The constraints are still saved and
+    # planned to; they just aren't read back word for word.
+    line = f"👍 Saved: *{availability_reader.describe(rec)}* w/c {ws:%a} {ws.day} {ws:%b}."
+    if built:
+        line += " That week is already built: say if you want it rebuilt."
+    return line
 
 
 def _handle_hours_capture(token, chat_id, text, athletes, reading):
