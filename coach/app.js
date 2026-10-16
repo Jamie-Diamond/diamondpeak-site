@@ -6100,6 +6100,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.017", "2026-10-16", "Peak reloads itself when it is running older code than the latest release", 0],
     ["4.016", "2026-10-16", "Athletes & usage: the margin is no longer shown", 1],
     ["4.016", "2026-10-16", "Goals: the race-day fitness band now comes from your race distance and goal time", 0],
     ["4.015", "2026-10-16", "Athletes & usage shows the average coached athlete's month by model (messages, cost, cost each) and the margin at \u00a345", 1],
@@ -6239,6 +6240,9 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     ch.port1.onmessage = function (ev) {
       done = true;
       var v = (ev.data && (ev.data.version || ev.data.cache)) || 'unknown';
+      // The page's own code can lag the worker (16 Oct 2026): say so here.
+      var wm = /(\d+)$/.exec((ev.data && ev.data.cache) || '');
+      if (wm && SCRIPT_V !== '0' && Number(wm[1]) > Number(SCRIPT_V)) v += ' (this screen is older: close Peak fully and reopen)';
       navigator.serviceWorker.getRegistration().then(function (reg) {
         cell.textContent = v + (reg && (reg.waiting || reg.installing)
           ? ' — update syncing, reload to finish' : '');
@@ -6986,9 +6990,35 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
         if (!hadController) { hadController = true; return; }       // first install, not an update
         if (document.hidden) location.reload(); else swReload = true;
       });
+      // 16 Oct 2026: Settings said 4.016 (it asks the worker) while the page still ran
+      // pre-4.014 code - Android kept the old page alive, so Jamie saw a fix "not working".
+      // The page now asks the worker which release it serves and, if that is newer than
+      // the script running here, reloads: at once when nothing is being typed or sent,
+      // else the next time Peak is out of sight. Once per release, so it cannot loop.
+      var staleCheck = function () {
+        var c = navigator.serviceWorker.controller;
+        if (!c || !window.MessageChannel || SCRIPT_V === '0') return;
+        var ch = new MessageChannel();
+        ch.port1.onmessage = function (ev) {
+          var m = /(\d+)$/.exec((ev.data && ev.data.cache) || '');
+          var served = m ? Number(m[1]) : 0;
+          if (!served || served <= Number(SCRIPT_V)) return;
+          var key = 'cc.staleReload.' + served;
+          try { if (sessionStorage.getItem(key)) return; } catch (e) { /* ok */ }
+          var idle = !chatState.busy && !chatState.devBusy &&
+            !(($('#chatIn') || {}).value || '').trim();
+          if (document.hidden || idle) {
+            try { sessionStorage.setItem(key, '1'); } catch (e) { /* ok */ }
+            location.reload();
+          } else swReload = true;
+        };
+        try { c.postMessage({ type: 'version' }, [ch.port2]); } catch (e) { /* old worker */ }
+      };
+      setTimeout(staleCheck, 3000);
       document.addEventListener('visibilitychange', function () {
         if (document.hidden) { if (swReload) location.reload(); return; }
         navigator.serviceWorker.getRegistration().then(function (r) { if (r) r.update(); }).catch(function () {});
+        setTimeout(staleCheck, 1500);
       });
     }
   }
