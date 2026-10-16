@@ -86,6 +86,11 @@ class TestPromptBlock:
         # It has to actually override the coaching instructions above it in the prompt.
         assert "OVERRIDES" in block
 
+    def test_a_goal_they_state_is_still_saved(self, paused_file):
+        # 16 Oct 2026: Kathryn's goal said while tracking only became a note, not a goal.
+        block = pp.prompt_block("calum", "Calum", path=paused_file)
+        assert "goal-setup" in block and "switched back on" in block
+
 
 class TestLiveConfig:
     """The shipped config/planning-paused.json — the file that actually deploys."""

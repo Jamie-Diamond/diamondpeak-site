@@ -136,7 +136,13 @@ _PROMPT_BLOCK = (
     "have made, not a failure to report. If they ask what they should do, answer as a "
     "knowledgeable friend in a sentence or two, without turning it into a plan. "
     "If they ask for structured coaching or a plan back, tell them planning is paused "
-    "and Jamie can switch it back on."
+    "and Jamie can switch it back on. "
+    # 16 Oct 2026: Kathryn's "50 minute 10km by January" (4 Oct) became a note, not a goal,
+    # because of "set targets" above, so switching coaching back on found nothing to aim at.
+    "ONE EXCEPTION: when they state a goal of their own (a time, a distance, getting faster "
+    "or stronger), still save it as their goal with goal-setup (the preview, their OK, then "
+    "--apply). It changes nothing while they are tracking only; it is what their plan aims "
+    "at the day coaching is switched back on. Tell them it is saved for then."
 )
 
 

@@ -250,3 +250,28 @@ def test_preview_says_when_an_off_season_block_wins(tmp_path):
                                       "offseason": {"focus": "speed"}}}))
     pv = pt.goal_setup("tess", "ftp", path=p, today=SET, ctl=40.0, sports="bike")
     assert "block_1" not in pv and "off-season block" in pv["note"]
+
+
+def test_coached_with_no_goal_and_no_race_is_asked(tmp_path, monkeypatch):
+    # 16 Oct 2026: Kathryn, switched back to coaching after her 70.3, had no goal for weeks.
+    import planning_pause
+    monkeypatch.setattr(planning_pause, "is_paused", lambda slug, cfg=None, path=None: False)
+    p = tmp_path / "athletes.json"
+    past = {"race_date": "2026-09-20", "race_name": "70.3"}
+    p.write_text(json.dumps({"kat": past}))
+    today = date(2026, 10, 30)                       # past the race's recovery weeks
+    assert "NO GOAL YET" in goals.prompt_block("kat", "Kat", path=p, today=today)
+    # not while the race's recovery weeks run, not with a race ahead, not with a goal
+    assert "NO GOAL YET" not in goals.prompt_block("kat", "Kat", path=p, today=date(2026, 9, 25))
+    p.write_text(json.dumps({"kat": {"race_date": "2026-12-01"}}))
+    assert "NO GOAL YET" not in goals.prompt_block("kat", "Kat", path=p, today=today)
+    p.write_text(json.dumps({"kat": dict(past, **_cfg("run"))}))
+    assert "NO GOAL YET" not in goals.prompt_block("kat", "Kat", path=p, today=today)
+
+
+def test_tracking_only_is_not_asked(tmp_path, monkeypatch):
+    import planning_pause
+    monkeypatch.setattr(planning_pause, "is_paused", lambda slug, cfg=None, path=None: True)
+    p = tmp_path / "athletes.json"
+    p.write_text(json.dumps({"cal": {}}))
+    assert "NO GOAL YET" not in goals.prompt_block("cal", "Cal", path=p, today=date(2026, 10, 30))

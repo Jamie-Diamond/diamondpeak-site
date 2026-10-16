@@ -641,6 +641,20 @@ _SETUP = (
     "\"target_value\":290,\"by\":\"2027-01-31\"}}]' --keep swim (preview, then --apply).")
 
 
+def _needs_goal(cfg: dict, slug: str, today: date | None = None) -> bool:
+    """A coached athlete with nothing to aim at: no goal, no A race ahead, not in a race's
+    recovery weeks, no off-season block and not tracking only (16 Oct 2026: Kathryn was
+    switched back to coaching with her stated goal still sitting in a note)."""
+    try:
+        import planning_pause
+        import plan_tools as _pt
+        return not (goal_cfg(cfg) or planning_pause.is_paused(slug, cfg)
+                    or _pt.a_race_ahead(cfg, today) or _pt.in_post_race_recovery(cfg, today)
+                    or _pt.offseason_cfg(cfg))
+    except Exception:
+        return False
+
+
 def prompt_block(slug: str, first_name: str = "", path=None, today: date | None = None) -> str:
     """System-prompt lines for the coach: the goal block when one is running, and always
     how to set one up."""
@@ -667,6 +681,13 @@ def prompt_block(slug: str, first_name: str = "", path=None, today: date | None 
             out = _PROMPT.format(name=name, label=label(g),
                                  weeks=pos["weeks"], builds=pos["weeks"] - 1,
                                  block=pos["block"], week=pos["week"], test=test)
+    if not g and _needs_goal(cfg, slug, today):
+        out += (f"\nNO GOAL YET: {name} is coached but has no goal and no race ahead, so their "
+                "plan has nothing to aim at. At the next natural moment in chat (not in the "
+                "middle of a session question), agree one with them. If their standing rules "
+                "already record a goal they stated, confirm that one rather than asking from "
+                "scratch; otherwise offer 2-3 options as buttons. Then save it with goal-setup "
+                "as below.")
     if g and smart_missing(g):
         r = realistic(g["type"], g.get("start_values") or {}, 12)
         rng = (f" A realistic 12-week target from their start ({r['measure']} {r['from']}"
