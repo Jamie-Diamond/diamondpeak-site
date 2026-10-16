@@ -763,6 +763,16 @@ def _hist_entry(user, assistant, kind="text"):
             "ts": datetime.now().isoformat(timespec="seconds")}
 
 
+def _keep_ts(entry, ts):
+    """The turn's entry takes the time of the capture entry it replaces (Jamie, 16 Oct
+    2026: "have you been double messaging Fred?"). The chat archive keys an exchange on
+    time + message, so a new time archived it twice and Peak showed his message and the
+    read-back twice after a reload."""
+    if ts:
+        entry["ts"] = ts
+    return entry
+
+
 # --- Capture pass-through ----------------------------------------------------
 # A "capture" is one of the four deterministic parsers that run BEFORE the model
 # (race, weekly hours, directed day-rule, open action). Until 13 Aug 2026 a capture
@@ -7260,11 +7270,12 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
         # message appears in history once. Two entries with the same `user` text would read
         # as the instruction having been given twice — the misreading that made the 13 Aug
         # "Now" reply wrong in the first place.
-        readback = ""
+        readback, readback_ts = "", None
         if capture:
             if (history and history[-1].get("kind") == "capture"
                     and history[-1].get("user") == text):
-                readback = history.pop().get("assistant") or ""
+                _cap = history.pop()
+                readback, readback_ts = _cap.get("assistant") or "", _cap.get("ts")
             # Concatenated HERE, never inside prefetch_context: that block is cached per
             # athlete (see _PREFETCH_CACHE), and a note folded into the cache would be
             # replayed on the next, unrelated message.
@@ -7338,9 +7349,9 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
                 token, chat_id, slug, clean,
                 icu_retry=_make_calendar_retry(text, config, history, model, files,
                                                athlete_name, context))
-            history.append(_hist_entry(
+            history.append(_keep_ts(_hist_entry(
                 text, _capture_history_assistant(readback, clean)
-                + (f"\n\n{extra}" if extra else "")))
+                + (f"\n\n{extra}" if extra else "")), readback_ts))
             save_history(history, files["history"])
             return
 
@@ -7487,9 +7498,9 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
             icu_retry=_make_calendar_retry(text, config, history, model, files,
                                            athlete_name, context),
             tool_summary=gate_summary)
-        history.append(_hist_entry(
+        history.append(_keep_ts(_hist_entry(
             text, _capture_history_assistant(readback, clean)
-            + (f"\n\n{extra}" if extra else "")))
+            + (f"\n\n{extra}" if extra else "")), readback_ts))
         save_history(history, files["history"])
 
         # LAST: after the reply, after the verifier (so the diff includes anything its

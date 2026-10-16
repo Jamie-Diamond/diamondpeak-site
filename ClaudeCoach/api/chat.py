@@ -631,6 +631,16 @@ def timeline(slug: str | None, limit: int = 80, chat_id: str | None = None,
                           "ts": ts, "key": hk + ":u"})
         if coach.startswith("[chart/photo sent]"):
             coach = ""                      # notify.py's stand-in for a chart; the chart is in the outbox
+        # A capture read-back + model reply share one history entry ("👍 Saved…\n\n<reply>");
+        # the reply is also in the outbox, so show only the read-back here, or the reply
+        # appeared twice (Fred, 16 Oct 2026).
+        if coach and "\n\n" in coach and not _in_outbox(coach, ts, user, out_texts, out_at):
+            core = _FOOTER_RE.sub("", coach).strip()
+            for o_core in out_texts:
+                if (len(o_core) > 40 and core.endswith(o_core) and core != o_core
+                        and _in_outbox(o_core, ts, user, out_texts, out_at)):
+                    coach = core[:-len(o_core)].strip()
+                    break
         if coach and (e.get("kind") == "drill" or not _in_outbox(coach, ts, user, out_texts, out_at)):
             items.append({"who": "coach", "text": coach, "ts": ts, "key": hk + ":c"})
     for o in out:
