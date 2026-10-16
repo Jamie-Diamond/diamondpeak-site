@@ -1,0 +1,6 @@
+{
+  "_README": "What an athlete pays, for the margin line on Peak's Athletes & usage page (lib/usage_ledger.py model_view). Jamie, 6 Oct 2026: at most 45 GBP a month including VAT. usd_per_gbp converts our USD API costs.",
+  "price_gbp_incl_vat": 45,
+  "vat_rate": 0.2,
+  "usd_per_gbp": 1.325
+}

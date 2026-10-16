@@ -2684,7 +2684,25 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
             (a.tripped ? '<small>The key was refused just now, so everyone is on Max for the moment.</small>' : '') +
             '</p>';
         }
-        box.innerHTML = apiLine + '<table class="tbl utbl"><thead><tr><th>Athlete</th><th>Chat this month</th>' +
+        // By model (Jamie, 16 Oct 2026: "track costs and messages per model ... for this to
+        // be viable this is key"): the average coached athlete's month, and the margin.
+        var bm = j.byModel, modelH = '';
+        if (bm && bm.rows && bm.rows.length) {
+          var KIND = { chat: 'chat replies', scheduled: 'daily messages, debriefs, plans' };
+          var mrows = bm.rows.map(function (r) {
+            return '<tr><td class="lbl"><b>' + esc(r.model.charAt(0).toUpperCase() + r.model.slice(1)) +
+              '</b><small>' + esc(KIND[r.kind] || r.kind) + '</small></td><td>' + Math.round(r.msgs) +
+              '</td><td>' + money(r.usd) + '</td><td>' +
+              (r.per_msg != null ? '$' + Number(r.per_msg).toFixed(3) : '\u2014') + '</td></tr>';
+          }).join('');
+          modelH = '<p class="uapi"><b>Average coached athlete: ' + money(bm.avg_month) + ' a month' +
+            (bm.margin != null ? ' \u00b7 ' + Math.round(bm.margin * 100) + '% margin at \u00a3' + bm.price_gbp : '') +
+            '</b><small>' + esc((bm.athletes || []).join(', ')) + '. Per athlete per month, from the last ' +
+            bm.window_days + ' days. Not you, not dev work.</small></p>' +
+            '<table class="tbl utbl"><thead><tr><th>By model</th><th>Messages</th><th>Cost</th><th>Each</th>' +
+            '</tr></thead><tbody>' + mrows + '</tbody></table>';
+        }
+        box.innerHTML = apiLine + modelH + '<table class="tbl utbl"><thead><tr><th>Athlete</th><th>Chat this month</th>' +
           '<th>7 days</th><th>Avg / wk</th><th>Avg / mo</th></tr></thead><tbody>' + body +
           '</tbody></table><p class="card-f">API list prices, as if Peak ran on a pay-per-use key. ' +
           '7 days: the last seven days, rolling. Averages: since logging began, or since the athlete joined. Logging began ' +
@@ -6060,6 +6078,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.015", "2026-10-16", "Athletes & usage shows the average coached athlete's month by model (messages, cost, cost each) and the margin at \u00a345", 1],
     ["4.014", "2026-10-16", "Athletes & usage shows what the API key spent this month against the $100 credit, and who is on it", 1],
     ["4.013", "2026-10-16", "Today shows Fitness and Form, each with a word for where you are", 0],
     ["4.012", "2026-10-15", "Sign-up: tick every box on Intervals.icu; Connect Strava only for an Apple Watch; the checklist reads cleaner", 0],

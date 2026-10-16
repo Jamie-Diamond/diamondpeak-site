@@ -1437,12 +1437,12 @@ def admin_usage(request: Request):
     import usage_ledger
     athletes, users = _load(ATHLETES_CONFIG), _users()
     onboarding = _load(CC / "config" / "onboarding_state.json")
+    coach_slug = _slug_of(users.get(email) or {}, athletes)
     try:
-        summ = usage_ledger.summary(athletes)
+        summ = usage_ledger.summary(athletes, coach=coach_slug)
     except Exception as e:                        # a cost read must not hide the stages
         summ = {"athletes": {}, "error": f"{type(e).__name__}: {e}"}
     costs = summ.get("athletes") or {}
-    coach_slug = _slug_of(users.get(email) or {}, athletes)
     admin_cid = str((athletes.get(coach_slug) or {}).get("chat_id") or "")
     out = admin_view.rows(users, athletes, _load_list(PENDING_FILE), onboarding,
                           {k: v for k, v in costs.items() if k not in ("system", "dev")},
@@ -1450,7 +1450,8 @@ def admin_usage(request: Request):
     return JSONResponse({"rows": out, "shared": costs.get("system"), "dev": costs.get("dev"),
                          "total": admin_view.totals(costs), "since": summ.get("since"),
                          "rateDays": summ.get("rate_days"), "generated": summ.get("generated"),
-                         "api": summ.get("api"), "error": summ.get("error")}, headers=NO_STORE)
+                         "api": summ.get("api"), "byModel": summ.get("by_model"),
+                         "error": summ.get("error")}, headers=NO_STORE)
 
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
