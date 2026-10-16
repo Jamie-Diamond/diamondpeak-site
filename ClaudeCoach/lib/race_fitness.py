@@ -169,6 +169,8 @@ def parse_goal_s(text, event: str):
     s = str(text or "").lower()
     if not s or "finish" in s:
         return None
+    # The distance is not the time: "10k in 50 min" read as 10 min (Jamie, 16 Oct 2026).
+    s = re.sub(r"\d+(?:\.\d+)?\s*(?:km|k|mi|miles?)\b", " ", s)
     m = re.search(r"(\d{1,2})(?::(\d{2}))?(?::(\d{2}))?", s)
     if not m:
         return None

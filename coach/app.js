@@ -4925,7 +4925,24 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     }
 
     var cp = d.ctlProjection || {};
-    if (triSeason && cp.target_ctl_min != null) {
+    // The race-day band from the blueprint's level tables (season.fitness; Jamie, 16 Oct
+    // 2026): running Fitness for a run race or a goal like "10k in 50 min", total otherwise.
+    var fb = sv && sv.fitness;
+    if (fb && fb.now != null) {
+      var gap = Math.max(5, Math.round((fb.lo - fb.now) / Math.max(fb.now, 1) * 20) * 5);
+      var what = fb.sport === 'running' ? 'Running fitness' : 'Fitness';
+      var forWhat = sv.goal && !sv.aRace ? 'your ' + (fb.event === 'half_marathon' ? 'half marathon' : fb.event)
+                                         : 'race day';
+      h += card(what + ' for ' + forWhat,
+        '<div><div class="statline"><b>' + Number(fb.now).toFixed(0) + '</b>' +
+        '<span>now · target ' + fb.lo + '–' + fb.hi + ' for ' + esc(fb.levelLabel || '') + '</span></div>' +
+        '<div class="bar' + (fb.status === 'under' ? ' warn' : '') + '"><i style="width:' +
+        Math.min(100, fb.now / fb.hi * 100).toFixed(0) + '%"></i></div></div>',
+        { foot: (fb.status === 'in' ? 'Inside the band.'
+                 : fb.status === 'over' ? 'Above the band: plenty for this goal.'
+                 : 'You need to be about ' + gap + '% fitter to reach the band.') +
+                (fb.sport === 'running' ? ' Running counts most; some cycling counts too.' : '') });
+    } else if (triSeason && cp.target_ctl_min != null) {
       var now = (d.kpi || {}).ctl || 0, lo = cp.target_ctl_min, hi = cp.target_ctl_max;
       h += card('Fitness target for race day',
         // One wrapper, not two siblings: .card pads each direct child, so two
@@ -6084,6 +6101,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
     ["4.016", "2026-10-16", "Athletes & usage: the margin is no longer shown", 1],
+    ["4.016", "2026-10-16", "Goals: the race-day fitness band now comes from your race distance and goal time", 0],
     ["4.015", "2026-10-16", "Athletes & usage shows the average coached athlete's month by model (messages, cost, cost each) and the margin at \u00a345", 1],
     ["4.015", "2026-10-16", "Goals: how much fitter you need to be, as a percentage", 0],
     ["4.014", "2026-10-16", "Athletes & usage shows what the API key spent this month against the $100 credit, and who is on it", 1],

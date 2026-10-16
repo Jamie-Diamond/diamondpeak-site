@@ -170,6 +170,49 @@ def _run_predictions(v, event, a_race, cfg, profile, data, today, when) -> None:
         v["raceday_s"] = int(round(v["now_s"] * (1 - share * (1 - gain))))
 
 
+def _sport_now(data: dict, sport: str):
+    """Today's per-sport Fitness from the published series (fitnessBySport.current)."""
+    pts = ((data.get("fitnessBySport") or {}).get("current") or {}).get(sport) or []
+    try:
+        return float(pts[-1][1]) if pts else None
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
+def fitness_band(event, goal_s, cfg: dict, profile: dict, data: dict) -> dict | None:
+    """The race-day Fitness band from the blueprint's level tables (config/event-levels.json,
+    blueprint §4.5) for an event and goal time (Jamie, 16 Oct 2026: "a 70+ CTL for a 10k is
+    madness ... I thought we did this with the blueprints"). A run race measures RUNNING
+    Fitness (with the blueprint's cycling credit, rf.running_status); anything else total
+    Fitness. None when the event has no level table."""
+    import race_fitness as rf
+    if not event or not rf.level_table(event):
+        return None
+    row = rf.level_for_time(event, goal_s) if goal_s else None
+    source = "goal"
+    if not row:
+        lv = rf.athlete_level(cfg, profile, event, (data.get("kpi") or {}).get("ctl"))
+        row, source = lv, (lv or {}).get("source")
+    if not row:
+        return None
+    lo, hi = row["fitness_at_taper"]
+    out = {"event": event, "levelLabel": row.get("label"), "source": source, "lo": lo, "hi": hi}
+    if rf.event_kind(event) == "run":
+        st = rf.running_status(event, "taper", _sport_now(data, "Run"), int(row["level"]),
+                               bike_ctl=_sport_now(data, "Ride"))
+        if not st:
+            return None
+        out.update(sport="running", now=st["effective"], status=st["status"])
+    else:
+        now = (data.get("kpi") or {}).get("ctl")
+        if now is None:
+            return None
+        now = round(float(now), 1)
+        out.update(sport="total", now=now,
+                   status="under" if now < lo else "over" if now > hi else "in")
+    return out
+
+
 def payload(slug: str, cfg: dict, profile: dict, data: dict, today: date | None = None) -> dict:
     import planning_pause
     import races as races_lib
@@ -197,6 +240,11 @@ def payload(slug: str, cfg: dict, profile: dict, data: dict, today: date | None 
     a_view = next((v for v in views if a_race and v["name"] == a_race.get("name")
                    and v["date"] == a_race.get("date")), None)
     out = {"aRace": a_view, "races": views, "phases": phases, "trackingOnly": tracking}
+    if a_view:
+        try:
+            out["fitness"] = fitness_band(a_view.get("event"), a_view.get("goal_s"), cfg, profile, data)
+        except Exception:
+            pass
     # A goal without a race (lib/goals.py): the goal card replaces the race hero while no A
     # race is ahead; with one ahead, the page just says the goal resumes after it.
     try:
@@ -210,6 +258,12 @@ def payload(slug: str, cfg: dict, profile: dict, data: dict, today: date | None 
                                              ctl_now=(data.get("kpi") or {}).get("ctl"))
                 # No race ahead but still in the last race's recovery weeks.
                 out["goal"]["waiting"] = not _pt.goal_active(cfg, today)
+                # A goal with an event in it ("10k in 50 min") gets that event's band.
+                import race_fitness as rf
+                tgt = (cfg.get("goal") or {}).get("target") or ""
+                ev = rf.levels_key(tgt)
+                if ev:
+                    out["fitness"] = fitness_band(ev, rf.parse_goal_s(tgt, ev), cfg, profile, data)
     except Exception:
         pass
     return out
