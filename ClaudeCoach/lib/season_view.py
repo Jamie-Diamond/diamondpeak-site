@@ -16,6 +16,8 @@ build to the A race.
       "trackingOnly": bool,                    no plan, so no phases
       "goal": goals.view() for an athlete with a goal and no A race ahead (lib/goals.py),
       "goalAfterRace": the goal's label when an A race is ahead of it,
+      "limiters": what is holding them back from a run goal time (lib/limiters.py):
+                  fitness, engine, efficiency, durability, and the biggest gap named,
     }
 
 Run-race predictions, FIRST CHOICE (Jamie, 17 Oct 2026: "build a better predictor ...
@@ -235,6 +237,17 @@ def fitness_band(event, goal_s, cfg: dict, profile: dict, data: dict) -> dict | 
     return out
 
 
+def limiters_for(event, goal_s, goal, data: dict, fb: dict | None) -> dict | None:
+    """The "What's holding you back" card for a run event with a goal time."""
+    import limiters
+    import race_fitness as rf
+    run = (data.get("performance") or {}).get("run")
+    km = rf._race_km(event) if event else None
+    if not run or not km or not goal_s or rf.event_kind(event) != "run":
+        return None
+    return limiters.diagnose(km * 1000, goal_s, goal, run, fb, rf.level_for_time(event, goal_s))
+
+
 def payload(slug: str, cfg: dict, profile: dict, data: dict, today: date | None = None) -> dict:
     import planning_pause
     import races as races_lib
@@ -267,6 +280,11 @@ def payload(slug: str, cfg: dict, profile: dict, data: dict, today: date | None 
             out["fitness"] = fitness_band(a_view.get("event"), a_view.get("goal_s"), cfg, profile, data)
         except Exception:
             pass
+        try:
+            out["limiters"] = limiters_for(a_view.get("event"), a_view.get("goal_s"),
+                                           a_view.get("goal"), data, out.get("fitness"))
+        except Exception:
+            pass
     # A goal without a race (lib/goals.py): the goal card replaces the race hero while no A
     # race is ahead; with one ahead, the page just says the goal resumes after it.
     try:
@@ -286,6 +304,8 @@ def payload(slug: str, cfg: dict, profile: dict, data: dict, today: date | None 
                 ev = rf.levels_key(tgt)
                 if ev:
                     out["fitness"] = fitness_band(ev, rf.parse_goal_s(tgt, ev), cfg, profile, data)
+                    out["limiters"] = limiters_for(ev, rf.parse_goal_s(tgt, ev), tgt, data,
+                                                   out["fitness"])
     except Exception:
         pass
     return out

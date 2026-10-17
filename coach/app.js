@@ -4803,6 +4803,21 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     return 'No time prediction for this kind of race yet.';
   }
 
+  /* What's holding you back (lib/limiters.py; Jamie, 17 Oct 2026: "your fitness is the
+     issue, or it's your durability or efficiency"): four areas from training, each against
+     what the goal time needs, the biggest gap named. */
+  function limitersCard(L) {
+    if (!L || !L.rows) return '';
+    var rows = L.rows.map(function (r) {
+      return '<tr' + (r.key === L.limiter ? ' class="lim"' : '') + '><td class="lbl">' + esc(r.label) +
+        '</td><td>' + esc(r.you) + '</td><td>' + esc(r.need) + '</td><td><span class="lim-d ' +
+        esc(r.status) + '"></span></td></tr>';
+    }).join('');
+    return card('What\u2019s holding you back', '<p class="gv' + (L.limiter ? ' warn' : '') + '" style="margin:12px 16px">' +
+      esc(L.headline) + '</p><table class="tbl"><thead><tr><th></th><th>You</th><th>Goal needs</th><th></th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table>', { flush: true, foot: L.foot });
+  }
+
   function seasonTimeline(sv) {
     var ph = sv.phases || [], a = sv.aRace;
     if (!ph.length || !a) return '';
@@ -4909,8 +4924,10 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
             { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + '</p></section>';
         h += card(a.hold ? 'What you could hold' : 'Times', goalTimes(a) + goalVerdict(a),
                   { foot: goalMethod(a) });
+        h += limitersCard(sv.limiters);
       } else if (sv.goal) {
         h += goalBlock(sv.goal);
+        h += limitersCard(sv.limiters);
       } else {
         h += '<section class="hero"><p class="hero-k">Season</p><h2 class="hero-t">No A race booked</h2>' +
           '<p class="hero-m">Tell the coach your next target race, or a goal such as raising ' +
@@ -6124,6 +6141,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.023", "2026-10-17", "Goals: \u2018What\u2019s holding you back\u2019 \u2013 your fitness, engine (VO2max), efficiency and durability from training, each against what your goal time needs, with the biggest gap named", 0],
     ["4.022", "2026-10-17", "Goals: a run race time says when it is out of date (much less running, or a break, since the races it comes from) and that a parkrun or 5k time trial will update it", 0],
     ["4.021", "2026-10-17", "Goals: run race times now come from your own races (parkruns, 10ks, halves), how much you slow as races get longer, and your weekly km for the marathon", 0],
     ["4.020", "2026-10-17", "Settings retries if an athlete\u2019s connections and coaching options don\u2019t load", 1],

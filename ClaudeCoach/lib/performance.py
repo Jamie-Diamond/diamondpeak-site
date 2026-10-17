@@ -16,7 +16,17 @@
                        now and six weeks ago (same watch only)
         "training":    best 3k / 5k / 10k inside any run in the last 90 days (pace curve)
         "criticalSpeed": {"mps", "pace_s_km"} - Intervals.icu's 90-day model, for reference
+        "engine":      {"vo2max", "source", "n"} - Garmin's VO2max estimate (median, last 6
+                       weeks), else the heart-rate one (run_model.hr_vdot)
+        "threshold":   {"pace_s_km", "source", "lthr", "hr_top"} - pace at threshold HR from
+                       the speed-on-heart-rate line of the last 6 weeks' runs, else the
+                       threshold pace set in Intervals
+        "durability":  {"drift_pct", "n", "longest_km"} - median pace:HR drift of runs of
+                       75+ min in the last 8 weeks (Intervals' decoupling; not race or
+                       multisport days) and the longest of those runs
     }}
+lib/limiters.py turns engine / threshold / durability / weekly km into the Goals page's
+"What's holding you back" card.
 
 and appends one row per week to athletes/<slug>/performance-history.json, so the trend
 of each determinant is kept for the coach and for the "where to improve" work next.
@@ -30,6 +40,7 @@ None and the Goals page keeps its threshold-pace estimate.
 from __future__ import annotations
 
 import json
+import statistics
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -43,7 +54,13 @@ KEEP_WEEKS = 156
 RUN_TYPES = ("Run", "TrailRun", "VirtualRun", "Treadmill")
 SLIM = ("id", "start_date_local", "type", "name", "distance", "moving_time", "elapsed_time",
         "average_heartrate", "athlete_max_hr", "icu_resting_hr", "icu_ignore_hr", "gap",
-        "average_speed", "device_name", "race")
+        "average_speed", "device_name", "race", "VO2MaxGarmin", "lthr", "decoupling",
+        "threshold_pace")
+CACHE_VERSION = 2                    # bump when SLIM grows: forces a full refetch
+ENGINE_DAYS = 42
+THRESHOLD_MIN_RUNS = 6
+THRESHOLD_MAX_REACH = 30             # bpm the line may be extended past the hardest run
+LONG_RUN_S = 75 * 60
 TRAINING_EVENTS = {"3k": 3000.0, "5k": 5000.0, "10k": 10000.0}
 
 
@@ -67,9 +84,10 @@ def activities(slug: str, client, today: date) -> list:
     path = _athlete_dir(slug) / "run-history.json"
     cache = _load(path, {})
     full = rm._d(cache.get("full"))
-    if not cache.get("acts") or not full or (today - full).days >= FULL_EVERY_DAYS:
+    if (not cache.get("acts") or not full or (today - full).days >= FULL_EVERY_DAYS
+            or cache.get("v") != CACHE_VERSION):
         acts = [_slim(a) for a in client.get_training_history(days=HISTORY_DAYS) or []]
-        cache = {"full": today.isoformat(), "acts": acts}
+        cache = {"full": today.isoformat(), "acts": acts, "v": CACHE_VERSION}
     else:
         fetched = rm._d(cache.get("fetched")) or full
         days = (today - fetched).days + OVERLAP_DAYS
@@ -134,6 +152,61 @@ def _longest_break(acts: list, today: date, days: int = 56) -> int:
     return max((b - a).days - 1 for a, b in zip(edges, edges[1:]))
 
 
+def _recent_runs(acts: list, today: date, days: int) -> list:
+    multi = rm._multisport_days(acts)
+    return [a for a in acts if a.get("type") == "Run" and not a.get("race")
+            and str(a.get("start_date_local"))[:10] not in multi
+            and (d := rm._d(a.get("start_date_local"))) and 0 <= (today - d).days < days]
+
+
+def engine(acts: list, today: date) -> dict | None:
+    runs = _recent_runs(acts, today, ENGINE_DAYS)
+    garmin = [a["VO2MaxGarmin"] for a in runs if a.get("VO2MaxGarmin")]
+    if garmin:
+        return {"vo2max": round(statistics.median(garmin), 1), "source": "Garmin", "n": len(garmin)}
+    eff = rm.efficiency(acts, today + timedelta(days=1), ENGINE_DAYS)
+    if eff:
+        return {"vo2max": eff["value"], "source": "heart rate", "n": eff["n"]}
+    return None
+
+
+def threshold(acts: list, today: date) -> dict | None:
+    """Pace at threshold HR from the speed-on-HR line of recent runs (20-120 min), if the
+    hardest of them reach within THRESHOLD_MAX_REACH bpm of it; else Intervals' setting."""
+    runs = [a for a in _recent_runs(acts, today, ENGINE_DAYS)
+            if 1200 <= (a.get("moving_time") or 0) <= 7200 and a.get("average_heartrate")
+            and not a.get("icu_ignore_hr") and (a.get("gap") or a.get("average_speed"))]
+    lthrs = [a["lthr"] for a in runs if a.get("lthr")]
+    lthr = statistics.median(lthrs) if lthrs else None
+    if lthr and len(runs) >= THRESHOLD_MIN_RUNS:
+        pts = [(a["average_heartrate"], a.get("gap") or a["average_speed"]) for a in runs]
+        top = max(h for h, _ in pts)
+        mx, my = statistics.mean(h for h, _ in pts), statistics.mean(v for _, v in pts)
+        sxx = sum((h - mx) ** 2 for h, _ in pts)
+        if sxx > 0 and lthr - top <= THRESHOLD_MAX_REACH:
+            b = sum((h - mx) * (v - my) for h, v in pts) / sxx
+            v = my + b * (lthr - mx)
+            if b > 0 and v > 0:
+                return {"pace_s_km": round(1000 / v), "source": "heart rate", "lthr": round(lthr),
+                        "hr_top": round(top)}
+    set_ = sorted((str(a.get("start_date_local")), a["threshold_pace"]) for a in acts
+                  if a.get("type") == "Run" and a.get("threshold_pace"))
+    if set_:
+        return {"pace_s_km": round(1000 / set_[-1][1]), "source": "Intervals setting",
+                "lthr": round(lthr) if lthr else None, "hr_top": None}
+    return None
+
+
+def durability(acts: list, today: date) -> dict | None:
+    longs = [a for a in _recent_runs(acts, today, 56) if (a.get("moving_time") or 0) >= LONG_RUN_S]
+    if not longs:
+        return None
+    drift = [a["decoupling"] for a in longs if a.get("decoupling") is not None]
+    return {"drift_pct": round(statistics.median(drift), 1) if drift else None, "n": len(longs),
+            "n_drift": len(drift),
+            "longest_km": round(max((a.get("distance") or 0) for a in longs) / 1000, 1)}
+
+
 def determinants(acts: list, today: date, profile: dict | None = None,
                  training: list | None = None, cs_mps: float | None = None) -> dict:
     """The run block of `build`, from data already fetched. Pure."""
@@ -154,7 +227,9 @@ def determinants(acts: list, today: date, profile: dict | None = None,
     if eff:
         prev = rm.efficiency(acts, today - timedelta(days=41))
         eff["prev"] = prev["value"] if prev and prev["device"] == eff["device"] else None
-    out = {"races": races, "k": rm.personal_k(races, today), "predictions": preds,
+    out = {"engine": engine(acts, today), "threshold": threshold(acts, today),
+           "durability": durability(acts, today),
+           "races": races, "k": rm.personal_k(races, today), "predictions": preds,
            "weeklyKm": weekly_km, "longestKm": longest, "recentBreakDays": brk, "efficiency": eff,
            "training": training or []}
     if cs_mps:

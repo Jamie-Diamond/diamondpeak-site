@@ -227,3 +227,83 @@ def test_the_goals_page_and_coach_carry_the_flag(monkeypatch):
     p = sv.payload("x", {}, {}, {"recent": [], "performance": {"run": run}}, today=today)
     r = p["races"][0]
     assert r["stale"]["reason"] == "break" and r["note"].startswith("Out of date")
+
+
+def test_a_parkrun_on_a_day_with_a_ride_still_counts_but_a_triathlon_does_not():
+    acts = easy_runs(date(2025, 1, 1), date(2025, 12, 31))
+    acts += [act("2025-11-01T09:00:00", 5.0, 1150, hr=172, name="parkrun"),           # Saturday
+             act("2025-11-01T14:00:00", 60.0, 7200, hr=130, type_="Ride", name="Afternoon ride")]
+    assert [r["date"] for r in rm.detect_races(acts)] == ["2025-11-01"]
+    acts += [act("2025-11-08T08:00:00", 1.5, 1700, type_="OpenWaterSwim"),
+             act("2025-11-08T08:40:00", 40.0, 3700, type_="Ride"),
+             act("2025-11-08T09:50:00", 10.0, 2500, hr=170, race=True, name="Tri run")]
+    assert [r["date"] for r in rm.detect_races(acts)] == ["2025-11-01"]
+
+
+# ── What's holding you back (lib/limiters.py) ────────────────────────────────
+
+import limiters as lim  # noqa: E402
+
+SUB3 = {"run_km": [80, 110], "long_run_km": [32, 35]}
+
+
+def run_stats(km=40, vo2=59.3, thr=242, drift=-2.0, longest=32.0):
+    return {"weeklyKm": km, "engine": {"vo2max": vo2, "source": "Garmin", "n": 9},
+            "threshold": {"pace_s_km": thr, "source": "heart rate", "lthr": 170, "hr_top": 146},
+            "durability": {"drift_pct": drift, "n": 4, "longest_km": longest}}
+
+
+def test_threshold_pace_for_a_sub3_marathon_is_about_4_01():
+    need = lim.threshold_pace_for(rm.vdot(42195, 10800))
+    assert 238 <= need <= 244
+
+
+def test_jamie_today_fitness_is_the_issue():
+    d = lim.diagnose(42195, 10800, "sub 3", run_stats(), {"now": 55, "lo": 70, "hi": 95}, SUB3)
+    by = {r["key"]: r for r in d["rows"]}
+    assert d["limiter"] == "fitness" and by["fitness"]["status"] == "red"
+    assert by["engine"]["status"] == by["efficiency"]["status"] == by["durability"]["status"] == "green"
+    assert d["headline"] == "Fitness is the issue: 40 km a week against 80–110 for sub 3."
+    assert "146 bpm, threshold 170" in d["foot"]
+
+
+def test_engine_short_names_the_engine():
+    d = lim.diagnose(42195, 10800, "sub 3", run_stats(km=95, vo2=48, thr=232),
+                     {"now": 80, "lo": 70, "hi": 95}, SUB3)
+    assert d["limiter"] == "engine" and d["headline"].startswith("Your engine is the issue: VO2max 48")
+
+
+def test_efficiency_is_named_when_it_also_shows_as_drift():
+    d = lim.diagnose(42195, 10800, "sub 3", run_stats(km=95, thr=262, drift=12),
+                     {"now": 80, "lo": 70, "hi": 95}, SUB3)
+    by = {r["key"]: r for r in d["rows"]}
+    assert by["durability"]["short"] > by["efficiency"]["short"]          # drift is the bigger gap
+    assert d["limiter"] == "efficiency" and d["headline"].endswith("It also shows up late in your long runs.")
+
+
+def test_short_long_runs_are_durability_and_all_clear_says_so():
+    d = lim.diagnose(42195, 10800, "sub 3", run_stats(km=95, longest=21),
+                     {"now": 80, "lo": 70, "hi": 95}, SUB3)
+    assert d["limiter"] == "durability" and "longest run 21 km against 32–35" in d["headline"]
+    ok = lim.diagnose(42195, 10800, "sub 3", run_stats(km=95), {"now": 80, "lo": 70, "hi": 95}, SUB3)
+    assert ok["limiter"] is None and ok["headline"].startswith("Nothing is holding you back")
+
+
+def test_missing_measures_are_unknown_not_guessed():
+    d = lim.diagnose(10000, 3000, "10k in 50 min", {"weeklyKm": 20}, None, {"run_km": [25, 40]})
+    by = {r["key"]: r for r in d["rows"]}
+    assert by["engine"]["status"] == by["efficiency"]["status"] == by["durability"]["status"] == "unknown"
+    assert d["limiter"] == "fitness"
+    assert lim.diagnose(10000, None, "", {"weeklyKm": 20}, None, None) is None
+
+
+def test_goals_payload_carries_the_card(monkeypatch):
+    import planning_pause
+    import races
+    import season_view as sv
+    monkeypatch.setattr(planning_pause, "is_paused", lambda slug, cfg=None: False)
+    monkeypatch.setattr(races, "load_races", lambda slug, config=None: [
+        {"name": "Brighton Marathon", "date": "2027-04-04", "priority": "A", "distance": "Marathon"}])
+    p = sv.payload("x", {"race_goal": "sub 3"}, {}, {"recent": [], "performance": {"run": run_stats()}},
+                   today=date(2026, 10, 17))
+    assert p["limiters"]["limiter"] == "fitness" and len(p["limiters"]["rows"]) == 4

@@ -2329,7 +2329,9 @@ def cmd_run_predict(args) -> dict:
     """Run race times, 5k to marathon, from the athlete's own races (lib/run_model.py):
     the same numbers as Peak's Goals page. `booked` is each run race on their calendar
     with Now / Race day exactly as the Goals page shows them; `standard` is Now for the
-    usual distances (or --km). Use these numbers, never invent run times."""
+    usual distances (or --km); `holding_back` is the Goals page's "What's holding you back"
+    (fitness / engine / efficiency / durability against the goal time). Use these numbers,
+    never invent run times or limiters."""
     import run_model
     from season_view import training_volume
     data = _training_data(args.athlete)
@@ -2354,7 +2356,12 @@ def cmd_run_predict(args) -> dict:
                "goal": r.get("goal"), "method": r.get("method"), "note": r.get("note"),
                "out_of_date": bool(r.get("stale"))}
               for r in (data.get("season") or {}).get("races") or [] if r.get("kind") == "run"]
+    lim = (data.get("season") or {}).get("limiters") or {}
+    holding = ({"headline": lim.get("headline"), "limiter": lim.get("limiter"),
+                "areas": [{k: r.get(k) for k in ("label", "you", "need", "status", "source")}
+                          for r in lim.get("rows") or []], "how": lim.get("foot")} if lim else None)
     return {"athlete": args.athlete, "as_of": (data.get("performance") or {}).get("asOf"),
+            "holding_back": holding,
             "booked": booked, "standard": standard, "k": run.get("k"),
             "weekly_km": round(k_now, 1) if k_now is not None else None,
             "races": [{"date": r["date"], "event": r["event"], "time": fmt(r["time_s"]),

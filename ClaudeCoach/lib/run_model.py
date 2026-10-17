@@ -198,9 +198,14 @@ def _parkrun(a: dict) -> bool:
 
 
 def _multisport_days(activities: list) -> set:
-    """Days with a swim or ride: a run that day is a triathlon / duathlon leg."""
-    return {str(a.get("start_date_local"))[:10] for a in activities
-            if "Swim" in str(a.get("type") or "") or str(a.get("type") or "") in ("Ride", "Transition")}
+    """Race days of a triathlon / duathlon: a Transition logged, or a swim and a ride on
+    the same day. NOT any day with a ride: a triathlete rides and runs on most days, and
+    that excluded half their runs (and any parkrun with a ride later)."""
+    by_day = {}
+    for a in activities:
+        by_day.setdefault(str(a.get("start_date_local"))[:10], set()).add(str(a.get("type") or ""))
+    return {d for d, ts in by_day.items()
+            if "Transition" in ts or (any("Swim" in t for t in ts) and ts & {"Ride", "VirtualRide"})}
 
 
 def _parse_time(v) -> int | None:
