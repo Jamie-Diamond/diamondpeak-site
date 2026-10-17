@@ -58,6 +58,7 @@ import coach_alert                                             # noqa: E402
 import day_overrides                                           # noqa: E402
 import weekly_availability                                     # noqa: E402
 import agreed_week                                              # noqa: E402
+import workout_profile                                         # noqa: E402
 
 ATHLETES = BASE / "config" / "athletes.json"
 # Known-baseline signatures (committed, athlete-slug keyed). This check currently
@@ -154,6 +155,50 @@ def _dur_min(ev) -> int:
     return int(m.group(1)) if m else 0
 
 
+# Race eve (Jamie, 17 Oct 2026). The day before ANY race (A, B or C) is rest or a short
+# opener. Until now only the A race's eve was protected, and only by prompt text; B/C eves
+# were checked at build time (stage1 booking_easy_dates) but a chat edit could still land
+# a hard session there. Same cut as stage1's _hard_minutes_on: time at >= 0.90 of
+# threshold, more than 10 minutes of it. A 90-minute session is "long" whatever its zones.
+RACE_EVE_HARD_PCT = 90
+RACE_EVE_HARD_MIN = 10
+RACE_EVE_LONG_MIN = 90
+
+
+def _hard_minutes(ev: dict) -> float:
+    """Minutes of a planned workout's steps at >= RACE_EVE_HARD_PCT % of threshold."""
+    blocks = workout_profile.planned(ev.get("workout_doc"), {})
+    return sum(sec for sec, pct, _z in blocks if pct >= RACE_EVE_HARD_PCT) / 60
+
+
+def race_eve_findings(workouts: list, races: list) -> list[dict]:
+    """Planned workouts that break the race-eve rule. `races` are calendar RACE events
+    (or {"start_date_local", "name"} stand-ins); a race the day after another race is not
+    a workout, so a stage race or a double-header weekend never trips it."""
+    out = []
+    for r in races:
+        try:
+            race_day = date.fromisoformat(str(r.get("start_date_local") or "")[:10])
+        except ValueError:
+            continue
+        eve = race_day - timedelta(days=1)
+        for e in workouts:
+            if str(e.get("start_date_local") or "")[:10] != eve.isoformat():
+                continue
+            hard, dur = _hard_minutes(e), _dur_min(e)
+            if hard > RACE_EVE_HARD_MIN:
+                why = f"{hard:.0f} min at race pace or harder"
+            elif dur >= RACE_EVE_LONG_MIN:
+                why = f"{dur} min long"
+            else:
+                continue
+            out.append({"week": (eve - timedelta(days=eve.weekday())).isoformat(),
+                        "detail": (f"'{(e.get('name') or 'session')[:48]}' on {eve} is {why}, "
+                                   f"the day before '{(r.get('name') or 'race')[:48]}'. The "
+                                   f"day before a race is rest or one short opener")})
+    return out
+
+
 # The only categories that BLOCK. Everything else (fuelling, weekly load, soft
 # distribution, skipped checks, coach-directed deviations) is a warning: it is reported
 # and fingerprinted, but does not fail the audit. Kept as a named function so the
@@ -171,8 +216,12 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
     today = date.today()
     win_start = today - timedelta(days=today.weekday())
     win_end = win_start + timedelta(days=7 * weeks - 1)
-    events = [e for e in client.get_events(win_start.isoformat(), win_end.isoformat())
-              if e.get("category") == "WORKOUT"]
+    all_events = client.get_events(win_start.isoformat(), win_end.isoformat())
+    events = [e for e in all_events if e.get("category") == "WORKOUT"]
+    races = [e for e in all_events if str(e.get("category") or "").upper().startswith("RACE")]
+    if cfg.get("race_date") and not any(str(r.get("start_date_local") or "")[:10]
+                                        == str(cfg["race_date"])[:10] for r in races):
+        races.append({"start_date_local": str(cfg["race_date"]), "name": "A race"})
     wellness = client.get_wellness(days=3)
     ctl = round(float(wellness[-1].get("ctl") or 0), 1) if wellness else None
     sl_path = BASE / "athletes" / slug / "session-log.json"
@@ -234,6 +283,10 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
                 fails["FUELLING"].append(f"{nm} — no fuelling stated (expect {fuel} g/hr)")
             elif not any(abs(int(x) - fuel) <= _FUEL_TOLERANCE_G_HR for x in g):
                 fails["FUELLING"].append(f"{nm} — states {g} g/hr, expected {fuel}")
+
+    for f in race_eve_findings(events, races):
+        fails["RULES"].append(f"week {f['week']}: [hard] race_eve: {f['detail']}")
+        hard_ids.append(f"RULES:{f['week']}:race_eve")
 
     # Per-week: load vs target + validate_week rules.
     for wk in range(weeks):

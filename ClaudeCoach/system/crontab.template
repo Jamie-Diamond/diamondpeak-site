@@ -26,11 +26,13 @@
 0 * * * * /root/.claude/cc-run python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/refresh-public-data.py >> /root/Library/Logs/ClaudeCoach/public-data.log 2>&1
 30 20 * * * /root/.claude/cc-run python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/night-before-brief.py >> /root/Library/Logs/ClaudeCoach/night-before-brief.log 2>&1
 40 7-22/2 * * * /root/.claude/cc-run python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/session-sync.py >> /root/Library/Logs/ClaudeCoach/session-sync.log 2>&1
-0 23 * * * /root/.claude/cc-run bash /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/backup-config.sh >> ~/Library/Logs/ClaudeCoach/backup.log 2>&1
+50 23 * * * /root/.claude/cc-run bash /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/backup-config.sh >> ~/Library/Logs/ClaudeCoach/backup.log 2>&1
 30 21 * * * /root/.claude/cc-run python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/ops-digest.py >> /root/Library/Logs/ClaudeCoach/ops-digest.log 2>&1
 */5 * * * * /root/.claude/cc-run python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/bot-watchdog.py >> /root/Library/Logs/ClaudeCoach/bot-watchdog.log 2>&1
 0 9 * * 1 /root/.claude/cc-run /Users/diamondpeakconsulting/expense-bot/scripts/backup_staleness_alert.sh >> /root/backup-staleness.log 2>&1
 0 0 * * * /root/.claude/cc-run python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/bug-fixer.py --fix >> /root/Library/Logs/ClaudeCoach/bug-fixer.log 2>&1
 15 3 * * * /root/.claude/cc-run python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/claude-cli-update.py >> /root/Library/Logs/ClaudeCoach/claude-cli-update.log 2>&1
 0 0 * * * /root/.claude/cc-run python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/api-nightly-restart.py >> /root/Library/Logs/ClaudeCoach/api-restart.log 2>&1
-20 23 * * * /root/.claude/cc-run bash /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/sync-private-repo.sh >> ~/Library/Logs/ClaudeCoach/sync-private.log 2>&1
+# Retired 15 Oct 2026: plaintext mirror, failing since 13 Aug. Replaced by backup-athletes-encrypted.sh.
+# 20 23 * * * /root/.claude/cc-run bash /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/sync-private-repo.sh >> ~/Library/Logs/ClaudeCoach/sync-private.log 2>&1
+25 23 * * * /root/.claude/cc-run bash /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/backup-athletes-encrypted.sh >> ~/Library/Logs/ClaudeCoach/backup-athletes.log 2>&1
