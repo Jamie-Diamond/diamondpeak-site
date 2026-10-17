@@ -724,6 +724,103 @@ def test_several_photos_in_one_coaching_message(env, monkeypatch):
     assert env.post("/api/chat/photos", json={"photos": [jpg] * 7}, headers=h).status_code == 400
 
 
+# GPX in chat (Jamie, 17 Oct 2026): a route file attached in the coaching chat.
+GPX = (b'<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="test"><trk><trkseg>' +
+       b"".join(b'<trkpt lat="%.5f" lon="6.10000"><ele>%d</ele></trkpt>' % (46.0 + i / 1000, 400 + i)
+                for i in range(12)) + b"</trkseg></trk></gpx>")
+
+
+def gpx_turns(monkeypatch):
+    got = []
+
+    def turn(cid, label="", **k):
+        got.append((cid, label, k))
+        return FakeSink([("done", "")])
+    monkeypatch.setattr(server.chat, "start_turn", turn)
+    return got
+
+
+def test_gpx_is_stored_and_the_coach_is_told_its_path(env, monkeypatch):
+    dev(monkeypatch, "kat@example.com")
+    got = gpx_turns(monkeypatch)
+    h = {"x-peak": "1"}
+    r = env.post("/api/chat/gpx?caption=This%20is%20Cervia&name=Cervia%20Route.GPX", content=GPX, headers=h)
+    assert r.status_code == 200
+    files = sorted((server.CC / "athletes" / "kathryn" / "courses" / "uploads").glob("*.gpx"))
+    assert len(files) == 1 and files[0].read_bytes() == GPX
+    import re
+    assert re.match(r"^\d{8}-\d{6}-cervia-route\.gpx$", files[0].name)
+    cid, label, k = got[0]
+    assert (cid, label, sorted(k)) == ("222", "kathryn", ["text"])          # a text turn, no image
+    line = (f"[Route file attached: {files[0].absolute()}. Read it with: plan_tools.py course --athlete "
+            f"kathryn --gpx {files[0].absolute()} --name '<race name if the athlete said it, else ask>' --save]")
+    assert k["text"] == "This is Cervia\n" + line
+    # without a caption the line is the whole message; Peak's history shows it as "Route: <name>"
+    env.post("/api/chat/gpx?name=x.gpx", content=GPX, headers=h)
+    assert got[1][2]["text"].startswith("[Route file attached: ")
+    assert server.chat._route_label(k["text"]) == "This is Cervia\nRoute: cervia-route.gpx"
+
+
+def test_gpx_names_are_made_safe(env, monkeypatch):
+    dev(monkeypatch, "kat@example.com")
+    gpx_turns(monkeypatch)
+    h = {"x-peak": "1"}
+    env.post("/api/chat/gpx", params={"name": "../../etc/Passwd \u00c9pique " + "x" * 80 + ".gpx"},
+             content=GPX, headers=h)
+    env.post("/api/chat/gpx", params={"name": ""}, content=GPX, headers=h)
+    names = [f.name for f in (server.CC / "athletes" / "kathryn" / "courses" / "uploads").iterdir()]
+    assert len(names) == 2 and all(n.endswith(".gpx") for n in names)
+    stems = sorted(n[16:-4] for n in names)           # after "YYYYmmdd-HHMMSS-"
+    assert stems[0].startswith("etc-passwd-pique-xxxx") and len(stems[0]) <= 40
+    assert stems[1] == "route"
+    assert not (server.CC / "athletes" / "kathryn" / "etc").exists()
+
+
+def test_a_file_named_gpx_that_is_not_gpx_is_refused(env, monkeypatch):
+    dev(monkeypatch, "kat@example.com")
+    got = gpx_turns(monkeypatch)
+    h = {"x-peak": "1"}
+    uploads = server.CC / "athletes" / "kathryn" / "courses" / "uploads"
+    for body in (b"\xff\xd8\xff\xe0" + b"1" * 2000,                                   # a JPEG
+                 b"<html><body>" + b"hello " * 300 + b"</body></html>",                # not XML or GPX
+                 b'<?xml version="1.0"?><gpx><wpt lat="1" lon="2"></wpt></gpx>',       # GPX, no track or route points
+                 b"<trkpt lat='1' lon='2'><ele>3</ele></trkpt>" * 40):                 # points, but no XML prolog or <gpx
+        r = env.post("/api/chat/gpx?name=route.gpx", content=body, headers=h)
+        assert r.status_code == 400, body[:30]
+        assert "GPX" in r.json()["detail"]
+    assert env.post("/api/chat/gpx?name=route.gpx", content=b"", headers=h).status_code == 400
+    assert env.post("/api/chat/gpx?name=r.gpx", content=GPX).status_code == 400            # no app header
+    assert env.post("/api/chat/gpx?name=r.gpx", content=b"x" * (5 * 1024 * 1024 + 1),
+                    headers=h).status_code == 413
+    assert got == [] and not uploads.exists()                                              # nothing stored, no turn
+    dev(monkeypatch, "stranger@example.com")
+    assert env.post("/api/chat/gpx?name=r.gpx", content=GPX, headers=h).status_code == 403
+
+
+def test_a_busy_coach_keeps_no_route_file(env, monkeypatch):
+    dev(monkeypatch, "kat@example.com")
+
+    def busy(cid, label="", **k):
+        raise server.chat.Busy(cid)
+    monkeypatch.setattr(server.chat, "start_turn", busy)
+    r = env.post("/api/chat/gpx?name=r.gpx", content=GPX, headers={"x-peak": "1"})
+    assert r.status_code == 409
+    assert list((server.CC / "athletes" / "kathryn" / "courses" / "uploads").glob("*")) == []
+
+
+def test_photos_still_go_through_the_image_path_beside_gpx(env, monkeypatch):
+    import base64
+    dev(monkeypatch, "kat@example.com")
+    got = gpx_turns(monkeypatch)
+    h = {"x-peak": "1"}
+    jpg = b"\xff\xd8\xff\xe0" + b"1" * 2000
+    assert env.post("/api/chat/photo?caption=lunch", content=jpg, headers=h).status_code == 200
+    url = "data:image/jpeg;base64," + base64.b64encode(jpg).decode()
+    assert env.post("/api/chat/photos", json={"caption": "dinner", "photos": [url]}, headers=h).status_code == 200
+    assert [(k.get("text"), k.get("image")) for _, _, k in got] == [("lunch", jpg), ("dinner", jpg)]
+    assert not (server.CC / "athletes" / "kathryn" / "courses").exists()                   # no route stored
+
+
 # ── Connect Intervals.icu by OAuth (lib/icu_link.py) ──
 
 @pytest.fixture()

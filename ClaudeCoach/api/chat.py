@@ -379,6 +379,53 @@ def log_session(chat_id: str, item: str, values: dict) -> dict:
     return {"text": summary, "buttons": outbox._buttons(markup), "form": form, "logged": logged}
 
 
+# GPX in chat (Jamie, 17 Oct 2026): a route file attached in the chat is stored under the
+# athlete's courses/uploads/ (gitignored with the rest of athletes/) and the coach is told
+# its path in the message text, so it reads it with plan_tools.py course ... --save.
+GPX_MAX_BYTES = 5 * 1024 * 1024
+_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+_ROUTE_LINE_RE = re.compile(r"\[Route file attached: (\S+?)\. Read it with: [^\n]*\]")
+
+
+def save_gpx(slug: str, raw: bytes, filename: str = "") -> Path:
+    """Validate a GPX upload and store it as courses/uploads/<YYYYmmdd-HHMMSS>-<safe-name>.gpx
+    (safe name: lowercase, a-z 0-9 and hyphens, at most 40 characters). Returns the
+    absolute path. ValueError, with a sentence the athlete can read, for anything that is
+    not a GPX route: it must open like an XML file (or carry <gpx within its first 1 KB)
+    and hold track or route points."""
+    if not _SLUG_RE.match(str(slug or "")):
+        raise ValueError("that account can't take a route file")
+    if len(raw) > GPX_MAX_BYTES:
+        raise ValueError("too large - 5 MB at most")
+    head = raw[:1024].decode("utf-8", "replace").lstrip("\ufeff \t\r\n")
+    if not (head.startswith("<?xml") or "<gpx" in head) or not (b"<trkpt" in raw or b"<rtept" in raw):
+        raise ValueError("that doesn't look like a GPX route file")
+    stem = re.sub(r"[^a-z0-9]+", "-", re.sub(r"\.gpx$", "", str(filename or ""), flags=re.I).lower())
+    stem = stem.strip("-")[:40].strip("-") or "route"
+    d = Path(CC).absolute() / "athletes" / slug / "courses" / "uploads"
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{stem}.gpx"
+    path.write_bytes(raw)
+    return path
+
+
+def gpx_text(slug: str, path: Path, caption: str = "") -> str:
+    """The message as the coach sees it: what the athlete wrote, then one line naming the
+    route file and the command that reads it (the race name is theirs to give)."""
+    line = (f"[Route file attached: {path}. Read it with: plan_tools.py course --athlete {slug} "
+            f"--gpx {path} --name '<race name if the athlete said it, else ask>' --save]")
+    cap = (caption or "").strip()
+    return f"{cap}\n{line}" if cap else line
+
+
+def _route_label(text: str) -> str:
+    """How Peak shows that line in the chat: "Route: <file name>", not a path and a command."""
+    if "[Route file attached:" not in text:
+        return text
+    return _ROUTE_LINE_RE.sub(
+        lambda m: "Route: " + re.sub(r"^\d{8}-\d{6}-", "", Path(m.group(1)).name), text).strip()
+
+
 def stop(chat_id: str) -> bool:
     """Peak's Stop button: cancel this chat's reply in flight, through the bot's own Stop
     path (cancels a running CLI, or parks the cancel if it hasn't started yet)."""
@@ -625,6 +672,8 @@ def timeline(slug: str | None, limit: int = 80, chat_id: str | None = None,
                 continue                    # shown inside its Log it card instead
         if is_dev(None, hk, dev_keys) != want_dev:
             continue
+        # GPX in chat (Jamie, 17 Oct 2026): the coach's route-file line shows as "Route: <name>".
+        user = _route_label(user)
         if user:
             items.append({"who": "me", "text": (("📷×%d " % e["images"] if e.get("images") else "📷 ")
                                                 if e.get("kind") == "image" else "") + user,

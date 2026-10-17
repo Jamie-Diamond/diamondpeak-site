@@ -32,6 +32,7 @@ Paths mirror the GitHub Pages layout so Peak runs unchanged:
   POST /api/chat                              talk to the coach as YOURSELF (see chat.py), SSE
   POST /api/chat/voice                        a voice recording; transcribed, reply spoken back
   POST /api/chat/photo?caption=               a photo, read by the bot's own image path
+  POST /api/chat/gpx?caption=&name=           a GPX route file (5 MB): stored, the coach told its path
   POST /api/chat/button                       a tapped button (its callback data)
   GET  /api/chat/history                      your chat: conversation + scheduled messages
   GET  /api/admin/usage                       coach: every person's stage, chat and API cost
@@ -640,9 +641,10 @@ async def chat_log(request: Request):
         raise HTTPException(404, str(e))
 
 
-async def _upload(request: Request, max_mb: int) -> bytes:
+# GPX in chat (Jamie, 17 Oct 2026): min_bytes, so a small GPX gets the GPX message, not "nothing recorded".
+async def _upload(request: Request, max_mb: int, min_bytes: int = 500) -> bytes:
     data = await request.body()
-    if len(data) < 500:
+    if len(data) < min_bytes:
         raise HTTPException(400, "nothing recorded")
     if len(data) > max_mb * 1024 * 1024:
         raise HTTPException(413, f"too large - {max_mb} MB at most")
@@ -659,6 +661,24 @@ async def chat_voice(request: Request):
 async def chat_photo(request: Request, caption: str = ""):
     cid, label = _chat_user(request, need_active=True)
     return _turn_stream(cid, label, text=caption.strip()[:1000], image=await _upload(request, 12))
+
+
+# GPX in chat (Jamie, 17 Oct 2026): the raw file as the body, like a photo; `name` is the file's
+# own name. It is checked and stored (chat.save_gpx), then goes to the coach as an ordinary
+# text turn whose text names the file, so photos and everything else are untouched.
+@app.post("/api/chat/gpx")
+async def chat_gpx(request: Request, caption: str = "", name: str = ""):
+    cid, label = _chat_user(request, need_active=True)
+    raw = await _upload(request, 5, min_bytes=1)
+    try:
+        path = chat.save_gpx(label, raw, name)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    try:
+        return _turn_stream(cid, label, text=chat.gpx_text(label, path, caption.strip()[:1000]))
+    except HTTPException:
+        path.unlink(missing_ok=True)          # the coach was busy: nothing was sent, keep nothing
+        raise
 
 
 @app.post("/api/chat/photos")

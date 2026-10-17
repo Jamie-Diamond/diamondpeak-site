@@ -1427,8 +1427,9 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
         '<p class="chat-status" id="chatStatus"></p>' +
         '<form class="composer" id="composer">' +
           '<div class="thumb" id="chatThumb" hidden></div>' +
-          '<input type="file" id="chatFile" accept="image/*" hidden>' +
-          '<button type="button" class="cb" id="chatCam" aria-label="Send a photo">' +
+          // GPX in chat (Jamie, 17 Oct 2026): the same picker also takes a .gpx route file.
+          '<input type="file" id="chatFile" accept="image/*,.gpx,application/gpx+xml" hidden>' +
+          '<button type="button" class="cb" id="chatCam" aria-label="Send a photo or a GPX route">' +
             '<svg viewBox="0 0 24 24"><path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z"/><circle cx="12" cy="13.2" r="3.4"/></svg></button>' +
           '<textarea id="chatIn" rows="1" placeholder="Message the coach" aria-label="Message"></textarea>' +
           '<button type="button" class="cb go" id="chatMic" aria-label="Record a voice message">' +
@@ -1453,7 +1454,16 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       $('#chatStop').onclick = stopReply;
       $('#chatCam').onclick = function () { if (!chatState.busy) $('#chatFile').click(); };
       $('#chatFile').onchange = function () {
-        pickDevPhotos(this.files);                       // Coach and Dev: up to 6 (12 Oct 2026)
+        // GPX in chat (Jamie, 17 Oct 2026): a .gpx is staged as a route; photos go on as before.
+        var picked = Array.prototype.slice.call(this.files || []);   // copied: clearing the input empties a live FileList
+        var routes = picked.filter(isGpxFile);
+        if (!routes.length) {
+          if (chatState.route) clearRoute();             // choosing photos replaces a staged route
+          pickDevPhotos(picked);                         // Coach and Dev: up to 6 (12 Oct 2026)
+          return;
+        }
+        pickRoute(routes[0], picked.length > routes.length);
+        this.value = '';
       };
       $('#chatLog').addEventListener('click', onChatTap);
       if ($('#chatTabs')) $('#chatTabs').onclick = function (e) {
@@ -1514,6 +1524,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     if (chatState.ctrl) { chatState.ctrl.abort(); chatState.ctrl = null; }
     if (chatState.rec) stopRecord(false);
     if (chatState.photo) clearPhoto();
+    if (chatState.route) clearRoute();                   // GPX in chat (Jamie, 17 Oct 2026)
     clearDevPhotos();
     clearTimeout(chatState.devPoll);
     chatBusy(false);
@@ -2180,7 +2191,8 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       return;
     }
     if (devTab()) { $('#chatSend').hidden = false; $('#chatMic').hidden = true; return; }
-    var has = !!($('#chatIn').value.trim() || chatState.photo || (chatState.devPhotos || []).length);
+    // GPX in chat (Jamie, 17 Oct 2026): a staged route file counts, like a staged photo.
+    var has = !!($('#chatIn').value.trim() || chatState.photo || chatState.route || (chatState.devPhotos || []).length);
     $('#chatSend').hidden = !has || chatState.rec != null;
     $('#chatMic').hidden = has && chatState.rec == null;
   }
@@ -2253,7 +2265,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   function sendChat() {
     var ta = $('#chatIn'), text = (ta.value || '').trim();
     if (chatState.busy || (devTab() && chatState.devBusy)) {
-      if (text && !(chatState.devPhotos || []).length && !chatState.photo) queueMsg(text);
+      if (text && !(chatState.devPhotos || []).length && !chatState.photo && !chatState.route) queueMsg(text);
       return;
     }
     if (devTab()) {
@@ -2265,6 +2277,18 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       var datas = shots.map(function (x) { return x.data; });
       clearDevPhotos(true);
       streamTurn('/api/dev/chat', JSON.stringify({ text: text, photos: datas }), 'application/json');
+      return;
+    }
+    // GPX in chat (Jamie, 17 Oct 2026): a staged route file goes up as the raw body, with the
+    // text as its caption (where the athlete says which race it is) and its file name.
+    if (chatState.route) {
+      var rt = chatState.route;
+      clearRoute();
+      ta.value = ''; ta.style.height = 'auto'; composerMode();
+      var br = bubble('me', text || '');
+      br.insertAdjacentHTML('afterbegin', routeChip(rt.name, !!text));
+      streamTurn('/api/chat/gpx?caption=' + encodeURIComponent(text) + '&name=' + encodeURIComponent(rt.name),
+                 rt.file, 'application/gpx+xml');
       return;
     }
     if ((chatState.devPhotos || []).length) {
@@ -2533,6 +2557,37 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     return '<div class="dev-shots">' + srcs.map(function (u) {
       return '<img class="msg-img" src="' + esc(u) + '" alt="">';
     }).join('') + '</div>';
+  }
+
+  // GPX in chat (Jamie, 17 Oct 2026): a route file is staged above the box like a photo
+  // ("Route: name" and a remove button), the text becomes its caption, and it is sent as it is,
+  // never drawn to a canvas. Coach tab only (the Dev chat has no route reader); 5 MB at most.
+  var ROUTE_MAX = 5 * 1024 * 1024;
+  function isGpxFile(f) { return /\.gpx$/i.test((f && f.name) || ''); }
+  function pickRoute(file, extras) {
+    if (devTab()) { bubble('coach', 'Route files go in the Coach tab, not Dev.', 'err'); return; }
+    if (file.size > ROUTE_MAX) { bubble('coach', 'That route file is too big (5 MB at most).', 'err'); return; }
+    clearDevPhotos();
+    chatState.route = { file: file, name: file.name };
+    var t = $('#chatThumb');
+    t.innerHTML = '<span class="th-n">Route: ' + esc(file.name) + '</span>' +
+      '<button type="button" aria-label="Remove route" id="chatRouteX">\u2715</button>';
+    t.hidden = false;
+    $('#chatRouteX').onclick = function () { clearRoute(); composerMode(); };
+    $('#chatIn').placeholder = 'Which race is it? (optional)';
+    if (extras) bubble('coach', 'One at a time: the route is attached. Send it, then add the photos.', 'err');
+    composerMode();
+  }
+  function clearRoute() {
+    chatState.route = null;
+    var t = $('#chatThumb'); if (t) { t.hidden = true; t.innerHTML = ''; }
+    $('#chatIn').placeholder = devTab() ? 'Message dev' : 'Message the coach';
+    $('#chatFile').value = '';
+  }
+  function routeChip(name, hasText) {
+    return '<div style="display:inline-block;max-width:100%;overflow-wrap:anywhere;padding:2px 9px;' +
+      'border-radius:999px;background:rgba(255,255,255,.18);font:500 12px \'DM Mono\',monospace;margin:0' +
+      (hasText ? ' 0 6px' : '') + '">Route: ' + esc(name) + '</div>';
   }
 
   function clearPhoto() {
@@ -6529,6 +6584,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.033", "2026-10-17", "Chat: attach a race route (.gpx) and the coach reads the climbs, the cut-offs and what they need", 0],
     ["4.032", "2026-10-17", "Share cards are square (1:1), both the image and the overlay.", 0],
     ["4.031", "2026-10-17", "Your weekly plan leans its quality sessions toward what\u2019s holding you back (the blueprint still sets the volume, zones and phases)", 0],
     ["4.031", "2026-10-17", "Goals for triathlons: \u2018What\u2019s holding you back\u2019 by leg \u2013 swim, bike, run off the bike \u2013 from your own numbers against the splits your goal needs", 0],
