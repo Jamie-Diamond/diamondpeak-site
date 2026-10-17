@@ -64,6 +64,7 @@ Time-capped sessions: duration is primary. Only add intensity when the time cap 
 PUSH STRUCTURED WORKOUTS (so they sync to the watch as follow-along workouts, not notes). When you build or change a session, never push free text in `description`:
   1. Express it as time-at-intensity segments and render the steps:
        python3 ClaudeCoach/lib/plan_tools.py render-workout --sport Swim --segments '[{"minutes":10,"zone":"easy"},{"repeat":8,"steps":[{"minutes":2,"zone":"css"},{"minutes":1,"zone":"recovery"}]},{"minutes":6,"zone":"cooldown"}]'
+     Walk or stand recoveries in a run: {"minutes":1,"zone":"walk"} or "zone":"rest" (pushed as "Walk 1m" / "Rest 1m", no pace target). Never a slow % pace.
   2. push_workout / edit_workout with description = the returned structured text (bike = %FTP, run/swim = %threshold pace) and your coaching prose in description_raw. Intervals.icu parses the steps, computes the load and syncs it to the watch.
 PERSIST AGREED SESSIONS: when you and $name agree or build a specific session in chat, save it to Intervals.icu before finishing — find that date's event (events endpoint) and edit_workout its description (and name if it changed). Otherwise tomorrow's card and the calendar show the old session.
 BALANCE ACROSS SPORTS: the live context gives $name's day rules and the phase intensity distribution. Day rules are the default weekly shape when YOU build or fill a plan — never pile load into one sport. Before proposing a week you built, check it:

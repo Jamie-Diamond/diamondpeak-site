@@ -69,7 +69,10 @@ _ZONE_IF = {
     "run":  {"recovery": 0.72, "easy": 0.83, "z2": 0.83, "warmup": 0.74,
              "cooldown": 0.72, "steady": 0.83, "z3": 0.83, "tempo": 0.88,
              "threshold": 0.97, "css": 0.97, "interval": 1.05, "vo2": 1.06,
-             "hill": 0.95, "sprint": 1.15},
+             "hill": 0.95, "sprint": 1.15,
+             # Walking recovery between run reps (Jamie, 17 Oct 2026: the pace floor must
+             # not ban walk recoveries). Pushed as "- Walk 1m" with no pace target.
+             "walk": 0.35, "rest": 0.0},
     "bike": {"recovery": 0.50, "z1": 0.55, "z2": 0.65, "endurance": 0.65,
              "warmup": 0.60, "cooldown": 0.55, "tempo": 0.80, "z3": 0.80,
              "sweetspot": 0.90, "ss": 0.90, "threshold": 0.95, "race": 0.80,
@@ -517,7 +520,8 @@ def render_workout(sport: str, segments: list, name: str = "", rpe_only: bool = 
     def _resolved(zone) -> str:
         """The _ZONE_BAND key a zone renders through (a TID label via its alias)."""
         z = (zone or "").lower().strip()
-        return z if z in _ZONE_BAND.get(sp, {}) or z == "rest" else _TID_ALIAS.get(sp, {}).get(z, z)
+        return (z if z in _ZONE_BAND.get(sp, {}) or z in ("rest", "walk")
+                else _TID_ALIAS.get(sp, {}).get(z, z))
 
     def _line(seg, rest: bool = False):
         """(structured-text line or None, minutes, flat entry). Never mutates flat.
@@ -543,6 +547,11 @@ def render_workout(sport: str, segments: list, name: str = "", rpe_only: bool = 
         if rest:
             return f"- Rest {dur}", mins, {"minutes": mins, "zone": "rest", "if": None}
         zone = _zone_of(seg)
+        # Run walk / rest steps: a label and a duration, no pace target, like swim Rest, so
+        # the watch says "Walk" and the pace floor never applies (Jamie, 17 Oct 2026).
+        if sp == "run" and _resolved(zone) in ("walk", "rest"):
+            label = "Walk" if _resolved(zone) == "walk" else "Rest"
+            return f"- {label} {dur}", mins, {"minutes": mins, "zone": _resolved(zone), "if": None}
         explicit_if = seg.get("if")
         lo, hi = (_band(sport, zone, float(explicit_if)) if explicit_if is not None
                   else _band(sport, zone))

@@ -334,3 +334,17 @@ class SwimRest(unittest.TestCase):
 def test_floors_are_the_documented_numbers():
     assert PACE_FLOOR_PCT == {"run": 68, "swim": 78}
     assert _ZONE_BAND["run"]["recovery"][0] == 68 and _ZONE_BAND["swim"]["drill"][0] == 78
+
+
+def test_run_walk_and_rest_recoveries_have_no_pace_target():
+    """Jamie, 17 Oct 2026: the pace floor must not ban walking recoveries in a run."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
+    import icu_api
+    from primitives.planned_tss import render_workout
+    r = render_workout("Run", [{"repeat": 2, "steps": [{"minutes": 3, "zone": "threshold"},
+                                                       {"minutes": 1, "zone": "walk"}]},
+                               {"minutes": 1, "zone": "rest"}])
+    assert "- Walk 1m" in r["description"] and "- Rest 1m" in r["description"]
+    icu_api.pace_floor_guard("Run", r["description"])      # passes: no % target on them
