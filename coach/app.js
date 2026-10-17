@@ -2938,7 +2938,9 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
 
     var NAME = { swim: 'Swim', bike: 'Bike', run: 'Run', strength: 'Str', other: 'Other' };
     // Completed only (Jamie, 17 Oct 2026): mins is hours done, tssDone/daysDone the
-    // average TSS per day over the month's days so far that have data.
+    // average TSS per day over the month's days so far that have data - rest days in,
+    // today only once something is done on it, so an untrained morning does not drag
+    // it down.
     var mTot = { mins: 0, tssDone: 0, daysDone: 0, rest: 0, before: false };
     var rows = [];
 
@@ -2965,7 +2967,8 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
             mTot.mins += mn; mTot.tssDone += x.tss || 0;
           }
         });
-        if (inMonth && covered && key <= t) mTot.daysDone++;
+        var trained = items.some(function (x) { return x.status === 'completed'; });
+        if (inMonth && covered && (key < t || (key === t && trained))) mTot.daysDone++;
         // Only a covered day with nothing on it is a rest day.
         if (inMonth && !items.length && covered && key <= t) mTot.rest++;
         if (inMonth && cov && key < cov.from) mTot.before = true;
@@ -3044,7 +3047,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     });
     var km = function (v) { return (v < 10 ? v.toFixed(1) : String(Math.round(v))) + ' km'; };
     var distCell = '<div class="mini mini-dist"><div class="md">' +
-      (mTot.daysDone && distSports.length ? distSports.map(function (k) {
+      (distSports.some(function (k) { return dist[k]; }) ? distSports.map(function (k) {
         return '<i title="' + sportWord(k) + '"><svg class="sp-ic wk-ic ic-' + k +
           '" viewBox="0 0 24 24" aria-hidden="true">' + SPORT_ICON[k] + '</svg>' + km(dist[k]) + '</i>';
       }).join('') : '<b>—</b>') + '</div><span>Distance</span></div>';
@@ -7011,6 +7014,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.047", "2026-10-17", "Calendar: TSS per day counts rest days, and today only once you\u2019ve trained, so a morning before your session doesn\u2019t pull it down", 0],
     ["4.046", "2026-10-17", "Calendar month: average TSS per day instead of the month\u2019s TSS, and distance for swim, bike and run instead of a session count. Hours, TSS and distance count what you\u2019ve done, not what\u2019s planned. The note under it now just says how many days are left", 0],
     ["4.045", "2026-10-17", "Sport colours easier to tell apart: swim is now a clear blue (it was close to bike\u2019s teal), run a brighter amber, strength near-black. The same colours on the calendar dots, session cards and charts. Calendar: each sport in the weekly totals has its icon, including a new one for other activities", 0],
     ["4.044", "2026-10-17", "Trends: \u2018What\u2019s holding you back\u2019 has its own Race tab with a Run / Ride / Swim picker, starting on your target sport. Drift is measured one way everywhere: warm-up and cool-down cut, coasting and stops left out, hills taken out (power against heart rate, or grade-adjusted pace)", 0],
