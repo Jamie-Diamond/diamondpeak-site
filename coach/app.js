@@ -129,11 +129,14 @@
 
   var C = { ink: '#14181d', ink2: '#3d4650', muted: '#8b949e', rule: '#d8dce1',
             accent: '#10656b', blue: '#1d4e73', amber: '#a86a12', red: '#b3241f',
-            paper: '#f6f7f8' };
+            paper: '#f6f7f8',
+            // Sport colours: the same five as --swim etc in the stylesheet.
+            swim: '#2a78d6', bike: '#10656b', run: '#c26a14', strength: '#14181d',
+            other: '#8b949e' };
 
   // Same discipline colours as the session dots and the load-chart bars (.sp-swim
   // etc in the stylesheet) - swim is blue everywhere, not just on the badges.
-  var SPORT_LINE_COLOR = { swim: C.blue, bike: C.accent, run: C.amber };
+  var SPORT_LINE_COLOR = { swim: C.swim, bike: C.bike, run: C.run };
 
   var state = {
     slug: 'jamie', tab: 'today', data: null, lib: null, exlib: null, strength: null,
@@ -298,11 +301,13 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     bike: '<circle cx="6" cy="17" r="3.6"/><circle cx="18" cy="17" r="3.6"/><path d="M6 17l4-7h5l3 7M10 10l-1.5-3H6M15 10l1-3h2"/>',
     run: '<circle cx="15" cy="4.5" r="2"/><path d="M8 21l3-6 3 2v5M11 15l-1-5 4-2 2 3 3 1M7 10l3-2"/>',
     swim: '<circle cx="17" cy="7" r="2"/><path d="M3 18c2 0 2-1.5 4-1.5s2 1.5 4 1.5 2-1.5 4-1.5 2 1.5 4 1.5M5 14l5-4 3 2 3-2"/>',
-    strength: '<path d="M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10"/>'
+    strength: '<path d="M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10"/>',
+    // A pulse line: any activity that is not one of the four (a walk, a hike, yoga).
+    other: '<path d="M3 12h4l2.5-6 5 12 2.5-6h4"/>'
   };
   function sportIcon(sp) {
     var k = SPORT[sp] || family(sp);
-    return '<svg class="sp-ic" viewBox="0 0 24 24" aria-hidden="true">' + (SPORT_ICON[k] || SPORT_ICON.run) + '</svg>';
+    return '<svg class="sp-ic" viewBox="0 0 24 24" aria-hidden="true">' + (SPORT_ICON[k] || SPORT_ICON.other) + '</svg>';
   }
 
   function sportWord(s) {
@@ -2969,7 +2974,11 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       var split = ['swim', 'bike', 'run', 'strength', 'other'].filter(function (k) {
         return wk.sports[k];
       }).map(function (k) {
-        return '<span><i class="sp sp-' + k + '"></i>' + hhmm(wk.sports[k]) + '</span>';
+        // The sport's icon, not just a coloured dot (Jamie, 17 Oct 2026: "it needs to be
+        // clearer what is which sport").
+        var ic = '<svg class="sp-ic wk-ic ic-' + k + '" viewBox="0 0 24 24" aria-hidden="true">' +
+          SPORT_ICON[k] + '</svg>';
+        return '<span title="' + (sportWord(k) || 'Other') + '">' + ic + hhmm(wk.sports[k]) + '</span>';
       }).join('');
       return '<div class="wkrow">' +
         '<div class="wkrow-t"><span class="wkn">wk ' + wk.num + '</span>' +
@@ -4348,8 +4357,10 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     var lc = (d.loadChart || []).slice();
     var t = todayISO();
     var SPORTS = ['Ride', 'Run', 'Swim', 'Strength', 'Other'];
-    var BASE = { Ride: '16,101,107', Run: '186,60,50', Swim: '29,78,115',
-                 Strength: '120,132,142', Other: '166,172,180' };
+    // The sport colours (C.swim etc), as RGB so planned bars can be paler. Run was red
+    // here and amber everywhere else until 17 Oct 2026.
+    var BASE = { Ride: '16,101,107', Run: '194,106,20', Swim: '42,120,214',
+                 Strength: '20,24,29', Other: '139,148,158' };
     var norm = function (sp) {
       var k = SPORT[sp] || 'other';
       return { bike: 'Ride', run: 'Run', swim: 'Swim', strength: 'Strength' }[k] || 'Other';
@@ -4611,9 +4622,9 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       type: 'line',
       data: {
         datasets: [
-          { label: 'Bike', data: f.Ride, borderColor: C.accent, borderWidth: 2,
+          { label: 'Bike', data: f.Ride, borderColor: C.bike, borderWidth: 2,
             pointRadius: 0, tension: 0.2, fill: false, stepped: 'after' },
-          { label: 'Run', data: f.Run, borderColor: C.red, borderWidth: 2,
+          { label: 'Run', data: f.Run, borderColor: C.run, borderWidth: 2,
             pointRadius: 0, tension: 0.2, fill: false, stepped: 'after' }
         ]
       },
@@ -6971,6 +6982,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.045", "2026-10-17", "Sport colours easier to tell apart: swim is now a clear blue (it was close to bike\u2019s teal), run a brighter amber, strength near-black. The same colours on the calendar dots, session cards and charts. Calendar: each sport in the weekly totals has its icon, including a new one for other activities", 0],
     ["4.044", "2026-10-17", "Trends: \u2018What\u2019s holding you back\u2019 has its own Race tab with a Run / Ride / Swim picker, starting on your target sport. Drift is measured one way everywhere: warm-up and cool-down cut, coasting and stops left out, hills taken out (power against heart rate, or grade-adjusted pace)", 0],
     ["4.043", "2026-10-17", "\u2018What\u2019s holding you back\u2019 says which sport it is about: on Trends it follows the Ride / Run / Swim picker (All is your goal sport), and on Goals the title names the sport and the race", 0],
     ["4.042", "2026-10-17", "Goals: a goal can run with no set target, to see how far you can take it. The coach won\u2019t ask for one", 0],

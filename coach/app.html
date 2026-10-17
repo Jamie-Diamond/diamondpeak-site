@@ -16,7 +16,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <!-- Glass style (glass.css) and Plus Jakarta Sans: the only look since 3.78 (Jamie,
      14 Oct 2026). Set before first paint. -->
-<link rel="stylesheet" href="glass.css?v=204">
+<link rel="stylesheet" href="glass.css?v=205">
 <script>try{document.documentElement.classList.add('glass');
 var gf="jakarta";document.documentElement.setAttribute("data-font",gf);
 var GF={inter:'Inter:wght@400;500;600;700',manrope:'Manrope:wght@400;500;600;700',jakarta:'Plus+Jakarta+Sans:wght@400;500;600;700'};
@@ -60,6 +60,15 @@ if(gf)peakLoadFont(gf)}catch(e){}</script>
   --accent:#10656b;
   --blue:#1d4e73;
   --amber:#a86a12;
+  /* Sport colours, their own set (Jamie, 17 Oct 2026: "swim bike are almost identical").
+     Navy swim beside teal bike scored 7.8 colour difference against a floor of 15; this
+     set's closest pair is 16.7, and 14.7 for colour-blind readers. Bike stays the brand
+     teal, but buttons and links keep using --accent, so retuning these repaints sports only. */
+  --swim:#2a78d6;
+  --bike:#10656b;
+  --run:#c26a14;
+  --strength:#14181d;
+  --other:#8b949e;
   --red:#b3241f;
   --tab-h:58px;
   --sheet:min(680px,100%);
@@ -446,8 +455,8 @@ main{max-width:var(--sheet);margin:0 auto;padding:0 0 26px}
 .sesh .rt{flex:0 0 auto;text-align:right;font-family:'DM Mono',monospace;font-size:9.5px;color:var(--muted);padding-top:2px}
 .sesh .rt b{display:block;font-family:'Libre Baskerville',serif;font-size:14px;color:var(--ink);letter-spacing:-.01em}
 .sp{display:inline-block;width:5px;height:5px;border-radius:50%;margin-right:5px;vertical-align:.08em}
-.sp-swim{background:var(--blue)} .sp-bike{background:var(--accent)} .sp-run{background:var(--amber)}
-.sp-other{background:var(--muted)}
+.sp-swim{background:var(--swim)} .sp-bike{background:var(--bike)} .sp-run{background:var(--run)}
+.sp-other{background:var(--other)}
 .keymark{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:.14em;color:var(--accent);border:1px solid var(--accent);border-radius:2px;padding:1px 4px;margin-left:6px;vertical-align:1.5px}
 
 /* ── library ────────────────────────────────────────────────────────────── */
@@ -894,9 +903,9 @@ body.signup.in-chat main{padding-bottom:calc(86px + env(safe-area-inset-bottom,0
   border:1px solid currentColor;background:transparent;
 }
 .dot.done{background:currentColor}
-.dot.sp-swim{color:var(--blue)} .dot.sp-bike{color:var(--accent)}
-.dot.sp-run{color:var(--amber)} .dot.sp-strength{color:var(--ink-2)}
-.dot.sp-other{color:var(--muted)}
+.dot.sp-swim{color:var(--swim)} .dot.sp-bike{color:var(--bike)}
+.dot.sp-run{color:var(--run)} .dot.sp-strength{color:var(--strength)}
+.dot.sp-other{color:var(--other)}
 .cal-cell.sel .dot{border-color:var(--paper);color:var(--paper)}
 
 /* ── misc ───────────────────────────────────────────────────────────────── */
@@ -914,7 +923,7 @@ body.signup.in-chat main{padding-bottom:calc(86px + env(safe-area-inset-bottom,0
   font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.13em;
   text-transform:uppercase;color:var(--muted);
 }
-.sp-strength{background:var(--ink-2)}
+.sp-strength{background:var(--strength)}
 
 
 /* ── settings: tool links ───────────────────────────────────────────────── */
@@ -1064,8 +1073,10 @@ body.dev-chat .composer .cb.go{background:#238636}
 /* chat: the model under a reply, and Delete (app.js splitMeta, toggleDelete) */
 /* session card + workout profiles (app.js profSvg / openDetail, 13 Oct 2026) */
 .sx .card-h .sp-ic{width:18px;height:18px;margin:-2px 0}
-.sx-bike .sp-ic{color:var(--accent)} .sx-run .sp-ic{color:var(--amber)}
-.sx-swim .sp-ic{color:var(--blue)} .sx-strength .sp-ic{color:var(--ink-2)}
+/* Any sport not named below (a walk, a hike) is "other"; the four override it. */
+.sx .sp-ic{color:var(--other)}
+.sx-bike .sp-ic{color:var(--bike)} .sx-run .sp-ic{color:var(--run)}
+.sx-swim .sp-ic{color:var(--swim)} .sx-strength .sp-ic{color:var(--strength)}
 .sp-ic{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
 .card.sx > .sx-figs{display:flex;justify-content:space-around;gap:6px;padding:14px 10px 4px;text-align:center}
 .sx-f b{display:block;font-family:'Libre Baskerville',serif;font-weight:400;font-size:21px;letter-spacing:-.02em;color:var(--ink)}
@@ -1221,6 +1232,13 @@ body.dev-chat .composer .cb.go{background:#238636}
 .wkrow-s{display:flex;flex-wrap:wrap;gap:3px 9px;margin:5px 0 0 42px}
 .wkrow-s span{font-family:'DM Mono',monospace;font-size:8.5px;color:var(--ink-2)}
 .wkrow-s .sp{width:4px;height:4px;margin-right:3px}
+.wkrow-s span{display:inline-flex;align-items:center}
+/* Thin line icons, not bright ones (Jamie, 17 Oct 2026: "subtle icons"), in the same
+   sport colour as the day dots above so the two read together. */
+.wkrow-s .wk-ic{width:11px;height:11px;stroke-width:1.8;margin-right:3px}
+.wk-ic.ic-swim{color:var(--swim)} .wk-ic.ic-bike{color:var(--bike)}
+.wk-ic.ic-run{color:var(--run)} .wk-ic.ic-strength{color:var(--strength)}
+.wk-ic.ic-other{color:var(--other)}
 
 /* A long table stays inside the card and scrolls itself, so the page never grows a
    horizontal scrollbar and the card keeps its shape. */
@@ -1530,6 +1548,6 @@ html body .shr .shr-b button:first-child{background:var(--ink);color:#fff;border
 <script src="figure.js?v=200" defer></script>
 <script src="exercise-anims.js?v=200" defer></script>
 <script src="strength-player.js?v=200" defer></script>
-<script src="app.js?v=204" defer></script>
+<script src="app.js?v=205" defer></script>
 </body>
 </html>
