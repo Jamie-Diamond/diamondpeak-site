@@ -64,6 +64,7 @@ _COST = threading.local()
 
 def _cost_reset() -> None:
     _COST.runs = []
+    _COST.usd, _COST.priced = 0.0, 0
 
 
 def _cost_add(v) -> None:
@@ -73,8 +74,27 @@ def _cost_add(v) -> None:
     if v is None:
         return
     if not hasattr(_COST, "runs"):
-        _COST.runs = []
+        _cost_reset()
     _COST.runs.append(v)
+
+
+def _reply_usd(sp_file) -> float | None:
+    """This reply's own cost so far: the sum of its runs' own costs, each run priced
+    exactly ONCE. chat_limits.run_cost is not idempotent - it remembers each session's
+    running total - so pricing the same resumed run twice makes the second call see the
+    run's own total as the last one on record and return $0. Before 17 Oct 2026 _shadow
+    and _meter each priced the runs: 12 of 23 chat-shadow records showed $0.000, every
+    one a resumed turn, and call_claude (which shadows before it meters) charged the
+    chat allowance $0 for the same turns."""
+    if _chat_limits is None:
+        return None
+    if not hasattr(_COST, "runs"):
+        _cost_reset()
+    slug = Path(sp_file).parent.name
+    for r in _COST.runs[_COST.priced:]:
+        _COST.usd += _chat_limits.run_cost(slug, r)
+        _COST.priced += 1
+    return _COST.usd
 
 
 def _shadow(user_message, history, sp_file, athlete_name, context, model, text) -> None:
@@ -85,9 +105,7 @@ def _shadow(user_message, history, sp_file, athlete_name, context, model, text) 
         import chat_shadow
         if not chat_shadow.active():
             return
-        slug = Path(sp_file).parent.name
-        cost = (sum(_chat_limits.run_cost(slug, r) for r in getattr(_COST, "runs", []))
-                if _chat_limits else None)
+        cost = _reply_usd(sp_file)
         chat_shadow.launch(user_message, history, sp_file, athlete_name, context, model,
                            text, cost)
     except Exception as e:
@@ -100,9 +118,7 @@ def _meter(sp_file) -> None:
     if _chat_limits is None:
         return
     try:
-        slug = Path(sp_file).parent.name
-        usd = sum(_chat_limits.run_cost(slug, r) for r in getattr(_COST, "runs", []))
-        _chat_limits.record(slug, usd)
+        _chat_limits.record(Path(sp_file).parent.name, _reply_usd(sp_file))
     except Exception as e:
         log(f"chat cost not metered: {e}")
 

@@ -103,12 +103,12 @@ class TestRun:
         def fake(prompt, model, **kw):
             calls.append((model, kw["allowed_tools"], kw["env"].get("CC_READ_ONLY"),
                           kw["no_session_persistence"], prompt[:40]))
-            if model == "haiku" and kw["allowed_tools"] == "":
-                return R(json.dumps({"result": '{"model": "haiku", "why": "logging"}',
-                                     "total_cost_usd": 0.002}))
             return R(json.dumps({"result": f"<telegram>{model} reply</telegram>",
                                  "total_cost_usd": 0.1}))
         monkeypatch.setattr(claude_call, "run_claude", fake)
+        monkeypatch.setattr(cs, "pick", lambda m, h, slug: {
+            "model": "haiku", "why": "logging", "secs": 0.6, "cost": 0.0003,
+            "fallback": None})
         f = tmp_path / "rec.json"
         f.write_text(json.dumps({"slug": "fred", "message": "Weight 72.4", "history": [],
                                  "sp_file": "x/fred/system_prompt.txt", "athlete_name": "Fred",
@@ -121,7 +121,7 @@ class TestRun:
         assert rec["twins"]["sonnet"]["text"] == "<telegram>sonnet reply</telegram>"
         # every call read-only and stateless; the twins carry the never-sent note
         assert all(c[2] == "1" and c[3] for c in calls)
-        assert all(c[4].startswith("SHADOW RE-RUN") for c in calls[1:])
+        assert all(c[4].startswith("SHADOW RE-RUN") for c in calls)
         assert "Write" not in cs.TOOLS and "Edit" not in cs.TOOLS
 
 
@@ -147,3 +147,103 @@ def test_engine_hands_a_finished_turn_to_the_shadow(tmp_path, monkeypatch):
 def test_report_keeps_the_would_change_line():
     t = "<telegram>45 g/hr it is.</telegram>\nWOULD CHANGE: Saturday's ride description"
     assert cs._tg(t) == "45 g/hr it is.\n[WOULD CHANGE: Saturday's ride description]"
+
+
+def test_a_fallback_pick_is_no_pick(tmp_path, monkeypatch):
+    """The picker timing out must not read as the picker choosing Sonnet."""
+    monkeypatch.setattr(cs, "_maybe_tell", lambda: None)
+    monkeypatch.setattr(engine, "_assemble", lambda *a: "P")
+    monkeypatch.setattr(cs, "pick", lambda m, h, slug: {
+        "model": "sonnet", "why": "", "secs": 1.5, "cost": None, "fallback": "timeout 1.5s"})
+    asked = []
+    monkeypatch.setattr(cs, "_ask", lambda p, m, *a: asked.append(m) or {"text": "x"})
+    monkeypatch.setattr(cs, "SHADOW_DIR", tmp_path / "cs")
+    f = tmp_path / "cs" / "2026-10-17" / "chat-fred-090000.json"
+    f.parent.mkdir(parents=True)
+    f.write_text(json.dumps({"slug": "fred", "ts": "2026-10-17T09:00:00", "message": "hi",
+                             "history": [], "sp_file": "x/fred/system_prompt.txt",
+                             "athlete_name": "Fred", "context": "",
+                             "real": {"model": "sonnet", "reply": "ok", "cost": 0.1},
+                             "pick": None, "twins": {}}))
+    cs._run(str(f))
+    assert asked == []                      # sonnet answered; no pick = no twin
+    assert json.loads(f.read_text())["pick"]["fallback"] == "timeout 1.5s"
+    assert "sonnet (fallback: timeout 1.5s)" in cs.report(7)
+
+
+class TestPick:
+    """pick(): one direct Messages API call on the business key, Sonnet on anything else."""
+
+    @pytest.fixture
+    def billing(self, monkeypatch):
+        import claude_billing
+        rec = []
+        monkeypatch.setattr(claude_billing, "_key", lambda: "sk-test")
+        monkeypatch.setattr(claude_billing, "tripped", lambda: False)
+        monkeypatch.setattr(claude_billing, "record",
+                            lambda *a, **k: rec.append((a, k)))
+        return rec
+
+    @staticmethod
+    def answer(text, usage=None):
+        return {"content": [{"type": "text", "text": text}],
+                "usage": usage or {"input_tokens": 600, "output_tokens": 20}}
+
+    def test_picks_and_ledgers_its_cost(self, billing, monkeypatch):
+        sent = {}
+
+        def post(body, key, timeout):
+            sent.update(body=body, key=key)
+            return self.answer('{"model": "opus", "why": "moves a race"}')
+        monkeypatch.setattr(cs, "_post", post)
+        p = cs.pick("Move my race to May", [{"user": "hi", "assistant": "hello"}], "fred")
+        assert (p["model"], p["why"], p["fallback"]) == ("opus", "moves a race", None)
+        assert sent["key"] == "sk-test"
+        assert sent["body"]["model"] == "claude-haiku-5-5"
+        assert sent["body"]["max_tokens"] <= 100
+        assert sent["body"]["thinking"] == {"type": "disabled"}   # else no answer in 60-80
+        assert "Move my race to May" in sent["body"]["messages"][0]["content"]
+        assert "athlete: hi" in sent["body"]["messages"][0]["content"]
+        # Haiku 5.5: 600 in at $0.10/M + 20 out at $0.50/M
+        assert p["cost"] == pytest.approx(600 * 0.10 / 1e6 + 20 * 0.50 / 1e6)
+        [(args, kw)] = billing
+        assert args[0] is None and args[2:4] == ("fred", "chat-picker")
+        assert kw["usd"] == pytest.approx(p["cost"])
+
+    def test_key_never_reaches_the_environment(self, billing, monkeypatch):
+        import os
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.setattr(cs, "_post", lambda b, k, t: self.answer('{"model": "haiku"}'))
+        cs.pick("done", [], "fred")
+        assert "ANTHROPIC_API_KEY" not in os.environ
+
+    def test_timeout_falls_back_to_sonnet_fast(self, billing, monkeypatch):
+        import time
+        monkeypatch.setattr(cs, "_post", lambda b, k, t: time.sleep(1.0) or self.answer(
+            '{"model": "haiku"}'))
+        t0 = time.time()
+        p = cs.pick("done", [], "fred", timeout=0.2)
+        assert time.time() - t0 < 0.6
+        assert p["model"] == "sonnet" and p["fallback"].startswith("timeout")
+
+    def test_http_error_falls_back(self, billing, monkeypatch):
+        def boom(b, k, t):
+            raise OSError("connection refused")
+        monkeypatch.setattr(cs, "_post", boom)
+        p = cs.pick("done", [], "fred")
+        assert p["model"] == "sonnet" and "connection refused" in p["fallback"]
+        assert billing == []                 # nothing reached the API, nothing to bill
+
+    def test_unreadable_answer_falls_back(self, billing, monkeypatch):
+        monkeypatch.setattr(cs, "_post", lambda b, k, t: self.answer("I think sonnet"))
+        p = cs.pick("done", [], "fred")
+        assert p["model"] == "sonnet" and p["fallback"].startswith("unreadable")
+
+    @pytest.mark.parametrize("key,trip", [("", False), ("sk-test", True)])
+    def test_no_key_or_tripped_breaker_never_calls(self, monkeypatch, key, trip):
+        import claude_billing
+        monkeypatch.setattr(claude_billing, "_key", lambda: key)
+        monkeypatch.setattr(claude_billing, "tripped", lambda: trip)
+        monkeypatch.setattr(cs, "_post", lambda *a: pytest.fail("must not call the API"))
+        p = cs.pick("done", [], "fred")
+        assert p["model"] == "sonnet" and p["fallback"] == "no key"

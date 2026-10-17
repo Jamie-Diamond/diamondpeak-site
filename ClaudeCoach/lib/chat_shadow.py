@@ -8,7 +8,7 @@ sending Opus's share of chat to Sonnet: "undecided, more shadowing required". Th
 both, and changes nothing an athlete sees:
 
 after every real chat reply, launch() starts a DETACHED process that
-  1. asks the picker (Haiku, PICKER_PROMPT) which model the message needs, and times it
+  1. asks the picker (pick(): Haiku, PICKER_PROMPT) which model the message needs, and times it
   2. writes the reply again on the picker's model when that is not the model that
      answered, and on Sonnet whenever Opus answered
 from the same fresh prompt (engine._assemble), read-only: Read/Grep and the two fetchers
@@ -17,6 +17,17 @@ in SHADOW_DIR/<date>/chat-<slug>-<time>.json. On Max, like all dev work: a shado
 never given the API key.
 
 When READY_AT pairs have been written, Jamie's Dev tab is told once, so they get reviewed.
+
+The picker (17 Oct 2026) is ONE direct Messages API call, not the CLI: the CLI took 3-7 s a
+pick (a Claude Code start and its ~17k-token prompt), too slow to sit in front of a live
+reply. pick() posts PICKER_PROMPT to claude-haiku-5-5 on the business key, read from
+claude_billing.KEY_FILE per call and sent as a header only (never into os.environ or a
+child env, so the CLI can never pick it up), with a short max_tokens and a PICK_TIMEOUT
+deadline. Anything else - no key, the breaker tripped, an HTTP error, an unreadable answer,
+the deadline passed - is DEFAULT_PICK (Sonnet, today's default), so a live picker could
+only ever fall back to what chat does now. Each call that reached the API is written to the
+billing ledger with its own cost, labelled chat-picker. Still SHADOW ONLY: nothing calls
+pick() before a reply.
 
     python3 ClaudeCoach/lib/chat_shadow.py --report [--days 7]
 """
@@ -27,7 +38,9 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
+import urllib.request
 from datetime import date, datetime
 from pathlib import Path
 
@@ -39,6 +52,11 @@ READY_AT = 20                           # pairs that differ, then Jamie's Dev ta
 TOOLS = ("Read,Grep,Bash(python3 ClaudeCoach/lib/icu_fetch.py:*),"
          "Bash(python3 ClaudeCoach/lib/strava_fetch.py:*)")
 MODELS = ("haiku", "sonnet", "opus")
+PICKER_MODEL = "claude-haiku-5-5"
+PICK_TIMEOUT = 1.5                      # s, the whole call; then DEFAULT_PICK
+PICK_MAX_TOKENS = 80                    # {"model": ..., "why": ...} is ~25-50
+DEFAULT_PICK = "sonnet"
+API_URL = "https://api.anthropic.com/v1/messages"
 
 PICKER_PROMPT = """\
 You choose which Claude model answers an athlete's message to their AI endurance coach.
@@ -160,6 +178,78 @@ def launch(user_message: str, history: list, sp_file, athlete_name: str, context
         pass
 
 
+def _post(body: dict, key: str, timeout: float) -> dict:
+    req = urllib.request.Request(API_URL, data=json.dumps(body).encode(), headers={
+        "x-api-key": key, "anthropic-version": "2023-06-01",
+        "content-type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read())
+
+
+def _usd(usage: dict) -> float | None:
+    try:
+        import usage_ledger
+        return usage_ledger._report().cost(PICKER_MODEL, usage or {})
+    except Exception:
+        return None
+
+
+def pick(message: str, history: list | None = None, slug: str = "",
+         timeout: float = PICK_TIMEOUT) -> dict:
+    """Which model this message needs: {"model", "why", "secs", "cost", "fallback"}.
+    Never raises and never takes much longer than `timeout`: any failure or a late answer
+    is DEFAULT_PICK with `fallback` saying why (`model` then is DEFAULT_PICK, so a caller
+    can use it as it is)."""
+    t0 = time.time()
+    out = {"model": DEFAULT_PICK, "why": "", "secs": 0.0, "cost": None, "fallback": None}
+    try:
+        import claude_billing
+        key = "" if claude_billing.tripped() else claude_billing._key()
+    except Exception:
+        claude_billing, key = None, ""
+    if not key:
+        out.update(fallback="no key", secs=round(time.time() - t0, 2))
+        return out
+    # Thinking off: Haiku 5.5 thinks by default, and on 17 Oct spent all 60 tokens of
+    # every pick thinking and returned no answer.
+    body = {"model": PICKER_MODEL, "max_tokens": PICK_MAX_TOKENS,
+            "thinking": {"type": "disabled"},
+            "messages": [{"role": "user", "content": PICKER_PROMPT.format(
+                recent=_recent(history or []), message=message)}]}
+    box: dict = {}
+    start = claude_billing.now()
+
+    def call():
+        try:
+            box["d"] = _post(body, key, timeout + 2)
+        except Exception as e:
+            box["e"] = e
+        # Even an answer that came too late was paid for.
+        d = box.get("d")
+        if isinstance(d, dict) and d.get("usage"):
+            claude_billing.record(None, start, slug, "chat-picker", usd=_usd(d["usage"]) or 0)
+
+    th = threading.Thread(target=call, daemon=True)
+    th.start()
+    th.join(timeout)
+    out["secs"] = round(time.time() - t0, 2)
+    if th.is_alive():
+        out["fallback"] = f"timeout {timeout}s"
+        return out
+    if "e" in box:
+        out["fallback"] = f"{type(box['e']).__name__}: {box['e']}"[:120]
+        return out
+    d = box.get("d") or {}
+    text = "".join(b.get("text", "") for b in d.get("content") or [] if isinstance(b, dict))
+    model, why = parse_pick(text)
+    out.update(cost=_usd(d.get("usage")), why=why)
+    if model:
+        out["model"] = model
+    else:
+        out["fallback"] = f"unreadable: {text[:60]}"
+    return out
+
+
 def _ask(prompt: str, model: str, slug: str, tools: str, timeout: int, env: dict) -> dict:
     import claude_call
     t0 = time.time()
@@ -184,10 +274,10 @@ def _run(path: str) -> None:
     env = {**os.environ, "CC_ATHLETE_SCOPE": slug, "CC_READ_ONLY": "1"}
     env.pop("ANTHROPIC_API_KEY", None)
     try:
-        p = _ask(PICKER_PROMPT.format(recent=_recent(rec["history"]), message=rec["message"]),
-                 "haiku", slug, "", 60, env)
-        model, why = parse_pick(p.get("text", ""))
-        rec["pick"] = {"model": model, "why": why, "secs": p["secs"], "cost": p.get("cost")}
+        rec["pick"] = pick(rec["message"], rec["history"], slug)
+        # A fallback is no pick: the twin is then the one an answer would have asked for
+        # (Sonnet), not the picker's judgement, and the report shows why.
+        model = None if rec["pick"].get("fallback") else rec["pick"]["model"]
         f.write_text(json.dumps(rec, default=str))
         import engine
         prompt = TWIN_NOTE + engine._assemble(rec["message"], rec["history"], rec["sp_file"],
@@ -249,6 +339,8 @@ def report(days: int = 7) -> str:
     for r in recs:
         real = r["real"]["model"]
         pick = (r.get("pick") or {}).get("model")
+        if (r.get("pick") or {}).get("fallback"):
+            pick = f"{pick} (fallback: {r['pick']['fallback']})"
         picks[pick] = picks.get(pick, 0) + 1
         agree += pick == real
         out.append(f"===== {r['ts']} {r['slug']} | answered on {real} "
