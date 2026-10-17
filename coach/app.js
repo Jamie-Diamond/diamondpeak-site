@@ -50,7 +50,6 @@
     } catch (e) { return []; }
   })();
 
-  var TELEGRAM = 'https://t.me/ClaudeCoachTri_bot';
 
   var TABS = [
     { id: 'today', label: 'Today', icon: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2"/>' },
@@ -391,20 +390,18 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
 
   function buildChrome() {
     buildTabs();
-    // The corner chat button. A link out to Telegram until FastAPI lands.
+    // The corner chat button: Peak's own chat (Telegram is retired, 17 Oct 2026).
     var fab = document.getElementById('chatFab');
     if (!fab) {
       fab = document.createElement('a');
       fab.id = 'chatFab';
       fab.className = 'fab';
-      fab.target = '_blank';
-      fab.rel = 'noopener';
       fab.setAttribute('aria-label', 'Chat to the coach');
       fab.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' +
         '<path d="M21 4 3 11l5 2 2 5 3-4 5 3z"/></svg>';
       document.body.appendChild(fab);
     }
-    fab.href = TELEGRAM;
+    fab.href = '#chat';
 
     $('#gear').onclick = function () { show('set'); };
     $('#whoName').onclick = openGate;
@@ -475,8 +472,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   /* ── shared bits ─────────────────────────────────────────────────────── */
 
   function chatCTA(sub) {
-    return (state.me ? '<a class="chat" href="#chat" data-chat="1">'
-                     : '<a class="chat" href="' + TELEGRAM + '" target="_blank" rel="noopener">') +
+    return '<a class="chat" href="#chat" data-chat="1">' +
       '<svg viewBox="0 0 24 24"><path d="M21 4 3 11l5 2 2 5 3-4 5 3z"/></svg>' +
       '<span class="txt"><span class="t">Ask the coach</span>' +
       '<span class="s">' + esc(sub) + '</span></span>' +
@@ -1388,8 +1384,12 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   function openChat() {
     var v = $('#v-chat');
     if (!state.me) {
-      v.innerHTML = '<div class="card"><div class="empty">Chat needs coach.diamondpeak.uk</div></div>' +
-        chatCTA('Use Telegram instead');
+      // 17 Oct 2026: this said "Chat needs coach.diamondpeak.uk / Use Telegram instead"
+      // (Telegram is retired) and never recovered. /api/me is retried in the background
+      // (loadMe) and Peak reloads once it answers; this is what shows meanwhile.
+      v.innerHTML = '<div class="card"><div class="empty">Can\u2019t reach Peak just now, retrying\u2026' +
+        '<p><button type="button" class="btn" id="meRetry">Try again</button></p></div></div>';
+      $('#meRetry').onclick = function () { location.reload(); };
       return;
     }
     if (!$('#chatLog')) {
@@ -6100,6 +6100,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.018", "2026-10-17", "If Peak can\u2019t reach the server when it opens, it keeps retrying and recovers by itself", 0],
     ["4.017", "2026-10-16", "Peak reloads itself when it is running older code than the latest release", 0],
     ["4.016", "2026-10-16", "Athletes & usage: the margin is no longer shown", 1],
     ["4.016", "2026-10-16", "Goals: the race-day fitness band now comes from your race distance and goal time", 0],
@@ -6939,6 +6940,11 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     // On coach.diamondpeak.uk the backend (ClaudeCoach/api/server.py) says who is signed
     // in and which athletes they may see, and serves their private data under the same
     // paths. On GitHub Pages /api/me is a 404 and the picker is unchanged.
+    // Retried when it fails (17 Oct 2026: one failed call - an API restart, a bad signal
+    // moment - left Peak without the chat until it was closed). A later success reloads
+    // the page, so everything starts from a known state.
+    var meTries = 0;
+    function loadMe() {
     fetch('/api/me', { cache: 'no-store' })
       .then(function (r) {
         if (r.ok) return r.json();
@@ -6951,6 +6957,10 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       })
       .catch(function () { return null; })
       .then(function (me) {
+        if (!me && location.protocol === 'https:' && meTries < 8) {
+          setTimeout(loadMe, [2, 4, 8, 15, 30, 60, 60, 60][meTries++] * 1000);
+          if (meTries > 1) return;          // the first failure still shows cached data below
+        } else if (me && meTries > 0) { location.reload(); return; }
         if (me && me.denied) { signInProblem(me); return; }
         if (me && !(me.athletes && me.athletes.length) && me.state) {
           // Invited and still signing up (or waiting for approval): the app is just the
@@ -6977,6 +6987,8 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
         var s = stored() || (ATHLETES.length === 1 ? ATHLETES[0].slug : null);
         if (s) { closeGate(); load(s); } else { openGate(); }
       });
+    }
+    loadMe();
 
     loadLibrary();
     if ('serviceWorker' in navigator && location.protocol === 'https:') {
