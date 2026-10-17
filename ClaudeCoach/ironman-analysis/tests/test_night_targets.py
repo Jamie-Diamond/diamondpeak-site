@@ -57,12 +57,13 @@ def test_title_built_from_names_in_calendar_order():
 def test_targets_only_tomorrows_sports_and_no_labels():
     s = _ev("WeightTraining", "Kettlebells")
     lines = nb._target_lines([RIDE, s], "1:41", 305, "4:02", level="pro")
-    assert len(lines) == 2 and all(l.startswith("•") for l in lines)
-    assert lines[0].startswith("• NP target 188 W (IF 0.62) • Main set power")
-    assert lines[1] == "• Main focus • Key movements"
+    assert all(l.startswith("•") and l.count("•") == 1 for l in lines)
+    assert lines[0] == "• NP target 188 W (IF 0.62)"
+    assert lines[1] == "• Main set power 183-214 W"
+    assert lines[-1].startswith("• Main focus") and "name none" in lines[-1]
     assert not any(l.startswith(("Ride", "Run", "Swim", "Strength")) for l in lines)
     swim = nb._target_lines([SWIM], "1:38", 190, "5:04", level="pro")
-    assert swim == ["• Target pace [the /100m band above, the pace only] vs CSS 1:38 • Main set structure"]
+    assert swim == ["• Target pace [the /100m band above, the pace only] vs CSS 1:38", "• Main set structure"]
 
 
 def test_prompt_carries_title_targets_and_power_without_sport_templates():
@@ -112,8 +113,63 @@ def test_jargon_follows_the_coaching_level():
     """Minimal jargon, by the level the athlete chose (Jamie, 16 Oct 2026)."""
     pro, mid, beg = (nb._target_lines([RIDE, SWIM], "1:41", 305, "4:02", level=lv)
                      for lv in ("pro", "mid", "beginner"))
-    assert "NP target" in pro[0] and "W band" in pro[0] and "vs CSS" in pro[1]
-    assert "NP" not in mid[0] and "IF" not in mid[0] and "W band" in mid[0] and "CSS" not in mid[1]
-    assert "W" not in beg[0].split("HR cap")[0] and "How it should feel" in beg[0]
-    p = nb._build_prompt("calum", "Calum", 305, "1:41", "4:02", "x", [], targets=beg, level="beginner")
+    pro, mid, beg = "\n".join(pro), "\n".join(mid), "\n".join(beg)
+    assert "NP target" in pro and "Main set power 183-214 W" in pro and "vs CSS" in pro
+    assert "NP" not in mid and "IF" not in mid and "Main set power 183-214 W" in mid and "CSS" not in mid
+    assert " W" not in beg and "Main set power" not in beg and "How it should feel" in beg
+    p = nb._build_prompt("calum", "Calum", 305, "1:41", "4:02", "x", [], targets=beg.split("\n"), level="beginner")
     assert "Coaching level: BEGINNER" in p and "only, no number" in p
+
+
+# --- Shadow review, 17 Oct 2026 (Jamie): the 16 Oct 20:30 night briefs ---------------------
+
+JAMIE_RIDE = _ev("Ride", "Endurance ride", "- 15m 50-58%\n- 57m 60-70%\n- 15m 50-58%",
+                 moving_time=5220, icu_training_load=55, icu_intensity=61.588177)
+KB_EMPTY = _ev("WeightTraining", "Kettlebells", "", moving_time=2700, icu_training_load=30)
+
+
+def test_main_set_watts_is_the_main_band_not_the_warm_up():
+    """Jamie's ride listed 148-172 W and 178-208 W; Haiku printed both."""
+    assert nb._main_set_watts(JAMIE_RIDE, 297) == "178-208 W"
+    assert nb._main_set_watts(RIDE, 305) == "183-214 W"        # 5m 95% opener is not the main set
+    intervals = _ev("Ride", "VO2", "Warmup\n- 20m 55-65%\n\nMain set 5x\n- 3m 115%\n- 3m 50%\n\n- 10m 50%")
+    assert nb._main_set_watts(intervals, 300) == "345 W"       # 5x3m = 15 min counts as main
+    assert nb._main_set_watts(_ev("Ride", "Long", "- 1h40m 60-70%"), 196) == "118-137 W"
+    assert nb._main_set_watts(_ev("Ride", "Free ride"), 196) == ""
+    assert nb._main_set_watts(JAMIE_RIDE, None) == ""
+
+
+def test_one_bullet_per_line_with_duration_and_load_written_in_code():
+    """Sonnet printed '• NP target ... • Main set power ...' on one line; duration/Load
+    bullet came out three ways across three athletes."""
+    pro = nb._target_lines([JAMIE_RIDE], "1:41", 297, "4:02", level="pro")
+    assert pro[:3] == ["• 87 min · Load 55", "• NP target 183 W (IF 0.62)", "• Main set power 178-208 W"]
+    assert pro[3].startswith("• HR cap") and len(pro) == 4
+    mid = nb._target_lines([JAMIE_RIDE], "1:41", 297, "4:02", level="mid")
+    assert mid[:2] == ["• 87 min · Load 55", "• Main set power 178-208 W"]
+    beg = nb._target_lines([JAMIE_RIDE], "1:41", 297, "4:02", level="beginner")
+    assert beg[0] == "• 87 min" and "Load" not in "\n".join(beg)
+    two = nb._target_lines([JAMIE_RIDE, KB_EMPTY], "1:41", 297, "4:02", level="mid")
+    assert "• Endurance ride: 87 min · Load 55" in two and "• Kettlebells: 45 min · Load 30" in two
+
+
+def test_strength_with_no_exercises_names_none():
+    """Sonnet invented swings/goblet squats/deadlifts/carries for an empty Kettlebells event."""
+    lines = nb._target_lines([KB_EMPTY], None, None, None, level="mid")
+    assert lines[0] == "• 45 min · Load 30"
+    assert "name none" in lines[1] and "write no key-movements bullet" in lines[1]
+    listed = nb._target_lines([_ev("WeightTraining", "KB", "- 3x10 swings")], None, None, None)
+    assert "• Key movements [only the exercises the planned event lists]" in listed
+
+
+def test_prompt_layout_wins_over_level_and_fuelling_off_drops_nutrition():
+    t = nb._target_lines([JAMIE_RIDE], "1:41", 297, "4:02", level="pro")
+    p = nb._build_prompt("jamie", "Jamie", 297, "1:41", "4:02", "IM", [], title=nb._title_line([JAMIE_RIDE]),
+                         targets=t, level="pro", fuel="0 g/hr carbs, water to thirst")
+    assert "Coaching level: PRO" in p and "no narrative or summary sentence" in p
+    assert "exactly these bullets, one per line" in p and "2-4 bullets" not in p
+    assert "*Nutrition:* 0 g/hr carbs, water to thirst" in p
+    k = nb._build_prompt("kathryn", "Kathryn", 186, "1:38", "5:04", "IM", [],
+                         title=nb._title_line([KB_EMPTY]), targets=nb._target_lines([KB_EMPTY], None, None, None),
+                         fuelling=False)
+    assert "Nutrition" not in k and "*Sleep:* ≥8h tonight" in k

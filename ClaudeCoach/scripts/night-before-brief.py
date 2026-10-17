@@ -144,9 +144,7 @@ def _power_bands(events, ftp) -> list[str]:
     for e in _workouts(events):
         if _sport_family(e.get("type")) != "ride":
             continue
-        for lo, hi in re.findall(
-                r"(?<![\d.])(\d+(?:\.\d+)?)(?:\s*-\s*(\d+(?:\.\d+)?))?\s*%(?!\s*(?:Pace|HR|LTHR|MMP))",
-                str(e.get("description") or "")):
+        for lo, hi in re.findall(_PCT, str(e.get("description") or "")):
             if hi:
                 band = f"Ride {lo}-{hi}% FTP = {round(ftp * float(lo) / 100)}-{round(ftp * float(hi) / 100)} W"
             else:
@@ -154,6 +152,52 @@ def _power_bands(events, ftp) -> list[str]:
             if band not in out:
                 out.append(band)
     return out
+
+
+_PCT = r"(?<![\d.])(\d+(?:\.\d+)?)(?:\s*-\s*(\d+(?:\.\d+)?))?\s*%(?!\s*(?:Pace|HR|LTHR|MMP))"
+
+
+def _main_set_watts(event, ftp) -> str:
+    """"178-208 W": the one ride band the "Main set power" bullet quotes, picked here
+    (Jamie, 17 Oct 2026: shadow review: Jamie's ride had 15m 50-58% at each end and 57m
+    60-70% between, both bands were listed, and Haiku printed the 50-58% one as an extra
+    "Easy blocks" bullet while Sonnet did not). Minutes per %FTP band, a "4x" block's
+    steps counted 4 times; the main set is the hardest band with 10+ min in it (so a 5-min
+    opener in an endurance ride is not it), else the hardest band. "" if none."""
+    import re
+    try:
+        ftp = float(ftp)
+    except (TypeError, ValueError):
+        return ""
+    if ftp <= 0:
+        return ""
+    mins, mult = {}, 1
+    for raw in str(event.get("description") or "").splitlines():
+        line = raw.strip()
+        if not line:
+            mult = 1
+            continue
+        if not line.startswith("-"):
+            m = re.search(r"(\d+)\s*x\s*$", line, re.I)
+            mult = int(m.group(1)) if m else 1
+            continue
+        step = line.lstrip("-").strip()
+        tok = step.split()[0] if step.split() else ""
+        d = re.fullmatch(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?", tok)
+        if not tok or not d:
+            continue
+        t = int(d.group(1) or 0) * 60 + int(d.group(2) or 0) + int(d.group(3) or 0) / 60
+        p = re.search(_PCT, step)
+        if not p:
+            continue
+        lo, hi = float(p.group(1)), float(p.group(2) or p.group(1))
+        mins[(lo, hi)] = mins.get((lo, hi), 0) + t * mult
+    if not mins:
+        return ""
+    long_enough = [b for b, t in mins.items() if t >= 10] or list(mins)
+    lo, hi = max(long_enough, key=lambda b: (b[1], b[0]))
+    w_lo, w_hi = round(ftp * lo / 100), round(ftp * hi / 100)
+    return f"{w_lo}-{w_hi} W" if w_lo != w_hi else f"{w_lo} W"
 
 
 def _np_if(event, ftp) -> str:
@@ -188,33 +232,58 @@ def _target_lines(events, css, ftp, run_threshold=None, run_note="", level="mid"
     a ride's NP/IF is filled in here (_np_if).
     By coaching level (Jamie, 16 Oct 2026: "minimal jargon not 0 jargon ... depend on the
     level of detail the athlete asked for"): NP and IF for pro only; watts for mid and pro;
-    a beginner's ride is effort and heart rate (lib/coaching_levels.py)."""
-    out, seen = [], set()
-    for e in sorted(events or [], key=lambda e: e.get("start_date_local") or ""):
+    a beginner's ride is effort and heart rate (lib/coaching_levels.py).
+    Shadow review, 17 Oct 2026 (Jamie): ONE bullet per line (the template's "• A • B" on
+    one line was printed on one line); a "• 87 min · Load 55" bullet per session written
+    here (with "2-4 bullets" and no duration bullet, Sonnet added "Duration 100 min,
+    Load 70" for two athletes and nothing for the third); the ride's main-set watts filled
+    in (_main_set_watts); and a strength session with no exercises in the calendar names
+    none (Sonnet invented "swings, goblet squats, deadlifts and carries" for Kathryn's
+    empty Kettlebells event, Haiku wrote "Key movements: not set in the calendar yet")."""
+    evs = sorted(events or [], key=lambda e: e.get("start_date_local") or "")
+    out = []
+    for e in evs:
         fam = _sport_family(e.get("type"))
+        bullets = []
+        bits = []
+        if e.get("moving_time"):
+            bits.append(f"{round(e['moving_time'] / 60)} min")
+        if e.get("icu_training_load") and level != "beginner":      # beginner: no Load / TSS
+            bits.append(f"Load {e['icu_training_load']}")
+        if bits:
+            name = str(e.get("name") or "").strip()
+            bullets.append("• " + (f"{name}: " if len(evs) > 1 and name else "") + " · ".join(bits))
         if fam == "ride":
             np_if = _np_if(e, ftp) if level == "pro" else ""
-            watts = level != "beginner" and _power_bands([e], ftp)
-            line = ((f"• {np_if} " if np_if else "")
-                    + ("• Main set power [the W band above, watts only] " if watts else "")
-                    + ("• How it should feel [easy / steady / hard, from the planned event] "
-                       if level == "beginner" else "")
-                    + "• HR cap [bpm] only if the planned event sets one; otherwise leave that"
-                      " bullet out, never write that none is set")
+            if np_if:
+                bullets.append(f"• {np_if}")
+            if level != "beginner":
+                w = _main_set_watts(e, ftp)
+                if w:
+                    bullets.append(f"• Main set power {w}")
+            else:
+                bullets.append("• How it should feel [easy / steady / hard, from the planned event]")
+            bullets.append("• HR cap [bpm] only if the planned event sets one; otherwise leave that"
+                           " bullet out, never write that none is set")
         elif fam == "run":
             src = "the /km band above" if _pace_bands([e], run_threshold) else "/km, as the planned event gives it"
-            line = f"• Target pace [{src}, the pace only] • HR cap [bpm]{run_note}"
+            bullets += [f"• Target pace [{src}, the pace only]", f"• HR cap [bpm]{run_note}"]
         elif fam == "swim":
             src = "the /100m band above" if _pace_bands([e], None, css) else "/100m, as the planned event gives it"
-            line = (f"• Target pace [{src}, the pace only] vs CSS {css or '?'} • Main set structure"
-                    if level == "pro" else f"• Target pace [{src}, the pace only] • Main set structure")
+            bullets.append(f"• Target pace [{src}, the pace only]"
+                           + (f" vs CSS {css or '?'}" if level == "pro" else ""))
+            bullets.append("• Main set structure")
         elif fam == "strength":
-            line = "• Main focus • Key movements"
+            if str(e.get("description") or "").strip():
+                bullets += ["• Main focus", "• Key movements [only the exercises the planned event lists]"]
+            else:
+                bullets.append("• Main focus [one line from the session name; the planned event lists no"
+                               " exercises, so name none and write no key-movements bullet]")
         else:
-            line = "• What the session is • How it should feel"
-        if line not in seen:
-            seen.add(line)
-            out.append(line)
+            bullets += ["• What the session is", "• How it should feel"]
+        for b in bullets:
+            if b not in out:
+                out.append(b)
     return out
 
 
@@ -299,7 +368,7 @@ def _sessions_line(events) -> str:
 
 def _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries, long_run_cap_km=None,
                   pace_bands=None, form="", hr_cap="", fuel="", sessions="",
-                  power_bands=None, title="", targets=None, level="mid"):
+                  power_bands=None, title="", targets=None, level="mid", fuelling=True):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -356,8 +425,9 @@ def _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries
     else:
         title_block = "*Tomorrow — [the session name(s) from the calendar, joined with ' + ']*"
     if targets:
-        targets_block = ("[Targets — 2-4 bullets in all, in this shape. Write only the bullets: "
-                         "no sport name or label before them.]\n" + "\n".join(targets))
+        targets_block = ("[Targets — exactly these bullets, one per line, in this order, filled in "
+                         "where marked [ ]; add none. Write only the bullets: no sport name or label "
+                         "before them.]\n" + "\n".join(targets))
     else:
         targets_block = (
             "[Targets — 2-4 bullets, only for the sport(s) on tomorrow's calendar. The words "
@@ -368,12 +438,26 @@ def _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries
             f"for a swim: • Target pace [/100m] vs CSS {css or '?'} • Main set structure\n"
             "for strength: • Main focus • Key movements")
 
+    # The level paragraph is shared with chat and debriefs, where PRO means "lead with a
+    # narrative verdict" and "NP/IF only when asked". Here the layout is fixed and the pro
+    # NP/IF bullet is written in code (Jamie, 17 Oct 2026: shadow review: both models put a
+    # narrative paragraph above Jamie's bullets, Haiku dropped his NP bullet and relabelled
+    # "Form" as "Form (TSB)"). So the level sets the wording; Step 4 sets the layout.
+    layout_rule = ("For this brief the level above sets the WORDING only. The layout is Step 4's, at "
+                   "every level: no narrative or summary sentence anywhere, every bullet Step 4 gives "
+                   "is kept, and the bold labels are copied exactly as written.")
+    # Fuelling off: no Nutrition line in the template at all, rather than a template line
+    # and a note further down saying to leave it out (Jamie, 17 Oct 2026: shadow review).
+    nutrition_line = (f"*Nutrition:* {fuel or '[g/hr carbs + ml/hr fluid — calibrated to session length and intensity. Zero if easy/recovery.]'}\n"
+                      if fuelling else "")
+
     return f"""\
 You are generating the night-before session brief for {first_name}.
 
 Apply the GLOBAL coaching rules in ClaudeCoach/athletes/_shared/persistent-rules.md (read them first).
 
 {_level_block(level)}
+{layout_rule}
 
 Step 1 — Fetch data via Bash:
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint profile
@@ -397,10 +481,9 @@ Step 4 — Output the night-before brief in Telegram Markdown (no preamble, no s
 
 {targets_block}
 Numbers (pace bands, power bands, NP, IF, HR caps, durations, Load) are copied EXACTLY as
-this prompt, the planned event or the data gives them: never round, re-derive or tidy a figure.{" The Nutrition line is already worked out: copy it exactly." if fuel else ""}
+this prompt, the planned event or the data gives them: never round, re-derive or tidy a figure.{" The Nutrition line is already worked out: copy it exactly." if fuel and fuelling else ""}
 
-*Nutrition:* {fuel or "[g/hr carbs + ml/hr fluid — calibrated to session length and intensity. Zero if easy/recovery.]"}
-*Sleep:* ≥8h tonight
+{nutrition_line}*Sleep:* ≥8h tonight
 *Form:* {"[Fresh / In training / Heavy] only, no number" if level == "beginner" else "[value] ([Fresh / In training / Heavy])"}{injury_flag}
 
 The brief ends at the Form line. Keep the entire brief under 120 words. Never ask questions.
@@ -522,8 +605,12 @@ def run_athlete(slug, athlete_cfg):
         power_bands = []
     fuel = ""
     try:
+        fuelling = coaching_prefs.fuelling_on(slug)
+    except Exception:
+        fuelling = True
+    try:
         _sl = json.loads((adir / "session-log.json").read_text()) if (adir / "session-log.json").exists() else []
-        fuel = _fuel_line(events, athlete_cfg, _sl) if coaching_prefs.fuelling_on(slug) else ""
+        fuel = _fuel_line(events, athlete_cfg, _sl) if fuelling else ""
     except Exception as exc:
         print(f"[{slug}] fuel pre-compute failed: {exc}", file=sys.stderr)
     # Whether to brief at all is decided here when the calendar was read (_to_brief).
@@ -544,7 +631,8 @@ def run_athlete(slug, athlete_cfg):
     prompt = _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries,
                            long_run_cap_km=long_run_cap, pace_bands=pace_bands,
                            form=form, hr_cap=hr_cap, fuel=fuel, sessions=sessions,
-                           power_bands=power_bands, title=title, targets=targets, level=level)
+                           power_bands=power_bands, title=title, targets=targets, level=level,
+                           fuelling=fuelling)
     prompt += coaching_prefs.prompt_note(slug)
 
     with open(log_file, "a") as lf:
