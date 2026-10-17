@@ -4554,6 +4554,8 @@ def prefetch_context(slug: str) -> str:
                 "cut-off: if they don't know, find the official event page, quote it with its source and year, and "
                 "confirm. Save with course ... --save --start HH:MM --cutoff KM@HH:MM (repeat) --finish HH:MM "
                 "--feed KM:LABEL (or --race '<name>' plus those flags to add them later). "
+                "Whether they can make a course's cut-offs, and the FTP (in W/kg) and fitness it needs: "
+                "follow docs/fitness-from-course-demands.md (two bands: ride it well / survive it). "
                 "If the athlete reports a PRE/POST-SESSION WEIGH-IN (sweat test), call:  "
                 f"plan_tools.py sweat-rate --athlete {slug} --pre <kg> --post <kg> --fluid <ml> --minutes <n> --activity <icu id> --save  "
                 "-> computes sweat rate and (with --save) updates sweat_ml_hr so race-fuelling uses it automatically; "
