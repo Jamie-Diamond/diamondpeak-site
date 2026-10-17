@@ -132,7 +132,7 @@
   var SPORT_LINE_COLOR = { swim: C.blue, bike: C.accent, run: C.amber };
 
   var state = {
-    slug: 'jamie', tab: 'today', data: null, lib: null,
+    slug: 'jamie', tab: 'today', data: null, lib: null, exlib: null, strength: null,
     // me: the signed-in user from /api/me (private host only). updated: when the
     // athlete's data file was last rebuilt, from its Last-Modified header.
     me: null, updated: null, refreshing: false,
@@ -762,6 +762,9 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
         ' or pull down</p>';
     }
 
+    var stLive = strengthOn() && PeakStrengthPlayer.live(state.slug);
+    if (stLive) h = '<div class="card st-resume"><b>Strength session in progress: ' + esc(stLive.title) +
+      '</b><button type="button" data-st-resume>Resume</button></div>' + h;
     $('#v-today').innerHTML = setupCard() + '<div id="todayNote">' + todayNoteHtml(TODAY_NOTE[state.slug]) + '</div>' + h;
     loadTodayNote();
     var sgo = $('#v-today').querySelector('.notify-go');
@@ -774,6 +777,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       th.addEventListener('click', function (e) {
         try {
           if (e.target.closest('[data-tnote]')) { openTodayNote(e); return; }
+          if (e.target.closest('[data-st-resume]')) { startStrength(null); return; }
           var head = e.target.closest('[data-sess]');
           if (head && head.dataset.d) openDetail(head.dataset.d, head.dataset.sp, head.dataset.n);
         } catch (err) {
@@ -5178,6 +5182,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     ]);
     // Done: replaced by the full Stats card once /api/track answers (lib/activity_stats.py).
     h += '<div id="detSlot">' + (det ? card('Details', det, { flush: true }) : '') + '</div>';
+    if (fam2 === 'strength' && strengthOn()) h += strengthCards(dateISO, pl, done);
 
     // The workout, step by step, with the athlete's own watts / paces (lib/workout_steps.py,
     // 13 Oct 2026: "Tempo 2x25" alone didn't say what to do).
@@ -5238,6 +5243,9 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     document.body.classList.add('drawn');
     $('#drX').onclick = closeDetail;
     if ($('#drSh')) $('#drSh').onclick = function () { openShare(x, fam2); };
+    dr.querySelectorAll('[data-st]').forEach(function (b) {
+      b.onclick = function () { startStrength(b.getAttribute('data-st'), pl); };
+    });
     dr.querySelector('.dr-h').focus && dr.querySelector('#drX').focus();
     if (done && state.me) loadTrack(dateISO, a.type || pl.sport || sport, a.name || name, fam2,
                                      lg.rpe != null ? ['RPE', lg.rpe + ' / 10'] : null);
@@ -6442,6 +6450,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.028", "2026-10-17", "Strength sessions you can follow and log: tap a strength session, Start, and each exercise shows from two angles with how it should feel; log weight and reps for every set (each leg on its own), rest timer, any order when kit is busy. It goes into your watch\u2019s session in Intervals.icu, and next time\u2019s weights come from it. Physio sessions are logged as set. Pilot: Jamie and Fred", 1],
     ["4.027", "2026-10-17", "Share a finished session: the share button on a done session makes an image with your key stats on the dark map background, or a see-through overlay to put on your own photo for Instagram or Strava. Pick up to four stats. Over-unders and ramp tests now show each over, under and step in the session chart.", 0],
     ["4.026", "2026-10-17", "Goals for bike races: \u2018What\u2019s holding you back\u2019 from the route itself \u2013 the climbs, the cut-offs and the climbing power they need, how long the day can be, durability and fuelling (no finish time: drafting and wind make that a guess)", 0],
     ["4.025", "2026-10-17", "Goals: \u2018What\u2019s holding you back\u2019 uses running power where you have it: threshold power, economy (speed per watt) against your own trend, and power drift late in long runs, all said as pace too", 0],
@@ -7238,6 +7247,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       })
       .then(function (j) { state.data = j; state.dataSlug = slug; renderAll(); })
       .then(loadNutrition)
+      .then(loadStrength)
       .catch(function () {
         $('#v-today').innerHTML =
           '<div class="card"><div class="empty">Could not load ' + esc(slug) +
@@ -7261,6 +7271,119 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
         renderSettings();
       })
       .catch(function () { /* absent by design for athletes without the flag */ });
+  }
+
+  /* Strength sessions (Jamie, 17 Oct 2026: "log weights and reps"). The session sheet of
+     a planned strength session lists the exercises and starts the guided player
+     (strength-player.js); every set's weight and reps go to /api/strength/<slug>, which
+     puts them into the watch's own activity in Intervals.icu, or logs them as their own
+     session if the watch never sends one (lib/strength_log.py). Physio sessions are
+     logged as set, never changed. Pilot athletes only (the API's "on"). */
+  var ST_QUEUE = 'peak.strengthQueue.';
+  function strengthOn() {
+    return !!(state.me && state.strength && state.strength.on && state.exlib && window.PeakStrengthPlayer);
+  }
+  function strengthQueue(slug, add, removeId) {
+    var k = ST_QUEUE + slug, q = [];
+    try { q = JSON.parse(localStorage.getItem(k) || '[]'); } catch (e) { q = []; }
+    if (add || removeId) {
+      q = q.filter(function (r) { return r.id !== (add ? add.id : removeId); });
+      if (add) q.push(add);
+      try { localStorage.setItem(k, JSON.stringify(q)); } catch (e) { /* private mode */ }
+    }
+    return q;
+  }
+  // Kept on the phone until the server has it: gyms have bad signal. Sent again on the
+  // next load.
+  function saveStrength(slug, rec) {
+    strengthQueue(slug, rec);
+    return postJSON('/api/strength/' + encodeURIComponent(slug), rec).then(function () {
+      strengthQueue(slug, null, rec.id);
+      // the server merges into the watch's activity and refreshes the calendar
+      setTimeout(function () { if (slug === state.slug) load(slug); }, 20000);
+    }).catch(function () { /* stays queued */ });
+  }
+  function loadStrength() {
+    var slug = state.slug;
+    state.strength = null;
+    if (!state.me) return;
+    var lib = state.exlib ? Promise.resolve(state.exlib)
+      : fetch('../ClaudeCoach/public/exercise-library.json', { cache: 'default' })
+          .then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+    var mine = fetch('/api/strength/' + encodeURIComponent(slug), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+    Promise.all([lib, mine]).then(function (v) {
+      if (slug !== state.slug || !v[1]) return;
+      state.exlib = v[0];
+      state.strength = v[1];
+      var log = state.strength.log = state.strength.log || [];
+      strengthQueue(slug).forEach(function (r) {
+        if (!log.some(function (x) { return x.id === r.id; })) log.push(r);
+        saveStrength(slug, r);
+      });
+      if (strengthOn() && state.tab === 'today') renderToday();
+    });
+  }
+  function strengthSessionFor(pl) {
+    var ss = state.strength.sessions || [];
+    var low = String(pl.name || '').toLowerCase();
+    return ss.filter(function (s) { return s.event_id != null && String(s.event_id) === String(pl.event_id); })[0] ||
+      ss.filter(function (s) {
+        return !s.suggested && !s.planned && (s.match || []).some(function (m) { return m && low.indexOf(m) >= 0; });
+      })[0] || null;
+  }
+  function strengthRx(it, e) {
+    var kg = it.kg_L != null || it.kg_R != null ? 'L ' + it.kg_L + ' / R ' + it.kg_R + ' kg' : (it.kg != null ? it.kg + ' kg' : '');
+    return [it.sets && it.reps ? it.sets + ' \u00d7 ' + it.reps + (e.per_side && !/side/.test(it.reps) ? ' each side' : '') : null,
+      kg || null].filter(Boolean).join(' \u00b7 ');
+  }
+  function strengthCards(dateISO, pl, done) {
+    var lib = state.exlib.exercises || {}, h = '';
+    var logged = (state.strength.log || []).filter(function (r) { return r.date === dateISO; });
+    if (logged.length) {
+      h += card('Logged in Peak', logged.map(function (r) {
+        return '<div class="st-log"><b>' + esc(r.title) + '</b>' + (r.entries || []).map(function (en) {
+          return '<div class="st-row"><span>' + esc((lib[en.ex] || {}).name || en.name || en.ex) + '</span><span>' +
+            esc(PeakStrengthPlayer.setsTxt(en.sets || [], en.log)) + '</span></div>';
+        }).join('') + '<p class="hint">' + (!r.icu ? 'Waiting for your watch\u2019s session' : r.icu.mode === 'merged'
+          ? 'Added to your watch\u2019s session in Intervals.icu' : 'Logged in Intervals.icu as its own session') + '</p></div>';
+      }).join(''));
+    }
+    if (done) return h;
+    var s = strengthSessionFor(pl);
+    if (s) {
+      h += card(s.physio ? 'Your physio\u2019s session' : 'The session', (s.parts || []).map(function (p) {
+        return (p.items || []).map(function (it) {
+          var e = lib[it.ex] || {};
+          return '<div class="st-row"><span>' + esc(e.name || it.ex) + '</span><span>' + esc(strengthRx(it, e)) + '</span></div>';
+        }).join('');
+      }).join('') + '<button type="button" class="st-go" data-st="' + esc(s.id) + '">Start session</button>' +
+        (s.physio ? '<p class="hint">Peak logs your physio\u2019s numbers as they are and never changes them.</p>' : ''));
+    } else {
+      var opts = (state.strength.sessions || []).filter(function (x) { return !x.planned; });
+      h += card('Pick a session', '<p class="hint">Nothing written for this one yet. Pick a session to do and log:</p>' +
+        opts.map(function (x) {
+          return '<button type="button" class="st-pick" data-st="' + esc(x.id) + '"><b>' + esc(x.title) + '</b><span>' +
+            esc([x.minutes ? x.minutes + ' min' : null, x.physio ? 'your physio\u2019s plan' : x['for']].filter(Boolean).join(' \u00b7 ')) +
+            '</span></button>';
+        }).join(''));
+    }
+    return h;
+  }
+  // id null = resume the session in progress
+  function startStrength(id, pl) {
+    if (!strengthOn()) return;
+    var s = id ? (state.strength.sessions || []).filter(function (x) { return x.id === id; })[0] : null;
+    if (id && !s) return;
+    var slug = state.slug;
+    if ($('#drawer').classList.contains('on')) closeDetail();
+    PeakStrengthPlayer.open({
+      lib: state.exlib, anims: window.PeakAnims || {}, key: slug,
+      session: s ? Object.assign({}, s, { event_id: s.event_id || (pl && pl.event_id) || null }) : null,
+      history: state.strength.log,
+      onFinish: function (rec) { saveStrength(slug, rec); },
+      onExit: function () { if (state.tab === 'today') renderToday(); }
+    });
   }
 
   function loadLibrary() {

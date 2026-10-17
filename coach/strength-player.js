@@ -6,8 +6,9 @@
    what should be comfortable. Make it so if in the gym you can do things out of order
    as you have to deal with equipment availability." So any exercise can be done next,
    and a busy machine can be swapped for a same-job alternative.
-   PREVIEW: the log lives on this phone (localStorage). Nothing goes to Peak or
-   Intervals yet; the summary says so. */
+   In Peak (app.js) the log comes from and goes to /api/strength/<slug> (history +
+   onFinish), which merges it into the watch's Intervals.icu activity. Without them (the
+   preview page, strength-lab.html) it lives on the phone (localStorage) and says so. */
 (function (global) {
   'use strict';
   var KEY_LOG = 'peakStrength.log.v1', KEY_LIVE = 'peakStrength.live.v1';
@@ -17,6 +18,7 @@
     { id: 'hard', label: 'Too hard', sub: '0-1 more, or form slipped' }
   ];
   var LIB, ANIMS, S = null, root = null, anim = null, tick = 0, wake = null, onExit = null;
+  var HIST = null, SAVE = null, LIVE = KEY_LIVE;
 
   // ── helpers ──
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -32,6 +34,7 @@
     return m ? { lo: +m[1], hi: +(m[2] || m[1]) } : null;
   }
   function logType(e, it) {
+    if (it && it.log) return it.log;
     if (e.log) return e.log;
     if (/\d\s*s\b|sec/.test(String((it && it.reps) || (e.dose && e.dose.reps) || ''))) return 'seconds';
     if (num(e.load_step_kg, 0) > 0) return 'weight_reps';
@@ -41,7 +44,9 @@
   function isPhysio(it) { return /physio/i.test(String(it.sets) + String(it.reps)); }
 
   // ── the log ──
-  function history() { return load(KEY_LOG, []); }
+  function history() { return HIST || load(KEY_LOG, []); }
+  function localISO(t) { var d = new Date(t || Date.now()); return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19); }
+  function uid() { return (global.crypto && global.crypto.randomUUID) ? global.crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 10); }
   function lastFor(id) {
     var h = history();
     for (var i = h.length - 1; i >= 0; i--) {
@@ -76,6 +81,11 @@
       sides(e).forEach(function (s) {
         var ss = last ? last.sets.filter(function (x) { return (x.side || null) === s; }) : [];
         out.kg[s || 'x'] = ss.length ? ss[0].kg : null; out.val[s || 'x'] = ss.length ? ss[0].val : null;
+      });
+      sides(e).forEach(function (s) {
+        var k = s || 'x';
+        if (out.kg[k] == null) out.kg[k] = it['kg_' + s] != null ? it['kg_' + s] : (it.kg != null ? it.kg : null);
+        if (out.val[k] == null) { var pr = parseRange(it.reps); out.val[k] = pr ? pr.lo : null; }
       });
       if (last) out.lines.push('Last time: ' + setsTxt(last.sets, type) + '.');
       out.lines.push('Use the sets, reps and weight your physio set, and log them here so the trend is easy to see.');
@@ -123,8 +133,9 @@
   function build(session) {
     var items = [];
     (session.parts || []).forEach(function (p, pi) {
-      (p.items || []).forEach(function (it, ii) {
-        if (!it.ex || !LIB.exercises[it.ex]) return;
+      (p.items || []).forEach(function (it0, ii) {
+        if (!it0.ex || !LIB.exercises[it0.ex]) return;
+        var it = Object.assign({}, it0, { physio: !!session.physio || isPhysio(it0) });
         var e = ex(it.ex), sug = suggest(e, it), n = typeof it.sets === 'number' ? it.sets : (parseInt(it.sets, 10) || 3);
         var rows = [];
         for (var i = 1; i <= n; i++) sides(e).forEach(function (s) {
@@ -133,19 +144,21 @@
         var alt = it.alt || Object.keys(e.swaps || {}).map(function (t) { return e.swaps[t]; }).filter(function (a) { return a && a !== it.ex && LIB.exercises[a]; })[0] || null;
         var warm = /warm/i.test(p.title || '');
         items.push({ k: pi + '-' + ii, ex: it.ex, part: pi, warm: warm, sets: n, reps: it.reps, rest_s: it.rest_s != null ? it.rest_s : (e.dose && e.dose.rest_s) || 60,
-          note: it.note || '', alt: alt, physio: isPhysio(it), rows: rows, effort: null });
+          note: it.note || '', alt: it.physio ? null : alt, physio: it.physio, log: it.log || null,
+          kg: it.kg, kg_L: it.kg_L, kg_R: it.kg_R, rows: rows, effort: null });
       });
     });
     return { sid: session.id, title: session.title, parts: (session.parts || []).map(function (p) {
       return { title: p.title, order: p.order || (/warm|power/i.test(p.title) ? 'suggested' : 'any') }; }),
-      items: items, cur: items.length ? items[0].k : null, start: Date.now(), restUntil: 0 };
+      items: items, cur: items.length ? items[0].k : null, start: Date.now(), startedAt: localISO(),
+      id: uid(), event_id: session.event_id || null, physio: !!session.physio, restUntil: 0 };
   }
   function item(k) { return S.items.filter(function (x) { return x.k === k; })[0]; }
   function doneItem(it) { return it.rows.length && it.rows.every(function (r) { return r.done; }) && (it.effort || it.warm); }
-  function persist() { save(KEY_LIVE, S); }
+  function persist() { save(LIVE, S); }
 
   // ── rendering ──
-  var CSS = '.spl{position:fixed;inset:0;z-index:30;background:#f2f4f6;overflow:auto;-webkit-overflow-scrolling:touch;font-family:inherit;color:#0b0d10}' +
+  var CSS = '.spl{position:fixed;inset:0;z-index:200;background:#f2f4f6;overflow:auto;-webkit-overflow-scrolling:touch;font-family:inherit;color:#0b0d10}' +
     '.spl *{box-sizing:border-box}' +
     '.spl .hd{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:10px;padding:10px 14px;padding-top:max(10px,env(safe-area-inset-top));background:rgba(242,244,246,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid rgba(60,60,67,.1)}' +
     '.spl .hd .t{flex:1;min-width:0}.spl .hd b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
@@ -216,7 +229,8 @@
 
   function body(it) {
     var e = ex(it.ex), type = logType(e, it), sug = suggest(e, it);
-    var target = it.physio ? 'As your physio set it' :
+    var pkg = it.kg_L != null || it.kg_R != null ? 'L ' + kgTxt(it.kg_L) + ' / R ' + kgTxt(it.kg_R) + ' kg' : (it.kg != null ? kgTxt(it.kg) + ' kg' : '');
+    var target = it.physio ? (/\d/.test(String(it.sets)) ? it.sets + ' × ' + it.reps + (pkg ? ' · ' + pkg : '') + ' · as your physio set it' : 'As your physio set it') :
       (it.sets + ' × ' + (it.reps || (e.dose && e.dose.reps) || '') + (e.per_side && !/side/.test(it.reps || '') ? ' each side' : '') +
        (it.rest_s ? ' · rest ' + mins(it.rest_s) : ''));
     var h = '<h3>' + esc(e.name) + '</h3><div class="tg">' + esc(target) + '</div>' +
@@ -358,11 +372,14 @@
         sets: x.rows.filter(function (r) { return r.done; }).map(function (r) { return { side: r.side, kg: r.kg, val: r.val }; }) };
     });
     if (entries.length) {
-      var h = history();
-      h.push({ date: new Date().toISOString(), sid: S.sid, title: S.title, minutes: Math.round((Date.now() - S.start) / 60000), entries: entries });
-      save(KEY_LOG, h);
+      entries.forEach(function (en) { en.name = ex(en.ex).name || en.ex; });
+      var rec = { id: S.id || uid(), date: (S.startedAt || localISO(S.start)).slice(0, 10), title: S.title, session_id: S.sid,
+        event_id: S.event_id || null, physio: !!S.physio, started_at: S.startedAt || localISO(S.start), ended_at: localISO(),
+        minutes: Math.round((Date.now() - S.start) / 60000), entries: entries };
+      if (SAVE) { if (HIST) HIST.push(rec); SAVE(rec); }
+      else { var h = history(); h.push(rec); save(KEY_LOG, h); }
     }
-    S.finished = true; save(KEY_LIVE, null);
+    S.finished = true; save(LIVE, null);
     if (anim) { anim.stop(); anim = null; }
     S.restUntil = 0; restBar();
     root.querySelector('.vw').innerHTML = '';
@@ -375,7 +392,8 @@
         (en.effort ? ' · ' + esc({ easy: 'easy', right: 'about right', hard: 'too hard' }[en.effort]) : '') + '</p><p><b style="font-size:13px">Next time:</b> ' +
         esc(nx.lines[nx.lines.length - 1].replace(/^Today: /, '').replace(/^Use the sets.*/, 'as your physio sets it.')) + '</p></div>';
     }).join('') : '<p class="pv">Nothing was logged.</p>') +
-      '<p class="pv">Preview: this log is saved on this phone only. In Peak it will go to your training log and be added to the session your watch recorded.</p>' +
+      '<p class="pv">' + (SAVE ? 'Saved to your log. It is added to the session your watch recorded, or logged as its own session if the watch doesn\'t send one.'
+        : 'Preview: this log is saved on this phone only. In Peak it goes to your training log and into the session your watch recorded.') + '</p>' +
       '<button class="big" data-done-all>Done</button>';
     root.scrollTop = 0;
   }
@@ -398,10 +416,11 @@
   // open({lib, anims, session, onExit}) starts (or resumes) a session.
   function open(o) {
     LIB = o.lib; ANIMS = o.anims || {}; onExit = o.onExit;
+    HIST = o.history || null; SAVE = o.onFinish || null; LIVE = KEY_LIVE + (o.key ? '.' + o.key : '');
     ((LIB.effort_guide || {}).answers || []).forEach(function (a) {
       EFFORT.forEach(function (f) { if (f.id === a.id && a.label) f.sub = a.label; });
     });
-    var live = load(KEY_LIVE, null);
+    var live = load(LIVE, null);
     S = live && o.session && live.sid === o.session.id ? live : (o.session ? build(o.session) : live);
     if (!S || !S.items) return false;
     persist(); ensureCss();
@@ -428,7 +447,7 @@
     open: open,
     close: function () { if (root) close(true, false); },
     isOpen: function () { return !!root; },
-    live: function () { var l = load(KEY_LIVE, null); return l && l.items ? { sid: l.sid, title: l.title } : null; },
-    lastFor: lastFor, history: history, suggest: suggest
+    live: function (key) { var l = load(KEY_LIVE + (key ? '.' + key : ''), null); return l && l.items ? { sid: l.sid, title: l.title } : null; },
+    lastFor: lastFor, history: history, suggest: suggest, setsTxt: setsTxt
   };
 })(typeof window !== 'undefined' ? window : this);

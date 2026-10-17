@@ -863,3 +863,30 @@ def test_intervals_webhook_needs_the_secret_and_marks_the_athlete_changed(env, i
     assert "secret" not in logged and logged["events"][0]["type"] == "ACTIVITY_UPLOADED"
     assert logged["events"][0]["slug"] == "kathryn" and logged["events"][1]["slug"] is None
     assert icu_changes.changed_since("kathryn", 0, icu_changes.ACTIVITY_TYPES)
+
+
+# ── strength player (lib/strength_log.py) ──
+
+def test_strength_log_saves_for_own_athlete_only(env, monkeypatch):
+    dev(monkeypatch, "kat@example.com")
+    (server.CC / "athletes" / "kathryn").mkdir(exist_ok=True)
+    rec = {"id": "abc12345", "date": "2026-10-19", "title": "Hamstrings",
+           "started_at": "2026-10-19T07:05:00", "ended_at": "2026-10-19T07:50:00",
+           "entries": [{"ex": "single_leg_hamstring_curl", "log": "weight_reps", "effort": "right",
+                        "sets": [{"side": "L", "kg": 27.5, "val": 10}, {"side": "R", "kg": 32.5, "val": 10}]}]}
+    h = {"x-peak": "1"}
+    assert env.post("/api/strength/kathryn", json=rec).status_code == 400        # no app header
+    assert env.post("/api/strength/jamie", json=rec, headers=h).status_code == 403
+    r = env.post("/api/strength/kathryn", json=rec, headers=h)
+    assert r.status_code == 200 and r.json()["id"] == "abc12345"
+    got = env.get("/api/strength/kathryn").json()
+    assert [x["id"] for x in got["log"]] == ["abc12345"]
+    assert got["log"][0]["entries"][0]["sets"][1] == {"side": "R", "kg": 32.5, "val": 10}
+    bad = dict(rec, entries=[{"ex": "x", "sets": []}])
+    assert env.post("/api/strength/kathryn", json=bad, headers=h).status_code == 400
+
+
+def test_exercise_library_is_served(env, monkeypatch):
+    dev(monkeypatch, "kat@example.com")
+    (server.PUBLIC_DIR / "exercise-library.json").write_text('{"exercises":{}}')
+    assert env.get("/ClaudeCoach/public/exercise-library.json").json() == {"exercises": {}}

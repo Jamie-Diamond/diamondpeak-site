@@ -36,6 +36,9 @@ Paths mirror the GitHub Pages layout so Peak runs unchanged:
   GET  /api/chat/history                      your chat: conversation + scheduled messages
   GET  /api/admin/usage                       coach: every person's stage, chat and API cost
   POST /api/indoor/<slug>                     move a planned ride under 2 h indoors / back out
+  GET  /api/strength/<slug>                   strength sessions to do + the strength log
+  POST /api/strength/<slug>                   save one session from Peak's strength player
+  /ClaudeCoach/public/exercise-library.json   the strength exercise library
   GET  /api/rules/<slug>                      Your rules: standing rules by topic, one line each
   POST /api/rules/<slug>                      keep / change / drop one rule (archived first)
   GET  /api/media/<name>                      a photo/chart from your chat
@@ -408,6 +411,61 @@ async def ride_indoors(slug: str, request: Request):
         raise HTTPException(502, f"Intervals.icu didn't take the change: {type(e).__name__}")
     threading.Thread(target=lambda: run_refresh(slug), daemon=True).start()
     return JSONResponse(out, headers=NO_STORE)
+
+
+# ── strength sessions logged in Peak's player (lib/strength_log.py, 17 Oct 2026) ──
+
+def _exercise_library() -> dict:
+    try:
+        return json.loads((PUBLIC_DIR / "exercise-library.json").read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+@app.get("/api/strength/{slug}")
+def strength_get(slug: str, request: Request):
+    """The athlete's strength sessions to do (their own physio plan first, then the
+    library's suggestions) and what they have logged, for the player's next-time numbers."""
+    require_slug(request, slug)
+    import strength_log
+    return JSONResponse({"on": strength_log.on(slug),
+                         "sessions": strength_log.sessions(slug, _exercise_library(), base=CC),
+                         "log": strength_log.recent(slug, base=CC)}, headers=NO_STORE)
+
+
+def _strength_merge(slug: str, cfg: dict) -> None:
+    """Put the session into the watch's activity now if it has already synced; the
+    activity watcher retries every cycle and logs it as a manual activity if it never does."""
+    import strength_log
+    from icu_api import IcuClient
+    try:
+        done = strength_log.reconcile(slug, IcuClient(cfg["icu_athlete_id"], cfg.get("icu_api_key") or ""), base=CC)
+        if done:
+            print(f"[strength] {slug}: {done}", flush=True)
+            run_refresh(slug)
+    except Exception as e:
+        print(f"[strength] {slug}: merge failed: {type(e).__name__}: {e}", flush=True)
+
+
+@app.post("/api/strength/{slug}")
+async def strength_save(slug: str, request: Request):
+    """One finished session from the player: every set's weight and reps, per side."""
+    if request.headers.get("x-peak") != "1":
+        raise HTTPException(400, "missing app header")
+    require_slug(request, slug)
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(400, "not JSON")
+    import strength_log
+    try:
+        rec = strength_log.save(slug, body, base=CC)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    cfg = _load(ATHLETES_CONFIG).get(slug) or {}
+    if _icu_linked(cfg):
+        threading.Thread(target=_strength_merge, args=(slug, cfg), daemon=True).start()
+    return JSONResponse({"ok": True, "id": rec["id"]}, headers=NO_STORE)
 
 
 # ── the Today note: the morning card on the Today tab (lib/today_note.py) ──
@@ -1507,6 +1565,11 @@ async def admin_link(request: Request):
 @app.get("/ClaudeCoach/public/session-library.json")
 def session_library():
     return FileResponse(PUBLIC_DIR / "session-library.json", media_type="application/json")
+
+
+@app.get("/ClaudeCoach/public/exercise-library.json")
+def exercise_library():
+    return FileResponse(PUBLIC_DIR / "exercise-library.json", media_type="application/json")
 
 
 @app.get("/")

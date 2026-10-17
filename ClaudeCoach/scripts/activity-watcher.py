@@ -2406,6 +2406,19 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     if poll:
         _log_pre_activation_history(slug, athlete_cfg, session_log_f, acts=recent)
 
+    # Strength sessions logged in Peak go into the watch's own activity, or become a
+    # manual one if the watch never sends it (lib/strength_log.py, 17 Oct 2026). Only
+    # touches Intervals.icu while a logged session is still unmerged.
+    try:
+        import strength_log
+        if any(not r.get("icu") for r in strength_log.load(slug)) and athlete_cfg.get("icu_athlete_id"):
+            from icu_api import IcuClient
+            for _line in strength_log.reconcile(slug, IcuClient(athlete_cfg["icu_athlete_id"],
+                                                                athlete_cfg.get("icu_api_key") or "")):
+                print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] strength: {_line}", file=sys.stderr)
+    except Exception as exc:
+        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] strength merge failed: {exc}", file=sys.stderr)
+
     # Snapshot existing IDs before Claude runs
     existing_ids: set = set()
     if session_log_f.exists():
