@@ -404,7 +404,7 @@ They live in the profile's existing **`injuries[]`** list. **I extend it. No new
 | **Priority first** | The protocol's sessions go in first. Swim, bike and run fit round them |
 | **Counts toward the cap** | Protocol strength sessions count toward the 2/week cap. Two of them fill it |
 | **Counts toward coverage** | Protocol items count toward the weekly coverage list (§3) |
-| **Top up only** | The builder adds **only what's missing**: usually upper body + core, 10-20 min, added to a protocol session. **Never a competing lower-body session** |
+| **The protocol is the strength** | **Decided 17 Oct (Jamie: "Strength = physio").** An athlete's own protocol sessions are their strength work. Peak adds **nothing on top**: no top-up, no extra session. A physio session is an ordinary strength session whose sets, reps and weights are set exactly; Peak logs them as set and never progresses them |
 | **Never edit the source** | Never change a physio's or doctor's exercises, sets, reps or loads. The coach may **only point out a conflict** and suggest the athlete checks with the source |
 | **Physio items never auto-progress** | Source physio or doctor: the log shows their numbers; the progression engine stays off |
 | **Self-managed can progress** | Source self or coach: the normal progression rules (§8c) apply |
@@ -441,11 +441,11 @@ Issue: area knee · status **rehab** · source **physio** · priority **first** 
 | Cap | The 2 physio sessions **fill the 2/week cap**. No library strength session is added |
 | Covered by the physio | **squat, hinge, single-leg, bridge, calf, adductors**, lateral core, balance |
 | Missing | push, pull, anti-extension and anti-rotation core, bone impact, grip |
-| Top-up (15 min, added to a physio session) | dumbbell_bench_press + lat_pulldown (paired), dead_bug, pallof_press |
+| Added by Peak | **Nothing.** The two physio sessions are the week's strength |
 | Blocked | **pogo_hops, squat_jump**: knee in rehab, not cleared |
 | Grip | No carries (walking load on the knee). Gap until the physio says otherwise |
 | Conflict to flag | A hard ride within 8 h of a physio session. **Flag it; never move the physio session** |
-| Balance | Comes from the physio's single_leg_rdl. **Ask the physio** before adding single_leg_balance to the top-up |
+| Balance, upper body, jumps | Balance comes from the physio's single-leg deadlift. Anything else is **the physio's call** |
 | Logging | Each side logged separately; the physio's numbers shown, never auto-progressed |
 | Debrief | "How did the knee feel - any pain or swelling during or after?" |
 
@@ -597,8 +597,8 @@ The blueprint says **light strength in taper, none in race week**. An athlete's 
 
 | Option | Impact |
 |---|---|
-| a. Follow the source; with no instruction, keep rehab sessions and drop top-ups | Rehab never stalls for a race. Library extras go quiet |
+| a. Follow the source; with no instruction, keep rehab sessions and drop library sessions | Rehab never stalls for a race. Library sessions go quiet |
 | b. Drop everything in race week, protocol included | Clean rule. Can break a physio's programme |
-| c. Keep everything as normal | Top-ups add fatigue in race week |
+| c. Keep everything as normal | Library sessions add fatigue in race week |
 
 **Default until decided:** follow the source's instruction. If there is none, **ask the athlete when the taper starts.**

@@ -5203,7 +5203,10 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     if (done && (a.powAvg || lg.avg_power)) figRow.push(sxFig(a.powAvg || lg.avg_power, 'watts', 'w'));
     else if (done && a.pace && fam2 !== 'bike') figRow.push(sxFig(esc(a.pace.replace(/\/(km|100m)$/, '')), a.pace.indexOf('100m') > 0 ? '/100m' : '/km', 'w'));
     if (tssV != null) figRow.push(sxFig(Math.round(tssV), 'load'));
-    h += '<section class="card sx sx-' + esc(fam2 || 'other') + '">' +
+    // A planned strength session with its exercises is one card of its own (strengthCards):
+    // time, exercises and Load in one row, then Start (Jamie, 17 Oct 2026: "more premium").
+    var stHero = fam2 === 'strength' && !done && strengthOn() && !!strengthSessionFor(pl);
+    if (!stHero) h += '<section class="card sx sx-' + esc(fam2 || 'other') + '">' +
       '<header class="card-h">' + sportIcon(pl.sport || a.type || sport) +
       '<h2>' + esc(sportWord(pl.sport || a.type || sport) || 'Session') + (done ? '' : ' · planned') + '</h2></header>' +
       '<div class="sx-figs">' + figRow.join('') + '</div>' +
@@ -6627,6 +6630,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.040", "2026-10-17", "Strength sessions: one look for every session (a physio's is just one with exact sets, reps and weights), nothing added on top of physio sessions, and a cleaner session sheet: time, exercises and Load in one row, a proper Start button, the exercise list underneath. Pilot: Jamie and Fred", 1],
     ["4.039", "2026-10-17", "Strength sessions tidied: each exercise in the session sheet has its picture with what to do under it, and Start is at the top. In the player, change a set\u2019s weight and the sets after it follow; a progress bar; cleaner set rows; the rest of the session shows the next three, with every exercise one tap away. Pilot: Jamie and Fred", 1],
     ["4.038", "2026-10-17", "When you mention a sportive, gran fondo or triathlon, the coach asks for the route (GPX) and the time limits, and saves the cut-offs you give it", 0],
     ["4.037", "2026-10-17", "Share cards: runs with running power can show average power and normalised power.", 0],
@@ -7528,46 +7532,56 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       .filter(Boolean).join(' \u00b7 ');
   }
   // One exercise: a still of its animation, the name on one line, what to do under it.
-  function strengthItem(it, lib) {
+  function strengthItem(it, lib, line) {
     var e = lib[it.ex] || {}, an = (window.PeakAnims || {})[it.ex], th = '';
     if (an && window.PeakFigure) {
       var ks = PeakFigure.compile(an).keys;
       th = PeakFigure.drawStatic(an, (an.views || ['side'])[0], ks[Math.min(1, ks.length - 1)].t0);
     }
     return '<div class="st-ex"><div class="st-th">' + th + '</div><div class="st-tx"><div class="st-n">' +
-      esc(e.name || it.ex) + '</div><div class="st-m">' + esc(strengthRx(it, e)) + '</div></div></div>';
+      esc(e.name || it.ex) + '</div><div class="st-m">' + esc(line != null ? line : strengthRx(it, e)) + '</div></div></div>';
   }
   function strengthCards(dateISO, pl, done) {
     var lib = state.exlib.exercises || {}, h = '';
     var logged = (state.strength.log || []).filter(function (r) { return r.date === dateISO; });
     if (logged.length) {
-      h += card('Logged in Peak', logged.map(function (r) {
-        return '<div class="st-log"><b>' + esc(r.title) + '</b>' + (r.entries || []).map(function (en) {
-          return '<div class="st-row"><span>' + esc((lib[en.ex] || {}).name || en.name || en.ex) + '</span><span>' +
-            esc(PeakStrengthPlayer.setsTxt(en.sets || [], en.log)) + '</span></div>';
-        }).join('') + '<p class="hint">' + (!r.icu ? 'Waiting for your watch\u2019s session' : r.icu.mode === 'merged'
-          ? 'Added to your watch\u2019s session in Intervals.icu' : 'Logged in Intervals.icu as its own session') + '</p></div>';
-      }).join(''));
+      h += logged.map(function (r) {
+        return '<section class="card st-card"><div class="st-top st-pickh"><h3>' + esc(r.title) + '</h3><p class="st-note">' +
+          (!r.icu ? 'Logged in Peak \u00b7 waiting for your watch\u2019s session' : r.icu.mode === 'merged'
+            ? 'Logged in Peak \u00b7 added to your watch\u2019s session' : 'Logged in Peak \u00b7 in Intervals.icu as its own session') +
+          '</p></div><div class="st-list">' + (r.entries || []).map(function (en) {
+            return strengthItem({ ex: en.ex }, lib, PeakStrengthPlayer.setsTxt(en.sets || [], en.log));
+          }).join('') + '</div></section>';
+      }).join('');
     }
     if (done) return h;
     var s = strengthSessionFor(pl);
     if (s) {
-      var multi = (s.parts || []).length > 1;
-      h += card(s.physio ? 'Your physio\u2019s session' : 'The session',
-        '<button type="button" class="st-go" data-st="' + esc(s.id) + '">Start session</button>' +
-        (s.physio ? '<p class="hint st-h">Your physio\u2019s numbers, logged as set and never changed.</p>' : '') +
-        (s.parts || []).map(function (p) {
-          return (multi ? '<div class="st-part">' + esc(p.title) + '</div>' : '') +
+      var multi = (s.parts || []).length > 1, n = 0;
+      (s.parts || []).forEach(function (p) { n += (p.items || []).length; });
+      var mins = s.minutes || pl.duration_min;
+      var stat = function (v, l) { return v == null ? '' : '<div><b>' + esc(v) + '</b><span>' + esc(l) + '</span></div>'; };
+      // One kind of session (Jamie, 17 Oct 2026: "Strength = physio"): a physio's is just
+      // one whose sets, reps and weights are set exactly.
+      h += '<section class="card st-card"><div class="st-top">' +
+        '<div class="st-stats">' + stat(mins ? Math.round(mins) : null, 'min') + stat(n, n === 1 ? 'exercise' : 'exercises') +
+        stat(pl.tss != null ? Math.round(pl.tss) : null, 'load') + '</div>' +
+        (s.physio ? '<p class="st-note">Sets, reps and weights from your physio</p>' : '') +
+        '<button type="button" class="st-go" data-st="' + esc(s.id) + '"><svg viewBox="0 0 12 14" aria-hidden="true">' +
+        '<path d="M1.5 1.2v11.6c0 .6.7 1 1.2.6l8.6-5.8c.5-.3.5-1 0-1.3L2.7.6c-.5-.4-1.2 0-1.2.6z"/></svg>Start session</button></div>' +
+        '<div class="st-list">' + (s.parts || []).map(function (p) {
+          return '<div class="st-part">' + esc(multi ? p.title : 'Exercises') + '</div>' +
             (p.items || []).map(function (it) { return strengthItem(it, lib); }).join('');
-        }).join(''));
+        }).join('') + '</div></section>';
     } else {
       var opts = (state.strength.sessions || []).filter(function (x) { return !x.planned; });
-      h += card('Pick a session', '<p class="hint">Nothing written for this one yet. Pick a session to do and log:</p>' +
+      h += '<section class="card st-card"><div class="st-top st-pickh"><h3>Pick a session</h3>' +
+        '<p class="st-note">Nothing written for this day yet. Choose one to do and log.</p></div><div class="st-list">' +
         opts.map(function (x) {
-          return '<button type="button" class="st-pick" data-st="' + esc(x.id) + '"><b>' + esc(x.title) + '</b><span>' +
-            esc([x.minutes ? x.minutes + ' min' : null, x.physio ? 'your physio\u2019s plan' : x['for']].filter(Boolean).join(' \u00b7 ')) +
-            '</span></button>';
-        }).join(''));
+          return '<button type="button" class="st-pick" data-st="' + esc(x.id) + '"><span class="st-tx"><span class="st-n">' + esc(x.title) +
+            '</span><span class="st-m">' + esc([x.minutes ? x.minutes + ' min' : null, x.physio ? 'from your physio' : x['for']].filter(Boolean).join(' \u00b7 ')) +
+            '</span></span><span class="st-chev" aria-hidden="true">\u203a</span></button>';
+        }).join('') + '</div></section>';
     }
     return h;
   }

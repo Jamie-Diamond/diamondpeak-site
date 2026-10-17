@@ -16,7 +16,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <!-- Glass style (glass.css) and Plus Jakarta Sans: the only look since 3.78 (Jamie,
      14 Oct 2026). Set before first paint. -->
-<link rel="stylesheet" href="glass.css?v=199">
+<link rel="stylesheet" href="glass.css?v=200">
 <script>try{document.documentElement.classList.add('glass');
 var gf="jakarta";document.documentElement.setAttribute("data-font",gf);
 var GF={inter:'Inter:wght@400;500;600;700',manrope:'Manrope:wght@400;500;600;700',jakarta:'Plus+Jakarta+Sans:wght@400;500;600;700'};
@@ -1440,20 +1440,32 @@ html body .shr .shr-b button:first-child{background:var(--ink);color:#fff;border
 @media (prefers-reduced-motion:reduce){
   *{animation:none!important;transition:none!important}
 }
-/* Strength sessions in the session sheet (17 Oct 2026) */
-.st-row{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--rule-soft,rgba(60,60,67,.12));font-size:14px}
-.st-row span:last-child{color:var(--muted);text-align:right;white-space:nowrap}
-.st-log b{display:block;margin:2px 0 2px}.st-log+.st-log{margin-top:12px}
-.st-ex{display:grid;grid-template-columns:52px 1fr;gap:12px;align-items:center;padding:7px 0;border-top:1px solid var(--rule-soft,rgba(60,60,67,.1))}
-.st-th{width:52px;height:52px;border-radius:12px;background:#f3f5f7;overflow:hidden}
-.st-n{font-size:15px;font-weight:600;line-height:1.3}.st-m{font-size:13px;color:var(--muted);margin-top:2px}
-.st-part{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin:14px 0 4px}
-.st-h{margin:6px 0 4px}
-.st-go{display:block;width:100%;margin:4px 0 10px;padding:12px;border:0;border-radius:14px;background:var(--accent);color:#fff;font:inherit;font-size:16px;font-weight:700;cursor:pointer}
-.st-pick{display:flex;flex-direction:column;align-items:flex-start;width:100%;text-align:left;margin-top:8px;padding:10px 12px;border:1px solid var(--rule-soft,rgba(60,60,67,.14));border-radius:14px;background:transparent;font:inherit;color:inherit;cursor:pointer}
-.st-pick span{font-size:12px;color:var(--muted)}
-.st-resume{display:flex;align-items:center;gap:10px}.st-resume b{flex:1}
-.st-resume button{border:0;border-radius:14px;background:var(--accent);color:#fff;font:inherit;font-weight:700;padding:8px 14px;cursor:pointer}
+/* Strength sessions in the session sheet (17 Oct 2026; refined after Jamie: "more premium") */
+.st-card{padding:0}
+.st-top{padding:18px 18px 16px}
+.st-stats{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;text-align:center}
+.st-stats div+div{border-left:.5px solid var(--rule-soft,rgba(60,60,67,.14))}
+.st-stats b{display:block;font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums;color:var(--ink)}
+.st-stats span{display:block;margin-top:3px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.st-note{margin:12px 0 0;font-size:13px;color:var(--muted);text-align:center}
+.st-pickh{padding-bottom:12px}.st-pickh h3{margin:0;font-size:17px;font-weight:600}.st-pickh .st-note{text-align:left;margin-top:4px}
+.st-go{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;height:52px;margin:16px 0 0;border:0;border-radius:16px;
+  background:linear-gradient(180deg,#167a81 0%,#0f6066 100%);color:#fff;font:inherit;font-size:16px;font-weight:600;letter-spacing:.01em;cursor:pointer;
+  box-shadow:0 8px 20px -8px rgba(16,101,107,.55),inset 0 1px 0 rgba(255,255,255,.22);transition:transform .12s}
+.st-go:active{transform:scale(.985)}
+.st-go svg{width:12px;height:14px;fill:#fff}
+.st-list{border-top:.5px solid var(--rule-soft,rgba(60,60,67,.14));padding:4px 0 8px}
+.st-part{padding:14px 18px 4px;font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.st-ex{position:relative;display:grid;grid-template-columns:56px 1fr;gap:14px;align-items:center;padding:9px 18px}
+.st-ex+.st-ex:before{content:"";position:absolute;top:0;left:88px;right:0;border-top:.5px solid var(--rule-soft,rgba(60,60,67,.12))}
+.st-th{width:56px;height:56px;border-radius:14px;background:rgba(243,245,247,.9);overflow:hidden}
+.st-n{display:block;font-size:15.5px;font-weight:600;line-height:1.3;color:var(--ink)}
+.st-m{display:block;font-size:13px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
+.st-pick{position:relative;display:flex;align-items:center;gap:12px;width:100%;padding:11px 18px;border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.st-pick+.st-pick:before{content:"";position:absolute;top:0;left:18px;right:0;border-top:.5px solid var(--rule-soft,rgba(60,60,67,.12))}
+.st-pick .st-tx{flex:1}.st-chev{font-size:22px;color:var(--muted)}
+.st-resume{display:flex;align-items:center;gap:10px;padding:12px 14px}.st-resume b{flex:1;font-weight:600}
+.st-resume button{border:0;border-radius:12px;background:var(--accent);color:#fff;font:inherit;font-weight:600;padding:9px 16px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -1515,9 +1527,9 @@ html body .shr .shr-b button:first-child{background:var(--ink);color:#fff;border
      ClaudeCoach/ironman-analysis/tests/test_peak_release.py. -->
 <!-- The strength player (17 Oct 2026): the figure drawn in code, the 44 exercise animations
      and the guided session with weight and reps logged. Before app.js, which uses them. -->
-<script src="figure.js?v=199" defer></script>
-<script src="exercise-anims.js?v=199" defer></script>
-<script src="strength-player.js?v=199" defer></script>
-<script src="app.js?v=199" defer></script>
+<script src="figure.js?v=200" defer></script>
+<script src="exercise-anims.js?v=200" defer></script>
+<script src="strength-player.js?v=200" defer></script>
+<script src="app.js?v=200" defer></script>
 </body>
 </html>

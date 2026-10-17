@@ -231,7 +231,7 @@ h2{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
         (bo.top_up.placement ? '<p class="note">' + esc(bo.top_up.placement) + '</p>' : '') +
         (bo.top_up.items || []).map(function (it) { return itemRow(it, itemRx(it)); }).join('') + '</div>' : '') +
       '<div class="box"><h4>How Peak plans round it</h4>' +
-      [['Strength cap', bo.cap], ['Already covered', bo.covered_note], ['Held back', bo.blocked_note || bo.plyometrics],
+      [['Strength cap', bo.cap], ['Already covered', bo.covered_note], ['Not added', bo.not_added], ['Held back', bo.blocked_note || bo.plyometrics],
        ['Cautions', bo.cautions_note], ['Clashes', bo.conflict_to_flag], ['After each session Peak asks', bo.debrief]]
         .filter(function (r) { return r[1]; })
         .map(function (r) { return '<p class="note"><b>' + r[0] + ':</b> ' + esc(r[1]) + '</p>'; }).join('') + '</div></div>';

@@ -114,22 +114,11 @@ def test_managed_knee_or_cleared_rehab_still_gets_plyos_in_build():
         assert any(EX[x]["pattern"] == "plyometric" for x in _ids(s, with_alt=False)), inj
 
 
-def test_knee_rehab_example_gets_only_an_upper_body_and_core_top_up():
-    ex = _knee_example()
-    prof = {"injuries": [ex["issue"]]}
-    s = _build(prof, tier="A", sports=["bike"], slot="A")
-    assert s["kind"] == "top_up"
-    pats = {EX[x]["pattern"] for x in _ids(s)}
-    assert pats <= {"push_horizontal", "push_vertical", "pull_horizontal", "pull_vertical",
-                    "scapular_cuff"} | CORE, pats
-    assert pats & {"push_horizontal", "push_vertical"} and pats & {"pull_horizontal", "pull_vertical"}
-    # The library's own expected output for this example.
-    want = [it["ex"] for it in ex["builder_output"]["top_up"]["items"]]
-    assert _ids(s, with_alt=False) == want
-    assert s["minutes"] == ex["builder_output"]["top_up"]["minutes"]
-    assert {"bone_impact", "grip"} <= set(s["gaps"])
-    # Asked again with that top-up already in the week: nothing more to add.
-    assert _build(prof, tier="A", sports=["bike"], slot="B", week_logged=[s]) is None
+def test_a_physio_protocol_is_the_strength_nothing_is_added():
+    # Jamie, 17 Oct 2026: "Strength = physio" - no top-up on top of a physio's sessions.
+    prof = {"injuries": [_knee_example()["issue"]]}
+    assert _build(prof, tier="A", sports=["bike"], slot="A") is None
+    assert _build(prof, tier="A", sports=["bike"], slot="B") is None
 
 
 def test_protocol_items_count_toward_coverage_and_the_sport_block_skips_them():
@@ -147,9 +136,7 @@ def test_two_counted_protocol_sessions_fill_the_cap_for_any_issue():
           "protocol": {"summary": "x", "sessions": [
               {"title": "Cuff", "per_week": 2, "items": [{"ex": "band_external_rotation"},
                                                          {"ex": "band_pull_apart"}]}]}}
-    s = _build({"injuries": [sh]}, tier="A", sports=["run"])
-    assert s["kind"] == "top_up"
-    assert "band_external_rotation" not in _ids(s, with_alt=False)
+    assert _build({"injuries": [sh]}, tier="A", sports=["run"]) is None
     assert _build({"injuries": [sh]}, tier="A", sports=["run"], cap=3)["kind"] == "library"
 
 

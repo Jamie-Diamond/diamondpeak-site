@@ -12,7 +12,7 @@ Pure and deterministic: no network, no clock (write_plan's 14-day prune aside).
 A session is the hand-over shape strength_log.planned() expects:
   {"date", "title", "minutes", "parts": [{"title", "order": "suggested"|"any",
      "items": [{"ex", "sets", "reps", "rest_s", "alt", "rpe"?, "pair"?, "note"?}]}]}
-plus a few fields for the planner and coach: kind ("library" | "top_up"), slot, tier,
+plus a few fields for the planner and coach: kind ("library"), slot, tier,
 phase, module, gaps (coverage this session could not give).
 
 Rules: config/exercise-library.json (template, modules, dose_by_phase, issues) and
@@ -248,8 +248,8 @@ class _Ctx:
         self.protocol_ids = [str(it["ex"]) for it in p_items if it.get("ex")]
         self.cap = cap
         self.cap_used = sum(_per_week(s) for s in protocol if _counts(s))
-        # A source-led strength programme for a lower-limb issue: never a competing
-        # lower-body session (issues.rules.top_up_only).
+        # A source-led strength programme for a lower-limb issue IS the athlete's strength
+        # work (issues.rules.protocol_is_the_strength).
         self.lower_protocol = any(i["lower_limb"] and i["acute"] and any(_counts(s) for s in i["sessions"])
                                   for i in self.issues)
         self.week_known = week_logged is not None
@@ -572,48 +572,6 @@ def _session(ctx: _Ctx, slot: str) -> dict:
             "parts": parts, "gaps": gaps}
 
 
-# Top-up picks per missing coverage key (issues.rules.top_up_only).
-TOP_UP = (("push", "push_horizontal", True), ("pull", "pull_vertical", True),
-          ("core_anti_extension", "dead_bug", False), ("core_anti_rotation", "pallof_press", False),
-          ("core_lateral", "side_plank", False), ("squat", "squat", True), ("hinge", "hinge", True),
-          ("single_leg", "single_leg", True), ("calf_ankle", "calf_raise", False),
-          ("balance", "single_leg_balance", False))
-TOP_UP_MAX = 6
-
-
-def _top_up(ctx: _Ctx) -> dict | None:
-    """What the protocol (and the week so far) leaves missing, usually upper body and
-    core, 10-20 min appended to a protocol session. Never lower body for a lower-limb
-    issue; never plyos, carries or balance there either (ask the source)."""
-    ctx.lower_blocked = ctx.acute_lower
-    used, upper, core = [], [], []
-    for key, what, is_pattern in TOP_UP:
-        if key in ctx.covered or len(used) >= TOP_UP_MAX:
-            continue
-        got = ctx.pick(what, used) if is_pattern else ctx.pick_exact(what, used)
-        if not got:
-            continue
-        used.append(got)
-        (upper if ctx.exs[got].get("pattern") in UPPER | LOWER else core).append(got)
-    if not used:
-        return None
-    pair = "1" if sum(1 for x in upper if ctx.exs[x].get("pattern") in UPPER) == 2 else None
-    rounds = _sets((ctx.dose.get("core") or {}).get("rounds") or "2", ctx.low)
-    parts = []
-    if upper:
-        parts.append({"title": "Upper body" if all(ctx.exs[x].get("pattern") in UPPER for x in upper)
-                      else "Strength", "order": "suggested",
-                      "items": [ctx.main_item(x, used, pair if ctx.exs[x].get("pattern") in UPPER else None)
-                                for x in upper]})
-    if core:
-        parts.append({"title": "Core", "order": "any",
-                      "items": [ctx.light_item(x, used, rounds, 20) for x in core]})
-    have = ctx.covered | coverage(used, ctx.lib)
-    gaps = [k for k in ("push", "pull", "bone_impact", "grip") if k not in have]
-    title = "Upper body + core top-up" if not any(ctx.exs[x].get("pattern") in LOWER for x in used) else "Strength top-up"
-    return {"kind": "top_up", "title": title, "parts": parts, "gaps": gaps}
-
-
 # ── time ──
 
 def _item_seconds(it: dict, lib: dict) -> float:
@@ -677,7 +635,8 @@ def build(profile: dict, library: dict, *, date: str, phase: str, slot: str, tie
     athlete's event sports (2+ of swim/bike/run = triathlon module, none = health), level
     1-3. minutes caps the length. week_logged: the week's other strength sessions so far
     (hand-over sessions, strength-log records or ids), NOT the issue protocol; it drives
-    weekly coverage and makes a repeat top-up call return None. cap = day_rules.strength_max.
+    weekly coverage. None when the athlete's own protocol already is their strength work.
+    cap = day_rules.strength_max.
     """
     day = _date.fromisoformat(str(date)[:10])
     slot = "B" if str(slot).upper() == "B" else "A"
@@ -686,11 +645,14 @@ def build(profile: dict, library: dict, *, date: str, phase: str, slot: str, tie
                level=level, week_logged=week_logged, cap=cap)
     if ctx.phase == "race" or _race_week(profile or {}, day):
         return None
-    top = ctx.lower_protocol or ctx.cap_used >= cap
-    sess = _top_up(ctx) if top else _session(ctx, slot)
+    # The athlete's own protocol (a physio's sessions) is their strength work: nothing is
+    # added on top of it (Jamie, 17 Oct 2026: "Strength = physio").
+    if ctx.lower_protocol or ctx.cap_used >= cap:
+        return None
+    sess = _session(ctx, slot)
     if sess is None:
         return None
-    if minutes and not top:
+    if minutes:
         _trim(sess, int(minutes), library)
     out = {"date": day.isoformat(), "title": sess["title"],
            "minutes": estimate_minutes(sess, library), "kind": sess["kind"],

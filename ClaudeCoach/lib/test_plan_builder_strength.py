@@ -31,8 +31,7 @@ def test_physio_day_keeps_the_physio_session_as_set():
     assert s["kind"] == "protocol" and s["title"] == "Hamstrings"
     first = s["parts"][0]["items"][0]
     assert first == {"ex": "hip_thrust", "sets": 4, "reps": "8", "kg": 75, "physio": True}
-    # any top-up comes after the physio work and says it is optional
-    assert all("if you have time" in p["title"] for p in s["parts"][1:])
+    assert len(s["parts"]) == 1                    # nothing added on top of the physio's work
 
 
 def test_sports_from_the_race():

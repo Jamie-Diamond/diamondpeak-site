@@ -2990,7 +2990,6 @@
    "priority_first": "priority first: place the protocol's sessions before anything else that week. Swim, bike and run fit round them, keeping the 8 h gap from quality sessions where possible.",
    "counts_toward_cap": "Protocol sessions with counts_as_strength true count toward the weekly strength cap (strength_max). Two such sessions fill the cap.",
    "counts_toward_coverage": "Protocol items count toward weekly coverage by their exercise's pattern (or the item's pattern field for free-text items).",
-   "top_up_only": "The builder only tops up coverage the protocol leaves missing, usually upper body and core as a 10-20 min add-on appended to a protocol session. It never adds a competing lower-body session.",
    "never_edit_source": "Never change a physio's or doctor's exercises, sets, reps or loads. The coach may only point out a conflict (e.g. a hard ride the day after a heavy protocol session) and ask the athlete to check with the source.",
    "self_managed": "Protocols with source self or coach may be progressed with the library's progression rules.",
    "cautions_auto": "For each current issue, every library exercise's cautions[area.caution_key] apply automatically: follow the caution text or swap.",
@@ -3001,7 +3000,8 @@
    "debrief": "The strength debrief asks about the issue area (already in lib/strength_ask.py).",
    "review_by": "On or after review_by, ask the athlete for an update and whether the source has changed anything. Never expire an issue silently.",
    "outside_cap": "Short sessions with counts_as_strength false (balance, mobility) sit outside the cap and use the session_type given (e.g. ankle_mobility, mobility).",
-   "taper_race_week": "Open decision. Until decided: follow the source's instruction; if there is none, ask the athlete when the taper starts."
+   "taper_race_week": "Open decision. Until decided: follow the source's instruction; if there is none, ask the athlete when the taper starts.",
+   "protocol_is_the_strength": "An athlete's own protocol sessions (a physio's plan) are their strength work. The builder adds nothing on top: no top-up, no extra session (decided 17 Oct 2026). Sets, reps and weights are logged exactly as set and never progressed by Peak."
   },
   "library_candidates": [],
   "library_candidates_note": "Empty: the four free-text exercises from the knee rehab example were added to the library on 17 Oct. New free-text protocol items land here.",
@@ -3102,7 +3102,7 @@
      }
     },
     "builder_output": {
-     "cap": "The 2 physio sessions fill the 2/week strength cap. No strength_general session is added.",
+     "cap": "The 2 physio sessions are the athlete's strength for the week. Peak adds nothing on top.",
      "covered_by_protocol": [
       "squat",
       "hinge",
@@ -3111,61 +3111,18 @@
       "core_lateral",
       "balance"
      ],
-     "covered_note": "Bridge work (hip_thrust, raised_single_leg_hamstring_bridge) counts under hinge. lateral_step_down adds single-leg. The curl and extension add knee_flexion and knee_extension. Adductor work and lateral core come from copenhagen_plank. Balance comes from single_leg_rdl.",
-     "missing": [
-      "push",
-      "pull",
-      "core_anti_extension",
-      "core_anti_rotation",
-      "bone_impact",
-      "grip"
-     ],
-     "top_up": {
-      "title": "Upper body + core top-up",
-      "minutes": 15,
-      "placement": "Appended to either physio session, same day. No extra session, so the cap is unchanged.",
-      "items": [
-       {
-        "ex": "dumbbell_bench_press",
-        "sets": 3,
-        "reps": "8-10",
-        "rest_s": 60,
-        "rpe": "7-8",
-        "pair": "1"
-       },
-       {
-        "ex": "lat_pulldown",
-        "sets": 3,
-        "reps": "8-12",
-        "rest_s": 60,
-        "rpe": "7-8",
-        "pair": "1"
-       },
-       {
-        "ex": "dead_bug",
-        "sets": 2,
-        "reps": "8/side",
-        "rest_s": 15
-       },
-       {
-        "ex": "pallof_press",
-        "sets": 2,
-        "reps": "10/side",
-        "rest_s": 15
-       }
-      ]
-     },
+     "covered_note": "Bridge work (hip thrust, single-leg hamstring bridge, foot raised) counts under hinge. lateral step-down adds single-leg. The curl and extension add knee bending and straightening work. Adductor work and lateral core come from Copenhagen plank. Balance comes from single-leg Romanian deadlift.",
+     "missing": [],
      "blocked": [
       "pogo_hops",
       "squat_jump"
      ],
-     "blocked_note": "No plyometrics: lower-limb issue in rehab and plyo_cleared is false. Bone impact stays a gap until the physio clears it.",
-     "grip_note": "No carries (they add walking load to the knee). Grip stays a gap; ask the physio before adding any.",
-     "cautions_note": "Knee cautions would show on any library lower-body exercise the builder added. Here it adds none.",
+     "cautions_note": "Knee cautions apply to any library exercise Peak would otherwise pick. Here it picks none.",
      "conflict_to_flag": "If a hard ride lands within 8 h of a protocol session, say so. Never move or edit the physio session.",
      "debrief": "How did the knee feel - any pain or swelling during or after?",
-     "balance_note": "Balance comes from the physio's single_leg_rdl. Ask the physio before adding single_leg_balance to the top-up.",
-     "logging": "Each side is logged separately; left and right loads usually differ in rehab. The physio's numbers are shown, never auto-progressed."
+     "balance_note": "Balance comes from the physio's single-leg Romanian deadlift. Ask the physio before adding single-leg balance (reach / perturbation) to the top-up.",
+     "logging": "Each side is logged separately; left and right loads usually differ in rehab. The physio's numbers are shown, never auto-progressed.",
+     "not_added": "Upper body, jumps and carries are the physio's call while the knee is in rehab."
     }
    },
    {

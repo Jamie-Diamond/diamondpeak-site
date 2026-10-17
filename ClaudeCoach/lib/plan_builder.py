@@ -221,8 +221,9 @@ def _strength_for(slug: str, s: dict, profile: dict, lib: dict, week: list, phas
                   cap: int) -> dict | None:
     """The planner names a strength day ("Strength A (Tier C)"); the exercise library
     writes it (lib/strength_builder.py, Jamie 17 Oct 2026). A day named after the athlete's
-    own physio session ("Strength: hamstrings") carries that session as set, plus the
-    week's one upper-body/core top-up. None = leave the day as the planner wrote it."""
+    own physio session ("Strength: hamstrings") carries that session as set, and nothing
+    else: the physio's sessions are that athlete's strength (Jamie, 17 Oct 2026). None =
+    leave the day as the planner wrote it."""
     import re as _re
     import strength_log
     name = s.get("name") or ""
@@ -235,9 +236,6 @@ def _strength_for(slug: str, s: dict, profile: dict, lib: dict, week: list, phas
     if own:
         parts = [dict(p, items=[dict(it, physio=True) if own.get("physio") else dict(it) for it in p["items"]])
                  for p in own["parts"]]
-        top = strength_builder.build(profile, lib, slot="A", **common)
-        if top and top.get("kind") == "top_up":
-            parts += [dict(p, title=p["title"] + " (if you have time)") for p in top["parts"]]
         sess = {"date": s["date"], "title": own["title"], "kind": "protocol", "parts": parts}
         sess["minutes"] = strength_builder.estimate_minutes(sess, lib)
         return sess

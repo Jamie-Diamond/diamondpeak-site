@@ -88,7 +88,7 @@
         if (out.val[k] == null) { var pr = parseRange(it.reps); out.val[k] = pr ? pr.lo : null; }
       });
       if (last) out.lines.push('Last time: ' + setsTxt(last.sets, type) + '.');
-      out.lines.push('Use the sets, reps and weight your physio set, and log them here so the trend is easy to see.');
+      out.lines.push('Sets, reps and weight as your physio set them.');
       return out;
     }
     if (!last) {
@@ -169,9 +169,8 @@
     '.spl .vw{display:grid;grid-template-columns:1fr 1fr;gap:8px}.spl .vw>div{background:#fff;border-radius:16px;aspect-ratio:1;position:relative}' +
     '.spl .vw span{position:absolute;left:10px;top:8px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:rgba(60,60,67,.55)}' +
     '.spl .vw i{position:absolute;inset:0}' +
-    '.spl .ttl{margin:14px 0 8px;position:relative}.spl h3{font-size:23px;font-weight:700;letter-spacing:-.015em;line-height:1.2;padding-right:60px}' +
+    '.spl .ttl{margin:14px 0 8px;position:relative}.spl h3{font-size:23px;font-weight:700;letter-spacing:-.015em;line-height:1.2;}' +
     '.spl .tg{display:inline-block;margin-top:6px;font-size:13px;font-weight:600;color:#10656b;background:rgba(16,101,107,.09);border-radius:8px;padding:4px 9px}' +
-    '.spl .badge{position:absolute;right:0;top:4px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#7a4b00;background:#fdf0d5;border-radius:8px;padding:4px 8px}' +
     '.spl .info{background:#fff;border-radius:16px;padding:4px 14px;font-size:14px;line-height:1.45}' +
     '.spl .info p{padding:9px 0;border-bottom:1px solid rgba(60,60,67,.08);color:rgba(30,34,40,.85)}' +
     '.spl .info p b{display:block;font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:rgba(60,60,67,.55);margin-bottom:2px}' +
@@ -245,11 +244,10 @@
        (it.rest_s ? ' · rest ' + mins(it.rest_s) : ''));
     var feel = it.warm ? 'Comfortable, no strain: this is to get moving.' : (e.effort || 'Last 2 reps hard but clean: you could do 2 more.');
     var plan = it.warm ? '' : sug.lines.join(' ') + (e.progress && !it.physio ? ' ' + e.progress : '');
-    var h = '<div class="ttl"><h3>' + esc(e.name) + '</h3><div class="tg">' + esc(target) + '</div>' +
-      (it.physio ? '<span class="badge">Physio</span>' : '') + '</div>' +
+    var h = '<div class="ttl"><h3>' + esc(e.name) + '</h3><div class="tg">' + esc(target) + '</div></div>' +
       '<div class="info">' + (it.note ? '<p>' + esc(it.note) + '</p>' : '') +
       '<p><b>Feel</b>' + esc(feel) + '</p>' +
-      (plan ? '<p><b>' + (it.physio ? 'Plan' : sug.first ? 'Weight' : 'Build') + '</b>' + esc(plan) + '</p>' : '') +
+      (plan ? '<p><b>' + (it.physio ? 'Set by your physio' : sug.first ? 'Weight' : 'Build') + '</b>' + esc(plan) + '</p>' : '') +
       (e.cues && e.cues.length ? '<details><summary>How to do it</summary><ol>' + e.cues.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ol></details>' : '') +
       '</div>';
     var wr = type === 'weight_reps', unit = type === 'seconds' ? 'Seconds' : 'Reps';
