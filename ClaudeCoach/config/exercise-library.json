@@ -1,0 +1,3628 @@
+{
+ "schema_version": 1,
+ "_source": "Drafted 17 Oct 2026, draft for red-line; see docs/strength-methodology.md. Builds on blueprints/strength.md (signed off 10 Jun 2026). Muscle names follow ExRx anatomical naming; all text original.",
+ "patterns": {
+  "squat": "Two-leg, knee-led lower-body strength.",
+  "hinge": "Bend at the hips with a flat back; hamstrings and glutes do the work.",
+  "single_leg": "Split-stance or step pattern, one leg working at a time.",
+  "bridge": "Hip extension from the floor or a bench; glute-led.",
+  "hip_stability": "Side-hip and inner-thigh strength that keeps the pelvis and knee in line.",
+  "calf_ankle": "Calf, Achilles and ankle strength.",
+  "balance": "Standing on one leg and controlling the ankle and hip.",
+  "plyometric": "Quick jumps and hops: power, tendon stiffness and bone loading.",
+  "push_horizontal": "Pushing away from the chest.",
+  "push_vertical": "Pushing overhead.",
+  "pull_horizontal": "Rowing towards the chest.",
+  "pull_vertical": "Pulling down from overhead (lats).",
+  "scapular_cuff": "Shoulder-blade control and rotator cuff.",
+  "carry": "Walking with heavy weights: grip and whole-body bracing.",
+  "anti_extension": "Core that resists the low back arching.",
+  "anti_rotation": "Core that resists twisting.",
+  "lateral_core": "Core that resists bending sideways.",
+  "mobility": "Range-of-movement drills for warm-ups and mobility sessions."
+ },
+ "equipment_ids": {
+  "barbell": "Olympic barbell and plates",
+  "rack": "Squat rack or cage",
+  "bench": "Flat bench (a sturdy step or box can stand in for some uses)",
+  "lat_pulldown": "Lat pulldown or cable station",
+  "pull_up_bar": "Pull-up bar (a doorway bar counts)",
+  "db_kb": "Dumbbells or kettlebells (either works unless the exercise says otherwise)",
+  "band": "Long resistance band or tube; can be anchored in a door",
+  "mini_band": "Small loop band (a long band knotted into a loop works)",
+  "mat": "Floor space and a mat or towel",
+  "step": "A step, stair or low box",
+  "chair": "Sturdy chair, sofa or bench to rest a foot, knee or back on",
+  "wall": "A wall"
+ },
+ "equipment_tiers": {
+  "A": {
+   "name": "Full gym",
+   "kit": [
+    "barbell",
+    "rack",
+    "bench",
+    "lat_pulldown",
+    "pull_up_bar",
+    "db_kb",
+    "band",
+    "mini_band",
+    "mat",
+    "step",
+    "chair",
+    "wall"
+   ],
+   "main_lifts": {
+    "squat": "back_squat",
+    "hinge": "romanian_deadlift",
+    "bridge": "hip_thrust",
+    "single_leg": "bulgarian_split_squat"
+   },
+   "note": "Matches blueprints/strength.md tier A (back squat / leg press, barbell RDL, barbell hip thrust). Leg press is a fine back-squat swap but is not in this first 40."
+  },
+  "B": {
+   "name": "Dumbbells or kettlebells (hotel / home)",
+   "kit": [
+    "db_kb",
+    "band",
+    "mini_band",
+    "mat",
+    "step",
+    "chair",
+    "wall"
+   ],
+   "main_lifts": {
+    "squat": "goblet_squat",
+    "hinge": "single_leg_rdl",
+    "single_leg": "split_squat",
+    "power": "kettlebell_swing"
+   },
+   "note": "Matches the blueprint tier B mapping (goblet squat, single-leg DB RDL, DB split squat, KB swing). Dumbbell romanian_deadlift and bulgarian_split_squat are the upgrades when the dumbbells are heavy enough. A bench is not assumed: bench press becomes a floor press."
+  },
+  "C": {
+   "name": "Bodyweight + band (default, always possible)",
+   "kit": [
+    "band",
+    "mini_band",
+    "mat",
+    "step",
+    "chair",
+    "wall"
+   ],
+   "main_lifts": {
+    "squat": "bulgarian_split_squat",
+    "hinge": "single_leg_rdl",
+    "single_leg": "step_up",
+    "bridge": "hip_thrust"
+   },
+   "note": "Matches the blueprint tier C mapping (rear-foot-elevated split squat, single-leg RDL reach, step-ups, banded hip thrust). Reps shift up to 8-12 where load can't reach RPE 8. No band? Drop the band exercises and use the band-free swaps in each module."
+  }
+ },
+ "muscle_groups": [
+  "Gluteus maximus",
+  "Gluteus medius & minimus",
+  "Tensor fasciae latae",
+  "Hip adductors",
+  "Iliopsoas",
+  "Quadriceps",
+  "Hamstrings",
+  "Gastrocnemius",
+  "Soleus",
+  "Tibialis anterior",
+  "Tibialis posterior",
+  "Peroneus longus & brevis",
+  "Extensor digitorum longus",
+  "Foot intrinsics",
+  "Erector spinae",
+  "Quadratus lumborum",
+  "Rectus abdominis",
+  "Obliques",
+  "Transverse abdominis",
+  "Latissimus dorsi",
+  "Teres major",
+  "Trapezius, upper",
+  "Trapezius, middle",
+  "Trapezius, lower",
+  "Rhomboids",
+  "Serratus anterior",
+  "Pectoralis major",
+  "Deltoid, anterior",
+  "Deltoid, lateral",
+  "Deltoid, posterior",
+  "Infraspinatus & teres minor",
+  "Supraspinatus",
+  "Triceps brachii",
+  "Biceps brachii",
+  "Brachialis",
+  "Wrist & finger flexors"
+ ],
+ "exercises": {
+  "back_squat": {
+   "name": "Back squat",
+   "pattern": "squat",
+   "tier": "A",
+   "equipment": [
+    "barbell",
+    "rack"
+   ],
+   "level": 2,
+   "per_side": false,
+   "muscles": {
+    "target": [
+     "Quadriceps",
+     "Gluteus maximus"
+    ],
+    "synergists": [
+     "Hip adductors",
+     "Soleus",
+     "Erector spinae"
+    ]
+   },
+   "sports": {
+    "run": 2,
+    "bike": 3,
+    "swim": 1,
+    "health": 3
+   },
+   "why": "Heavy two-leg strength that makes every pedal stroke and running stride cost less energy.",
+   "easier": "goblet_squat",
+   "harder": null,
+   "swaps": {
+    "B": "goblet_squat",
+    "C": "bulgarian_split_squat"
+   },
+   "dose": {
+    "sets": "3",
+    "reps": "4-6",
+    "rpe": "8",
+    "rest_s": 150,
+    "tempo": "2-0-X",
+    "note": "Lower under control, stand up fast. Stop about 2 reps short of failure. Do the paired upper-body lift in the rest."
+   },
+   "cues": [
+    "Brace your stomach before each rep",
+    "Sit down between your heels, knees over toes",
+    "Drive the floor away and stand up fast"
+   ],
+   "mistakes": [
+    "Knees caving in on the way up",
+    "Losing the brace and rounding at the bottom"
+   ],
+   "cautions": {
+    "knee": "Squat only as deep as is pain-free. Still sore? Use a goblet squat to a box or a split squat.",
+    "low_back": "Swap to goblet squat or Bulgarian split squat, so the load is held in front or in the hands, not on the spine."
+   }
+  },
+  "goblet_squat": {
+   "name": "Goblet squat",
+   "pattern": "squat",
+   "tier": "B",
+   "equipment": [
+    "db_kb"
+   ],
+   "level": 1,
+   "per_side": false,
+   "muscles": {
+    "target": [
+     "Quadriceps",
+     "Gluteus maximus"
+    ],
+    "synergists": [
+     "Hip adductors",
+     "Erector spinae",
+     "Rectus abdominis"
+    ]
+   },
+   "sports": {
+    "run": 2,
+    "bike": 3,
+    "swim": 1,
+    "health": 3
+   },
+   "why": "The friendliest loaded squat: builds leg strength and teaches a good squat at the same time.",
+   "easier": "bodyweight_squat",
+   "harder": "back_squat",
+   "swaps": {
+    "A": "back_squat",
+    "C": "bulgarian_split_squat"
+   },
+   "dose": {
+    "sets": "3",
+    "reps": "6-10",
+    "rpe": "7-8",
+    "rest_s": 120,
+    "tempo": "3-0-1",
+    "note": "When the heaviest weight you have feels easy for 10, move to Bulgarian split squats (or back squats in a gym)."
+   },
+   "cues": [
+    "Hold the weight at your chest, elbows pointing down",
+    "Sit between your knees with your chest tall",
+    "Push up through the whole foot"
+   ],
+   "mistakes": [
+    "Heels lifting off the floor",
+    "Weight drifting away from the chest"
+   ],
+   "cautions": {
+    "knee": "Squat to a box or chair set at a pain-free depth."
+   }
+  },
+  "bodyweight_squat": {
+   "name": "Bodyweight squat",
+   "pattern": "squat",
+   "tier": "C",
+   "equipment": [],
+   "level": 1,
+   "per_side": false,
+   "muscles": {
+    "target": [
+     "Quadriceps",
+     "Gluteus maximus"
+    ],
+    "synergists": [
+     "Hip adductors",
+     "Soleus"
+    ]
+   },
+   "sports": {
+    "run": 1,
+    "bike": 1,
+    "swim": 1,
+    "health": 2
+   },
+   "why": "Grooves the squat pattern and warms up hips, knees and ankles.",
+   "easier": null,
+   "harder": "goblet_squat",
+   "swaps": {
+    "A": "goblet_squat",
+    "B": "goblet_squat"
+   },
+   "dose": {
+    "sets": "2",
+    "reps": "10-15",
+    "rpe": "5-6",
+    "rest_s": 45,
+    "tempo": "3-0-1",
+    "note": "Mainly a warm-up or first-weeks exercise. Too light as a main lift for most athletes: use a split squat instead."
+   },
+   "cues": [
+    "Feet shoulder-width, toes turned out a little",
+    "Sit back and down as if to a chair",
+    "Stand tall and squeeze your glutes at the top"
+   ],
+   "mistakes": [
+    "Rising onto the toes",
+    "Knees collapsing inward"
+   ],
+   "cautions": {
+    "knee": "Squat to a chair or box at a pain-free height."
+   }
+  },
+  "bulgarian_split_squat": {
+   "name": "Bulgarian split squat",
+   "pattern": "single_leg",
+   "tier": "C",
+   "equipment": [
+    "chair"
+   ],
+   "level": 2,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Quadriceps",
+     "Gluteus maximus"
+    ],
+    "synergists": [
+     "Hip adductors",
+     "Gluteus medius & minimus",
+     "Soleus"
+    ]
+   },
+   "sports": {
+    "run": 3,
+    "bike": 3,
+    "swim": 1,
+    "health": 2
+   },
+   "why": "Single-leg strength that matches running and pedalling, with enough load to work even at home.",
+   "easier": "reverse_lunge",
+   "harder": null,
+   "swaps": {},
+   "dose": {
+    "sets": "3",
+    "reps": "6-10",
+    "rpe": "8",
+    "rest_s": 90,
+    "tempo": "3-0-1",
+    "note": "Reps are per side. At home with no weights, do 8-12 slow reps. With dumbbells, 6-8. Rest after both legs."
+   },
+   "cues": [
+    "Rear foot laces-down on the bench, front foot well forward",
+    "Drop the back knee straight down",
+    "Push through the front heel to stand"
+   ],
+   "mistakes": [
+    "Front foot too close, so the knee shoots forward and the heel lifts",
+    "Pushing off the back foot"
+   ],
+   "cautions": {
+    "knee": "Shorten the range (stop above parallel) or use a split squat with the back foot on the floor.",
+    "ankle": "Hold a wall or doorframe with one hand if balance is shaky."
+   }
+  },
+  "split_squat": {
+   "name": "Split squat",
+   "pattern": "single_leg",
+   "tier": "C",
+   "equipment": [],
+   "level": 1,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Quadriceps",
+     "Gluteus maximus"
+    ],
+    "synergists": [
+     "Hip adductors",
+     "Gluteus medius & minimus"
+    ]
+   },
+   "sports": {
+    "run": 3,
+    "bike": 2,
+    "swim": 1,
+    "health": 2
+   },
+   "why": "A stable first step into single-leg strength: both feet stay on the floor.",
+   "easier": "step_up",
+   "harder": "reverse_lunge",
+   "swaps": {},
+   "dose": {
+    "sets": "3",
+    "reps": "8-12",
+    "rpe": "7-8",
+    "rest_s": 75,
+    "tempo": "3-0-1",
+    "note": "Reps are per side. Hold dumbbells when 12 feels easy."
+   },
+   "cues": [
+    "Take a long stance with the back heel up",
+    "Lower the back knee towards the floor",
+    "Stay upright and drive up through the front foot"
+   ],
+   "mistakes": [
+    "Feet in one line like a tightrope, so you wobble",
+    "Leaning forward over the front knee"
+   ],
+   "cautions": {
+    "knee": "Stop the back knee a few inches higher. A shorter range is fine."
+   }
+  },
+  "step_up": {
+   "name": "Step-up",
+   "pattern": "single_leg",
+   "tier": "C",
+   "equipment": [
+    "step"
+   ],
+   "level": 1,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Quadriceps",
+     "Gluteus maximus"
+    ],
+    "synergists": [
+     "Gluteus medius & minimus",
+     "Soleus",
+     "Hamstrings"
+    ]
+   },
+   "sports": {
+    "run": 3,
+    "bike": 2,
+    "swim": 0,
+    "health": 3
+   },
+   "why": "Builds the climbing strength runners and walkers use, one leg at a time.",
+   "easier": "bodyweight_squat",
+   "harder": "split_squat",
+   "swaps": {},
+   "dose": {
+    "sets": "3",
+    "reps": "8-12",
+    "rpe": "7-8",
+    "rest_s": 75,
+    "tempo": "2-0-1",
+    "note": "Reps are per side. Box height: top of the box at or just below knee height. Step down slowly: the way down counts."
+   },
+   "cues": [
+    "Put your whole foot on the box",
+    "Stand up with the top leg, don't bounce off the bottom one",
+    "Step down slowly"
+   ],
+   "mistakes": [
+    "Pushing off the trailing foot",
+    "Knee diving inward"
+   ],
+   "cautions": {
+    "knee": "Use a lower step.",
+    "ankle": "Hold a rail if balance is shaky."
+   }
+  },
+  "reverse_lunge": {
+   "name": "Reverse lunge",
+   "pattern": "single_leg",
+   "tier": "C",
+   "equipment": [],
+   "level": 2,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Quadriceps",
+     "Gluteus maximus"
+    ],
+    "synergists": [
+     "Hamstrings",
+     "Hip adductors",
+     "Gluteus medius & minimus"
+    ]
+   },
+   "sports": {
+    "run": 3,
+    "bike": 2,
+    "swim": 1,
+    "health": 2
+   },
+   "why": "Single-leg strength with balance and control, and kinder to knees than a forward lunge.",
+   "easier": "split_squat",
+   "harder": "bulgarian_split_squat",
+   "swaps": {},
+   "dose": {
+    "sets": "3",
+    "reps": "8-10",
+    "rpe": "7-8",
+    "rest_s": 75,
+    "tempo": "2-0-1",
+    "note": "Reps are per side. Alternate legs, or do all reps on one side first."
+   },
+   "cues": [
+    "Step back long and land on the ball of the back foot",
+    "Lower until both knees are bent about 90 degrees",
+    "Drive through the front foot to step back up"
+   ],
+   "mistakes": [
+    "Short step, so the front knee takes all the strain",
+    "Body tipping forward"
+   ],
+   "cautions": {
+    "knee": "Shorten the range or go back to split squats."
+   }
+  },
+  "romanian_deadlift": {
+   "name": "Romanian deadlift",
+   "pattern": "hinge",
+   "tier": "B",
+   "equipment": [
+    "db_kb"
+   ],
+   "level": 2,
+   "per_side": false,
+   "muscles": {
+    "target": [
+     "Hamstrings",
+     "Gluteus maximus"
+    ],
+    "synergists": [
+     "Erector spinae",
+     "Hip adductors",
+     "Wrist & finger flexors"
+    ]
+   },
+   "sports": {
+    "run": 3,
+    "bike": 3,
+    "swim": 1,
+    "health": 3
+   },
+   "why": "Strong hamstrings and glutes: the engine behind climbing and a powerful stride.",
+   "easier": "glute_bridge",
+   "harder": "single_leg_rdl",
+   "swaps": {
+    "C": "single_leg_rdl"
+   },
+   "dose": {
+    "sets": "3",
+    "reps": "6-8",
+    "rpe": "8",
+    "rest_s": 120,
+    "tempo": "3-0-1",
+    "note": "Barbell in a gym, dumbbells elsewhere. Grip is often the limit, which is fine: it trains grip too."
+   },
+   "cues": [
+    "Soften the knees and push your hips back",
+    "Keep the weight close to your legs and your back flat",
+    "Stand up by squeezing your glutes"
+   ],
+   "mistakes": [
+    "Rounding the back to reach lower",
+    "Bending the knees so it becomes a squat"
+   ],
+   "cautions": {
+    "low_back": "Only go as low as your back stays flat. Still sore? Swap to hip thrust or single-leg glute bridge."
+   }
+  },
+  "single_leg_rdl": {
+   "name": "Single-leg Romanian deadlift",
+   "pattern": "hinge",
+   "tier": "C",
+   "equipment": [],
+   "level": 2,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Hamstrings",
+     "Gluteus maximus"
+    ],
+    "synergists": [
+     "Gluteus medius & minimus",
+     "Erector spinae",
+     "Peroneus longus & brevis",
+     "Foot intrinsics"
+    ]
+   },
+   "sports": {
+    "run": 3,
+    "bike": 2,
+    "swim": 1,
+    "health": 3
+   },
+   "why": "Hip strength and balance on one leg: trains the standing leg the way running does.",
+   "easier": "romanian_deadlift",
+   "harder": null,
+   "swaps": {},
+   "dose": {
+    "sets": "3",
+    "reps": "8-10",
+    "rpe": "7-8",
+    "rest_s": 60,
+    "tempo": "3-0-1",
+    "note": "Reps are per side. At home, reach your hands to the floor. Add a dumbbell in the opposite hand when it gets easy."
+   },
+   "cues": [
+    "Tip forward as the free leg goes back, like a see-saw",
+    "Keep your hips square to the floor",
+    "Push the standing foot down and stand tall"
+   ],
+   "mistakes": [
+    "Hip opening so the back leg turns out",
+    "Bending the standing knee into a squat"
+   ],
+   "cautions": {
+    "ankle": "Touch a wall with one hand until your balance is solid.",
+    "low_back": "Keep the range short and the back flat."
+   }
+  },
+  "kettlebell_swing": {
+   "name": "Kettlebell swing",
+   "pattern": "hinge",
+   "tier": "B",
+   "equipment": [
+    "db_kb"
+   ],
+   "level": 2,
+   "per_side": false,
+   "muscles": {
+    "target": [
+     "Gluteus maximus",
+     "Hamstrings"
+    ],
+    "synergists": [
+     "Erector spinae",
+     "Quadriceps",
+     "Wrist & finger flexors",
+     "Rectus abdominis"
+    ]
+   },
+   "sports": {
+    "run": 2,
+    "bike": 2,
+    "swim": 1,
+    "health": 2
+   },
+   "why": "Fast, powerful hip drive with no impact: power and back-of-leg stamina in one.",
+   "easier": "romanian_deadlift",
+   "harder": null,
+   "swaps": {
+    "C": "single_leg_rdl"
+   },
+   "dose": {
+    "sets": "3",
+    "reps": "10-15",
+    "rpe": "7",
+    "rest_s": 60,
+    "tempo": null,
+    "note": "This is power, not cardio: end the set as soon as the bell slows. A dumbbell held by one end works."
+   },
+   "cues": [
+    "Hike the bell back between your thighs",
+    "Snap your hips forward to float it to chest height",
+    "Let it drop and hinge again; the arms only guide"
+   ],
+   "mistakes": [
+    "Squatting the swing instead of hinging",
+    "Lifting with the arms or leaning back at the top"
+   ],
+   "cautions": {
+    "low_back": "Skip during a back flare-up. Use glute bridge or hip thrust instead."
+   }
+  },
+  "hip_thrust": {
+   "name": "Hip thrust",
+   "pattern": "bridge",
+   "tier": "C",
+   "equipment": [
+    "chair",
+    "band"
+   ],
+   "level": 2,
+   "per_side": false,
+   "muscles": {
+    "target": [
+     "Gluteus maximus"
+    ],
+    "synergists": [
+     "Hamstrings",
+     "Quadriceps",
+     "Hip adductors"
+    ]
+   },
+   "sports": {
+    "run": 3,
+    "bike": 3,
+    "swim": 0,
+    "health": 2
+   },
+   "why": "Builds the glutes that drive hip extension on the bike and in every running stride.",
+   "easier": "glute_bridge",
+   "harder": null,
+   "swaps": {},
+   "dose": {
+    "sets": "3",
+    "reps": "8-12",
+    "rpe": "8",
+    "rest_s": 90,
+    "tempo": "2-1-1",
+    "note": "Gym: barbell over the hips with a pad. Home: a band across the hips held down by your hands, or a dumbbell on the hips. Pause 1 s at the top."
+   },
+   "cues": [
+    "Upper back on the bench edge, feet flat, shins upright at the top",
+    "Tuck your chin and keep your ribs down",
+    "Drive the hips up until knees, hips and shoulders are in a line"
+   ],
+   "mistakes": [
+    "Arching the low back at the top instead of finishing with the glutes",
+    "Feet too far away, so the hamstrings take over"
+   ],
+   "cautions": {
+    "low_back": "Stop at a flat body line. Don't over-arch.",
+    "knee": "Move your feet a little further out if the front of the knee aches."
+   }
+  },
+  "glute_bridge": {
+   "name": "Glute bridge",
+   "pattern": "bridge",
+   "tier": "C",
+   "equipment": [
+    "mat"
+   ],
+   "level": 1,
+   "per_side": false,
+   "muscles": {
+    "target": [
+     "Gluteus maximus"
+    ],
+    "synergists": [
+     "Hamstrings",
+     "Transverse abdominis"
+    ]
+   },
+   "sports": {
+    "run": 2,
+    "bike": 2,
+    "swim": 0,
+    "health": 2
+   },
+   "why": "Wakes up and strengthens the glutes with no load on the spine: a safe first step.",
+   "easier": null,
+   "harder": "single_leg_glute_bridge",
+   "swaps": {
+    "A": "hip_thrust",
+    "B": "hip_thrust"
+   },
+   "dose": {
+    "sets": "2",
+    "reps": "12-15",
+    "rpe": "6-7",
+    "rest_s": 45,
+    "tempo": "2-1-1",
+    "note": "Good in warm-ups and for beginners. A band above the knees, pushed apart, works the side glutes too."
+   },
+   "cues": [
+    "Lie on your back with heels close to your bottom",
+    "Press through your heels and lift your hips",
+    "Squeeze your glutes hard for a second at the top"
+   ],
+   "mistakes": [
+    "Pushing through the toes",
+    "Arching the low back"
+   ],
+   "cautions": {}
+  },
+  "single_leg_glute_bridge": {
+   "name": "Single-leg glute bridge",
+   "pattern": "bridge",
+   "tier": "C",
+   "equipment": [
+    "mat"
+   ],
+   "level": 2,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Gluteus maximus"
+    ],
+    "synergists": [
+     "Hamstrings",
+     "Gluteus medius & minimus"
+    ]
+   },
+   "sports": {
+    "run": 3,
+    "bike": 2,
+    "swim": 0,
+    "health": 2
+   },
+   "why": "One-leg glute strength that keeps your pelvis level when you run.",
+   "easier": "glute_bridge",
+   "harder": "hip_thrust",
+   "swaps": {},
+   "dose": {
+    "sets": "3",
+    "reps": "10-12",
+    "rpe": "7-8",
+    "rest_s": 45,
+    "tempo": "2-1-1",
+    "note": "Reps are per side. Put your shoulders up on a sofa to make it harder."
+   },
+   "cues": [
+    "One foot down, the other knee pulled in or leg held straight",
+    "Drive through the heel to lift your hips",
+    "Keep both hips level"
+   ],
+   "mistakes": [
+    "Hips twisting as you lift",
+    "Hamstring cramping (bring the foot closer)"
+   ],
+   "cautions": {
+    "low_back": "Hug the other knee to your chest to stop the back arching."
+   }
+  },
+  "banded_lateral_walk": {
+   "name": "Banded lateral walk",
+   "pattern": "hip_stability",
+   "tier": "C",
+   "equipment": [
+    "mini_band"
+   ],
+   "level": 1,
+   "per_side": false,
+   "muscles": {
+    "target": [
+     "Gluteus medius & minimus"
+    ],
+    "synergists": [
+     "Tensor fasciae latae",
+     "Gluteus maximus"
+    ]
+   },
+   "sports": {
+    "run": 3,
+    "bike": 1,
+    "swim": 0,
+    "health": 1
+   },
+   "why": "Strengthens the side-hip muscles that stop your knee caving in when you land.",
+   "easier": null,
+   "harder": null,
+   "swaps": {},
+   "dose": {
+    "sets": "2",
+    "reps": "10-15 steps each way",
+    "rpe": "7",
+    "rest_s": 30,
+    "tempo": null,
+    "note": "Band above the knees is easier; around the ankles or feet is harder. Works well in the warm-up."
+   },
+   "cues": [
+    "Sit into a half-squat, chest up",
+    "Step sideways and keep the band tight",
+    "Don't let your feet snap together"
+   ],
+   "mistakes": [
+    "Standing up tall and swaying the body",
+    "Toes turning out"
+   ],
+   "cautions": {
+    "knee": "Put the band above the knees, not below."
+   }
+  },
+  "copenhagen_plank": {
+   "name": "Copenhagen plank",
+   "pattern": "hip_stability",
+   "tier": "C",
+   "equipment": [
+    "chair"
+   ],
+   "level": 2,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Hip adductors"
+    ],
+    "synergists": [
+     "Obliques",
+     "Quadratus lumborum",
+     "Gluteus medius & minimus"
+    ]
+   },
+   "sports": {
+    "run": 3,
+    "bike": 1,
+    "swim": 1,
+    "health": 1
+   },
+   "why": "Strong inner thighs and side trunk: protects the groin and steadies the pelvis.",
+   "easier": "side_plank",
+   "harder": null,
+   "swaps": {},
+   "dose": {
+    "sets": "2",
+    "reps": "6-10 lifts or 15-30 s",
+    "rpe": "7-8",
+    "rest_s": 45,
+    "tempo": null,
+    "note": "Per side. Start short lever: knee on the bench. Go long lever (ankle on the bench) when 30 s is easy."
+   },
+   "cues": [
+    "Lie on your side, top knee (or ankle) on the bench",
+    "Lift your hips until your body is straight",
+    "Bring the bottom leg up to meet the bench, then lower slowly"
+   ],
+   "mistakes": [
+    "Hips sagging or rolling back",
+    "Jumping straight to the long lever"
+   ],
+   "cautions": {
+    "knee": "Use the knee-on-bench version: it takes strain off the inside of the knee.",
+    "shoulder": "Work from the forearm with the elbow under the shoulder."
+   }
+  },
+  "calf_raise": {
+   "name": "Single-leg calf raise (straight knee)",
+   "pattern": "calf_ankle",
+   "tier": "C",
+   "equipment": [
+    "step"
+   ],
+   "level": 1,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Gastrocnemius",
+     "Soleus"
+    ],
+    "synergists": [
+     "Peroneus longus & brevis",
+     "Tibialis posterior",
+     "Foot intrinsics"
+    ]
+   },
+   "sports": {
+    "run": 3,
+    "bike": 1,
+    "swim": 0,
+    "health": 2
+   },
+   "why": "Strong, springy calves and Achilles: your main shock absorbers when you run.",
+   "easier": null,
+   "harder": "pogo_hops",
+   "swaps": {},
+   "dose": {
+    "sets": "3",
+    "reps": "12-15",
+    "rpe": "7-8",
+    "rest_s": 45,
+    "tempo": "3-1-1",
+    "note": "Per side, off a step. Beginners start on two feet. Eccentric option: rise on two feet, lower on one over 3 s. Add a dumbbell when 15 is easy. Aim for about 25 clean single-leg reps before hopping work."
+   },
+   "cues": [
+    "Ball of the foot on the step edge, knee straight",
+    "Rise as high as you can",
+    "Lower slowly until the heel drops below the step"
+   ],
+   "mistakes": [
+    "Bouncing out of the bottom",
+    "Rolling out onto the little toes"
+   ],
+   "cautions": {
+    "ankle": "Hold a wall. If the Achilles is sore, work on flat ground and keep pain at 3/10 or less."
+   }
+  },
+  "bent_knee_calf_raise": {
+   "name": "Bent-knee calf raise (soleus)",
+   "pattern": "calf_ankle",
+   "tier": "C",
+   "equipment": [
+    "step"
+   ],
+   "level": 1,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Soleus"
+    ],
+    "synergists": [
+     "Gastrocnemius",
+     "Tibialis posterior",
+     "Peroneus longus & brevis"
+    ]
+   },
+   "sports": {
+    "run": 3,
+    "bike": 1,
+    "swim": 0,
+    "health": 1
+   },
+   "why": "Trains the soleus, the deep calf muscle that takes a big share of the load on every running stride.",
+   "easier": null,
+   "harder": null,
+   "swaps": {},
+   "dose": {
+    "sets": "3",
+    "reps": "15-20",
+    "rpe": "7-8",
+    "rest_s": 45,
+    "tempo": "2-1-1",
+    "note": "Per side. Keep the knee bent about 30-45 degrees the whole time. Gym: seated calf machine. Home: a dumbbell on the knee or a loaded backpack."
+   },
+   "cues": [
+    "Bend the knee and keep it bent",
+    "Rise onto the ball of the foot",
+    "Lower slowly to a full stretch"
+   ],
+   "mistakes": [
+    "Straightening the knee as you rise",
+    "Rushing the reps"
+   ],
+   "cautions": {
+    "ankle": "Hold a wall. Stay on flat ground if the Achilles is irritable."
+   }
+  },
+  "single_leg_balance": {
+   "name": "Single-leg balance (reach / perturbation)",
+   "pattern": "balance",
+   "tier": "C",
+   "equipment": [],
+   "level": 1,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Peroneus longus & brevis",
+     "Gluteus medius & minimus"
+    ],
+    "synergists": [
+     "Tibialis anterior",
+     "Tibialis posterior",
+     "Foot intrinsics",
+     "Soleus"
+    ]
+   },
+   "sports": {
+    "run": 3,
+    "bike": 0,
+    "swim": 0,
+    "health": 3
+   },
+   "why": "Retrains the ankle's reflexes: proven to cut repeat ankle sprains, and balance work cuts falls later in life.",
+   "easier": null,
+   "harder": null,
+   "swaps": {},
+   "dose": {
+    "sets": "3",
+    "reps": "30-45 s",
+    "rpe": "6-7",
+    "rest_s": 15,
+    "tempo": null,
+    "note": "Per side. Progress in order: eyes closed, then reach the free foot to 3 points, then react to a gentle push or catch a ball, then stand on a cushion."
+   },
+   "cues": [
+    "Stand tall on one foot with a soft knee",
+    "Keep the arch of the foot lifted and toes relaxed",
+    "Reach or react, then come back to still"
+   ],
+   "mistakes": [
+    "Locking the knee",
+    "Gripping the floor with the toes"
+   ],
+   "cautions": {
+    "ankle": "Start next to a wall. Master a firm floor before using a cushion."
+   }
+  },
+  "banded_ankle_eversion": {
+   "name": "Banded ankle eversion",
+   "pattern": "calf_ankle",
+   "tier": "C",
+   "equipment": [
+    "band"
+   ],
+   "level": 1,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Peroneus longus & brevis"
+    ],
+    "synergists": [
+     "Extensor digitorum longus"
+    ]
+   },
+   "sports": {
+    "run": 2,
+    "bike": 0,
+    "swim": 0,
+    "health": 1
+   },
+   "why": "Strengthens the muscles on the outside of the ankle that resist rolling it.",
+   "easier": null,
+   "harder": null,
+   "swaps": {},
+   "dose": {
+    "sets": "2",
+    "reps": "15-20",
+    "rpe": "7",
+    "rest_s": 30,
+    "tempo": "2-1-1",
+    "note": "Per side. Sit with the band round the forefoot, anchored on the inside. Hold the end position for 1 s."
+   },
+   "cues": [
+    "Keep the heel still and the knee pointing up",
+    "Turn the sole of the foot outward against the band",
+    "Return slowly"
+   ],
+   "mistakes": [
+    "Turning the whole leg instead of the ankle",
+    "Letting the band snap back"
+   ],
+   "cautions": {}
+  },
+  "pogo_hops": {
+   "name": "Pogo hops",
+   "pattern": "plyometric",
+   "tier": "C",
+   "equipment": [],
+   "level": 2,
+   "per_side": false,
+   "muscles": {
+    "target": [
+     "Gastrocnemius",
+     "Soleus"
+    ],
+    "synergists": [
+     "Tibialis anterior",
+     "Peroneus longus & brevis",
+     "Quadriceps"
+    ]
+   },
+   "sports": {
+    "run": 3,
+    "bike": 1,
+    "swim": 0,
+    "health": 3
+   },
+   "why": "Short, stiff bounces that make the Achilles springier and load your bones in a safe dose.",
+   "easier": "calf_raise",
+   "harder": "squat_jump",
+   "swaps": {},
+   "dose": {
+    "sets": "3",
+    "reps": "10-20 contacts",
+    "rpe": "6",
+    "rest_s": 60,
+    "tempo": null,
+    "note": "Quality over quantity: quiet, quick contacts. Start with 2 x 10 on two feet. Add sets before height. Only after 4 weeks of pain-free calf raises."
+   },
+   "cues": [
+    "Stay tall with knees almost straight",
+    "Bounce off the balls of your feet, heels just kiss the floor",
+    "Spend as little time on the ground as you can"
+   ],
+   "mistakes": [
+    "Bending the knees so it turns into a squat jump",
+    "Landing loudly on the heels"
+   ],
+   "cautions": {
+    "knee": "Keep the hops low.",
+    "ankle": "Firm, flat floor only. Wait until you can balance 30 s on one leg without a wobble."
+   }
+  },
+  "squat_jump": {
+   "name": "Squat jump",
+   "pattern": "plyometric",
+   "tier": "C",
+   "equipment": [],
+   "level": 2,
+   "per_side": false,
+   "muscles": {
+    "target": [
+     "Quadriceps",
+     "Gluteus maximus"
+    ],
+    "synergists": [
+     "Gastrocnemius",
+     "Soleus",
+     "Hamstrings"
+    ]
+   },
+   "sports": {
+    "run": 2,
+    "bike": 2,
+    "swim": 1,
+    "health": 3
+   },
+   "why": "Turns strength into power and loads bone with a short, safe impact.",
+   "easier": "pogo_hops",
+   "harder": null,
+   "swaps": {},
+   "dose": {
+    "sets": "3",
+    "reps": "4-6",
+    "rpe": "6-7",
+    "rest_s": 75,
+    "tempo": null,
+    "note": "Every rep at full effort, with full rest. Land softly into a quarter squat and stick it before the next jump."
+   },
+   "cues": [
+    "Dip quickly into a quarter squat",
+    "Jump as high as you can, arms swinging up",
+    "Land softly on the balls of your feet, knees over toes"
+   ],
+   "mistakes": [
+    "Doing them fast as cardio",
+    "Knees caving in on landing"
+   ],
+   "cautions": {
+    "knee": "If landing hurts, swap to kettlebell swings or extra hip thrusts.",
+    "ankle": "Swap to low two-foot pogo hops.",
+    "low_back": "Skip during a back flare-up."
+   }
+  },
+  "push_up": {
+   "name": "Push-up",
+   "pattern": "push_horizontal",
+   "tier": "C",
+   "equipment": [],
+   "level": 1,
+   "per_side": false,
+   "muscles": {
+    "target": [
+     "Pectoralis major",
+     "Triceps brachii"
+    ],
+    "synergists": [
+     "Deltoid, anterior",
+     "Serratus anterior",
+     "Rectus abdominis"
+    ]
+   },
+   "sports": {
+    "run": 1,
+    "bike": 1,
+    "swim": 2,
+    "health": 3
+   },
+   "why": "Upper-body pushing strength for life, with a plank built in.",
+   "easier": null,
+   "harder": null,
+   "swaps": {
+    "A": "dumbbell_bench_press"
+   },
+   "dose": {
+    "sets": "3",
+    "reps": "6-15",
+    "rpe": "7-8",
+    "rest_s": 60,
+    "tempo": "2-0-1",
+    "note": "Hands on a bench or wall makes it easier; feet up makes it harder. Stop 2-3 reps before form breaks."
+   },
+   "cues": [
+    "Hands just wider than your shoulders",
+    "Body straight from head to heels",
+    "Lower your chest to the floor, elbows at about 45 degrees"
+   ],
+   "mistakes": [
+    "Hips sagging",
+    "Elbows flared straight out"
+   ],
+   "cautions": {
+    "shoulder": "Keep elbows tucked and shorten the range. Hands on a raised surface reduces the load.",
+    "low_back": "Squeeze your glutes so the hips don't sag."
+   }
+  },
+  "dumbbell_bench_press": {
+   "name": "Dumbbell bench press",
+   "pattern": "push_horizontal",
+   "tier": "B",
+   "equipment": [
+    "db_kb"
+   ],
+   "level": 1,
+   "per_side": false,
+   "muscles": {
+    "target": [
+     "Pectoralis major",
+     "Triceps brachii"
+    ],
+    "synergists": [
+     "Deltoid, anterior"
+    ]
+   },
+   "sports": {
+    "run": 0,
+    "bike": 1,
+    "swim": 1,
+    "health": 3
+   },
+   "why": "Builds chest and arm strength, with each side doing its own work.",
+   "easier": null,
+   "harder": null,
+   "swaps": {
+    "C": "push_up"
+   },
+   "dose": {
+    "sets": "3",
+    "reps": "6-10",
+    "rpe": "7-8",
+    "rest_s": 90,
+    "tempo": "2-0-1",
+    "note": "Bench if there is one. No bench? Do it lying on the floor (floor press). Upper-body work stays at RPE 7-8: it supports the legs, it doesn't take over."
+   },
+   "cues": [
+    "Feet flat, shoulder blades squeezed back",
+    "Lower the dumbbells to the sides of your chest",
+    "Press up and slightly in"
+   ],
+   "mistakes": [
+    "Bouncing the weights off the chest",
+    "Elbows flared out at 90 degrees"
+   ],
+   "cautions": {
+    "shoulder": "Use a palms-facing grip and stop a little short of the bottom."
+   }
+  },
+  "overhead_press": {
+   "name": "Standing dumbbell overhead press",
+   "pattern": "push_vertical",
+   "tier": "B",
+   "equipment": [
+    "db_kb"
+   ],
+   "level": 2,
+   "per_side": false,
+   "muscles": {
+    "target": [
+     "Deltoid, anterior",
+     "Triceps brachii"
+    ],
+    "synergists": [
+     "Deltoid, lateral",
+     "Trapezius, upper",
+     "Serratus anterior",
+     "Rectus abdominis"
+    ]
+   },
+   "sports": {
+    "run": 0,
+    "bike": 0,
+    "swim": 2,
+    "health": 2
+   },
+   "why": "Strong shoulders and a stable trunk for anything you lift overhead.",
+   "easier": null,
+   "harder": null,
+   "swaps": {
+    "C": "push_up"
+   },
+   "dose": {
+    "sets": "3",
+    "reps": "6-10",
+    "rpe": "7-8",
+    "rest_s": 90,
+    "tempo": "2-0-1",
+    "note": "Standing makes the trunk work too. One arm at a time is fine."
+   },
+   "cues": [
+    "Squeeze your glutes and keep your ribs down",
+    "Press up and slightly back so the weights finish over your ears",
+    "Lower to shoulder height under control"
+   ],
+   "mistakes": [
+    "Leaning back to push",
+    "Shrugging the shoulders up to the ears"
+   ],
+   "cautions": {
+    "shoulder": "Skip if pressing overhead hurts and do push-ups instead. Swimmers in a big swim week drop to 2 sets.",
+    "low_back": "Don't arch to finish the rep. Kneeling on one knee helps."
+   }
+  },
+  "bent_over_row": {
+   "name": "Bent-over dumbbell row",
+   "pattern": "pull_horizontal",
+   "tier": "B",
+   "equipment": [
+    "db_kb"
+   ],
+   "level": 1,
+   "per_side": false,
+   "muscles": {
+    "target": [
+     "Latissimus dorsi",
+     "Rhomboids",
+     "Trapezius, middle"
+    ],
+    "synergists": [
+     "Deltoid, posterior",
+     "Biceps brachii",
+     "Erector spinae",
+     "Hamstrings"
+    ]
+   },
+   "sports": {
+    "run": 1,
+    "bike": 2,
+    "swim": 2,
+    "health": 3
+   },
+   "why": "Upper-back strength for good posture on the bike and a strong pull in the water.",
+   "easier": null,
+   "harder": null,
+   "swaps": {
+    "C": "band_pull_apart"
+   },
+   "dose": {
+    "sets": "3",
+    "reps": "8-12",
+    "rpe": "7-8",
+    "rest_s": 75,
+    "tempo": "2-1-1",
+    "note": "Hinge to about 45 degrees and hold it: your hamstrings and back work too. Beginners: one hand on a bench, one arm at a time."
+   },
+   "cues": [
+    "Hinge forward with a flat back",
+    "Pull the dumbbells to your lower ribs",
+    "Squeeze the shoulder blades together, then lower slowly"
+   ],
+   "mistakes": [
+    "Standing up as you pull",
+    "Yanking with the arms and shrugging"
+   ],
+   "cautions": {
+    "low_back": "Rest one hand on a bench and row one arm at a time."
+   }
+  },
+  "lat_pulldown": {
+   "name": "Lat pulldown",
+   "pattern": "pull_vertical",
+   "tier": "A",
+   "equipment": [
+    "lat_pulldown"
+   ],
+   "level": 1,
+   "per_side": false,
+   "muscles": {
+    "target": [
+     "Latissimus dorsi"
+    ],
+    "synergists": [
+     "Teres major",
+     "Biceps brachii",
+     "Rhomboids",
+     "Trapezius, lower"
+    ]
+   },
+   "sports": {
+    "run": 0,
+    "bike": 1,
+    "swim": 3,
+    "health": 2
+   },
+   "why": "Builds the lats, your main swimming muscle, and a strong back.",
+   "easier": null,
+   "harder": "pull_up",
+   "swaps": {
+    "B": "bent_over_row",
+    "C": "straight_arm_pulldown"
+   },
+   "dose": {
+    "sets": "3",
+    "reps": "8-12",
+    "rpe": "7-8",
+    "rest_s": 75,
+    "tempo": "2-0-1",
+    "note": "Pull to the upper chest, never behind the neck."
+   },
+   "cues": [
+    "Grip just wider than your shoulders, lean back slightly",
+    "Pull your elbows down to your sides",
+    "Let the bar rise slowly to a full stretch"
+   ],
+   "mistakes": [
+    "Swinging the body to move the weight",
+    "Pulling behind the neck"
+   ],
+   "cautions": {
+    "shoulder": "Use a palms-facing handle and skip the very top of the stretch if it pinches."
+   }
+  },
+  "pull_up": {
+   "name": "Pull-up",
+   "pattern": "pull_vertical",
+   "tier": "A",
+   "equipment": [
+    "pull_up_bar"
+   ],
+   "level": 3,
+   "per_side": false,
+   "muscles": {
+    "target": [
+     "Latissimus dorsi"
+    ],
+    "synergists": [
+     "Teres major",
+     "Biceps brachii",
+     "Brachialis",
+     "Trapezius, lower",
+     "Rhomboids",
+     "Wrist & finger flexors"
+    ]
+   },
+   "sports": {
+    "run": 0,
+    "bike": 1,
+    "swim": 3,
+    "health": 3
+   },
+   "why": "The best bodyweight pull: lats, arms and grip all at once.",
+   "easier": "lat_pulldown",
+   "harder": null,
+   "swaps": {
+    "B": "bent_over_row",
+    "C": "straight_arm_pulldown"
+   },
+   "dose": {
+    "sets": "3",
+    "reps": "3-8",
+    "rpe": "8",
+    "rest_s": 120,
+    "tempo": "3-0-1",
+    "note": "Can't do one yet? Jump to the top and lower slowly over 3-5 s, or loop a band under your feet. A doorway bar at home counts."
+   },
+   "cues": [
+    "Hang with straight arms and shoulders pulled down",
+    "Drive elbows to your ribs until your chin clears the bar",
+    "Lower all the way under control"
+   ],
+   "mistakes": [
+    "Kicking or swinging",
+    "Half reps that never reach straight arms"
+   ],
+   "cautions": {
+    "shoulder": "Use a palms-facing grip, or swap to lat pulldown."
+   }
+  },
+  "straight_arm_pulldown": {
+   "name": "Straight-arm pulldown",
+   "pattern": "pull_vertical",
+   "tier": "C",
+   "equipment": [
+    "band"
+   ],
+   "level": 1,
+   "per_side": false,
+   "muscles": {
+    "target": [
+     "Latissimus dorsi"
+    ],
+    "synergists": [
+     "Teres major",
+     "Triceps brachii",
+     "Deltoid, posterior"
+    ]
+   },
+   "sports": {
+    "run": 0,
+    "bike": 0,
+    "swim": 3,
+    "health": 1
+   },
+   "why": "Copies the swim pull: trains the lats to sweep the arm from overhead to the hip.",
+   "easier": null,
+   "harder": null,
+   "swaps": {},
+   "dose": {
+    "sets": "3",
+    "reps": "12-15",
+    "rpe": "7",
+    "rest_s": 45,
+    "tempo": "2-1-1",
+    "note": "Band anchored high (top of a door) or a cable in the gym. Arms long with a slight elbow bend."
+   },
+   "cues": [
+    "Hinge slightly, arms long and up in front holding the band",
+    "Sweep your hands down to your thighs with straight arms",
+    "Squeeze the lats for a second, return slowly"
+   ],
+   "mistakes": [
+    "Bending the elbows into a triceps pushdown",
+    "Shrugging the shoulders up"
+   ],
+   "cautions": {
+    "shoulder": "Start from below shoulder height if reaching up pinches."
+   }
+  },
+  "band_pull_apart": {
+   "name": "Band pull-apart",
+   "pattern": "scapular_cuff",
+   "tier": "C",
+   "equipment": [
+    "band"
+   ],
+   "level": 1,
+   "per_side": false,
+   "muscles": {
+    "target": [
+     "Deltoid, posterior",
+     "Rhomboids",
+     "Trapezius, middle"
+    ],
+    "synergists": [
+     "Infraspinatus & teres minor",
+     "Trapezius, lower"
+    ]
+   },
+   "sports": {
+    "run": 1,
+    "bike": 2,
+    "swim": 3,
+    "health": 2
+   },
+   "why": "Balances all the forward reaching of swimming and riding: healthier shoulders, taller posture.",
+   "easier": null,
+   "harder": null,
+   "swaps": {},
+   "dose": {
+    "sets": "2",
+    "reps": "15-20",
+    "rpe": "6-7",
+    "rest_s": 30,
+    "tempo": "2-1-1",
+    "note": "Great in the warm-up. Palms facing up works more of the rotator cuff."
+   },
+   "cues": [
+    "Arms straight out at shoulder height, band tight",
+    "Pull the band to your chest by squeezing your shoulder blades",
+    "Return slowly without shrugging"
+   ],
+   "mistakes": [
+    "Arching the low back",
+    "Bending the elbows"
+   ],
+   "cautions": {
+    "shoulder": "Do it below shoulder height if it pinches."
+   }
+  },
+  "band_external_rotation": {
+   "name": "Band external rotation",
+   "pattern": "scapular_cuff",
+   "tier": "C",
+   "equipment": [
+    "band"
+   ],
+   "level": 1,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Infraspinatus & teres minor"
+    ],
+    "synergists": [
+     "Deltoid, posterior",
+     "Supraspinatus"
+    ]
+   },
+   "sports": {
+    "run": 0,
+    "bike": 0,
+    "swim": 3,
+    "health": 2
+   },
+   "why": "Strengthens the small rotator cuff muscles that keep a swimmer's shoulder centred.",
+   "easier": null,
+   "harder": null,
+   "swaps": {},
+   "dose": {
+    "sets": "2",
+    "reps": "12-15",
+    "rpe": "6-7",
+    "rest_s": 30,
+    "tempo": "2-1-1",
+    "note": "Per side. Elbow tucked at your side with a small towel between arm and body. Light band: this is control, not a strength test."
+   },
+   "cues": [
+    "Elbow at your side, bent to 90 degrees",
+    "Turn the hand outward against the band",
+    "Hold a second, return slowly"
+   ],
+   "mistakes": [
+    "Elbow drifting away from the body",
+    "A band so heavy you twist your trunk"
+   ],
+   "cautions": {
+    "shoulder": "Stay in the pain-free range. This one is usually fine even with a sore shoulder."
+   }
+  },
+  "farmers_carry": {
+   "name": "Farmer's carry",
+   "pattern": "carry",
+   "tier": "B",
+   "equipment": [
+    "db_kb"
+   ],
+   "level": 1,
+   "per_side": false,
+   "muscles": {
+    "target": [
+     "Wrist & finger flexors",
+     "Trapezius, upper"
+    ],
+    "synergists": [
+     "Obliques",
+     "Quadratus lumborum",
+     "Gluteus medius & minimus",
+     "Erector spinae"
+    ]
+   },
+   "sports": {
+    "run": 1,
+    "bike": 1,
+    "swim": 1,
+    "health": 3
+   },
+   "why": "Grip and whole-body strength. Grip strength tracks closely with long-term health.",
+   "easier": null,
+   "harder": null,
+   "swaps": {},
+   "dose": {
+    "sets": "3",
+    "reps": "30-40 m or 30-45 s",
+    "rpe": "7-8",
+    "rest_s": 60,
+    "tempo": null,
+    "note": "Heavy enough that you want to put them down by the end. One weight in one hand (suitcase carry) works the side trunk harder."
+   },
+   "cues": [
+    "Stand tall, shoulders back and down",
+    "Squeeze the handles hard",
+    "Walk with short, steady steps"
+   ],
+   "mistakes": [
+    "Leaning to one side",
+    "Shrugging the shoulders up"
+   ],
+   "cautions": {
+    "low_back": "Go lighter and shorter, and stay tall."
+   }
+  },
+  "dead_bug": {
+   "name": "Dead bug",
+   "pattern": "anti_extension",
+   "tier": "C",
+   "equipment": [
+    "mat"
+   ],
+   "level": 1,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Rectus abdominis",
+     "Transverse abdominis"
+    ],
+    "synergists": [
+     "Obliques",
+     "Iliopsoas"
+    ]
+   },
+   "sports": {
+    "run": 2,
+    "bike": 2,
+    "swim": 2,
+    "health": 2
+   },
+   "why": "Teaches your trunk to stay still while arms and legs move: the base of a steady stride and stroke.",
+   "easier": null,
+   "harder": "front_plank",
+   "swaps": {},
+   "dose": {
+    "sets": "2",
+    "reps": "6-10",
+    "rpe": "6-7",
+    "rest_s": 30,
+    "tempo": null,
+    "note": "Per side. Breathe out as the arm and leg reach. Slow is the point."
+   },
+   "cues": [
+    "Lie on your back, arms up, knees over hips",
+    "Press your low back gently into the floor",
+    "Reach the opposite arm and leg out, return, switch"
+   ],
+   "mistakes": [
+    "Low back lifting off the floor",
+    "Rushing"
+   ],
+   "cautions": {
+    "low_back": "Move only the legs, or reach less far."
+   }
+  },
+  "front_plank": {
+   "name": "Front plank",
+   "pattern": "anti_extension",
+   "tier": "C",
+   "equipment": [
+    "mat"
+   ],
+   "level": 1,
+   "per_side": false,
+   "muscles": {
+    "target": [
+     "Rectus abdominis",
+     "Transverse abdominis"
+    ],
+    "synergists": [
+     "Obliques",
+     "Serratus anterior",
+     "Gluteus maximus"
+    ]
+   },
+   "sports": {
+    "run": 2,
+    "bike": 2,
+    "swim": 2,
+    "health": 2
+   },
+   "why": "A trunk that holds its shape when you're tired: on the bike, on the run, in the water.",
+   "easier": "dead_bug",
+   "harder": null,
+   "swaps": {},
+   "dose": {
+    "sets": "2",
+    "reps": "20-45 s",
+    "rpe": "7",
+    "rest_s": 30,
+    "tempo": null,
+    "note": "Holding past 60 s adds little. Make it harder instead: squeeze everything, or lift one foot."
+   },
+   "cues": [
+    "Elbows under your shoulders",
+    "Squeeze your glutes and pull your ribs down",
+    "Breathe steadily"
+   ],
+   "mistakes": [
+    "Hips sagging",
+    "Bottom pushed up high"
+   ],
+   "cautions": {
+    "low_back": "Drop to the knees. Stop if your back aches.",
+    "shoulder": "Put your hands or elbows on a bench."
+   }
+  },
+  "side_plank": {
+   "name": "Side plank",
+   "pattern": "lateral_core",
+   "tier": "C",
+   "equipment": [
+    "mat"
+   ],
+   "level": 1,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Obliques",
+     "Quadratus lumborum"
+    ],
+    "synergists": [
+     "Gluteus medius & minimus",
+     "Transverse abdominis"
+    ]
+   },
+   "sports": {
+    "run": 3,
+    "bike": 2,
+    "swim": 2,
+    "health": 2
+   },
+   "why": "Strengthens the side trunk and hip that stop your pelvis dropping each stride.",
+   "easier": null,
+   "harder": "copenhagen_plank",
+   "swaps": {},
+   "dose": {
+    "sets": "2",
+    "reps": "20-40 s",
+    "rpe": "7",
+    "rest_s": 20,
+    "tempo": null,
+    "note": "Per side. Knees bent is easier; lifting the top leg is harder."
+   },
+   "cues": [
+    "Elbow under shoulder, feet stacked",
+    "Lift your hips into a straight line",
+    "Don't let the hips roll back"
+   ],
+   "mistakes": [
+    "Hips sinking",
+    "Shoulder hunched up to the ear"
+   ],
+   "cautions": {
+    "shoulder": "Do it from the knees, or standing with your forearm on a wall."
+   }
+  },
+  "pallof_press": {
+   "name": "Pallof press",
+   "pattern": "anti_rotation",
+   "tier": "C",
+   "equipment": [
+    "band"
+   ],
+   "level": 1,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Obliques",
+     "Transverse abdominis"
+    ],
+    "synergists": [
+     "Rectus abdominis",
+     "Gluteus medius & minimus"
+    ]
+   },
+   "sports": {
+    "run": 2,
+    "bike": 2,
+    "swim": 2,
+    "health": 2
+   },
+   "why": "Trains your trunk to resist twisting, so power goes into the pedals and the water, not into wobble.",
+   "easier": "bird_dog",
+   "harder": null,
+   "swaps": {},
+   "dose": {
+    "sets": "2",
+    "reps": "8-12",
+    "rpe": "7",
+    "rest_s": 30,
+    "tempo": null,
+    "note": "Per side. Hold 2 s with the arms out on each rep."
+   },
+   "cues": [
+    "Stand side-on to the anchor, band at your chest",
+    "Press your hands straight out and hold 2 s",
+    "Don't let the band turn you"
+   ],
+   "mistakes": [
+    "Rotating toward the anchor",
+    "Standing too close, so there's no tension"
+   ],
+   "cautions": {}
+  },
+  "bird_dog": {
+   "name": "Bird dog",
+   "pattern": "anti_rotation",
+   "tier": "C",
+   "equipment": [
+    "mat"
+   ],
+   "level": 1,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Erector spinae",
+     "Gluteus maximus"
+    ],
+    "synergists": [
+     "Obliques",
+     "Transverse abdominis",
+     "Deltoid, anterior"
+    ]
+   },
+   "sports": {
+    "run": 2,
+    "bike": 1,
+    "swim": 2,
+    "health": 2
+   },
+   "why": "Gentle back and hip control: a core exercise almost any back tolerates.",
+   "easier": null,
+   "harder": "pallof_press",
+   "swaps": {},
+   "dose": {
+    "sets": "2",
+    "reps": "6-10",
+    "rpe": "5-6",
+    "rest_s": 30,
+    "tempo": null,
+    "note": "Per side. Hold 3-5 s at full reach."
+   },
+   "cues": [
+    "Hands under shoulders, knees under hips",
+    "Reach the opposite arm and leg out long",
+    "Keep your back flat like a tabletop"
+   ],
+   "mistakes": [
+    "Lifting the leg so high the back arches",
+    "Hips tipping to one side"
+   ],
+   "cautions": {
+    "knee": "Kneel on a folded mat or towel."
+   }
+  },
+  "leg_swings": {
+   "name": "Leg swings",
+   "pattern": "mobility",
+   "tier": "C",
+   "equipment": [],
+   "level": 1,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Hamstrings",
+     "Iliopsoas",
+     "Hip adductors"
+    ],
+    "synergists": [
+     "Gluteus medius & minimus",
+     "Gluteus maximus"
+    ]
+   },
+   "sports": {
+    "run": 2,
+    "bike": 1,
+    "swim": 0,
+    "health": 1
+   },
+   "why": "Loosens the hips before you load them.",
+   "easier": null,
+   "harder": null,
+   "swaps": {},
+   "dose": {
+    "sets": "1",
+    "reps": "10-15 each way",
+    "rpe": "3",
+    "rest_s": 0,
+    "tempo": null,
+    "note": "Per side, forward-back and side-to-side. Hold a wall. Let the swings grow gradually."
+   },
+   "cues": [
+    "Hold a wall and stand tall",
+    "Swing forward and back, then across the body and out",
+    "Build the range gradually"
+   ],
+   "mistakes": [
+    "Bending at the waist to fake range",
+    "Swinging hard from the first rep"
+   ],
+   "cautions": {
+    "low_back": "Keep the swing small and the trunk still."
+   }
+  },
+  "knee_to_wall": {
+   "name": "Knee-to-wall ankle mobility",
+   "pattern": "mobility",
+   "tier": "C",
+   "equipment": [
+    "wall"
+   ],
+   "level": 1,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Soleus",
+     "Gastrocnemius"
+    ],
+    "synergists": [
+     "Tibialis anterior"
+    ]
+   },
+   "sports": {
+    "run": 3,
+    "bike": 1,
+    "swim": 0,
+    "health": 1
+   },
+   "why": "Frees up ankle bend for squats, lunges and running, and doubles as a quick ankle check.",
+   "easier": null,
+   "harder": null,
+   "swaps": {},
+   "dose": {
+    "sets": "1",
+    "reps": "10",
+    "rpe": "3-4",
+    "rest_s": 0,
+    "tempo": null,
+    "note": "Per side. Move the foot back until the knee only just touches. Note that toe-to-wall distance now and then: a clear left-right difference is worth flagging."
+   },
+   "cues": [
+    "Foot a few inches from the wall, heel down",
+    "Drive the knee forward to touch the wall, over the 2nd-3rd toe",
+    "Hold 2 s, then ease back"
+   ],
+   "mistakes": [
+    "Heel lifting",
+    "Knee collapsing inward"
+   ],
+   "cautions": {
+    "ankle": "A pinch at the front of the ankle means stop at that point. Don't force it."
+   }
+  },
+  "hip_flexor_stretch": {
+   "name": "Half-kneeling hip flexor stretch",
+   "pattern": "mobility",
+   "tier": "C",
+   "equipment": [
+    "mat"
+   ],
+   "level": 1,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Iliopsoas",
+     "Quadriceps"
+    ],
+    "synergists": [
+     "Gluteus maximus"
+    ]
+   },
+   "sports": {
+    "run": 2,
+    "bike": 3,
+    "swim": 0,
+    "health": 1
+   },
+   "why": "Opens the front of the hip that tightens after hours on the bike or at a desk.",
+   "easier": null,
+   "harder": null,
+   "swaps": {},
+   "dose": {
+    "sets": "1",
+    "reps": "30-45 s",
+    "rpe": "3",
+    "rest_s": 0,
+    "tempo": null,
+    "note": "Per side. Squeeze the glute of the back leg: the stretch comes from tucking the pelvis, not lunging deep."
+   },
+   "cues": [
+    "Half-kneel with the back knee on a pad",
+    "Tuck your pelvis and squeeze the back glute",
+    "Shift forward a little until you feel the front of the hip"
+   ],
+   "mistakes": [
+    "Arching the low back",
+    "Lunging forward without tucking the pelvis"
+   ],
+   "cautions": {
+    "knee": "Put a folded towel under the back knee."
+   }
+  },
+  "thoracic_open_book": {
+   "name": "Thoracic open book",
+   "pattern": "mobility",
+   "tier": "C",
+   "equipment": [
+    "mat"
+   ],
+   "level": 1,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Obliques",
+     "Pectoralis major"
+    ],
+    "synergists": [
+     "Rhomboids",
+     "Trapezius, middle"
+    ]
+   },
+   "sports": {
+    "run": 1,
+    "bike": 2,
+    "swim": 3,
+    "health": 2
+   },
+   "why": "Restores upper-back rotation for breathing in the swim and a comfortable position on the bike.",
+   "easier": null,
+   "harder": null,
+   "swaps": {},
+   "dose": {
+    "sets": "1",
+    "reps": "8",
+    "rpe": "3",
+    "rest_s": 0,
+    "tempo": null,
+    "note": "Per side. Breathe out as you open. Knees stay stacked on the floor."
+   },
+   "cues": [
+    "Lie on your side, knees bent to 90 degrees and stacked",
+    "Sweep the top arm over to the other side, eyes following the hand",
+    "Keep the knees together on the floor"
+   ],
+   "mistakes": [
+    "Knees lifting apart",
+    "Forcing the arm to the floor"
+   ],
+   "cautions": {
+    "shoulder": "Bend the elbow and keep the hand on your chest."
+   }
+  }
+ },
+ "modules": {
+  "run": {
+   "priority": [
+    "calf_ankle",
+    "single_leg",
+    "plyometric",
+    "hip_stability",
+    "hinge",
+    "squat",
+    "lateral_core"
+   ],
+   "must_include": [
+    "calf_raise",
+    "bent_knee_calf_raise",
+    "single_leg",
+    "hip_stability",
+    "plyometric"
+   ],
+   "warm_up_add": [
+    "knee_to_wall",
+    "banded_lateral_walk"
+   ],
+   "power": {
+    "A": "pogo_hops",
+    "B": "squat_jump",
+    "from_phase": "build"
+   },
+   "sport_block": {
+    "A": [
+     "calf_raise",
+     "bent_knee_calf_raise",
+     "single_leg_balance"
+    ],
+    "B": [
+     "copenhagen_plank",
+     "banded_lateral_walk",
+     "calf_raise"
+    ]
+   },
+   "notes": "Calves (straight and bent knee) in both sessions: they carry most of the load in running. Single-leg work is the main lift in Session B. Plyometrics from build, after 4 weeks of pain-free calf raises. Heavy squat/hinge stay in Session A."
+  },
+  "bike": {
+   "priority": [
+    "squat",
+    "hinge",
+    "bridge",
+    "single_leg",
+    "anti_extension",
+    "anti_rotation",
+    "plyometric"
+   ],
+   "must_include": [
+    "squat",
+    "hinge",
+    "single_leg",
+    "plyometric"
+   ],
+   "warm_up_add": [
+    "hip_flexor_stretch",
+    "thoracic_open_book"
+   ],
+   "power": {
+    "A": "squat_jump",
+    "B": "kettlebell_swing",
+    "from_phase": "build"
+   },
+   "sport_block": {
+    "A": [
+     "bulgarian_split_squat",
+     "calf_raise"
+    ],
+    "B": [
+     "single_leg_glute_bridge",
+     "copenhagen_plank",
+     "hip_flexor_stretch"
+    ]
+   },
+   "notes": "The heaviest module: heavy two-leg lifts are what improve cycling economy. Impact work is kept for bone, because cycling alone doesn't load bone. Kettlebell swing needs tier B; at tier C use pogo_hops."
+  },
+  "swim": {
+   "priority": [
+    "pull_vertical",
+    "straight_arm_pulldown",
+    "scapular_cuff",
+    "pull_horizontal",
+    "anti_extension",
+    "push_horizontal",
+    "squat",
+    "hinge",
+    "plyometric"
+   ],
+   "must_include": [
+    "pull_vertical",
+    "straight_arm_pulldown",
+    "band_external_rotation",
+    "band_pull_apart"
+   ],
+   "warm_up_add": [
+    "band_pull_apart",
+    "band_external_rotation",
+    "thoracic_open_book"
+   ],
+   "power": {
+    "A": "squat_jump",
+    "B": "pogo_hops",
+    "from_phase": "build"
+   },
+   "sport_block": {
+    "A": [
+     "straight_arm_pulldown",
+     "band_external_rotation",
+     "thoracic_open_book"
+    ],
+    "B": [
+     "straight_arm_pulldown",
+     "band_pull_apart",
+     "dead_bug"
+    ]
+   },
+   "notes": "Lats, shoulder blades and rotator cuff come first. Lower-body lifts stay for health and bone, since swimming gives bone little stimulus. Count shoulder load: in big swim weeks cut overhead pressing to 2 sets, and never take shoulder work near failure."
+  },
+  "triathlon": {
+   "priority": [
+    "squat",
+    "hinge",
+    "single_leg",
+    "calf_ankle",
+    "plyometric",
+    "pull_vertical",
+    "scapular_cuff",
+    "hip_stability",
+    "anti_rotation"
+   ],
+   "must_include": [
+    "squat",
+    "hinge",
+    "single_leg",
+    "calf_raise",
+    "bent_knee_calf_raise",
+    "straight_arm_pulldown",
+    "band_external_rotation"
+   ],
+   "warm_up_add": [
+    "band_pull_apart",
+    "band_external_rotation"
+   ],
+   "power": {
+    "A": "pogo_hops",
+    "B": "squat_jump",
+    "from_phase": "build"
+   },
+   "sport_block": {
+    "A": [
+     "calf_raise",
+     "bent_knee_calf_raise",
+     "single_leg_balance"
+    ],
+    "B": [
+     "copenhagen_plank",
+     "banded_lateral_walk",
+     "straight_arm_pulldown"
+    ]
+   },
+   "notes": "Bike module sets the main lifts (heavy). Run module sets the sport block. Swim module lives in the warm-up and the upper-body pull slot (pulldown / pull-up / straight-arm pulldown), so it costs no extra time."
+  },
+  "health": {
+   "applies_to": "Everyone. Layered on top of the sport module; it is the whole programme for athletes with no sport goal.",
+   "priority": [
+    "squat",
+    "hinge",
+    "push_horizontal",
+    "pull_horizontal",
+    "pull_vertical",
+    "single_leg",
+    "balance",
+    "carry",
+    "plyometric",
+    "anti_extension",
+    "lateral_core",
+    "anti_rotation",
+    "push_vertical"
+   ],
+   "must_include": [
+    "push_horizontal",
+    "pull_horizontal",
+    "balance",
+    "carry",
+    "plyometric"
+   ],
+   "requirements": {
+    "upper_body": "At least 1 push and 1 pull in every session.",
+    "bone_heavy": "At least 1 lower-body lift a week at 6 reps or fewer and RPE 7+ (level 2 and up).",
+    "bone_impact": "At least 1 plyometric a week once cleared (see beginners rule).",
+    "balance": "single_leg_balance or single_leg_rdl every week.",
+    "grip": "farmers_carry, pull_up, romanian_deadlift or kettlebell_swing every week. Tier C has no carry: use pull_up if a bar exists, else accept the gap."
+   },
+   "warm_up_add": [
+    "thoracic_open_book",
+    "leg_swings"
+   ],
+   "power": {
+    "A": "pogo_hops",
+    "B": "squat_jump",
+    "from_phase": "base_after_week_4"
+   },
+   "sport_block": {
+    "A": [
+     "single_leg_balance",
+     "calf_raise"
+    ],
+    "B": [
+     "farmers_carry",
+     "single_leg_balance"
+    ]
+   },
+   "notes": "Health needs every major muscle group, heavy loading and impact for bone, balance and grip. For no-sport athletes the sport block becomes this balance-and-grip block. Adults 65+: see the older-adults decision in docs/strength-methodology.md."
+  },
+  "ankle_protocol": {
+   "applies_to": "Athletes flagged with the ankle protocol (history of lateral ankle sprain or an unstable ankle).",
+   "exercises": [
+    {
+     "ex": "calf_raise",
+     "sets": 3,
+     "reps": "12/side, eccentric (3 s lowering)",
+     "rest_s": 30
+    },
+    {
+     "ex": "single_leg_balance",
+     "sets": 3,
+     "reps": "30-45 s/side with reach or perturbation",
+     "rest_s": 0
+    },
+    {
+     "ex": "banded_ankle_eversion",
+     "sets": 2,
+     "reps": "15-20/side",
+     "rest_s": 0
+    }
+   ],
+   "priority": [
+    "calf_raise",
+    "single_leg_balance",
+    "banded_ankle_eversion"
+   ],
+   "must_include": [
+    "calf_raise",
+    "single_leg_balance",
+    "banded_ankle_eversion"
+   ],
+   "both_sessions": true,
+   "all_tiers": true,
+   "replaces": "The sport block. The module's other sport-block picks move into the warm-up, or drop out if time is short.",
+   "by_phase": "Same in base, build, specific and peak. Taper: 2 sets each. Race week: no strength session; balance only (3 min, can sit in a run warm-up). Draft: see docs/strength-methodology.md decision 6.",
+   "notes": "Permanent, as signed off in blueprints/strength.md. Also the content of the 15-min ankle_mobility session type (add knee_to_wall)."
+  }
+ },
+ "template": {
+  "session_minutes": "35-45",
+  "alternation": "Session A and Session B alternate across the week (blueprint).",
+  "blocks": [
+   {
+    "id": "warm_up",
+    "minutes": 5,
+    "picks": "leg_swings always + 1 lower mobility drill (knee_to_wall or hip_flexor_stretch) + module.warm_up_add + 1-2 lighter ramp-up sets of the first main lift. 3 min easy spin or row first if a machine is there (blueprint)."
+   },
+   {
+    "id": "power",
+    "minutes": 3,
+    "picks": "module.power[A|B] from the module's from_phase. Skipped for level-1 athletes in their first 4 weeks and for anyone with an active knee or ankle flag. Done fresh, before the main lifts."
+   },
+   {
+    "id": "main",
+    "minutes": 20,
+    "picks": "Two pairs. Each pair = 1 lower-body lift + 1 upper-body lift, alternated so the upper lift fills the lower lift's rest. Session A: pair 1 squat + pull (vertical first, else horizontal); pair 2 hinge + push_horizontal. Session B: pair 1 single_leg + push (vertical first, else horizontal); pair 2 bridge (or single_leg_rdl) + pull."
+   },
+   {
+    "id": "sport",
+    "minutes": 8,
+    "picks": "module.sport_block[A|B]. Replaced by modules.ankle_protocol for flagged athletes. Multi-sport athletes use the triathlon module."
+   },
+   {
+    "id": "core",
+    "minutes": 5,
+    "picks": "2 rounds. Across the session: 1 anti_extension + 1 anti_rotation + 1 lateral_core. Session B may swap one for farmers_carry (grip + lateral). In base (no power block yet) core can run to 7 min, as in the blueprint."
+   }
+  ],
+  "session_slots": {
+   "A": {
+    "power": "module.power.A",
+    "pair_1": [
+     "squat",
+     "pull_vertical"
+    ],
+    "pair_2": [
+     "hinge",
+     "push_horizontal"
+    ]
+   },
+   "B": {
+    "power": "module.power.B",
+    "pair_1": [
+     "single_leg",
+     "push_vertical"
+    ],
+    "pair_2": [
+     "bridge",
+     "pull_horizontal"
+    ]
+   }
+  },
+  "weekly_coverage": {
+   "squat": {
+    "patterns": [
+     "squat"
+    ]
+   },
+   "hinge": {
+    "patterns": [
+     "hinge",
+     "bridge"
+    ],
+    "note": "At least one true hinge (romanian_deadlift, single_leg_rdl or kettlebell_swing) a week from level 2."
+   },
+   "single_leg": {
+    "patterns": [
+     "single_leg"
+    ],
+    "also": [
+     "single_leg_rdl"
+    ]
+   },
+   "push": {
+    "patterns": [
+     "push_horizontal",
+     "push_vertical"
+    ]
+   },
+   "pull": {
+    "patterns": [
+     "pull_horizontal",
+     "pull_vertical"
+    ]
+   },
+   "calf_ankle": {
+    "patterns": [
+     "calf_ankle"
+    ]
+   },
+   "core_anti_extension": {
+    "patterns": [
+     "anti_extension"
+    ]
+   },
+   "core_anti_rotation": {
+    "patterns": [
+     "anti_rotation"
+    ]
+   },
+   "core_lateral": {
+    "patterns": [
+     "lateral_core"
+    ],
+    "also": [
+     "copenhagen_plank",
+     "farmers_carry"
+    ]
+   },
+   "balance": {
+    "patterns": [
+     "balance"
+    ],
+    "also": [
+     "single_leg_rdl"
+    ]
+   },
+   "bone_impact": {
+    "patterns": [
+     "plyometric"
+    ],
+    "note": "Once cleared: level 2+, or level 1 after 4 weeks."
+   },
+   "bone_heavy": {
+    "rule": "At least 1 lower-body lift a week at 6 reps or fewer, RPE 7+ (level 2+)."
+   },
+   "grip": {
+    "also": [
+     "farmers_carry",
+     "pull_up",
+     "romanian_deadlift",
+     "kettlebell_swing"
+    ]
+   }
+  },
+  "pick_order": [
+   {
+    "step": 1,
+    "by": "sport_module",
+    "rule": "The athlete's module sets which patterns fill each slot, the power pick and the sport block. Health is always layered on."
+   },
+   {
+    "step": 2,
+    "by": "equipment_tier",
+    "rule": "Use this week's tier. If an exercise needs kit the athlete lacks, use exercise.swaps[tier]. If the athlete is on a higher tier and swaps lists an upgrade for it, use the upgrade."
+   },
+   {
+    "step": 3,
+    "by": "athlete_level",
+    "rule": "Only exercises at or below the athlete's level. Use easier/harder to move along the ladder."
+   },
+   {
+    "step": 4,
+    "by": "injury_cautions",
+    "rule": "If the athlete has an active knee, ankle, low_back or shoulder flag, follow that exercise's caution text, or swap to an exercise with no caution for that area."
+   }
+  ],
+  "athlete_levels": {
+   "1": "New to lifting, or under 3 months of steady training.",
+   "2": "3+ months of 2 sessions a week with good technique on level-1 lifts.",
+   "3": "A year or more, solid technique on level-2 lifts."
+  },
+  "one_session_week": "If only one session fits (peak, travel, a busy week): run Session A, but swap the squat for the single-leg pick every other week, and keep the sport block (or ankle protocol).",
+  "progression_rule": "Add load when every set hits the top of the rep range at RPE 7 or less for 2 sessions in a row, then restart at the bottom of the range. No more load to add (tier C, or the heaviest dumbbell)? Add reps, then slow the lowering to 3-4 s, then move to exercise.harder.",
+  "regression_rule": "Drop 5-10% load, or move to exercise.easier, if reps fall below the range or RPE hits 9+ in 2 sessions running, or if pain goes above 3/10 or is still there the next morning.",
+  "notes": "RPE uses the reps-in-reserve scale: RPE 8 = about 2 reps left, RPE 7 = about 3. Never train to failure. Tempo = seconds lowering - pause - lifting; X = as fast as possible. In example sessions, items with the same 'pair' label alternate; rest_s is the rest after each item, so the lower-body lift gets the combined rest. swaps[tier] = the exercise to use on that tier; a missing tier means keep this exercise."
+ },
+ "dose_by_phase": {
+  "base": {
+   "frequency": "2/wk",
+   "intro": {
+    "applies_to": "Level-1 athletes, or anyone back from a 4+ week break: first 3 weeks.",
+    "main": {
+     "sets": "2-3",
+     "reps": "8-12",
+     "rpe": "6-7",
+     "rest_s": 90,
+     "tempo": "3-0-1"
+    },
+    "note": "Learn the movements. No power block. Single-leg and upper body use the same dose."
+   },
+   "main": {
+    "sets": "3",
+    "reps": "5-6",
+    "rpe": "8",
+    "rest_s": 150
+   },
+   "single_leg": {
+    "sets": "3",
+    "reps": "6-8/side",
+    "rpe": "8",
+    "rest_s": 90
+   },
+   "upper": {
+    "sets": "2-3",
+    "reps": "8-12",
+    "rpe": "7",
+    "rest_s": 60
+   },
+   "power": {
+    "sets": "2",
+    "reps": "10 pogo contacts, from week 4 only",
+    "rpe": "6",
+    "rest_s": 60
+   },
+   "sport_prehab": "Exercise default doses.",
+   "core": {
+    "rounds": "2",
+    "minutes": "5-7"
+   },
+   "progress": "Add load weekly when the progression rule is met (blueprint).",
+   "notes": "Blueprint: full template, progress load weekly. Kept. Main lift 3 x 5 @ RPE 8 as signed off; 5-6 gives the progression rule room."
+  },
+  "build": {
+   "frequency": "2/wk",
+   "main": {
+    "sets": "3",
+    "reps": "4-6",
+    "rpe": "8",
+    "rest_s": 150,
+    "tempo": "2-0-X"
+   },
+   "single_leg": {
+    "sets": "3",
+    "reps": "6-8/side",
+    "rpe": "8",
+    "rest_s": 90
+   },
+   "upper": {
+    "sets": "3",
+    "reps": "6-10",
+    "rpe": "7-8",
+    "rest_s": 60
+   },
+   "power": {
+    "sets": "3",
+    "reps": "pogo 10-20 contacts or squat jump 4-6",
+    "rpe": "6-7",
+    "rest_s": 60,
+    "max_contacts": 60
+   },
+   "sport_prehab": "Exercise default doses.",
+   "core": {
+    "rounds": "2",
+    "minutes": "5"
+   },
+   "progress": "Add load weekly when the progression rule is met. Lift with fast intent on the way up.",
+   "notes": "Blueprint: full template, progress load weekly. Kept; power block added."
+  },
+  "specific": {
+   "frequency": "2/wk",
+   "main": {
+    "sets": "2",
+    "reps": "4-6",
+    "rpe": "7-8",
+    "rest_s": 150
+   },
+   "single_leg": {
+    "sets": "2",
+    "reps": "6-8/side",
+    "rpe": "7-8",
+    "rest_s": 90
+   },
+   "upper": {
+    "sets": "2",
+    "reps": "6-10",
+    "rpe": "7",
+    "rest_s": 60
+   },
+   "power": {
+    "sets": "2",
+    "reps": "pogo 10-15 contacts or squat jump 4-5",
+    "rpe": "6-7",
+    "rest_s": 60,
+    "max_contacts": 40
+   },
+   "sport_prehab": "Exercise default doses; 2 sets.",
+   "core": {
+    "rounds": "2",
+    "minutes": "5"
+   },
+   "progress": "Hold the load from the end of build. Nothing new.",
+   "notes": "Blueprint: maintain load, 2 working sets. Kept exactly."
+  },
+  "peak": {
+   "frequency": "1-2/wk",
+   "main": {
+    "sets": "2",
+    "reps": "3-5",
+    "rpe": "7",
+    "rest_s": 150
+   },
+   "single_leg": {
+    "sets": "2",
+    "reps": "5/side",
+    "rpe": "7",
+    "rest_s": 90
+   },
+   "upper": {
+    "sets": "1-2",
+    "reps": "6-8",
+    "rpe": "7",
+    "rest_s": 60
+   },
+   "power": {
+    "sets": "2",
+    "reps": "squat jump 3-5 or pogo 10",
+    "rpe": "6",
+    "rest_s": 75,
+    "max_contacts": 25
+   },
+   "sport_prehab": "Ankle protocol unchanged; other sport-block work 1-2 sets.",
+   "core": {
+    "rounds": "1-2",
+    "minutes": "4"
+   },
+   "progress": "Same load, fewer reps. Nothing new, no soreness.",
+   "notes": "Blueprint: 1-2/wk, maintenance, nothing new. Kept. NB session-library.json peak menu lacks strength_general (see decisions)."
+  },
+  "taper": {
+   "frequency": "1/wk light; none in race week",
+   "main": {
+    "sets": "1-2",
+    "reps": "3",
+    "rpe": "6",
+    "rest_s": 120
+   },
+   "single_leg": {
+    "sets": "1",
+    "reps": "4/side",
+    "rpe": "6",
+    "rest_s": 60
+   },
+   "upper": {
+    "sets": "0-1",
+    "reps": "6-8",
+    "rpe": "6",
+    "rest_s": 60
+   },
+   "power": {
+    "sets": "1-2",
+    "reps": "squat jump 3 or pogo 10",
+    "rpe": "6",
+    "rest_s": 75,
+    "max_contacts": 15
+   },
+   "sport_prehab": "Ankle protocol 2 sets. No slow-lowering (eccentric) emphasis anywhere: it causes soreness.",
+   "core": {
+    "rounds": "1",
+    "minutes": "3"
+   },
+   "progress": "Same load as specific, very few reps: a neuromuscular touch only.",
+   "notes": "Blueprint: 1/wk light, none in race week, neuromuscular touch only. Kept. NB session-library.json taper menu lacks strength_general (see decisions)."
+  },
+  "offseason": {
+   "frequency": "2/wk",
+   "main": {
+    "sets": "3-4",
+    "reps": "4-8",
+    "rpe": "8",
+    "rest_s": 150
+   },
+   "single_leg": {
+    "sets": "3",
+    "reps": "6-10/side",
+    "rpe": "8",
+    "rest_s": 90
+   },
+   "upper": {
+    "sets": "3",
+    "reps": "8-12",
+    "rpe": "7-8",
+    "rest_s": 60
+   },
+   "power": {
+    "sets": "3",
+    "reps": "pogo 15-20 or squat jump 5-6",
+    "rpe": "6-7",
+    "rest_s": 60,
+    "max_contacts": 80
+   },
+   "sport_prehab": "Exercise default doses.",
+   "core": {
+    "rounds": "2-3",
+    "minutes": "6"
+   },
+   "progress": "The best time of year to build strength: progress load weekly, try harder ladder steps.",
+   "notes": "New: not in the blueprint. The planner already has an offseason phase. Draft: see docs/strength-methodology.md."
+  }
+ },
+ "example_sessions": [
+  {
+   "id": "tri_build_gym_a",
+   "title": "Triathlon · Build · Gym · Session A",
+   "minutes": 40,
+   "tier": "A",
+   "level": 2,
+   "phase": "build",
+   "module": "triathlon",
+   "for": "Triathlete in build, full gym, level 2+. Athletes on the ankle protocol swap the Sport block for the ankle protocol.",
+   "parts": [
+    {
+     "title": "Warm-up",
+     "minutes": 5,
+     "items": [
+      {
+       "ex": "leg_swings",
+       "sets": 1,
+       "reps": "10 each way",
+       "rest_s": 0
+      },
+      {
+       "ex": "knee_to_wall",
+       "sets": 1,
+       "reps": "10/side",
+       "rest_s": 0
+      },
+      {
+       "ex": "band_pull_apart",
+       "sets": 1,
+       "reps": "15",
+       "rest_s": 0
+      },
+      {
+       "ex": "band_external_rotation",
+       "sets": 1,
+       "reps": "12/side",
+       "rest_s": 0,
+       "note": "Then 2 light ramp-up sets of back squat."
+      }
+     ]
+    },
+    {
+     "title": "Power",
+     "minutes": 3,
+     "items": [
+      {
+       "ex": "pogo_hops",
+       "sets": 3,
+       "reps": "10-15 contacts",
+       "rest_s": 45,
+       "rpe": "6"
+      }
+     ]
+    },
+    {
+     "title": "Main",
+     "minutes": 20,
+     "items": [
+      {
+       "ex": "back_squat",
+       "sets": 3,
+       "reps": "5",
+       "rest_s": 60,
+       "rpe": "8",
+       "pair": "1"
+      },
+      {
+       "ex": "lat_pulldown",
+       "sets": 3,
+       "reps": "8-10",
+       "rest_s": 60,
+       "rpe": "7-8",
+       "pair": "1"
+      },
+      {
+       "ex": "romanian_deadlift",
+       "sets": 3,
+       "reps": "6",
+       "rest_s": 60,
+       "rpe": "8",
+       "pair": "2",
+       "note": "Barbell."
+      },
+      {
+       "ex": "dumbbell_bench_press",
+       "sets": 3,
+       "reps": "8",
+       "rest_s": 60,
+       "rpe": "7-8",
+       "pair": "2"
+      }
+     ]
+    },
+    {
+     "title": "Sport",
+     "minutes": 7,
+     "items": [
+      {
+       "ex": "calf_raise",
+       "sets": 2,
+       "reps": "12/side",
+       "rest_s": 20,
+       "rpe": "7-8",
+       "note": "3 s lowering."
+      },
+      {
+       "ex": "bent_knee_calf_raise",
+       "sets": 2,
+       "reps": "15/side",
+       "rest_s": 20,
+       "rpe": "7-8"
+      },
+      {
+       "ex": "single_leg_balance",
+       "sets": 2,
+       "reps": "30 s/side, with reach",
+       "rest_s": 0
+      }
+     ]
+    },
+    {
+     "title": "Core",
+     "minutes": 5,
+     "items": [
+      {
+       "ex": "front_plank",
+       "sets": 2,
+       "reps": "30-45 s",
+       "rest_s": 15
+      },
+      {
+       "ex": "side_plank",
+       "sets": 2,
+       "reps": "30 s/side",
+       "rest_s": 15
+      },
+      {
+       "ex": "pallof_press",
+       "sets": 2,
+       "reps": "10/side",
+       "rest_s": 15
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "tri_build_gym_b",
+   "title": "Triathlon · Build · Gym · Session B",
+   "minutes": 40,
+   "tier": "A",
+   "level": 2,
+   "phase": "build",
+   "module": "triathlon",
+   "for": "Triathlete in build, full gym, level 2+. Pairs with Session A to cover every pattern in the week.",
+   "parts": [
+    {
+     "title": "Warm-up",
+     "minutes": 5,
+     "items": [
+      {
+       "ex": "leg_swings",
+       "sets": 1,
+       "reps": "10 each way",
+       "rest_s": 0
+      },
+      {
+       "ex": "hip_flexor_stretch",
+       "sets": 1,
+       "reps": "30 s/side",
+       "rest_s": 0
+      },
+      {
+       "ex": "thoracic_open_book",
+       "sets": 1,
+       "reps": "8/side",
+       "rest_s": 0
+      },
+      {
+       "ex": "band_external_rotation",
+       "sets": 1,
+       "reps": "12/side",
+       "rest_s": 0
+      }
+     ]
+    },
+    {
+     "title": "Power",
+     "minutes": 3,
+     "items": [
+      {
+       "ex": "squat_jump",
+       "sets": 3,
+       "reps": "5",
+       "rest_s": 60,
+       "rpe": "6-7"
+      }
+     ]
+    },
+    {
+     "title": "Main",
+     "minutes": 20,
+     "items": [
+      {
+       "ex": "bulgarian_split_squat",
+       "sets": 3,
+       "reps": "6/side",
+       "rest_s": 60,
+       "rpe": "8",
+       "pair": "1",
+       "note": "Dumbbells in each hand."
+      },
+      {
+       "ex": "overhead_press",
+       "sets": 3,
+       "reps": "8",
+       "rest_s": 60,
+       "rpe": "7-8",
+       "pair": "1"
+      },
+      {
+       "ex": "hip_thrust",
+       "sets": 3,
+       "reps": "8",
+       "rest_s": 60,
+       "rpe": "8",
+       "pair": "2",
+       "note": "Barbell."
+      },
+      {
+       "ex": "bent_over_row",
+       "sets": 3,
+       "reps": "10",
+       "rest_s": 60,
+       "rpe": "7-8",
+       "pair": "2",
+       "note": "Level-3 athletes can swap in pull-ups, 3 x 4-8."
+      }
+     ]
+    },
+    {
+     "title": "Sport",
+     "minutes": 7,
+     "items": [
+      {
+       "ex": "copenhagen_plank",
+       "sets": 2,
+       "reps": "6-8/side, short lever",
+       "rest_s": 20
+      },
+      {
+       "ex": "banded_lateral_walk",
+       "sets": 2,
+       "reps": "12 steps each way",
+       "rest_s": 20
+      },
+      {
+       "ex": "straight_arm_pulldown",
+       "sets": 2,
+       "reps": "12-15",
+       "rest_s": 20,
+       "rpe": "7"
+      }
+     ]
+    },
+    {
+     "title": "Core",
+     "minutes": 5,
+     "items": [
+      {
+       "ex": "dead_bug",
+       "sets": 2,
+       "reps": "8/side",
+       "rest_s": 15
+      },
+      {
+       "ex": "farmers_carry",
+       "sets": 2,
+       "reps": "40 m",
+       "rest_s": 45,
+       "rpe": "7-8"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "run_home_bodyweight_band",
+   "title": "Runner · Build · At home · Bodyweight + band",
+   "minutes": 35,
+   "tier": "C",
+   "level": 2,
+   "phase": "build",
+   "module": "run",
+   "for": "Runner training at home with only a band (tier C), level 2. One of the week's two sessions.",
+   "parts": [
+    {
+     "title": "Warm-up",
+     "minutes": 4,
+     "items": [
+      {
+       "ex": "leg_swings",
+       "sets": 1,
+       "reps": "10 each way",
+       "rest_s": 0
+      },
+      {
+       "ex": "knee_to_wall",
+       "sets": 1,
+       "reps": "10/side",
+       "rest_s": 0
+      },
+      {
+       "ex": "banded_lateral_walk",
+       "sets": 1,
+       "reps": "10 steps each way",
+       "rest_s": 0
+      }
+     ]
+    },
+    {
+     "title": "Power",
+     "minutes": 3,
+     "items": [
+      {
+       "ex": "pogo_hops",
+       "sets": 3,
+       "reps": "15 contacts",
+       "rest_s": 45,
+       "rpe": "6"
+      }
+     ]
+    },
+    {
+     "title": "Main",
+     "minutes": 16,
+     "items": [
+      {
+       "ex": "bulgarian_split_squat",
+       "sets": 3,
+       "reps": "8-12/side",
+       "rest_s": 45,
+       "rpe": "8",
+       "pair": "1",
+       "note": "3 s lowering; rear foot on the sofa."
+      },
+      {
+       "ex": "push_up",
+       "sets": 3,
+       "reps": "8-15",
+       "rest_s": 45,
+       "rpe": "7-8",
+       "pair": "1"
+      },
+      {
+       "ex": "single_leg_rdl",
+       "sets": 3,
+       "reps": "10/side",
+       "rest_s": 30,
+       "rpe": "7-8",
+       "pair": "2"
+      },
+      {
+       "ex": "straight_arm_pulldown",
+       "sets": 3,
+       "reps": "15",
+       "rest_s": 30,
+       "rpe": "7",
+       "pair": "2",
+       "note": "Band over the top of a door."
+      }
+     ]
+    },
+    {
+     "title": "Sport",
+     "minutes": 8,
+     "items": [
+      {
+       "ex": "calf_raise",
+       "sets": 3,
+       "reps": "12-15/side",
+       "rest_s": 20,
+       "rpe": "8",
+       "note": "Off a stair, 3 s lowering."
+      },
+      {
+       "ex": "bent_knee_calf_raise",
+       "sets": 2,
+       "reps": "15-20/side",
+       "rest_s": 20,
+       "rpe": "7-8"
+      },
+      {
+       "ex": "copenhagen_plank",
+       "sets": 2,
+       "reps": "6-8/side, short lever",
+       "rest_s": 20,
+       "note": "Knee on the sofa."
+      }
+     ]
+    },
+    {
+     "title": "Core",
+     "minutes": 4,
+     "items": [
+      {
+       "ex": "side_plank",
+       "sets": 2,
+       "reps": "30 s/side",
+       "rest_s": 10
+      },
+      {
+       "ex": "dead_bug",
+       "sets": 2,
+       "reps": "8/side",
+       "rest_s": 10
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "bike_dumbbells_a",
+   "title": "Cyclist · Build · Dumbbells · Session A",
+   "minutes": 40,
+   "tier": "B",
+   "level": 2,
+   "phase": "build",
+   "module": "bike",
+   "for": "Cyclist with dumbbells or kettlebells at home or in a hotel (tier B), level 2.",
+   "parts": [
+    {
+     "title": "Warm-up",
+     "minutes": 5,
+     "items": [
+      {
+       "ex": "leg_swings",
+       "sets": 1,
+       "reps": "10 each way",
+       "rest_s": 0
+      },
+      {
+       "ex": "hip_flexor_stretch",
+       "sets": 1,
+       "reps": "30 s/side",
+       "rest_s": 0
+      },
+      {
+       "ex": "thoracic_open_book",
+       "sets": 1,
+       "reps": "8/side",
+       "rest_s": 0
+      },
+      {
+       "ex": "goblet_squat",
+       "sets": 1,
+       "reps": "8, light",
+       "rest_s": 30
+      }
+     ]
+    },
+    {
+     "title": "Power",
+     "minutes": 3,
+     "items": [
+      {
+       "ex": "squat_jump",
+       "sets": 3,
+       "reps": "5",
+       "rest_s": 60,
+       "rpe": "6-7",
+       "note": "For bone: riding alone doesn't load it."
+      }
+     ]
+    },
+    {
+     "title": "Main",
+     "minutes": 20,
+     "items": [
+      {
+       "ex": "goblet_squat",
+       "sets": 3,
+       "reps": "8",
+       "rest_s": 60,
+       "rpe": "8",
+       "pair": "1",
+       "note": "When the heaviest weight is easy for 10, switch to Bulgarian split squats with dumbbells."
+      },
+      {
+       "ex": "bent_over_row",
+       "sets": 3,
+       "reps": "10",
+       "rest_s": 60,
+       "rpe": "7-8",
+       "pair": "1"
+      },
+      {
+       "ex": "romanian_deadlift",
+       "sets": 3,
+       "reps": "8",
+       "rest_s": 60,
+       "rpe": "8",
+       "pair": "2"
+      },
+      {
+       "ex": "push_up",
+       "sets": 3,
+       "reps": "8-15",
+       "rest_s": 60,
+       "rpe": "7-8",
+       "pair": "2"
+      }
+     ]
+    },
+    {
+     "title": "Sport",
+     "minutes": 7,
+     "items": [
+      {
+       "ex": "bulgarian_split_squat",
+       "sets": 2,
+       "reps": "8/side",
+       "rest_s": 45,
+       "rpe": "8"
+      },
+      {
+       "ex": "calf_raise",
+       "sets": 2,
+       "reps": "12/side",
+       "rest_s": 20,
+       "rpe": "7-8"
+      }
+     ]
+    },
+    {
+     "title": "Core",
+     "minutes": 5,
+     "items": [
+      {
+       "ex": "dead_bug",
+       "sets": 2,
+       "reps": "8/side",
+       "rest_s": 15
+      },
+      {
+       "ex": "side_plank",
+       "sets": 2,
+       "reps": "30 s/side",
+       "rest_s": 15
+      },
+      {
+       "ex": "farmers_carry",
+       "sets": 2,
+       "reps": "40 m",
+       "rest_s": 45,
+       "rpe": "7-8"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "health_beginner_full_body",
+   "title": "General health · Beginner · Full body · 30 min",
+   "minutes": 30,
+   "tier": "B",
+   "level": 1,
+   "phase": "base_intro",
+   "module": "health",
+   "for": "Adult with no sport goal, new to lifting, light dumbbells. Weeks 1-4. From week 5 add 2 x 10 pogo hops for bone if joints are happy.",
+   "parts": [
+    {
+     "title": "Warm-up",
+     "minutes": 4,
+     "items": [
+      {
+       "ex": "leg_swings",
+       "sets": 1,
+       "reps": "10 each way",
+       "rest_s": 0
+      },
+      {
+       "ex": "thoracic_open_book",
+       "sets": 1,
+       "reps": "6/side",
+       "rest_s": 0
+      },
+      {
+       "ex": "bodyweight_squat",
+       "sets": 1,
+       "reps": "10",
+       "rest_s": 0
+      }
+     ]
+    },
+    {
+     "title": "Main",
+     "minutes": 16,
+     "items": [
+      {
+       "ex": "goblet_squat",
+       "sets": 2,
+       "reps": "10",
+       "rest_s": 45,
+       "rpe": "6-7",
+       "pair": "1"
+      },
+      {
+       "ex": "push_up",
+       "sets": 2,
+       "reps": "6-10",
+       "rest_s": 45,
+       "rpe": "6-7",
+       "pair": "1",
+       "note": "Hands on a bench or table if needed."
+      },
+      {
+       "ex": "glute_bridge",
+       "sets": 2,
+       "reps": "12",
+       "rest_s": 30,
+       "rpe": "6-7",
+       "pair": "2"
+      },
+      {
+       "ex": "bent_over_row",
+       "sets": 2,
+       "reps": "10",
+       "rest_s": 30,
+       "rpe": "6-7",
+       "pair": "2",
+       "note": "One hand on a bench if the back complains."
+      },
+      {
+       "ex": "step_up",
+       "sets": 2,
+       "reps": "8/side",
+       "rest_s": 45,
+       "rpe": "6-7"
+      }
+     ]
+    },
+    {
+     "title": "Balance & grip",
+     "minutes": 5,
+     "items": [
+      {
+       "ex": "single_leg_balance",
+       "sets": 2,
+       "reps": "20-30 s/side",
+       "rest_s": 0
+      },
+      {
+       "ex": "calf_raise",
+       "sets": 2,
+       "reps": "10/side",
+       "rest_s": 20,
+       "note": "Hold a wall."
+      },
+      {
+       "ex": "farmers_carry",
+       "sets": 2,
+       "reps": "30 m",
+       "rest_s": 45,
+       "rpe": "7"
+      }
+     ]
+    },
+    {
+     "title": "Core",
+     "minutes": 5,
+     "items": [
+      {
+       "ex": "dead_bug",
+       "sets": 2,
+       "reps": "6/side",
+       "rest_s": 15
+      },
+      {
+       "ex": "side_plank",
+       "sets": 2,
+       "reps": "20 s/side, knees down",
+       "rest_s": 15
+      },
+      {
+       "ex": "bird_dog",
+       "sets": 2,
+       "reps": "6/side",
+       "rest_s": 15
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "travel_hotel_20",
+   "title": "Travel · Hotel room · 20 min",
+   "minutes": 20,
+   "tier": "C",
+   "level": 2,
+   "phase": "any",
+   "module": "any",
+   "for": "Any athlete travelling with no kit (a band if packed). Keeps the week's strength from silently dropping.",
+   "parts": [
+    {
+     "title": "Warm-up",
+     "minutes": 3,
+     "items": [
+      {
+       "ex": "leg_swings",
+       "sets": 1,
+       "reps": "10 each way",
+       "rest_s": 0
+      },
+      {
+       "ex": "knee_to_wall",
+       "sets": 1,
+       "reps": "8/side",
+       "rest_s": 0
+      },
+      {
+       "ex": "bodyweight_squat",
+       "sets": 1,
+       "reps": "10",
+       "rest_s": 0
+      }
+     ]
+    },
+    {
+     "title": "Main circuit (3 rounds)",
+     "minutes": 12,
+     "items": [
+      {
+       "ex": "bulgarian_split_squat",
+       "sets": 3,
+       "reps": "10/side",
+       "rest_s": 15,
+       "rpe": "8",
+       "pair": "circuit",
+       "note": "Rear foot on the bed or a chair."
+      },
+      {
+       "ex": "push_up",
+       "sets": 3,
+       "reps": "8-15",
+       "rest_s": 15,
+       "rpe": "7-8",
+       "pair": "circuit"
+      },
+      {
+       "ex": "single_leg_rdl",
+       "sets": 3,
+       "reps": "8/side",
+       "rest_s": 15,
+       "rpe": "7-8",
+       "pair": "circuit"
+      },
+      {
+       "ex": "band_pull_apart",
+       "sets": 3,
+       "reps": "15",
+       "rest_s": 60,
+       "pair": "circuit",
+       "note": "Skip if no band."
+      }
+     ]
+    },
+    {
+     "title": "Ankle & core",
+     "minutes": 5,
+     "items": [
+      {
+       "ex": "calf_raise",
+       "sets": 2,
+       "reps": "12/side",
+       "rest_s": 15,
+       "rpe": "7-8",
+       "note": "Off a stair or the bed frame edge."
+      },
+      {
+       "ex": "side_plank",
+       "sets": 1,
+       "reps": "30 s/side",
+       "rest_s": 10
+      },
+      {
+       "ex": "dead_bug",
+       "sets": 1,
+       "reps": "8/side",
+       "rest_s": 0
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
