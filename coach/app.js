@@ -5303,6 +5303,31 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   var SHARE_MAX = 4;
   var shareTrack = null;      // the /api/track stats of the open session (loadTrack)
   var shr = null;             // { x, fam, pool, pick, mode, file }
+  var shareMark = null;       // the Peak mark (icons/dpc-mark.png), recoloured white once
+
+  function shareMarkLoad() {
+    // The mark's light parts are transparent, so filling over it (source-in) gives a
+    // white logo for the dark image and for photos; the original is black on clear.
+    if (shareMark) return shareMark.p;
+    shareMark = { c: null };
+    shareMark.p = new Promise(function (ok) {
+      var im = new Image();
+      im.onload = function () {
+        var c = document.createElement('canvas');
+        c.width = c.height = 256;
+        var x = c.getContext('2d');
+        x.drawImage(im, 0, 0, 256, 256);
+        x.globalCompositeOperation = 'source-in';
+        x.fillStyle = '#fff';
+        x.fillRect(0, 0, 256, 256);
+        shareMark.c = c;
+        ok();
+      };
+      im.onerror = function () { ok(); };
+      im.src = 'icons/dpc-mark.png';
+    });
+    return shareMark.p;
+  }
 
   function shareSplit(label, v) {
     var m = String(v).match(/^([\d:.,+-]+)\s*(.*)$/);
@@ -5424,7 +5449,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       lines.slice(0, 2).forEach(function (l, i) { ctx.fillText(l, P, y + 74 + i * 66); });
     }
     // The picture: the route if there is one, else the session's effort profile.
-    var top = img ? 330 : 170, boxH = img ? 560 : 520;
+    var top = img ? 320 : 160, boxH = img ? 540 : 470;
     if (o.shape && o.shape.length > 3) {
       var xs = o.shape.map(function (p) { return p[0]; }), ys = o.shape.map(function (p) { return p[1]; });
       var mnx = Math.min.apply(null, xs), mxx = Math.max.apply(null, xs);
@@ -5460,7 +5485,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     }
     // The stats: up to four, value large, label small above it.
     var st = o.stats.slice(0, SHARE_MAX), n = st.length || 1, cw = (W - 2 * P) / n;
-    var sy = img ? 1060 : 860;
+    var sy = img ? 990 : 790;
     st.forEach(function (s, i) {
       var sx = P + i * cw;
       var lx = sx;
@@ -5484,15 +5509,22 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
         if (vw + 8 + ctx.measureText(s.u).width < cw - 12) ctx.fillText(s.u, sx + vw + 8, sy + big + 14);
       }
     });
-    // Watermark.
-    ctx.fillStyle = white(img ? .9 : .85);
-    ctx.font = '700 40px "Libre Baskerville", Georgia, serif';
-    ctx.fillText('Peak', P, H - (img ? 90 : 70));
+    // Watermark: the Peak mark beside the word, as in the app's masthead.
+    var mk = 104, mTop = H - (img ? 70 : 52) - mk, wx = P;
+    if (shareMark && shareMark.c) {
+      ctx.globalAlpha = img ? .95 : .92;
+      ctx.drawImage(shareMark.c, P - 6, mTop, mk, mk);
+      ctx.globalAlpha = 1;
+      wx = P + mk + 8;
+    }
+    ctx.fillStyle = white(img ? .95 : .92);
+    ctx.font = '700 52px "Libre Baskerville", Georgia, serif';
+    ctx.fillText('Peak', wx, mTop + mk / 2 + 19);
     if (img) {
       ctx.fillStyle = white(.45);
       ctx.font = '500 22px "DM Mono", monospace';
       ctx.textAlign = 'right';
-      ctx.fillText('diamondpeak.uk', W - P, H - 92);
+      ctx.fillText('diamondpeak.uk', W - P, H - 70 - mk / 2 + 8);
       ctx.textAlign = 'left';
     }
     shadow(false);
@@ -5583,7 +5615,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       document.fonts.load('600 64px "Plus Jakarta Sans"'), document.fonts.load('500 24px "DM Mono"'),
       document.fonts.load('700 40px "Libre Baskerville"')]).catch(function () {}) : Promise.resolve();
     shareRender();
-    fonts.then(shareRender);
+    Promise.all([fonts, shareMarkLoad()]).then(shareRender);
   }
 
   var TRK_NAMES = { power: 'Power', hr: 'HR', pace: 'Pace' };
@@ -6450,6 +6482,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.029", "2026-10-17", "Share cards carry the Peak logo beside the name.", 0],
     ["4.028", "2026-10-17", "Strength sessions you can follow and log: tap a strength session, Start, and each exercise shows from two angles with how it should feel; log weight and reps for every set (each leg on its own), rest timer, any order when kit is busy. It goes into your watch\u2019s session in Intervals.icu, and next time\u2019s weights come from it. Physio sessions are logged as set. Pilot: Jamie and Fred", 1],
     ["4.027", "2026-10-17", "Share a finished session: the share button on a done session makes an image with your key stats on the dark map background, or a see-through overlay to put on your own photo for Instagram or Strava. Pick up to four stats. Over-unders and ramp tests now show each over, under and step in the session chart.", 0],
     ["4.026", "2026-10-17", "Goals for bike races: \u2018What\u2019s holding you back\u2019 from the route itself \u2013 the climbs, the cut-offs and the climbing power they need, how long the day can be, durability and fuelling (no finish time: drafting and wind make that a guess)", 0],
