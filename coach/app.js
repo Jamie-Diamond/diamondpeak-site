@@ -6143,6 +6143,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.025", "2026-10-17", "Goals: \u2018What\u2019s holding you back\u2019 uses running power where you have it: threshold power, economy (speed per watt) against your own trend, and power drift late in long runs, all said as pace too", 0],
     ["4.024", "2026-10-17", "Goals: \u2018What\u2019s holding you back\u2019 is all measured: a fitness score for this point in the plan, endurance at race pace from your training, and how to fix it. Weekly km is advice, not a pass mark", 0],
     ["4.023", "2026-10-17", "Goals: \u2018What\u2019s holding you back\u2019 \u2013 your fitness, engine (VO2max), efficiency and durability from training, each against what your goal time needs, with the biggest gap named", 0],
     ["4.022", "2026-10-17", "Goals: a run race time says when it is out of date (much less running, or a break, since the races it comes from) and that a parkrun or 5k time trial will update it", 0],

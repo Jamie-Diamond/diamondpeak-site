@@ -245,15 +245,22 @@ def test_a_parkrun_on_a_day_with_a_ride_still_counts_but_a_triathlon_does_not():
 import limiters as lim  # noqa: E402
 
 FIT = {"now": 55, "lo": 70, "hi": 95}
+POWER = {"cp": 461, "model": "MORTON_3P", "weight": 81.65,
+         "best": {"600": 491, "1200": 478, "1800": 475, "3600": 441, "5400": 420}}
 
 
-def run_stats(km=40, vo2=59.3, thr=242, drift=-1.0, longest=32.0, half=6155):
-    return {"weeklyKm": km, "engine": {"vo2max": vo2, "source": "Garmin", "n": 9},
-            "threshold": {"pace_s_km": thr, "source": "heart rate", "lthr": 170, "hr_top": 146},
-            "durability": {"drift_pct": drift, "n": 5, "longest_km": longest},
-            "training": [{"event": "5k", "dist_m": 5000.0, "time_s": 1237},
-                         {"event": "half_marathon", "dist_m": 21097.5, "time_s": half},
-                         {"event": "30k", "dist_m": 30000.0, "time_s": 8808}]}
+def run_stats(km=40, vo2=59.3, thr=242, drift=-1.0, longest=32.0, half=6155, power=None,
+              econ=None, cost=None):
+    out = {"weeklyKm": km, "engine": {"vo2max": vo2, "source": "Garmin", "n": 9},
+           "threshold": {"pace_s_km": thr, "source": "heart rate", "lthr": 170, "hr_top": 146},
+           "durability": {"drift_pct": drift, "cost_fade_pct": cost, "n": 5, "longest_km": longest,
+                          "source": "power" if cost is not None else "pace"},
+           "training": [{"event": "5k", "dist_m": 5000.0, "time_s": 1237},
+                        {"event": "half_marathon", "dist_m": 21097.5, "time_s": half},
+                        {"event": "30k", "dist_m": 30000.0, "time_s": 8808}]}
+    if power:
+        out["power"], out["economy"] = power, econ or {"value": 0.702, "prev": 0.69, "n": 16}
+    return out
 
 
 def test_threshold_pace_for_a_sub3_marathon_is_about_4_01():
@@ -261,17 +268,30 @@ def test_threshold_pace_for_a_sub3_marathon_is_about_4_01():
     assert 238 <= need <= 244
 
 
-def test_jamie_today_endurance_not_shown_yet_and_weekly_km_is_never_the_verdict():
+def test_pace_only_endurance_not_shown_yet_and_weekly_km_is_never_the_verdict():
     d = lim.diagnose(42195, 10800, "sub 3", run_stats(), FIT, phase_frac=0.70)
     by = {r["key"]: r for r in d["rows"]}
     assert by["fitness"]["status"] == "green" and by["fitness"]["need"] == "~49 by now · 70–95 race day"
-    assert by["engine"]["status"] == by["efficiency"]["status"] == by["durability"]["status"] == "green"
+    assert by["engine"]["status"] == by["threshold"]["status"] == by["durability"]["status"] == "green"
+    assert by["efficiency"]["status"] == "unknown" and by["efficiency"]["you"] == "needs running power"
     assert by["endurance"]["status"] == "unshown" and by["endurance"]["you"] == "4:52/km for 21.1 km"
     assert d["limiter"] == "endurance"
-    assert d["headline"] == ("You have the engine and efficiency for sub 3. Not shown yet: holding "
+    assert d["headline"] == ("You have the engine and threshold for sub 3. Not shown yet: holding "
                              "4:16/km for long. Your fastest 21.1 km in training is 4:52/km.")
     assert d["fix"] == "Race-pace long runs show it."
     assert not any("km a week" in r["need"] for r in d["rows"])          # no volume pass mark
+
+
+def test_with_power_threshold_is_watts_said_as_pace_and_economy_against_own_trend():
+    d = lim.diagnose(42195, 10800, "sub 3", run_stats(power=POWER), FIT, phase_frac=0.70)
+    by = {r["key"]: r for r in d["rows"]}
+    assert by["threshold"]["label"] == "Threshold power"
+    assert by["threshold"]["you"] == "461 W (≈4:12/km)" and by["threshold"]["need"] == "~482 W (4:01/km)"
+    assert by["threshold"]["status"] == "amber" and d["limiter"] == "threshold"
+    assert d["headline"] == "Threshold is the issue: 461 W (≈4:12/km) against ~482 W (4:01/km) for sub 3."
+    assert by["efficiency"]["you"] == "0.70 m/s per W/kg · +2% on before" and by["efficiency"]["status"] == "green"
+    assert by["endurance"]["you"].startswith("420 W for 90 min") and by["endurance"]["status"] == "unshown"
+    assert "Garmin power reads differently from Stryd" in d["foot"]
 
 
 def test_low_fitness_score_names_fitness_with_km_only_as_the_fix():
@@ -285,11 +305,21 @@ def test_engine_short_names_the_engine():
     assert d["limiter"] == "engine" and d["headline"].startswith("Your engine is the issue: VO2max 48")
 
 
-def test_efficiency_is_named_when_it_also_shows_as_drift():
-    d = lim.diagnose(42195, 10800, "sub 3", run_stats(thr=262, drift=12), FIT, phase_frac=0.7)
+def test_falling_economy_is_named_when_it_also_shows_as_drift():
+    d = lim.diagnose(42195, 10800, "sub 3",
+                     run_stats(power=dict(POWER, cp=500), econ={"value": 0.702, "prev": 0.75}, drift=12),
+                     FIT, phase_frac=0.7)
     by = {r["key"]: r for r in d["rows"]}
-    assert by["durability"]["short"] > by["efficiency"]["short"]          # drift is the bigger gap
+    assert by["durability"]["short"] > by["efficiency"]["short"] > 0.03
     assert d["limiter"] == "efficiency" and d["headline"].endswith("It also shows up late in your long runs.")
+
+
+def test_cost_fade_late_in_long_runs_is_durability():
+    d = lim.diagnose(42195, 10800, "sub 3", run_stats(power=dict(POWER, cp=500), drift=1, cost=11),
+                     FIT, phase_frac=0.7)
+    assert d["limiter"] == "durability"
+    assert d["headline"] == ("Durability is the issue: late in long runs you need 11% more power for "
+                             "the same pace (under 5% is sound).")
 
 
 def test_all_shown_says_nothing_is_holding_you_back():
@@ -300,9 +330,23 @@ def test_all_shown_says_nothing_is_holding_you_back():
 def test_missing_measures_are_unknown_not_guessed():
     d = lim.diagnose(10000, 3000, "10k in 50 min", {"weeklyKm": 20}, {"now": 15, "lo": 22, "hi": 36})
     by = {r["key"]: r for r in d["rows"]}
-    assert {by[k]["status"] for k in ("engine", "efficiency", "endurance", "durability")} == {"unknown"}
+    assert {by[k]["status"] for k in ("engine", "threshold", "efficiency", "endurance", "durability")} == {"unknown"}
     assert d["limiter"] == "fitness"
     assert lim.diagnose(10000, None, "", {"weeklyKm": 20}, None) is None
+
+
+def test_run_power_and_economy_from_intervals_and_activities():
+    reply = {"list": [{"secs": [600, 1200, 3600], "watts": [491, 478, 441], "weight": 81.65,
+                       "powerModels": [{"type": "MS_2P", "criticalPower": 469},
+                                       {"type": "MORTON_3P", "criticalPower": 461.4}]}]}
+    p = performance.run_power(reply)
+    assert p == {"cp": 461, "model": "MORTON_3P", "best": {600: 491, 1200: 478, 3600: 441}, "weight": 81.65}
+    assert performance.run_power({"list": [{}]}) is None
+    today = date(2026, 10, 17)
+    acts = [dict(act(f"{today - timedelta(days=d)}T07:00:00", 10.0, 3000), icu_average_watts=400,
+                 icu_weight=80.0) for d in range(1, 120, 3)]
+    e = performance.economy(acts, today)
+    assert e["value"] == round((10000 / 3000) / 5.0, 3) and e["prev"] == e["value"]
 
 
 def test_goals_payload_carries_the_card_with_the_phase(monkeypatch):
@@ -314,7 +358,7 @@ def test_goals_payload_carries_the_card_with_the_phase(monkeypatch):
         {"name": "Brighton Marathon", "date": "2027-04-04", "priority": "A", "distance": "Marathon"}])
     cfg = {"race_goal": "sub 3", "plan_start": "2026-11-02", "race_date": "2027-04-04",
            "phase_tss": {"base_end_week": 6, "build_end_week": 14}}
-    p = sv.payload("x", cfg, {}, {"recent": [], "performance": {"run": run_stats()}},
+    p = sv.payload("x", cfg, {}, {"recent": [], "performance": {"run": run_stats(power=POWER)}},
                    today=date(2026, 10, 17))
     L = p["limiters"]
-    assert len(L["rows"]) == 5 and L["limiter"] in ("endurance", "fitness")
+    assert len(L["rows"]) == 6 and L["limiter"] == "threshold"

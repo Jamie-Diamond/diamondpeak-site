@@ -22,9 +22,18 @@
         "threshold":   {"pace_s_km", "source", "lthr", "hr_top"} - pace at threshold HR from
                        the speed-on-heart-rate line of the last 6 weeks' runs, else the
                        threshold pace set in Intervals
-        "durability":  {"drift_pct", "n", "longest_km"} - median pace:HR drift of runs of
-                       75+ min in the last 8 weeks (Intervals' decoupling; not race or
-                       multisport days) and the longest of those runs
+        "durability":  {"drift_pct", "cost_fade_pct", "n", "longest_km", "source"} - median
+                       drift of runs of 75+ min in the last 8 weeks and the longest of them.
+                       With running power: power:HR drift and cost fade (watts per m/s,
+                       last third against first) from the activity watcher's
+                       run-durability-log.json; without, Intervals' pace:HR decoupling
+        "power":       {"cp", "model", "best": {secs: watts}, "weight"} - running power
+                       (Jamie, 17 Oct 2026: "when we have running power we should use that
+                       where possible and pace as a fallback / way of communicating").
+                       Critical power from Intervals' 90-day Run power curve
+        "economy":     {"value", "prev", "n", "device"} - speed per W/kg on steady runs,
+                       last 6 weeks and the 12 weeks before (same watch). Garmin power reads
+                       differently from Stryd, so this is only compared with the athlete
     }}
 lib/limiters.py turns engine / threshold / durability / weekly km into the Goals page's
 "What's holding you back" card.
@@ -56,8 +65,10 @@ RUN_TYPES = ("Run", "TrailRun", "VirtualRun", "Treadmill")
 SLIM = ("id", "start_date_local", "type", "name", "distance", "moving_time", "elapsed_time",
         "average_heartrate", "athlete_max_hr", "icu_resting_hr", "icu_ignore_hr", "gap",
         "average_speed", "device_name", "race", "VO2MaxGarmin", "lthr", "decoupling",
-        "threshold_pace")
-CACHE_VERSION = 2                    # bump when SLIM grows: forces a full refetch
+        "threshold_pace", "icu_average_watts", "icu_weight")
+CACHE_VERSION = 3                    # bump when SLIM grows: forces a full refetch
+POWER_SECS = (600, 1200, 1800, 3600, 5400, 7200, 10800)
+POWER_MODEL_ORDER = ("MORTON_3P", "ECP", "FFT_CURVES", "MS_2P")
 ENGINE_DAYS = 42
 THRESHOLD_MIN_RUNS = 6
 THRESHOLD_MAX_REACH = 30             # bpm the line may be extended past the hardest run
@@ -199,18 +210,67 @@ def threshold(acts: list, today: date) -> dict | None:
     return None
 
 
-def durability(acts: list, today: date) -> dict | None:
+def durability(acts: list, today: date, dur_log: list | None = None) -> dict | None:
     longs = [a for a in _recent_runs(acts, today, 56) if (a.get("moving_time") or 0) >= LONG_RUN_S]
     if not longs:
         return None
+    longest = round(max((a.get("distance") or 0) for a in longs) / 1000, 1)
+    ids = {str(a.get("id")) for a in longs}
+    logged = [e for e in dur_log or [] if str(e.get("activity_id")) in ids
+              and e.get("decoupling_pct") is not None]
+    if logged:
+        cost = [e["cost_fade_pct"] for e in logged if e.get("cost_fade_pct") is not None]
+        return {"drift_pct": round(statistics.median(e["decoupling_pct"] for e in logged), 1),
+                "cost_fade_pct": round(statistics.median(cost), 1) if cost else None,
+                "n": len(logged), "longest_km": longest, "source": "power"}
     drift = [a["decoupling"] for a in longs if a.get("decoupling") is not None]
-    return {"drift_pct": round(statistics.median(drift), 1) if drift else None, "n": len(longs),
-            "n_drift": len(drift),
-            "longest_km": round(max((a.get("distance") or 0) for a in longs) / 1000, 1)}
+    return {"drift_pct": round(statistics.median(drift), 1) if drift else None, "cost_fade_pct": None,
+            "n": len(longs), "longest_km": longest, "source": "pace"}
+
+
+def run_power(reply: dict | None, weight: float | None = None) -> dict | None:
+    """{"cp", "model", "best", "weight"} from a /power-curves?type=Run reply."""
+    try:
+        c = (reply or {}).get("list", [])[0]
+    except (IndexError, AttributeError):
+        return None
+    models = {m.get("type"): m for m in c.get("powerModels") or [] if m.get("criticalPower")}
+    name = next((n for n in POWER_MODEL_ORDER if n in models), next(iter(models), None))
+    if not name:
+        return None
+    secs, watts = c.get("secs") or [], c.get("watts") or []
+    best = {s: watts[secs.index(s)] for s in POWER_SECS if s in secs and secs.index(s) < len(watts)
+            and watts[secs.index(s)]}
+    return {"cp": int(round(models[name]["criticalPower"])), "model": name, "best": best,
+            "weight": c.get("weight") or weight}
+
+
+def economy(acts: list, today: date) -> dict | None:
+    """Speed per W/kg (m/s per W/kg) on steady 20-120 min runs: last 6 weeks, and the 12
+    weeks before it on the same watch for the trend."""
+    def window(lo, hi):
+        rows = []
+        for a in acts:
+            d = rm._d(a.get("start_date_local"))
+            w, kg = a.get("icu_average_watts"), a.get("icu_weight")
+            v = a.get("gap") or a.get("average_speed")
+            if (a.get("type") == "Run" and not a.get("race") and d and lo <= (today - d).days < hi
+                    and w and kg and v and 1200 <= (a.get("moving_time") or 0) <= 7200):
+                rows.append((rm.device_key(a.get("device_name")), v / (w / kg)))
+        return rows
+    now = window(0, ENGINE_DAYS)
+    if len(now) < 5:
+        return None
+    dev = statistics.mode(r[0] for r in now)
+    vals = [e for k, e in now if k == dev]
+    prev = [e for k, e in window(ENGINE_DAYS, ENGINE_DAYS + 84) if k == dev]
+    return {"value": round(statistics.median(vals), 3), "n": len(vals), "device": dev,
+            "prev": round(statistics.median(prev), 3) if len(prev) >= 5 else None}
 
 
 def determinants(acts: list, today: date, profile: dict | None = None,
-                 training: list | None = None, cs_mps: float | None = None) -> dict:
+                 training: list | None = None, cs_mps: float | None = None,
+                 power: dict | None = None, dur_log: list | None = None) -> dict:
     """The run block of `build`, from data already fetched. Pure."""
     profile = profile or {}
     races = rm.detect_races(acts, profile.get("race_results"), profile.get("race_results_exclude"))
@@ -230,7 +290,8 @@ def determinants(acts: list, today: date, profile: dict | None = None,
         prev = rm.efficiency(acts, today - timedelta(days=41))
         eff["prev"] = prev["value"] if prev and prev["device"] == eff["device"] else None
     out = {"engine": engine(acts, today), "threshold": threshold(acts, today),
-           "durability": durability(acts, today),
+           "durability": durability(acts, today, dur_log),
+           "power": power, "economy": economy(acts, today) if power else None,
            "races": races, "k": rm.personal_k(races, today), "predictions": preds,
            "weeklyKm": weekly_km, "longestKm": longest, "recentBreakDays": brk, "efficiency": eff,
            "training": training or []}
@@ -250,6 +311,10 @@ def record_week(slug: str, run: dict, today: date) -> None:
            "k": (run.get("k") or {}).get("k"), "weeklyKm": run.get("weeklyKm"),
            "longestKm": run.get("longestKm"),
            "efficiency": (run.get("efficiency") or {}).get("value"),
+           "vo2max": (run.get("engine") or {}).get("vo2max"),
+           "cp": (run.get("power") or {}).get("cp"),
+           "economy": (run.get("economy") or {}).get("value"),
+           "drift": (run.get("durability") or {}).get("drift_pct"),
            "bestRaceVdot": max((r["vdot"] for r in recent), default=None),
            "races": len(run.get("races") or [])}
     rows = [r for r in rows if r.get("week") != week] + [row]
@@ -268,6 +333,11 @@ def build(slug: str, client, cfg: dict | None = None, profile: dict | None = Non
     except Exception:
         pc = None
     training, cs = training_efforts(pc)
-    run = determinants(acts, today, profile, training, cs)
+    try:
+        power = run_power(client._get("power-curves", {"type": "Run", "curves": "90d"}))
+    except Exception:
+        power = None
+    dur_log = _load(_athlete_dir(slug) / "run-durability-log.json", [])
+    run = determinants(acts, today, profile, training, cs, power, dur_log)
     record_week(slug, run, today)
     return {"asOf": today.isoformat(), "run": run}
