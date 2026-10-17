@@ -140,3 +140,9 @@ the prompt is assembled.
 **Activity watcher (same day):** no longer runs the model blind (Intervals.icu
 unreadable = wait) or in a loop (the same unlogged activities = at most 3 passes 30 min
 apart). Kathryn's 15 Oct was 139 Sonnet runs, ~$31.
+
+### 17 Oct 2026 - picker review (23 messages)
+- Picker adequate on 21/23; the two under-picks (a complaint sent to Haiku) fixed in PICKER_PROMPT.
+- Opus -> Sonnet: as good or better on 10/13, slightly worse on 3, materially worse on 0.
+- **Jamie: corrections to the coach stay on Opus** until the shadow ends on 26 Oct.
+- Open: follow-up turns record $0 cost (under-counted chat spend); picks take 3-7 s, too slow to go live as is.
