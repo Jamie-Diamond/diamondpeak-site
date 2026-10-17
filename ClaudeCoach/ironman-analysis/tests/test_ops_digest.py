@@ -60,7 +60,11 @@ def logs(monkeypatch, tmp_path):
 # NOW is a Wednesday evening after the 21:30 digest slot, and after every `since`
 # in DELIVERABLES, so all ten deliverables are DUE and the tests exercise the gap
 # logic rather than the due gate. The due gate has its own class below.
+# One exception since 15 Oct 2026: backup-athletes (which replaced sync-private) was
+# instrumented after NOW, so at NOW it is PRE_INSTRUMENTATION, not DUE. Its gap tests
+# use NOW_BACKUP instead, rather than moving NOW and every weekday-dependent test with it.
 NOW = datetime(2026, 8, 5, 21, 30)
+NOW_BACKUP = datetime(2026, 10, 21, 21, 30)   # also a Wednesday, after backup-athletes' since
 
 ATHLETES = {
     "jamie":   {"active": True},
@@ -143,7 +147,7 @@ class TestGapLines:
     def today(self, drop=(), fail=()):
         out = [_e("watchdog", "jamie", detail="silent"),
                _e("backup-config", detail="sync ok"),
-               _e("sync-private", detail="sync ok"),
+               _e("backup-athletes", detail="sync ok"),
                # activity-watcher is window="rolling" (last 60 min of NOW,
                # 21:30) — the default _e() ts (07:00) is far outside that, so
                # this needs its own recent timestamp or every TestGapLines
@@ -200,13 +204,36 @@ class TestGapLines:
         assert any("config backup" in l for l in gaps)
         assert tg == []
 
-    def test_missing_sync_private_flagged_but_not_telegrammed(self, digest):
-        # The only versioned backup of athletes/, now that the public repo was
-        # cleaned — same class as backup-config, and taken off Telegram with it
-        # on 11 Sep 2026. Still flagged in the digest.
-        gaps, tg = self.call(digest, drop={("sync-private", "")})
-        assert any("private repo sync" in l for l in gaps)
-        assert tg == []
+    def test_missing_backup_athletes_flagged_but_not_telegrammed(self, digest):
+        # The only off-server copy of athletes/ — same class as backup-config, and
+        # off Telegram with it. Was sync-private (plaintext mirror) until 15 Oct 2026,
+        # when the encrypted backup replaced it in the same slot. Judged at
+        # NOW_BACKUP (see NOW): at NOW it is pre-instrumentation, so a missing
+        # heartbeat there proves nothing.
+        def shifted(entries):
+            day = NOW_BACKUP.date().isoformat()
+            return [dict(e, ts=day + e["ts"][10:]) for e in entries]
+        week = shifted(self.week())
+        today = shifted(self.today())
+        # Baseline first: other deliverables instrumented after NOW (e.g. the
+        # nightly API restart) are due at NOW_BACKUP and have no heartbeat in
+        # today(), so the test asserts on what dropping backup-athletes ADDS.
+        base, base_tg = digest.gap_lines(today, today + week, ATHLETES, now=NOW_BACKUP)
+        assert not any("encrypted athlete backup" in l for l in base)
+        today = shifted(self.today(drop={("backup-athletes", "")}))
+        gaps, tg = digest.gap_lines(today, today + week, ATHLETES, now=NOW_BACKUP)
+        added = [l for l in gaps if l.startswith("⚠") and l not in base]
+        assert len(added) == 1 and "encrypted athlete backup" in added[0], added
+        assert tg == base_tg
+
+    def test_retired_sync_private_is_no_longer_a_deliverable(self, digest):
+        # 15 Oct 2026: sync-private-repo.sh is commented out of the crontab. Leaving
+        # it registered would be capture-reminder again — a false gap every night.
+        import coach_alert
+        assert "sync-private" not in {d["script"] for d in coach_alert.DELIVERABLES}
+        today = [e for e in self.today() if e["script"] != "sync-private"]
+        gaps, _ = digest.gap_lines(today, today + self.week(), ATHLETES, now=NOW)
+        assert not any("private repo sync" in l for l in gaps)
 
     def test_missing_activity_watcher_flagged_but_not_telegrammed(self, digest):
         # Plumbing, not a named deliverable — see coach_alert.DELIVERABLES'
@@ -441,8 +468,8 @@ class TestBackupConfigHeartbeat:
     def test_per_athlete_false_matches_sync_oks_empty_athlete(self, digest):
         # sync_ok records athlete="" while per_athlete=False checks athlete=None
         # ("any"). A mismatch here would gap every night with the job running fine.
-        # Only backup-config's own heartbeat is supplied, so sync-private (the
-        # same shape, registered separately) correctly still gaps here — this
+        # Only backup-config's own heartbeat is supplied, so any other deliverable of
+        # the same shape that is due at NOW correctly still gaps here — this
         # test is about backup-config specifically, not a claim of a clean digest.
         row = _e("backup-config", athlete="", detail="sync ok")
         gaps, tg = digest.gap_lines([row], [row], {}, now=NOW)
@@ -450,42 +477,58 @@ class TestBackupConfigHeartbeat:
         assert "config backup" not in tg
 
 
-class TestSyncPrivateHeartbeat:
-    """This ticket's registration of sync-private-repo.sh — the same shape as
-    backup-config, and just as sharp: it is the only place athlete data gets a
-    version history now that the public repo was cleaned."""
+class TestBackupAthletesHeartbeat:
+    """backup-athletes-encrypted.sh, registered 15 Oct 2026 in sync-private's place
+    (the plaintext mirror, dead since 13 Aug). Same shape as backup-config, and just
+    as sharp: it is the only off-server copy of athletes/, now ciphertext only."""
 
     def test_the_registered_detail_is_what_the_shared_helper_actually_writes(
             self, logs, monkeypatch):
-        """git_sync_ok "sync-private" (sync-private-repo.sh, via
-        lib_git_alert.sh) calls ops_log.sync_ok("sync-private") — the SAME
-        function backup-config uses, so it is the job label that must be
-        exact, not the script filename ("sync-private-repo.sh" is cron_cmd,
+        """backup-athletes-encrypted.sh sets NAME="backup-athletes" and calls
+        git_sync_ok "$NAME" (lib_git_alert.sh) -> ops_log.sync_ok("backup-athletes")
+        — the SAME function backup-config uses, so it is the job label that must be
+        exact, not the script filename ("backup-athletes-encrypted.sh" is cron_cmd,
         never script)."""
         import coach_alert
         monkeypatch.setattr(ops_log, "SYNC_STATE", logs / "git-sync-state")
-        ops_log.sync_ok("sync-private")
+        ops_log.sync_ok("backup-athletes")
         row = json.loads(ops_log.RUN_STATUS.read_text().splitlines()[-1])
-        d = next(x for x in coach_alert.DELIVERABLES if x["script"] == "sync-private")
-        assert row["script"] == d["script"] == "sync-private"
-        assert d["cron_cmd"] == "sync-private-repo.sh"
+        d = next(x for x in coach_alert.DELIVERABLES if x["script"] == "backup-athletes")
+        assert row["script"] == d["script"] == "backup-athletes"
+        assert d["cron_cmd"] == "backup-athletes-encrypted.sh"
         assert row["detail"] == d["detail"] == "sync ok"
         assert d["window"] == "daily" and d["per_athlete"] is False
-        assert d["telegram"] is False    # log-only from 11 Sep 2026 — see DELIVERABLES
+        assert d["telegram"] is False    # log-only, like backup-config — see DELIVERABLES
+        # The label is read from the script itself, not trusted from this test.
+        src = (REPO / "scripts" / "backup-athletes-encrypted.sh").read_text()
+        assert 'NAME="backup-athletes"' in src and 'git_sync_ok "$NAME"' in src
 
     def test_transient_failure_does_not_satisfy_the_check(self, digest, logs, monkeypatch):
-        # Same trap as backup-config: sync-private runs once nightly (23:20),
+        # Same trap as backup-config: backup-athletes runs once nightly (23:25),
         # so the "1st consecutive failure, usually self-heals" ok=True would
         # mask a whole missed night if it satisfied the check. Asserted on
         # `gaps` for the same reason as backup-config's twin above.
         monkeypatch.setattr(ops_log, "SYNC_STATE", logs / "git-sync-state")
-        ops_log.sync_failure("sync-private", "push to dpc_private failed")
+        ops_log.sync_failure("backup-athletes", "push to dpc_private encrypted-backups failed")
         row = json.loads(ops_log.RUN_STATUS.read_text().splitlines()[-1])
         assert row["ok"] is True and "transient" in row["detail"]
-        row["ts"] = "2026-08-05T07:00:00"
-        gaps, tg = digest.gap_lines([row], [row], {}, now=NOW)
-        assert any("private repo sync" in l for l in gaps)
-        assert "private repo sync" not in tg
+        row["ts"] = "2026-10-21T07:00:00"     # inside NOW_BACKUP's window
+        gaps, tg = digest.gap_lines([row], [row], {}, now=NOW_BACKUP)
+        assert any("encrypted athlete backup" in l for l in gaps)
+        assert "encrypted athlete backup" not in tg
+
+    def test_a_clean_run_satisfies_the_check(self, digest):
+        # The twin of the trap above, so it cannot pass by gapping unconditionally.
+        row = _e("backup-athletes", detail="sync ok", ts="2026-10-21T07:00:00")
+        gaps, _ = digest.gap_lines([row], [row], {}, now=NOW_BACKUP)
+        assert not any("encrypted athlete backup" in l for l in gaps)
+
+    def test_nights_before_instrumentation_are_not_judged(self):
+        import coach_alert as ca
+        d = next(x for x in ca.DELIVERABLES if x["script"] == "backup-athletes")
+        since = datetime.fromisoformat(d["since"])
+        assert ca.due_status(d, since - timedelta(minutes=1))[1] == ca.PRE_INSTRUMENTATION
+        assert ca.due_status(d, NOW_BACKUP) == (datetime(2026, 10, 20, 23, 25), ca.DUE)
 
 
 class TestActivityWatcherRollingWindow:
@@ -504,8 +547,8 @@ class TestActivityWatcherRollingWindow:
 
     def test_a_recent_heartbeat_is_not_a_gap(self, digest):
         # Only activity-watcher's own heartbeat is supplied — every other
-        # due, per_athlete=False daily deliverable (backup-config,
-        # sync-private) correctly gaps here too; this test is about
+        # due, per_athlete=False daily deliverable (backup-config)
+        # correctly gaps here too; this test is about
         # activity-watcher specifically, not a claim of a clean digest.
         recent = _e("activity-watcher", detail="cycle complete",
                     ts="2026-08-05T21:05:00")   # 25 min before NOW
@@ -1038,18 +1081,20 @@ class TestDueWindows:
         assert (due, state) == (datetime(2026, 8, 2, 18, 0), ca.DUE)
 
     def test_every_newly_instrumented_deliverable_got_the_grace(self):
-        """Seven deliverables now carry a 28 Jul `since` — the original five
+        """Five deliverables still carry a 28 Jul `since` — the original five
         (night-before-brief, capture-reminder [now deregistered, see below],
         session-sync, backup-config, stage1-plan) plus sync-private and
-        activity-watcher, registered by this ticket. Each must be silent about
-        every cycle before its own instrumentation."""
+        activity-watcher, registered by that ticket, less capture-reminder and
+        sync-private. sync-private was retired on 15 Oct 2026; its replacement backup-athletes carries
+        its own 15 Oct `since` and is checked in TestBackupAthletesHeartbeat. Each
+        must be silent about every cycle before its own instrumentation."""
         import coach_alert as ca
         new = [d for d in ca.DELIVERABLES if d["since"].startswith("2026-07-28")]
         # capture-reminder was the fifth of the original batch; it is
-        # deregistered (see coach_alert), not one of these seven.
+        # deregistered (see coach_alert), not one of these.
         assert {d["script"] for d in new} == {
             "night-before-brief", "session-sync", "backup-config", "stage1-plan",
-            "sync-private", "activity-watcher"}
+            "activity-watcher"}
         for d in new:
             since = datetime.fromisoformat(d["since"])
             due, state = ca.due_status(d, since - timedelta(minutes=1))
@@ -1193,7 +1238,11 @@ _CRON_LINES = [
     f"*/5 * * * * /root/.claude/cc-run python3 {CC}/scripts/bot-watchdog.py >> /root/Library/Logs/ClaudeCoach/bot-watchdog.log 2>&1",
     "0 9 * * 1 /root/.claude/cc-run /Users/diamondpeakconsulting/expense-bot/scripts/backup_staleness_alert.sh >> /root/backup-staleness.log 2>&1",
     f"0 0 * * * /root/.claude/cc-run python3 {CC}/scripts/bug-fixer.py --fix >> /root/Library/Logs/ClaudeCoach/bug-fixer.log 2>&1",
-    f"20 23 * * * /root/.claude/cc-run bash {CC}/scripts/sync-private-repo.sh >> ~/Library/Logs/ClaudeCoach/sync-private.log 2>&1",
+    # Retired 15 Oct 2026 and commented out on the live crontab exactly like this, so
+    # the fixture also proves a retired job reads as neither live nor a problem.
+    "# Retired 15 Oct 2026: plaintext mirror, failing since 13 Aug. Replaced by backup-athletes-encrypted.sh.",
+    f"# 20 23 * * * /root/.claude/cc-run bash {CC}/scripts/sync-private-repo.sh >> ~/Library/Logs/ClaudeCoach/sync-private.log 2>&1",
+    f"25 23 * * * /root/.claude/cc-run bash {CC}/scripts/backup-athletes-encrypted.sh >> ~/Library/Logs/ClaudeCoach/backup-athletes.log 2>&1",
     f"25 6 * * * /root/.claude/cc-run python3 {CC}/lib/plan_audit.py --all >> /root/Library/Logs/ClaudeCoach/plan-audit.log 2>&1",
     f"15 3 * * * /root/.claude/cc-run python3 {CC}/scripts/claude-cli-update.py >> /root/Library/Logs/ClaudeCoach/claude-cli-update.log 2>&1",
     f"0 8 * * * /root/.claude/cc-run python3 {CC}/scripts/icu-sync-nudge.py >> /root/Library/Logs/ClaudeCoach/icu-sync-nudge.log 2>&1",
@@ -1414,20 +1463,25 @@ class TestCronDerivedRegistry:
         assert "new-thing.py runs on the live crontab (15 4 * * *)" in a.problems[0]
         assert "NOTHING" in a.problems[0]
 
-    def test_the_two_previously_unwatched_live_jobs_are_now_registered(self):
+    def test_the_previously_unwatched_live_jobs_are_now_registered(self):
         """The inverse of the test this replaces. activity-watcher.py and
         sync-private-repo.sh were the finding this direction produced on its
         first run — neither registered nor exempt, sync-private-repo.sh even
         writing a heartbeat (lib_git_alert.sh's git_sync_ok "sync-private")
-        that nothing read. Both are now coach_alert.DELIVERABLES entries whose
-        declared cron_cmd/cron match the live crontab exactly, so the audit
-        against the real crontab must be silent about them — asserted
+        that nothing read. sync-private-repo.sh was retired on 15 Oct 2026 and
+        its slot taken by backup-athletes-encrypted.sh; both live jobs are
+        coach_alert.DELIVERABLES entries whose declared cron_cmd/cron match the
+        live crontab exactly, so the audit must be silent about them — asserted
         specifically (not just folded into "drift-free" below) so a future
         edit that quietly de-registers one of them fails loudly here, by name,
         rather than as an anonymous drop in the drift-free count."""
         a = self.audit()
-        for name in ("activity-watcher.py", "sync-private-repo.sh"):
+        for name in ("activity-watcher.py", "backup-athletes-encrypted.sh"):
+            assert name in a.present, name
             assert not any(name in p for p in a.problems), (name, a.problems)
+        # The retired mirror is commented out: not live, and not reported either way.
+        assert "sync-private-repo.sh" not in a.present
+        assert not any("sync-private" in p for p in a.problems)
 
     def test_every_exemption_carries_a_reason_and_is_silent(self):
         """The exemptions are a reviewable table, not an implicit rule in someone's
