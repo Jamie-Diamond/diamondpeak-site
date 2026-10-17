@@ -82,6 +82,10 @@ h2{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
 .row .n{font-size:15px;font-weight:600}
 .row .m{font-size:13px;color:var(--ink2)}
 .foot{margin-top:30px;font-size:12px;color:var(--muted)}
+.row.free{cursor:default}
+.row.free .th{display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted);text-align:center;line-height:1.2;padding:4px}
+.note{font-size:14px;line-height:1.45;color:var(--ink2);margin:4px 0}
+.note b{color:var(--ink)}
 </style>
 </head>
 <body>
@@ -176,11 +180,59 @@ h2{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
   }
 
   function renderSessions() {
-    var list = LIB.example_sessions || [];
-    document.getElementById('sessions').innerHTML = list.map(function (s) {
+    var list = LIB.example_sessions || [], issues = (LIB.issues || {}).examples || [];
+    document.getElementById('sessions').innerHTML = (list.map(function (s) {
       return '<button class="scard" data-ss="' + esc(s.id) + '"><div class="n">' + esc(s.title) + '</div><div class="m">' +
         esc(s.minutes ? s.minutes + ' min · ' : '') + esc(s['for'] || '') + '</div></button>';
-    }).join('') || '<p class="empty">No suggested sessions yet.</p>';
+    }).join('') || '<p class="empty">No suggested sessions yet.</p>') +
+      (issues.length ? '<h2>An athlete\'s own issue</h2><p class="note" style="margin-bottom:10px">Each athlete can carry their own injuries or rehab. ' +
+        'A physio\'s sessions go in as they are, and Peak builds the rest of the week round them. Examples:</p>' +
+        issues.map(function (x) {
+          return '<button class="scard" data-is="' + esc(x.id) + '"><div class="n">' + esc(x.title) + '</div><div class="m">' + esc(x.summary) + '</div></button>';
+        }).join('') : '');
+  }
+
+  // A library exercise is a tappable row with its animation; a physio's exercise that
+  // isn't in the library yet is shown plainly, never as an empty tap target.
+  function itemRow(it, rx) {
+    if (it.ex && LIB.exercises[it.ex]) {
+      return '<button class="row" data-ex="' + esc(it.ex) + '"><div class="th" data-anim="' + esc(it.ex) + '"></div><div><div class="n">' +
+        esc(exName(it.ex)) + '</div><div class="m">' + esc(rx) + '</div></div></button>';
+    }
+    return '<div class="row free"><div class="th">Not in the library yet</div><div><div class="n">' + esc(it.name || it.ex) +
+      '</div><div class="m">' + esc(rx) + '</div></div></div>';
+  }
+  function itemRx(it) {
+    if (it.sets === 'set by physio' || it.reps === 'set by physio') return 'Sets, reps and load set by the physio';
+    return [it.sets ? it.sets + ' × ' : '', it.reps || '', it.load && it.load !== 'none' ? ' · ' + it.load : '',
+      it.rest_s ? ' · rest ' + it.rest_s + ' s' : ''].join('');
+  }
+  function showIssue(iid) {
+    var x = ((LIB.issues || {}).examples || []).filter(function (e) { return e.id === iid; })[0];
+    if (!x) return;
+    var is = x.issue || {}, pr = is.protocol || {}, bo = x.builder_output || {};
+    var html = '<div class="bar"><button class="close" data-close aria-label="Close">×</button></div>' +
+      '<div class="ex"><h3 style="margin-top:0">' + esc(x.title) + '</h3><p class="why">' + esc(x.summary) + '</p>' +
+      '<div class="tags" style="margin-top:10px"><span class="tag">' + esc(pretty(is.area || is.location || '')) + '</span>' +
+      '<span class="tag dim">' + esc(pretty(is.status || '')) + '</span><span class="tag dim">Set by ' + esc(is.source || '') + '</span></div>' +
+      (pr.sessions || []).map(function (ss) {
+        return '<div class="part"><h4>' + esc(ss.title) + ' · ' + esc(ss.per_week) + '× a week' + (ss.minutes ? ' · ' + ss.minutes + ' min' : '') +
+          (ss.counts_as_strength === false ? ' · outside the strength cap' : '') + '</h4>' +
+          (ss.items || []).map(function (it) { return itemRow(it, itemRx(it)); }).join('') + '</div>';
+      }).join('') +
+      (bo.top_up ? '<div class="part"><h4>What Peak adds · ' + esc(bo.top_up.title) + (bo.top_up.minutes ? ' · ' + bo.top_up.minutes + ' min' : '') + '</h4>' +
+        (bo.top_up.placement ? '<p class="note">' + esc(bo.top_up.placement) + '</p>' : '') +
+        (bo.top_up.items || []).map(function (it) { return itemRow(it, itemRx(it)); }).join('') + '</div>' : '') +
+      '<div class="box"><h4>How Peak plans round it</h4>' +
+      [['Strength cap', bo.cap], ['Already covered', bo.covered_note], ['Held back', bo.blocked_note || bo.plyometrics],
+       ['Cautions', bo.cautions_note], ['Clashes', bo.conflict_to_flag], ['After each session Peak asks', bo.debrief]]
+        .filter(function (r) { return r[1]; })
+        .map(function (r) { return '<p class="note"><b>' + r[0] + ':</b> ' + esc(r[1]) + '</p>'; }).join('') + '</div></div>';
+    openSheet(html);
+    document.querySelectorAll('#panel [data-anim]').forEach(function (el) {
+      var an = ANIMS[el.getAttribute('data-anim')];
+      if (an) el._ctl = PeakFigure.play([el], an, { views: [(an.views || ['side'])[0]], fps: 30 });
+    });
   }
 
   // ── sheet ──
@@ -270,10 +322,11 @@ h2{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
     var h = location.hash.slice(1).split('/');
     if (h[0] === 'ex' && h[1]) showExercise(h[1]);
     else if (h[0] === 'ss' && h[1]) showSession(h[1]);
+    else if (h[0] === 'is' && h[1]) showIssue(h[1]);
     else closeSheet();
   }
   document.addEventListener('click', function (ev) {
-    var t = ev.target.closest('[data-k],[data-ex],[data-ss],[data-close],[data-tab]');
+    var t = ev.target.closest('[data-k],[data-ex],[data-ss],[data-is],[data-close],[data-tab]');
     if (!t) { if (ev.target.id === 'sheet') history.back(); return; }
     if (t.hasAttribute('data-k')) { state[t.getAttribute('data-k')] = t.getAttribute('data-v'); renderLib(); }
     else if (t.hasAttribute('data-ex')) {
@@ -281,6 +334,7 @@ h2{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
       else location.hash = 'ex/' + t.getAttribute('data-ex');
     }
     else if (t.hasAttribute('data-ss')) location.hash = 'ss/' + t.getAttribute('data-ss');
+    else if (t.hasAttribute('data-is')) location.hash = 'is/' + t.getAttribute('data-is');
     else if (t.hasAttribute('data-close')) { if (history.length > 1) history.back(); else location.hash = ''; }
     else if (t.hasAttribute('data-tab')) {
       var tab = t.getAttribute('data-tab');

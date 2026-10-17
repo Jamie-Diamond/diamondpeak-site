@@ -5,9 +5,9 @@ Builds on `blueprints/strength.md` (signed off 10 Jun 2026). **Nothing here is l
 
 | In one look | |
 |---|---|
-| **What it is** | 40 exercises, 6 modules (run, bike, swim, triathlon, health, ankle protocol), one session template, doses by phase, 6 example sessions |
-| **What stays** | Everything the blueprint decided: 2/wk cap, RPE not 1RM, tiers A/B/C, A/B sessions, ankle protocol, phase table, scheduling rules |
-| **What changes** | Upper body added at **no extra time**, a 3-min **power block**, a **sport block** per sport, a **learning block** for new lifters |
+| **What it is** | 40 exercises, 5 modules (run, bike, swim, triathlon, health), an **athlete-issues layer**, one session template, doses by phase, 6 example sessions |
+| **What stays** | Everything the blueprint decided: 2/wk cap, RPE not 1RM, tiers A/B/C, A/B sessions, phase table, scheduling rules |
+| **What changes** | Upper body added at **no extra time**, a 3-min **power block**, a **sport block** per sport, a **learning block** for new lifters, and **each athlete's own issues** (§9) |
 | **What you decide** | 8 decisions in §13. The top 3: upper body for all, the peak/taper planner gap, plyometrics for all |
 
 ---
@@ -80,6 +80,7 @@ Two jobs. **Make the sport faster and more durable.** Keep the athlete **healthy
 | Pain up to **3/10** is OK if gone by next morning | 🟡 | A cautious version of Silbernagel's model. I couldn't confirm the paper's exact threshold |
 | 4 weeks of calf work and ~25 single-leg calf raises **before hopping** | 🔴 | Coaching convention, not checked |
 | Max **60 foot contacts** a session in build | 🔴 | My number |
+| **No plyos** during lower-limb rehab unless the source clears them | 🟡 | A cautious default, not trial-based |
 | Heavy = **4-6 reps at RPE 8** | 🟡 | Blueprint's signed-off 3×5 @ RPE 8, and the review's "heavy" label. Rep counts not checked |
 | Pairing upper-body lifts into lower-body rests costs nothing | 🟡 | Different muscles, so little cross-fatigue. Not trial-checked |
 
@@ -143,7 +144,8 @@ The **module decides what fills each slot**. Multi-sport athletes use **triathlo
 | **Swim** | lats, straight-arm pull, cuff and shoulder blades, row, trunk | squat_jump / pogo_hops | straight_arm_pulldown, band_external_rotation, thoracic_open_book | straight_arm_pulldown, band_pull_apart, dead_bug | 🔴 thin evidence |
 | **Triathlon** | squat, hinge, single-leg, calves, plyometric, lats, cuff | pogo_hops / squat_jump | as Run A | copenhagen_plank, banded_lateral_walk, straight_arm_pulldown | 🟡 blend |
 | **Health** | squat, hinge, push, pull, single-leg, balance, carry, plyometric | pogo_hops / squat_jump (after week 4) | single_leg_balance, calf_raise | farmers_carry, single_leg_balance | ✅ CMO / WHO |
-| **Ankle protocol** | eccentric calf_raise, single_leg_balance, banded_ankle_eversion | n/a | **replaces** the sport block | **replaces** the sport block | ✅ Hupperets · signed off |
+
+An athlete's **own issues** (injury, rehab, a physio programme) sit **on top of** the module. See §9.
 
 ### Module notes
 
@@ -154,7 +156,6 @@ The **module decides what fills each slot**. Multi-sport athletes use **triathlo
 | **Swim** | Lats and cuff first. Legs stay for health, and because **swimming gives bone little stimulus**. Big swim weeks: overhead press drops to 2 sets |
 | **Triathlon** | **Bike sets the main lifts, run sets the sport block, swim lives in the warm-up and the pull slot.** So swim work costs no extra time |
 | **Health** | Every major muscle group, heavy + impact for bone, balance, grip. For athletes with no sport, it **is** the programme |
-| **Ankle protocol** | **Permanent, both sessions, all tiers** (blueprint). The module's other sport picks move to the warm-up. Also the content of the 15-min `ankle_mobility` session |
 
 ---
 
@@ -167,7 +168,7 @@ The **module decides what fills each slot**. Multi-sport athletes use **triathlo
 | **Warm-up** | 5 | leg_swings + 1 lower mobility drill + module warm-up adds + 1-2 ramp-up sets. Easy spin/row first if there's a machine | Kept, plus mobility and swim prep |
 | **Power** | 3 | module.power[A or B], from the module's start phase. Done fresh | **New** |
 | **Main** | 20 | **Two pairs**, each = 1 lower lift + 1 upper lift. The upper lift fills the lower lift's rest | Lower lifts kept. **Upper added at no extra time** |
-| **Sport** | 8 | module.sport_block[A or B]. **Ankle protocol replaces it** where flagged | Was "Ankle" for everyone |
+| **Sport** | 8 | module.sport_block[A or B]. Skips anything an issue protocol already covered that week | Replaces the blueprint's fixed block |
 | **Core** | 5 | 2 rounds: 1 anti-extension + 1 anti-rotation + 1 lateral. B may use farmers_carry. 7 min in base (no power block yet) | Was 7 min. Same exercises plus options |
 
 ### Slots
@@ -182,12 +183,14 @@ The blueprint's lower-body lifts sit in exactly the same places.
 
 ### How exercises are picked (in this order)
 
+**First:** place the athlete's **issue protocol sessions** (§9). They count toward the cap and coverage. Steps 1-4 then **only fill the gaps**.
+
 | Step | Filter | Rule |
 |---|---|---|
 | 1 | **Sport module** | Sets the patterns per slot, the power pick and the sport block |
 | 2 | **Equipment tier** | This week's tier. Missing kit: use `swaps[tier]`. Higher tier with an upgrade listed: use the upgrade |
 | 3 | **Athlete level** | Only exercises at or below the athlete's level (1, 2, 3). Move with `easier` / `harder` |
-| 4 | **Injury cautions** | Active knee, ankle, low back or shoulder flag: follow the exercise's caution, or swap (§9) |
+| 4 | **Athlete issues** | For each current issue: drop its `avoid` list, block plyos if it's a lower-limb issue in rehab, and apply each exercise's cautions for that area (§9) |
 
 **One-session week:** run Session A, swap the squat for the single-leg pick every other week, keep the sport block.
 
@@ -198,7 +201,7 @@ The blueprint's lower-body lifts sit in exactly the same places.
 | `strength_general` (40 min) | The full template, A or B |
 | `core` (20 min) | Core block × 3 rounds, plus copenhagen_plank and bird_dog |
 | `mobility` (20 min) | Mobility drills + single_leg_balance + thoracic_open_book |
-| `ankle_mobility` (15 min) | `modules.ankle_protocol` + knee_to_wall |
+| `ankle_mobility` / `mobility` (short) | An athlete's own short issue protocol, outside the cap (§9, example 2) |
 
 ---
 
@@ -291,19 +294,128 @@ The blueprint's lower-body lifts sit in exactly the same places.
 
 ---
 
-## 9. Injury cautions and swaps
+## 9. Athlete-specific issues
 
-Each exercise carries cautions **only for the areas it affects**, with what to do instead.
+**Every athlete can carry their own issues**: an injury, a rehab programme, something they manage themselves. The library is the same for everyone. **The issue layer makes it fit one person.** JSON: the `issues` block.
+
+### 9a. Where issues live
+
+They live in the profile's existing **`injuries[]`** list. **I extend it. No new store.**
+
+| Field | New? | What it holds |
+|---|---|---|
+| `location` | existing | Free text. The debrief asks about it (`lib/strength_ask.py`) |
+| `area` | **new** | knee, ankle, hip, low_back, shoulder, other. Picks which exercise cautions apply |
+| `side` | **new** | left, right, both, none |
+| `description` | existing | Free text |
+| `status` | existing | **active, rehab, managed, resolved**. Old "cleared" reads as resolved |
+| `source` | existing | physio, doctor, self, coach |
+| `priority` | **new** | **first** = protocol sessions go in before any other training that week. Default normal |
+| `protocol` | existing, **extended** | Still allows plain text. Now can also be `{summary, sessions: [{title, per_week, items}]}` |
+| `protocol` items | **new** | `ex` (library id) **or** `name` (free text), plus sets, reps, load, note |
+| `avoid` | **new** | Exercise ids never to prescribe while the issue is current |
+| `plyo_cleared` | **new** | Only the source sets this. Default false |
+| `review_by` | **new** | Date to check in on the issue |
+| `physio_allowance`, `ramp_state` | existing | Run/bike quality caps (`lib/injury.py`). Unchanged |
+
+**Build note:** `lib/athlete_brief.py` prints `protocol` as text. When it's an object, it must print `protocol.summary`.
+
+### 9b. Rules
+
+| Rule | What it means |
+|---|---|
+| **Priority first** | The protocol's sessions go in first. Swim, bike and run fit round them |
+| **Counts toward the cap** | Protocol strength sessions count toward the 2/week cap. Two of them fill it |
+| **Counts toward coverage** | Protocol items count toward the weekly coverage list (§3) |
+| **Top up only** | The builder adds **only what's missing**: usually upper body + core, 10-20 min, added to a protocol session. **Never a competing lower-body session** |
+| **Never edit the source** | Never change a physio's or doctor's exercises, sets, reps or loads. The coach may **only point out a conflict** and suggest the athlete checks with the source |
+| **Self-managed can progress** | Source self or coach: the normal progression rules (§8) apply |
+| **Cautions apply automatically** | Every library exercise's caution for the issue's area applies: follow it, or swap |
+| **Avoid list** | Never prescribed while the issue is current |
+| **No plyos in lower-limb rehab** | Knee, ankle or hip issue that is active or in rehab: **no plyometrics** unless the source clears them. Managed issues don't block. 🟡 |
+| **Free-text exercises allowed** | Shown **without an animation**. Added to the library candidates list (§9f) |
+| **Debrief** | Asks about the issue area. Already built (`lib/strength_ask.py`) |
+| **Review date** | On the `review_by` date, ask for an update. Never let an issue expire silently |
+| **Short sessions outside the cap** | Balance or mobility work with `counts_as_strength: false` uses the `mobility` or `ankle_mobility` session type |
+
+### 9c. Worked example 1: knee ligament rehab (physio-led)
+
+> An athlete recovering from **knee ligament surgery**. The physio sets **one hamstring session and one quad session** every week. **Strength comes first; bike fits round it.**
+
+Issue: area knee · status **rehab** · source **physio** · priority **first** · plyo_cleared **false**.
+
+| Hamstring session | In library? | Quad session | In library? |
+|---|---|---|---|
+| Single-leg deadlift | single_leg_rdl | Barbell back squat | back_squat |
+| Hip thrust | hip_thrust | Bulgarian split squat | bulgarian_split_squat |
+| Single-leg hamstring curl (machine) | **free text** | Single-leg leg extension (machine) | **free text** |
+| Single-leg calf raise | calf_raise | Lateral step-down | **free text** |
+| Single-leg hamstring bridge, foot raised | **free text** | Copenhagen plank | copenhagen_plank |
+
+**Loads: set by the physio.** The library never copies or changes them.
+
+**What the builder does:**
+
+| Step | Result |
+|---|---|
+| Cap | The 2 physio sessions **fill the 2/week cap**. No library strength session is added |
+| Covered by the physio | **squat, hinge, single-leg, bridge, calf, adductors**, lateral core, balance |
+| Missing | push, pull, anti-extension and anti-rotation core, bone impact, grip |
+| Top-up (15 min, added to a physio session) | dumbbell_bench_press + lat_pulldown (paired), dead_bug, pallof_press |
+| Blocked | **pogo_hops, squat_jump**: knee in rehab, not cleared |
+| Grip | No carries (walking load on the knee). Gap until the physio says otherwise |
+| Conflict to flag | A hard ride within 8 h of a physio session. **Flag it; never move the physio session** |
+| Debrief | "How did the knee feel - any pain or swelling during or after?" |
+
+### 9d. Worked example 2: old ankle sprain (self-managed)
+
+> A **runner with an old ankle sprain**, self-managed.
+
+Issue: area ankle · status **managed** · source **self** · priority normal.
+
+| Item | Dose |
+|---|---|
+| calf_raise | 3 × 12/side, 3 s lowering |
+| single_leg_balance | 3 × 30-45 s/side, reach or a gentle push |
+| banded_ankle_eversion | 2 × 15-20/side, light band |
+| knee_to_wall | 1 × 10/side |
+
+| Step | Result |
+|---|---|
+| Cap | **Outside the cap**: a 15-min `ankle_mobility` session, 3 times a week. The 2 strength sessions stay |
+| Coverage | Counts toward calf and balance, so the run sport block can lean on soleus and hips |
+| Plyos | **Allowed**: managed, not rehab |
+| Cautions | Ankle cautions apply (hold a wall on single-leg work, firm flat floor for hops) |
+| Progression | Source is self, so normal progression applies |
+
+**This is where the old ankle content now lives:** one athlete's issue, not a library rule.
+
+### 9e. Cautions by area
+
+Each exercise carries cautions **only for the areas it affects**. They switch on automatically for an athlete's issue areas.
 
 | Area | Avoid or modify | Swap to | Tag |
 |---|---|---|---|
 | **Knee** | Deep loaded knee bend if painful; jump landings | Shorter range, box squat depth, step_up on a low step, hip-led work (romanian_deadlift, hip_thrust), reverse not forward lunges | 🟡 |
-| **Ankle** | Hops on uneven ground; unsupported single-leg work early on | Hold a wall; two-foot pogo only; **ankle protocol** if there's sprain history | ✅ Hupperets (balance) · 🟡 rest |
+| **Ankle** | Hops on uneven ground; unsupported single-leg work early on | Hold a wall; low two-foot hops only | 🟡 |
+| **Hip** | Deep hip bend with a pinch at the front; big lunges; groin pain on the Copenhagen | Stop above the pinch, wider stance, shorter steps, side_plank instead of copenhagen_plank | 🟡 **new** |
 | **Low back** | Bar on the back; ballistic swings in a flare-up; loaded rounding | goblet_squat / bulgarian_split_squat, hip_thrust / single_leg_glute_bridge, supported one-arm row, dead_bug, bird_dog, side_plank | 🟡 |
 | **Shoulder** | Overhead pressing if painful; behind-neck pulls; very high reach | push_up with tucked elbows, palms-facing grips, lat_pulldown over pull_up, band_external_rotation | 🟡 |
-| **Achilles** | Fast bouncing reps when sore | Flat-ground calf raises, slow lowering, pain 3/10 or less | ✅ Alfredson, Silbernagel · 🟡 threshold |
+| **Achilles** (area: ankle) | Fast bouncing reps when sore | Flat-ground calf raises, slow lowering, pain 3/10 or less | ✅ Alfredson, Silbernagel · 🟡 threshold |
+| **Other** | No automatic cautions | The issue's `avoid` list and the source's protocol | n/a |
 
 **Stop and refer** (not a library job): sharp or worsening pain, swelling, pain at night or at rest, giving way. 🟡
+
+### 9f. Next library candidates
+
+The four free-text exercises from example 1 are **first in line** for the next batch:
+
+| # | Exercise | Pattern it would add |
+|---|---|---|
+| 1 | Single-leg hamstring curl (machine) | knee flexion (new pattern) |
+| 2 | Single-leg leg extension (machine) | knee extension (new pattern) |
+| 3 | Lateral step-down | single_leg |
+| 4 | Single-leg hamstring bridge, foot raised | bridge |
 
 ---
 
@@ -335,6 +447,7 @@ Each exercise carries cautions **only for the areas it affects**, with what to d
 | **Never the day before the long ride**; **8+ h from quality bike/run** | 0 h apart blunts strength gains; 6-24 h is better | ✅ Robineau 2016 |
 | Strength **never displaces** swim, bike or run to hit TSS | Planner rule. Strength is the support act: adding it **helps** endurance performance, and interference mainly hits **power** gains | ✅ Rønnestad & Mujika 2014, Wilson 2012 · kept |
 | Power block counts as strength | Same slot, same rules. Not before a quality run | 🟡 |
+| Issue protocols with priority **first** | Placed before swim, bike and run. They count toward the cap | rule (§9) |
 | Compliance flag (T11) | Unchanged | kept |
 
 **Planner gap:** `session-library.json` peak and taper menus **don't include `strength_general`**. The blueprint says peak 1-2/wk and taper 1/wk. So today the planner **can't place** the strength the blueprint asks for. See decision 2.
@@ -350,17 +463,18 @@ Each exercise carries cautions **only for the areas it affects**, with what to d
 | **Kept** | Equipment asked weekly, Tier C default | Unchanged |
 | **Kept** | Tier A/B/C main-lift mapping | Same lifts, now exercise ids |
 | **Kept** | A/B lower-body lifts | A: squat + hinge. B: single-leg + hip thrust |
-| **Kept** | Ankle protocol | Both sessions, all tiers, for flagged athletes |
 | **Kept** | Core exercises | side plank, Pallof press, dead bug, 2 rounds |
 | **Kept** | Phase table and scheduling rules | All of them |
 | **Changed** | Upper body | Legs-only → **push + pull every session**, paired into rests |
-| **Changed** | "Ankle" block | Now a **sport block**. Ankle protocol only where flagged; others get module picks |
+| **Changed** | Fixed block after the main lifts | Now a **sport block** per module. Anything specific to one athlete moves to the **issues layer** (§9) |
 | **Changed** | Core block | 7 → 5 min once the power block starts. More exercise options |
 | **Changed** | Warm-up | Adds mobility drills and swim shoulder prep |
 | **Changed** | Doses | Words → numbers per phase. Tier C rep shift kept (8-12) |
 | **New** | 40-exercise library | Patterns, muscles, levels, ladders, swaps, cues, cautions |
 | **New** | Power block | 3 min of plyos from build |
-| **New** | Sport and health modules | Run, bike, swim, triathlon, health, ankle protocol |
+| **New** | Sport and health modules | Run, bike, swim, triathlon, health |
+| **New** | Athlete-issues layer | Extends the profile's `injuries[]`: structured protocols, counted toward cap and coverage, avoid list, plyo block (§9) |
+| **New** | Library candidates | 4 exercises from a rehab protocol, first in line for the next batch (§9f) |
 | **New** | Weekly coverage rule | §3 |
 | **New** | Progression / regression rules | §8 |
 | **New** | Learning block for new lifters | §6 |
@@ -374,7 +488,7 @@ Each exercise carries cautions **only for the areas it affects**, with what to d
 ## 13. Decisions for Jamie
 
 ### 1. Upper body for every athlete?
-The blueprint is legs + ankle only. WHO says **all major muscle groups**.
+The blueprint is lower body only. WHO says **all major muscle groups**.
 
 | Option | Impact |
 |---|---|
@@ -403,7 +517,7 @@ The planner's peak and taper menus have **no `strength_general`**. The blueprint
 | b. Runners and triathletes only | Cyclists and swimmers miss the bone benefit they most need (✅ Olmedillas, Gómez-Bruton) |
 | c. None | Simplest. Loses both benefits |
 
-**Recommend a.** Ankle-protocol athletes start with **low pogo hops only**, and add squat jumps once those are easy.
+**Recommend a.** Separately, a lower-limb issue in rehab blocks plyos until its source clears them (§9). That's a rule, not part of this choice.
 
 ### 4. Learning block for new lifters?
 The blueprint starts at 3×5 @ RPE 8 from day one.
@@ -427,15 +541,16 @@ WHO says over-65s do balance + strength on **3+ days**. Our cap is 2 strength se
 
 **Recommend a.** 🔴 your judgment on the age line (65, or masters 50+?).
 
-### 6. Ankle protocol in race week?
-The protocol is permanent. The blueprint says **no strength in race week**.
+### 6. Issue protocols in taper and race week?
+The blueprint says **light strength in taper, none in race week**. An athlete's own protocol may say something different.
 
 | Option | Impact |
 |---|---|
-| **a. Balance only**, 3 min in a run warm-up | Keeps the reflex work. No load, no soreness |
-| b. Nothing in race week | Clean rule. One week off is low risk |
+| **a. Follow the source. If it says nothing: keep rehab sessions, drop the top-ups** | Rehab never stalls for a race. Library extras go quiet |
+| b. Drop everything in race week, protocol included | Clean rule. Can break a physio's programme |
+| c. Keep everything as normal | Top-ups add fatigue in race week |
 
-**Recommend a.** 🔴 your call.
+**Recommend a.** Managed (self-run) protocols follow the normal taper doses.
 
 ### 7. Pain rule?
 
@@ -444,7 +559,7 @@ The protocol is permanent. The blueprint says **no strength in race week**.
 | **a. Up to 3/10 during, gone by next morning = OK** | Athletes keep training through minor niggles. Cautious version of Silbernagel (✅ no harm at its threshold) |
 | b. Any pain = stop and swap | Safer-sounding. Lots of needless swaps |
 
-**Recommend a.**
+**Recommend a.** A source's own pain rule always wins (§9).
 
 ### 8. Extend the equipment ask?
 The weekly ask is A/B/C. The library also needs a **band**, a **pull-up bar** and a **bench**.

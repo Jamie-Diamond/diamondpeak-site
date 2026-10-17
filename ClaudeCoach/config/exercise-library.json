@@ -190,7 +190,8 @@
    ],
    "cautions": {
     "knee": "Squat only as deep as is pain-free. Still sore? Use a goblet squat to a box or a split squat.",
-    "low_back": "Swap to goblet squat or Bulgarian split squat, so the load is held in front or in the hands, not on the spine."
+    "low_back": "Swap to goblet squat or Bulgarian split squat, so the load is held in front or in the hands, not on the spine.",
+    "hip": "A pinch at the front of the hip at the bottom means stop above it. Widen the stance a little and turn the toes out."
    }
   },
   "goblet_squat": {
@@ -244,7 +245,8 @@
     "Weight drifting away from the chest"
    ],
    "cautions": {
-    "knee": "Squat to a box or chair set at a pain-free depth."
+    "knee": "Squat to a box or chair set at a pain-free depth.",
+    "hip": "Stop above any pinch at the front of the hip; a slightly wider stance often helps."
    }
   },
   "bodyweight_squat": {
@@ -347,7 +349,8 @@
    ],
    "cautions": {
     "knee": "Shorten the range (stop above parallel) or use a split squat with the back foot on the floor.",
-    "ankle": "Hold a wall or doorframe with one hand if balance is shaky."
+    "ankle": "Hold a wall or doorframe with one hand if balance is shaky.",
+    "hip": "If the front of the back hip pulls hard, lower the rear foot (a step, not a bench) or use split squats."
    }
   },
   "split_squat": {
@@ -496,7 +499,8 @@
     "Body tipping forward"
    ],
    "cautions": {
-    "knee": "Shorten the range or go back to split squats."
+    "knee": "Shorten the range or go back to split squats.",
+    "hip": "Take a shorter step back and keep the body upright."
    }
   },
   "romanian_deadlift": {
@@ -600,7 +604,8 @@
    ],
    "cautions": {
     "ankle": "Touch a wall with one hand until your balance is solid.",
-    "low_back": "Keep the range short and the back flat."
+    "low_back": "Keep the range short and the back flat.",
+    "hip": "Keep the range short; stop where the standing hip feels pinched or the hamstring pulls sharply."
    }
   },
   "kettlebell_swing": {
@@ -854,7 +859,8 @@
     "Toes turning out"
    ],
    "cautions": {
-    "knee": "Put the band above the knees, not below."
+    "knee": "Put the band above the knees, not below.",
+    "hip": "Use a lighter band and smaller steps."
    }
   },
   "copenhagen_plank": {
@@ -905,7 +911,8 @@
    ],
    "cautions": {
     "knee": "Use the knee-on-bench version: it takes strain off the inside of the knee.",
-    "shoulder": "Work from the forearm with the elbow under the shoulder."
+    "shoulder": "Work from the forearm with the elbow under the shoulder.",
+    "hip": "Groin pain during it means stop: use side plank instead until it settles."
    }
   },
   "calf_raise": {
@@ -1202,6 +1209,7 @@
    ],
    "cautions": {
     "knee": "If landing hurts, swap to kettlebell swings or extra hip thrusts.",
+    "hip": "Skip if landing hurts the hip; use hip thrusts instead.",
     "ankle": "Swap to low two-foot pogo hops.",
     "low_back": "Skip during a back flare-up."
    }
@@ -2028,7 +2036,8 @@
     "Swinging hard from the first rep"
    ],
    "cautions": {
-    "low_back": "Keep the swing small and the trunk still."
+    "low_back": "Keep the swing small and the trunk still.",
+    "hip": "Small, slow swings only; stop short of any pinch."
    }
   },
   "knee_to_wall": {
@@ -2126,7 +2135,8 @@
     "Lunging forward without tucking the pelvis"
    ],
    "cautions": {
-    "knee": "Put a folded towel under the back knee."
+    "knee": "Put a folded towel under the back knee.",
+    "hip": "Gentle only; a pinch at the front of the hip means ease off the tuck."
    }
   },
   "thoracic_open_book": {
@@ -2396,45 +2406,408 @@
     ]
    },
    "notes": "Health needs every major muscle group, heavy loading and impact for bone, balance and grip. For no-sport athletes the sport block becomes this balance-and-grip block. Adults 65+: see the older-adults decision in docs/strength-methodology.md."
-  },
-  "ankle_protocol": {
-   "applies_to": "Athletes flagged with the ankle protocol (history of lateral ankle sprain or an unstable ankle).",
-   "exercises": [
-    {
-     "ex": "calf_raise",
-     "sets": 3,
-     "reps": "12/side, eccentric (3 s lowering)",
-     "rest_s": 30
-    },
-    {
-     "ex": "single_leg_balance",
-     "sets": 3,
-     "reps": "30-45 s/side with reach or perturbation",
-     "rest_s": 0
-    },
-    {
-     "ex": "banded_ankle_eversion",
-     "sets": 2,
-     "reps": "15-20/side",
-     "rest_s": 0
-    }
-   ],
-   "priority": [
-    "calf_raise",
-    "single_leg_balance",
-    "banded_ankle_eversion"
-   ],
-   "must_include": [
-    "calf_raise",
-    "single_leg_balance",
-    "banded_ankle_eversion"
-   ],
-   "both_sessions": true,
-   "all_tiers": true,
-   "replaces": "The sport block. The module's other sport-block picks move into the warm-up, or drop out if time is short.",
-   "by_phase": "Same in base, build, specific and peak. Taper: 2 sets each. Race week: no strength session; balance only (3 min, can sit in a run warm-up). Draft: see docs/strength-methodology.md decision 6.",
-   "notes": "Permanent, as signed off in blueprints/strength.md. Also the content of the 15-min ankle_mobility session type (add knee_to_wall)."
   }
+ },
+ "issues": {
+  "_note": "Each athlete can carry their own issues. This extends profile.injuries[] (existing fields: location, description, protocol, status, source; physio_allowance and ramp_state stay as lib/injury.py uses them). No parallel store. Never put a real athlete's name or details in this file.",
+  "fields": {
+   "location": {
+    "existing": true,
+    "type": "string",
+    "note": "Free text, kept. lib/strength_ask.py asks about it in the debrief; lib/injury_scope.py matches on it."
+   },
+   "area": {
+    "new": true,
+    "type": "enum",
+    "values": [
+     "knee",
+     "ankle",
+     "hip",
+     "low_back",
+     "shoulder",
+     "other"
+    ],
+    "note": "Normalised from location. Drives which exercise cautions apply."
+   },
+   "side": {
+    "new": true,
+    "type": "enum",
+    "values": [
+     "left",
+     "right",
+     "both",
+     "none"
+    ]
+   },
+   "description": {
+    "existing": true,
+    "type": "string"
+   },
+   "status": {
+    "existing": true,
+    "type": "enum",
+    "values": [
+     "active",
+     "rehab",
+     "managed",
+     "resolved"
+    ],
+    "note": "Legacy 'cleared' reads as resolved (lib/session_library.py already treats both as not current)."
+   },
+   "source": {
+    "existing": true,
+    "type": "enum",
+    "values": [
+     "physio",
+     "doctor",
+     "self",
+     "coach"
+    ]
+   },
+   "priority": {
+    "new": true,
+    "type": "enum",
+    "values": [
+     "first",
+     "normal"
+    ],
+    "default": "normal",
+    "note": "first = the protocol's sessions are placed before any other training that week."
+   },
+   "protocol": {
+    "existing": true,
+    "type": "string or object",
+    "object": {
+     "summary": "string: the old free-text protocol",
+     "sessions": [
+      {
+       "title": "string",
+       "per_week": "integer",
+       "counts_as_strength": "boolean, default true",
+       "session_type": "optional: a session-library type, e.g. ankle_mobility or mobility, for short sessions outside the cap",
+       "minutes": "optional integer",
+       "items": [
+        {
+         "ex": "library exercise id",
+         "name": "free text, only when the exercise is not in the library",
+         "pattern": "optional pattern id, so a free-text item counts toward coverage",
+         "sets": "string",
+         "reps": "string",
+         "load": "string",
+         "note": "string"
+        }
+       ]
+      }
+     ]
+    },
+    "note": "A plain string is still valid (legacy). Code that prints the protocol as text (lib/athlete_brief.py) must read protocol.summary when it is an object."
+   },
+   "avoid": {
+    "new": true,
+    "type": "list of exercise ids",
+    "note": "Never prescribed while the issue is not resolved."
+   },
+   "plyo_cleared": {
+    "new": true,
+    "type": "boolean",
+    "default": false,
+    "note": "Only the issue's source sets this to true."
+   },
+   "review_by": {
+    "new": true,
+    "type": "date YYYY-MM-DD"
+   },
+   "physio_allowance": {
+    "existing": true,
+    "note": "Per-sport zone caps for run/bike quality (lib/injury.py). Unchanged."
+   },
+   "ramp_state": {
+    "existing": true,
+    "note": "Unchanged."
+   }
+  },
+  "areas": {
+   "knee": {
+    "lower_limb": true,
+    "caution_key": "knee"
+   },
+   "ankle": {
+    "lower_limb": true,
+    "caution_key": "ankle"
+   },
+   "hip": {
+    "lower_limb": true,
+    "caution_key": "hip"
+   },
+   "low_back": {
+    "lower_limb": false,
+    "caution_key": "low_back"
+   },
+   "shoulder": {
+    "lower_limb": false,
+    "caution_key": "shoulder"
+   },
+   "other": {
+    "lower_limb": false,
+    "caution_key": null,
+    "note": "No automatic cautions: rely on the avoid list and the source's protocol."
+   }
+  },
+  "rules": {
+   "current": "An issue is current unless status is resolved (or legacy cleared). Only current issues trigger the rules below.",
+   "priority_first": "priority first: place the protocol's sessions before anything else that week. Swim, bike and run fit round them, keeping the 8 h gap from quality sessions where possible.",
+   "counts_toward_cap": "Protocol sessions with counts_as_strength true count toward the weekly strength cap (strength_max). Two such sessions fill the cap.",
+   "counts_toward_coverage": "Protocol items count toward weekly coverage by their exercise's pattern (or the item's pattern field for free-text items).",
+   "top_up_only": "The builder only tops up coverage the protocol leaves missing, usually upper body and core as a 10-20 min add-on appended to a protocol session. It never adds a competing lower-body session.",
+   "never_edit_source": "Never change a physio's or doctor's exercises, sets, reps or loads. The coach may only point out a conflict (e.g. a hard ride the day after a heavy protocol session) and ask the athlete to check with the source.",
+   "self_managed": "Protocols with source self or coach may be progressed with the library's progression rules.",
+   "cautions_auto": "For each current issue, every library exercise's cautions[area.caution_key] apply automatically: follow the caution text or swap.",
+   "avoid_list": "Exercises on avoid are never prescribed while the issue is current.",
+   "plyo_block": "No plyometric-pattern exercises while any lower-limb issue is active or rehab, unless that issue has plyo_cleared true. Managed issues don't block.",
+   "free_text": "Protocol items may use name instead of ex for exercises not in the library. They show without an animation and are added to library_candidates.",
+   "debrief": "The strength debrief asks about the issue area (already in lib/strength_ask.py).",
+   "review_by": "On or after review_by, ask the athlete for an update and whether the source has changed anything. Never expire an issue silently.",
+   "outside_cap": "Short sessions with counts_as_strength false (balance, mobility) sit outside the cap and use the session_type given (e.g. ankle_mobility, mobility).",
+   "taper_race_week": "Follow the source. If it says nothing: keep rehab sessions, drop top-ups. Draft: see docs/strength-methodology.md decision 6."
+  },
+  "library_candidates": [
+   "Single-leg hamstring curl (machine)",
+   "Single-leg leg extension (machine)",
+   "Lateral step-down",
+   "Single-leg hamstring bridge, foot raised"
+  ],
+  "examples": [
+   {
+    "id": "knee_ligament_rehab",
+    "title": "Knee ligament surgery rehab · physio-led",
+    "summary": "An athlete recovering from knee ligament surgery. The physio sets one hamstring session and one quad session every week; strength comes first, bike fits round it.",
+    "issue": {
+     "location": "knee",
+     "area": "knee",
+     "side": "right",
+     "description": "Recovering from knee ligament surgery",
+     "status": "rehab",
+     "source": "physio",
+     "priority": "first",
+     "avoid": [],
+     "plyo_cleared": false,
+     "review_by": "2026-12-01",
+     "protocol": {
+      "summary": "Physio: one hamstring session and one quad session a week. Strength first; bike fits round it.",
+      "sessions": [
+       {
+        "title": "Hamstrings",
+        "per_week": 1,
+        "counts_as_strength": true,
+        "items": [
+         {
+          "ex": "single_leg_rdl",
+          "sets": "set by physio",
+          "reps": "set by physio",
+          "load": "set by physio"
+         },
+         {
+          "ex": "hip_thrust",
+          "sets": "set by physio",
+          "reps": "set by physio",
+          "load": "set by physio"
+         },
+         {
+          "name": "Single-leg hamstring curl (machine)",
+          "sets": "set by physio",
+          "reps": "set by physio",
+          "load": "set by physio"
+         },
+         {
+          "ex": "calf_raise",
+          "sets": "set by physio",
+          "reps": "set by physio",
+          "load": "set by physio"
+         },
+         {
+          "name": "Single-leg hamstring bridge, foot raised",
+          "pattern": "bridge",
+          "sets": "set by physio",
+          "reps": "set by physio",
+          "load": "set by physio"
+         }
+        ]
+       },
+       {
+        "title": "Quads",
+        "per_week": 1,
+        "counts_as_strength": true,
+        "items": [
+         {
+          "ex": "back_squat",
+          "sets": "set by physio",
+          "reps": "set by physio",
+          "load": "set by physio"
+         },
+         {
+          "ex": "bulgarian_split_squat",
+          "sets": "set by physio",
+          "reps": "set by physio",
+          "load": "set by physio"
+         },
+         {
+          "name": "Single-leg leg extension (machine)",
+          "sets": "set by physio",
+          "reps": "set by physio",
+          "load": "set by physio"
+         },
+         {
+          "name": "Lateral step-down",
+          "pattern": "single_leg",
+          "sets": "set by physio",
+          "reps": "set by physio",
+          "load": "set by physio"
+         },
+         {
+          "ex": "copenhagen_plank",
+          "sets": "set by physio",
+          "reps": "set by physio",
+          "load": "set by physio"
+         }
+        ]
+       }
+      ]
+     }
+    },
+    "builder_output": {
+     "cap": "The 2 physio sessions fill the 2/week strength cap. No general strength session is added.",
+     "covered_by_protocol": [
+      "squat",
+      "hinge",
+      "single_leg",
+      "calf_ankle",
+      "core_lateral",
+      "balance"
+     ],
+     "covered_note": "Bridge work (hip thrust, the raised bridge) counts under hinge. Adductor work and lateral core come from copenhagen plank. Balance comes from single-leg romanian deadlift.",
+     "missing": [
+      "push",
+      "pull",
+      "core_anti_extension",
+      "core_anti_rotation",
+      "bone_impact",
+      "grip"
+     ],
+     "top_up": {
+      "title": "Upper body + core top-up",
+      "minutes": 15,
+      "placement": "Appended to either physio session, same day. No extra session, so the cap is unchanged.",
+      "items": [
+       {
+        "ex": "dumbbell_bench_press",
+        "sets": 3,
+        "reps": "8-10",
+        "rest_s": 60,
+        "rpe": "7-8",
+        "pair": "1"
+       },
+       {
+        "ex": "lat_pulldown",
+        "sets": 3,
+        "reps": "8-12",
+        "rest_s": 60,
+        "rpe": "7-8",
+        "pair": "1"
+       },
+       {
+        "ex": "dead_bug",
+        "sets": 2,
+        "reps": "8/side",
+        "rest_s": 15
+       },
+       {
+        "ex": "pallof_press",
+        "sets": 2,
+        "reps": "10/side",
+        "rest_s": 15
+       }
+      ]
+     },
+     "blocked": [
+      "pogo_hops",
+      "squat_jump"
+     ],
+     "blocked_note": "No plyometrics: a lower-limb issue in rehab, and the physio hasn't cleared them. Bone impact stays a gap until the physio clears it.",
+     "grip_note": "No carries (they add walking load to the knee). Grip stays a gap; ask the physio before adding any.",
+     "cautions_note": "Knee cautions would show on any library lower-body exercise the builder added. Here it adds none.",
+     "conflict_to_flag": "If a hard ride lands within 8 h of a protocol session, say so. Never move or edit the physio session.",
+     "debrief": "How did the knee feel - any pain or swelling during or after?",
+     "free_text_items": "4 items show without an animation and are listed in library_candidates."
+    }
+   },
+   {
+    "id": "old_ankle_sprain_self_managed",
+    "title": "Old ankle sprain · self-managed",
+    "summary": "A runner with an old ankle sprain, self-managed.",
+    "issue": {
+     "location": "ankle",
+     "area": "ankle",
+     "side": "left",
+     "description": "Old ankle sprain; keeps up prevention work",
+     "status": "managed",
+     "source": "self",
+     "priority": "normal",
+     "avoid": [],
+     "plyo_cleared": false,
+     "review_by": "2027-04-01",
+     "protocol": {
+      "summary": "Short ankle session a few times a week, outside the strength cap.",
+      "sessions": [
+       {
+        "title": "Ankle prevention",
+        "per_week": 3,
+        "counts_as_strength": false,
+        "session_type": "ankle_mobility",
+        "minutes": 15,
+        "items": [
+         {
+          "ex": "calf_raise",
+          "sets": "3",
+          "reps": "12/side, 3 s lowering",
+          "load": "bodyweight"
+         },
+         {
+          "ex": "single_leg_balance",
+          "sets": "3",
+          "reps": "30-45 s/side, with reach or a gentle push",
+          "load": "none"
+         },
+         {
+          "ex": "banded_ankle_eversion",
+          "sets": "2",
+          "reps": "15-20/side",
+          "load": "light band"
+         },
+         {
+          "ex": "knee_to_wall",
+          "sets": "1",
+          "reps": "10/side",
+          "load": "none"
+         }
+        ]
+       }
+      ]
+     }
+    },
+    "builder_output": {
+     "cap": "Outside the cap: it doesn't count as strength, so it goes in as a 15-min mobility session. The 2 normal strength sessions stay.",
+     "covered_by_protocol": [
+      "calf_ankle",
+      "balance"
+     ],
+     "covered_note": "The run sport block can lean on soleus and hip work instead of repeating calf raises and balance.",
+     "plyometrics": "Allowed: the issue is managed, not active or rehab.",
+     "cautions_note": "Ankle cautions apply on library exercises, e.g. hold a wall on single-leg work, firm flat floor for hops.",
+     "adjustable": "Source is self, so the library's progression rules apply (add load to calf raises when easy).",
+     "debrief": "How did the ankle feel - any pain or swelling during or after?"
+    }
+   }
+  ]
  },
  "template": {
   "session_minutes": "35-45",
@@ -2448,7 +2821,7 @@
    {
     "id": "power",
     "minutes": 3,
-    "picks": "module.power[A|B] from the module's from_phase. Skipped for level-1 athletes in their first 4 weeks and for anyone with an active knee or ankle flag. Done fresh, before the main lifts."
+    "picks": "module.power[A|B] from the module's from_phase. Skipped for level-1 athletes in their first 4 weeks, and blocked by issues.rules.plyo_block. Done fresh, before the main lifts."
    },
    {
     "id": "main",
@@ -2458,7 +2831,7 @@
    {
     "id": "sport",
     "minutes": 8,
-    "picks": "module.sport_block[A|B]. Replaced by modules.ankle_protocol for flagged athletes. Multi-sport athletes use the triathlon module."
+    "picks": "module.sport_block[A|B]. Multi-sport athletes use the triathlon module. Skip picks already covered that week by an athlete's issue protocol (issues.rules.top_up_only)."
    },
    {
     "id": "core",
@@ -2573,6 +2946,7 @@
     ]
    }
   },
+  "issue_protocols_first": "Before steps 1-4: place the athlete's issue protocol sessions (issues block). They count toward the strength cap and weekly coverage; the builder then only tops up what is missing.",
   "pick_order": [
    {
     "step": 1,
@@ -2591,8 +2965,8 @@
    },
    {
     "step": 4,
-    "by": "injury_cautions",
-    "rule": "If the athlete has an active knee, ankle, low_back or shoulder flag, follow that exercise's caution text, or swap to an exercise with no caution for that area."
+    "by": "athlete_issues",
+    "rule": "For each of the athlete's issues that is not resolved: drop exercises on its avoid list, block plyometrics per issues.rules.plyo_block, and apply each exercise's cautions for the issue's area (follow the caution text, or swap to an exercise with no caution for that area)."
    }
   ],
   "athlete_levels": {
@@ -2600,7 +2974,7 @@
    "2": "3+ months of 2 sessions a week with good technique on level-1 lifts.",
    "3": "A year or more, solid technique on level-2 lifts."
   },
-  "one_session_week": "If only one session fits (peak, travel, a busy week): run Session A, but swap the squat for the single-leg pick every other week, and keep the sport block (or ankle protocol).",
+  "one_session_week": "If only one session fits (peak, travel, a busy week): run Session A, but swap the squat for the single-leg pick every other week, and keep the sport block.",
   "progression_rule": "Add load when every set hits the top of the rep range at RPE 7 or less for 2 sessions in a row, then restart at the bottom of the range. No more load to add (tier C, or the heaviest dumbbell)? Add reps, then slow the lowering to 3-4 s, then move to exercise.harder.",
   "regression_rule": "Drop 5-10% load, or move to exercise.easier, if reps fall below the range or RPE hits 9+ in 2 sessions running, or if pain goes above 3/10 or is still there the next morning.",
   "notes": "RPE uses the reps-in-reserve scale: RPE 8 = about 2 reps left, RPE 7 = about 3. Never train to failure. Tempo = seconds lowering - pause - lifting; X = as fast as possible. In example sessions, items with the same 'pair' label alternate; rest_s is the rest after each item, so the lower-body lift gets the combined rest. swaps[tier] = the exercise to use on that tier; a missing tier means keep this exercise."
@@ -2749,7 +3123,7 @@
     "rest_s": 75,
     "max_contacts": 25
    },
-   "sport_prehab": "Ankle protocol unchanged; other sport-block work 1-2 sets.",
+   "sport_prehab": "Sport-block work 1-2 sets.",
    "core": {
     "rounds": "1-2",
     "minutes": "4"
@@ -2784,7 +3158,7 @@
     "rest_s": 75,
     "max_contacts": 15
    },
-   "sport_prehab": "Ankle protocol 2 sets. No slow-lowering (eccentric) emphasis anywhere: it causes soreness.",
+   "sport_prehab": "Sport-block work 1-2 sets. No slow-lowering (eccentric) emphasis anywhere: it causes soreness.",
    "core": {
     "rounds": "1",
     "minutes": "3"
@@ -2837,7 +3211,7 @@
    "level": 2,
    "phase": "build",
    "module": "triathlon",
-   "for": "Triathlete in build, full gym, level 2+. Athletes on the ankle protocol swap the Sport block for the ankle protocol.",
+   "for": "Triathlete in build, full gym, level 2+.",
    "parts": [
     {
      "title": "Warm-up",
@@ -3065,7 +3439,7 @@
        "rest_s": 60,
        "rpe": "7-8",
        "pair": "2",
-       "note": "Level-3 athletes can swap in pull-ups, 3 x 4-8."
+       "note": "Level-3 athletes can swap in pull_up 3 x 4-8."
       }
      ]
     },
@@ -3315,7 +3689,7 @@
        "rest_s": 60,
        "rpe": "8",
        "pair": "1",
-       "note": "When the heaviest weight is easy for 10, switch to Bulgarian split squats with dumbbells."
+       "note": "When the heaviest weight is easy for 10, switch to bulgarian_split_squat with dumbbells."
       },
       {
        "ex": "bent_over_row",
@@ -3398,7 +3772,7 @@
    "level": 1,
    "phase": "base_intro",
    "module": "health",
-   "for": "Adult with no sport goal, new to lifting, light dumbbells. Weeks 1-4. From week 5 add 2 x 10 pogo hops for bone if joints are happy.",
+   "for": "Adult with no sport goal, new to lifting, light dumbbells (tier B). Weeks 1-4. From week 5 add 2 x 10 pogo_hops for bone if joints are happy.",
    "parts": [
     {
      "title": "Warm-up",
