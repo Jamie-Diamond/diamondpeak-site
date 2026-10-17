@@ -5432,6 +5432,45 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     if (row('Calories')) add(shareSplit('Calories', row('Calories')));
     return pool;
   }
+  // The card's title says what the session WAS (Jamie, 17 Oct 2026: "an intelligent title,
+  // like 'Easy 2hrs'"), not the watch's "Wandsworth Running". The effort comes from what was
+  // done (time in zones of the done profile); a planned set ("3x8") and a planned word that
+  // the data can't tell apart (sweetspot from tempo) come from the plan's name.
+  var SHARE_WORDS = [[/over.?unders?/i, 'Over-unders'], [/vo2/i, 'VO2'], [/threshold/i, 'Threshold'],
+                     [/sweet ?spot/i, 'Sweetspot'], [/tempo/i, 'Tempo'], [/race pace/i, 'Race pace'],
+                     [/ramp test/i, 'Ramp test'], [/css/i, 'CSS test']];
+  function shareTitle(x, fam, prof) {
+    var a = x.act || {}, pl = x.plan || {}, lg = x.log || {};
+    var dur = a.dur || 0, km = Number(a.dist || lg.distance_km || 0);
+    var noun = { bike: 'ride', run: 'run', swim: 'swim' }[fam] || '';
+    var size = function () {
+      if (fam === 'run' && km >= 1) return (km >= 10 ? Math.round(km) : km.toFixed(1)) + ' km';
+      if (fam === 'swim' && km) return Math.round(km * 1000).toLocaleString('en-GB') + ' m';
+      if (!dur) return '';
+      if (dur < 60) return Math.round(dur) + ' min';
+      var h = Math.floor(dur / 60), m = Math.round((dur % 60) / 5) * 5;
+      if (m === 60) { h++; m = 0; }
+      return m ? h + 'h' + String(m).padStart(2, '0') : h + (h === 1 ? ' hr' : ' hrs');
+    };
+    if (fam === 'strength') return String(pl.name || 'Strength ' + size()).split(/\s+[\u2014-]\s+|\s*\(/)[0].trim();
+    var pname = String(pl.name || '');
+    var sets = pname.match(/\d+\s*[x×]\s*(\(\s*\d+\s*[x×]\s*\d+\s*\)|\d+)/i);
+    sets = sets ? sets[0].replace(/\s+/g, '').replace(/x/gi, '×') : '';
+    var pword = null;
+    SHARE_WORDS.forEach(function (w) { if (!pword && w[0].test(pname)) pword = w[1]; });
+    // Share of the session at Z3+, Z4+, Z5+ (power or pace zones, 1-7).
+    var tot = 0, z = [0, 0, 0, 0, 0, 0, 0, 0];
+    (prof || []).forEach(function (b) { tot += b[0] || 0; z[Math.max(1, Math.min(7, b[2] || 1))] += b[0] || 0; });
+    var up = function (k) { var t = 0; for (var i = k; i <= 7; i++) t += z[i]; return tot ? t / tot : 0; };
+    var dword = !tot ? null : up(5) >= 0.06 ? 'VO2' : up(4) >= 0.12 ? 'Threshold' : up(3) >= 0.25 ? 'Tempo' : 'easy';
+    if (pword && (dword !== 'easy' || /test/i.test(pword))) return (pword + ' ' + sets).trim();
+    if (dword && dword !== 'easy') return (dword + ' ' + (sets || size())).trim();
+    if (!dword && !pname) return fam ? (fam[0].toUpperCase() + fam.slice(1) + ' ' + size()).trim() : (a.name || '');
+    var long = (fam === 'bike' && dur >= 150) || (fam === 'run' && (dur >= 90 || km >= 18)) ||
+               (fam === 'swim' && (km >= 3 || dur >= 60));
+    return ((long ? 'Long ' + noun : 'Easy') + ' ' + size()).trim();
+  }
+
   function shareDefaults(pool) {
     var by = function (k) { return pool.filter(function (s) { return s.k === k; })[0]; };
     var pick = [by('Distance'), by('Time'), by('Avg power') || by('Pace')];
@@ -5614,7 +5653,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     if (!cv) return;
     shareDraw(cv, {
       mode: shr.mode,
-      title: x.name || pl.name || a.name || '',
+      title: shareTitle(x, shr.fam, shr.prof),
       kicker: dow(x.date) + ' ' + dnum(x.date) + ' ' +
         new Date(x.date + 'T12:00:00').toLocaleDateString('en-GB', { month: 'short' }) +
         (sportWord(pl.sport || a.type || x.sport) ? ' · ' + sportWord(pl.sport || a.type || x.sport) : ''),
@@ -6584,6 +6623,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.034", "2026-10-17", "Share cards get a title that says what the session was: \u2018Easy 2 hrs\u2019, \u2018Threshold 3\u00d78\u2019, \u2018Long run 21 km\u2019, from what you actually did and the plan\u2019s sets.", 0],
     ["4.033", "2026-10-17", "Chat: attach a race route (.gpx) and the coach reads the climbs, the cut-offs and what they need", 0],
     ["4.032", "2026-10-17", "Share cards are square (1:1), both the image and the overlay.", 0],
     ["4.031", "2026-10-17", "Your weekly plan leans its quality sessions toward what\u2019s holding you back (the blueprint still sets the volume, zones and phases)", 0],
