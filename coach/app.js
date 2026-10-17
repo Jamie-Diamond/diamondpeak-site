@@ -5109,6 +5109,8 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       (done ? ' · completed' : ' · planned' + (pl.indoor ? ' · indoors' : '')) + '</p>' +
       '<h2 class="dr-t"><span class="sp ' + sportClass(sport) + '"></span>' +
       esc(name || pl.name || a.name || sport || 'Session') + '</h2></div>' +
+      (done ? '<button type="button" class="dr-x dr-sh" id="drSh" aria-label="Share">' +
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M8 8l4-4 4 4M6 12v7h12v-7"/></svg></button>' : '') +
       '<button type="button" class="dr-x" id="drX" aria-label="Close">✕</button></header>';
 
     h += '<div class="dr-b">';
@@ -5235,7 +5237,8 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     dr.classList.add('on');
     document.body.classList.add('drawn');
     $('#drX').onclick = closeDetail;
-    dr.querySelector('.dr-h').focus && dr.querySelector('.dr-x').focus();
+    if ($('#drSh')) $('#drSh').onclick = function () { openShare(x, fam2); };
+    dr.querySelector('.dr-h').focus && dr.querySelector('#drX').focus();
     if (done && state.me) loadTrack(dateISO, a.type || pl.sport || sport, a.name || name, fam2,
                                      lg.rpe != null ? ['RPE', lg.rpe + ' / 10'] : null);
     var ib = $('#indoorBtn');
@@ -5283,6 +5286,298 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     ]).catch(function (e) { leafletP = null; throw e; });
     return leafletP;
   }
+  /* ── Share a done session (Jamie, 17 Oct 2026) ────────────────────────────
+     "Key stats on a cool image to put in Insta and Strava": two images from one
+     drawing, a transparent overlay to drop on your own photo and a ready-made one on the
+     dark topo background, minimal, the athlete picks up to four stats. Drawn here on a
+     canvas (no server round trip); the PNG is made before Share is tapped, because iOS
+     only opens the share sheet straight from the tap. */
+  var SHARE_MAX = 4;
+  var shareTrack = null;      // the /api/track stats of the open session (loadTrack)
+  var shr = null;             // { x, fam, pool, pick, mode, file }
+
+  function shareSplit(label, v) {
+    var m = String(v).match(/^([\d:.,+-]+)\s*(.*)$/);
+    return m ? { k: label, v: m[1], u: m[2] } : { k: label, v: String(v), u: '' };
+  }
+  function sharePool(x, fam) {
+    var a = x.act || {}, lg = x.log || {}, pool = [], seen = {};
+    var add = function (s) { if (s && s.v && !seen[s.k]) { seen[s.k] = 1; pool.push(s); } };
+    var dist = a.dist || lg.distance_km;
+    if (dist) add({ k: 'Distance', v: Number(dist).toFixed(dist >= 100 ? 0 : 1), u: 'km' });
+    if (a.dur != null) add({ k: 'Time', v: hhmm(a.dur), u: '' });
+    var rows = (shareTrack && shareTrack.date === x.date) ? shareTrack.stats : [];
+    var row = function (l) { return (rows.filter(function (r) { return r[0] === l; })[0] || [])[1]; };
+    if (fam === 'bike') {
+      if (a.powAvg) add({ k: 'Avg power', v: String(a.powAvg), u: 'w' });
+      if (a.powNp || row('Normalised power')) add(shareSplit('Norm power', a.powNp ? a.powNp + ' w' : row('Normalised power')));
+      if (row('Avg speed')) add(shareSplit('Speed', row('Avg speed')));
+    } else if (a.pace) {
+      add({ k: 'Pace', v: a.pace.replace(/\/(km|100m)$/, ''), u: a.pace.indexOf('100m') > 0 ? '/100m' : '/km' });
+    }
+    if (row('Elevation')) add(shareSplit('Climbing', row('Elevation')));
+    // Each peak its own stat; a ★ (best in 90 days) is the coolest thing on the card.
+    String(row('Peak power') || '').replace(/ w$/, '').split(' · ').forEach(function (c) {
+      var m = c.match(/^(.*) (\d+)(★?)$/);
+      if (m) add({ k: 'Best ' + m[1], v: m[2], u: 'w', star: !!m[3] });
+    });
+    if (a.hr || lg.avg_hr) add({ k: 'Avg HR', v: String(a.hr || lg.avg_hr), u: 'bpm' });
+    if (row('Max heart rate')) add(shareSplit('Max HR', row('Max heart rate')));
+    if (row('Cadence')) add(shareSplit('Cadence', row('Cadence')));
+    if (row('Work')) add(shareSplit('Work', row('Work')));
+    if (row('Calories')) add(shareSplit('Calories', row('Calories')));
+    return pool;
+  }
+  function shareDefaults(pool) {
+    var by = function (k) { return pool.filter(function (s) { return s.k === k; })[0]; };
+    var pick = [by('Distance'), by('Time'), by('Avg power') || by('Pace')];
+    var climb = by('Climbing');
+    pick.push(pool.filter(function (s) { return s.star; })[0] ||
+              (climb && parseFloat(climb.v) >= 200 ? climb : null) || by('Avg HR'));
+    pick = pick.filter(Boolean);
+    pool.forEach(function (s) { if (pick.length < 3 && pick.indexOf(s) < 0) pick.push(s); });
+    return pick.slice(0, SHARE_MAX);
+  }
+
+  function shareTopo(ctx, W, H) {
+    // The homepage hero's contours (index.html topoNoise), drawn once, quietly.
+    var hash = function (x, y) {
+      var h = x * 374761393 + y * 668265263;
+      h = (h ^ (h >> 13)) * 1274126177;
+      return ((h ^ (h >> 16)) & 0x7fffffff) / 0x7fffffff;
+    };
+    var smooth = function (x, y) {
+      var ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy;
+      fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+      var a = hash(ix, iy), b = hash(ix + 1, iy), c = hash(ix, iy + 1), d = hash(ix + 1, iy + 1);
+      return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
+    };
+    var noise = function (x, y) {
+      return smooth(x, y) * 0.45 + smooth(x * 2.03, y * 2.03) * 0.3 +
+             smooth(x * 4.07, y * 4.07) * 0.15 + smooth(x * 8.1, y * 8.1) * 0.1;
+    };
+    var g = 10, cols = Math.ceil(W / g) + 1, rows = Math.ceil(H / g) + 1;
+    var seed = (Date.now() % 997) / 97, hs = new Float32Array(cols * rows), lo = 1, hi = 0;
+    for (var y = 0; y < rows; y++) for (var x = 0; x < cols; x++) {
+      var v = noise(x / cols * 4 + seed, y / rows * 5 + seed);
+      hs[y * cols + x] = v; if (v < lo) lo = v; if (v > hi) hi = v;
+    }
+    ctx.lineWidth = 1.6;
+    for (var lv = 0; lv < 22; lv++) {
+      var t = lo + (hi - lo) * (lv + 1) / 23;
+      ctx.strokeStyle = lv % 5 === 0 ? 'rgba(255,255,255,.10)' : 'rgba(255,255,255,.05)';
+      ctx.beginPath();
+      for (var cy = 0; cy < rows - 1; cy++) for (var cx = 0; cx < cols - 1; cx++) {
+        var i = cy * cols + cx, v00 = hs[i], v10 = hs[i + 1], v01 = hs[i + cols], v11 = hs[i + cols + 1];
+        var code = (v00 >= t ? 1 : 0) | (v10 >= t ? 2 : 0) | (v11 >= t ? 4 : 0) | (v01 >= t ? 8 : 0);
+        if (!code || code === 15) continue;
+        var x0 = cx * g, y0 = cy * g, x1 = x0 + g, y1 = y0 + g;
+        var l = function (a, b, va, vb) { return a + (t - va) / (vb - va) * (b - a); };
+        var T = [l(x0, x1, v00, v10), y0], B = [l(x0, x1, v01, v11), y1];
+        var Lf = [x0, l(y0, y1, v00, v01)], R = [x1, l(y0, y1, v10, v11)];
+        var segs = { 1: [T, Lf], 14: [T, Lf], 2: [T, R], 13: [T, R], 3: [Lf, R], 12: [Lf, R],
+                     4: [R, B], 11: [R, B], 6: [T, B], 9: [T, B], 7: [Lf, B], 8: [Lf, B],
+                     5: [T, R, Lf, B], 10: [T, Lf, R, B] }[code];
+        for (var s = 0; s < segs.length; s += 2) {
+          ctx.moveTo(segs[s][0], segs[s][1]); ctx.lineTo(segs[s + 1][0], segs[s + 1][1]);
+        }
+      }
+      ctx.stroke();
+    }
+  }
+
+  function shareDraw(cv, o) {
+    // o: { mode: 'overlay'|'image', title, kicker, stats, shape, prof }
+    var img = o.mode === 'image', W = 1080, H = img ? 1350 : 1080, P = 84;
+    cv.width = W; cv.height = H;
+    var ctx = cv.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+    if (img) { ctx.fillStyle = '#06080a'; ctx.fillRect(0, 0, W, H); shareTopo(ctx, W, H); }
+    var white = function (a) { return 'rgba(255,255,255,' + a + ')'; };
+    // On someone's photo the type needs a soft shadow to read; on the dark card it doesn't.
+    var shadow = function (on) {
+      ctx.shadowColor = on && !img ? 'rgba(0,0,0,.45)' : 'transparent';
+      ctx.shadowBlur = on && !img ? 18 : 0;
+    };
+    shadow(true);
+    var y = img ? 150 : 110;
+    ctx.fillStyle = white(.62);
+    ctx.font = '500 26px "DM Mono", monospace';
+    ctx.fillText(o.kicker.toUpperCase(), P, y);
+    if (img && o.title) {
+      ctx.fillStyle = white(.96);
+      ctx.font = '600 56px "Plus Jakarta Sans", system-ui, sans-serif';
+      var words = String(o.title).split(/\s+/), line = '', lines = [];
+      words.forEach(function (w) {
+        var t = line ? line + ' ' + w : w;
+        if (ctx.measureText(t).width > W - 2 * P && line) { lines.push(line); line = w; } else line = t;
+      });
+      if (line) lines.push(line);
+      lines.slice(0, 2).forEach(function (l, i) { ctx.fillText(l, P, y + 74 + i * 66); });
+    }
+    // The picture: the route if there is one, else the session's effort profile.
+    var top = img ? 330 : 170, boxH = img ? 560 : 520;
+    if (o.shape && o.shape.length > 3) {
+      var xs = o.shape.map(function (p) { return p[0]; }), ys = o.shape.map(function (p) { return p[1]; });
+      var mnx = Math.min.apply(null, xs), mxx = Math.max.apply(null, xs);
+      var mny = Math.min.apply(null, ys), mxy = Math.max.apply(null, ys);
+      var sc = Math.min((W - 2 * P) / ((mxx - mnx) || 1), boxH / ((mny === mxy ? 1 : mxy - mny)));
+      var ox = P + ((W - 2 * P) - (mxx - mnx) * sc) / 2, oy = top + (boxH - (mxy - mny) * sc) / 2;
+      ctx.lineJoin = ctx.lineCap = 'round';
+      ctx.strokeStyle = white(.95); ctx.lineWidth = 8;
+      ctx.beginPath();
+      o.shape.forEach(function (p, i) {
+        var px = ox + (p[0] - mnx) * sc, py = oy + (p[1] - mny) * sc;
+        if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+      });
+      ctx.stroke();
+      ctx.fillStyle = '#22b3a6';
+      ctx.beginPath();
+      ctx.arc(ox + (o.shape[0][0] - mnx) * sc, oy + (o.shape[0][1] - mny) * sc, 13, 0, 7);
+      ctx.fill();
+    } else if (o.prof && o.prof.length) {
+      var tot = o.prof.reduce(function (a, b) { return a + (b[0] || 0); }, 0) || 1;
+      var mx = Math.max.apply(null, o.prof.map(function (b) { return b[1] || 0; })) || 100;
+      var ph = 300, base = top + (boxH + ph) / 2, x = P;
+      shadow(false);
+      o.prof.forEach(function (b) {
+        var w = (W - 2 * P) * (b[0] || 0) / tot, hgt = Math.max(10, (b[1] || 0) / mx * ph);
+        ctx.fillStyle = ZONE_COL[Math.max(0, Math.min(6, (b[2] || 1) - 1))];
+        ctx.globalAlpha = .92;
+        ctx.fillRect(x + 2, base - hgt, Math.max(1, w - 4), hgt);
+        x += w;
+      });
+      ctx.globalAlpha = 1;
+      shadow(true);
+    }
+    // The stats: up to four, value large, label small above it.
+    var st = o.stats.slice(0, SHARE_MAX), n = st.length || 1, cw = (W - 2 * P) / n;
+    var sy = img ? 1060 : 860;
+    st.forEach(function (s, i) {
+      var sx = P + i * cw;
+      var lx = sx;
+      if (s.star) {                         // a 90-day best, in gold
+        ctx.fillStyle = '#f2c14e';
+        ctx.font = '600 26px system-ui, sans-serif';
+        ctx.fillText('★', sx, sy + 1);
+        lx += ctx.measureText('★ ').width;
+      }
+      ctx.fillStyle = white(.6);
+      ctx.font = '500 24px "DM Mono", monospace';
+      ctx.fillText(s.k.toUpperCase(), lx, sy);
+      var big = n > 3 ? 64 : 76;
+      ctx.fillStyle = white(.97);
+      ctx.font = '600 ' + big + 'px "Plus Jakarta Sans", system-ui, sans-serif';
+      ctx.fillText(s.v, sx, sy + big + 14);
+      if (s.u) {
+        var vw = ctx.measureText(s.v).width;
+        ctx.fillStyle = white(.7);
+        ctx.font = '500 30px "Plus Jakarta Sans", system-ui, sans-serif';
+        if (vw + 8 + ctx.measureText(s.u).width < cw - 12) ctx.fillText(s.u, sx + vw + 8, sy + big + 14);
+      }
+    });
+    // Watermark.
+    ctx.fillStyle = white(img ? .9 : .85);
+    ctx.font = '700 40px "Libre Baskerville", Georgia, serif';
+    ctx.fillText('Peak', P, H - (img ? 90 : 70));
+    if (img) {
+      ctx.fillStyle = white(.45);
+      ctx.font = '500 22px "DM Mono", monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText('diamondpeak.uk', W - P, H - 92);
+      ctx.textAlign = 'left';
+    }
+    shadow(false);
+  }
+
+  function shareRender() {
+    if (!shr) return;
+    var x = shr.x, a = x.act || {}, pl = x.plan || {};
+    var cv = $('#shrCv');
+    if (!cv) return;
+    shareDraw(cv, {
+      mode: shr.mode,
+      title: x.name || pl.name || a.name || '',
+      kicker: dow(x.date) + ' ' + dnum(x.date) + ' ' +
+        new Date(x.date + 'T12:00:00').toLocaleDateString('en-GB', { month: 'short' }) +
+        (sportWord(pl.sport || a.type || x.sport) ? ' · ' + sportWord(pl.sport || a.type || x.sport) : ''),
+      stats: shr.pick, shape: a.shape, prof: profFor({ date: x.date, sport: x.sport, prof: a.prof }) || a.prof
+    });
+    shr.file = null;
+    var stamp = shr.stamp = Date.now();
+    cv.toBlob(function (b) {
+      if (!b || !shr || shr.stamp !== stamp) return;
+      shr.file = new File([b], 'peak-' + x.date + (shr.mode === 'overlay' ? '-overlay' : '') + '.png',
+                          { type: 'image/png' });
+    }, 'image/png');
+    var chips = $('#shrChips');
+    if (chips) chips.innerHTML = shr.pool.map(function (s, i) {
+      return '<button type="button" data-i="' + i + '" aria-pressed="' + (shr.pick.indexOf(s) >= 0) + '">' +
+        (s.star ? '★ ' : '') + esc(s.k) + ' <b>' + esc(s.v + (s.u && s.u[0] !== '/' ? ' ' : '') + s.u) + '</b></button>';
+    }).join('');
+  }
+
+  function openShare(x, fam) {
+    var pool = sharePool(x, fam);
+    shr = { x: x, fam: fam, pool: pool, pick: shareDefaults(pool), mode: 'image', file: null };
+    var el = document.createElement('div');
+    el.className = 'shr';
+    el.id = 'shr';
+    el.innerHTML = '<div class="shr-p" role="dialog" aria-label="Share this session">' +
+      '<header class="shr-h"><h2>Share</h2><button type="button" class="dr-x" id="shrX" aria-label="Close">✕</button></header>' +
+      '<div class="seg sub shr-m"><button type="button" data-m="image" aria-selected="true">Image</button>' +
+      '<button type="button" data-m="overlay" aria-selected="false">Overlay</button></div>' +
+      '<div class="shr-cvw"><canvas id="shrCv" class="shr-cv"></canvas></div>' +
+      '<p class="shr-k">Pick up to ' + SHARE_MAX + ' stats</p><div class="shr-c" id="shrChips"></div>' +
+      '<div class="btns shr-b"><button type="button" id="shrGo">Share</button>' +
+      '<button type="button" id="shrSave">Save image</button></div>' +
+      '<p class="shr-msg" id="shrMsg"></p></div>';
+    document.body.appendChild(el);
+    var close = function () { el.remove(); shr = null; };
+    el.addEventListener('click', function (e) { if (e.target === el) close(); });
+    $('#shrX').onclick = close;
+    el.querySelectorAll('.shr-m button').forEach(function (b) {
+      b.onclick = function () {
+        shr.mode = b.getAttribute('data-m');
+        el.querySelectorAll('.shr-m button').forEach(function (o) { o.setAttribute('aria-selected', o === b); });
+        $('#shrCv').classList.toggle('see-through', shr.mode === 'overlay');
+        shareRender();
+      };
+    });
+    $('#shrChips').onclick = function (e) {
+      var b = e.target.closest('button');
+      if (!b) return;
+      var s = shr.pool[+b.getAttribute('data-i')], at = shr.pick.indexOf(s);
+      if (at >= 0) { if (shr.pick.length > 1) shr.pick.splice(at, 1); }
+      else { shr.pick.push(s); if (shr.pick.length > SHARE_MAX) shr.pick.shift(); }
+      shareRender();
+    };
+    var save = function () {
+      if (!shr || !shr.file) return;
+      var u = URL.createObjectURL(shr.file), l = document.createElement('a');
+      l.href = u; l.download = shr.file.name;
+      document.body.appendChild(l); l.click(); l.remove();
+      setTimeout(function () { URL.revokeObjectURL(u); }, 4000);
+    };
+    $('#shrSave').onclick = save;
+    $('#shrGo').onclick = function () {
+      if (!shr || !shr.file) { $('#shrMsg').textContent = 'One moment, still drawing…'; return; }
+      var f = shr.file;
+      if (navigator.canShare && navigator.canShare({ files: [f] })) {
+        navigator.share({ files: [f] }).catch(function () {});
+      } else {
+        save();
+        $('#shrMsg').textContent = 'Saved. Add it from your photos.';
+      }
+    };
+    // Draw once the card's fonts are in, or the first image comes out in the fallback face.
+    var fonts = document.fonts && document.fonts.load ? Promise.all([
+      document.fonts.load('600 64px "Plus Jakarta Sans"'), document.fonts.load('500 24px "DM Mono"'),
+      document.fonts.load('700 40px "Libre Baskerville"')]).catch(function () {}) : Promise.resolve();
+    shareRender();
+    fonts.then(shareRender);
+  }
+
   var TRK_NAMES = { power: 'Power', hr: 'HR', pace: 'Pace' };
   // Stats shown without opening the drawer, in lib/activity_stats.py's labels.
   var STATS_KEY = ['Efficiency vs your normal', 'Split', 'Fade', 'Normalised power', 'Intensity (IF)',
@@ -5295,6 +5590,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     fetch(url, { cache: 'no-store' })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then(function (t) {
+        shareTrack = { date: dateISO, stats: t.stats || [] };
         // Peak power, corrected decoupling and the rest, in place of the short Details card.
         var slot = $('#detSlot');
         // The few that matter up front, the rest in a drawer, so more can be added without
@@ -6146,6 +6442,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.027", "2026-10-17", "Share a finished session: the share button on a done session makes an image with your key stats on the dark map background, or a see-through overlay to put on your own photo for Instagram or Strava. Pick up to four stats. Over-unders and ramp tests now show each over, under and step in the session chart.", 0],
     ["4.026", "2026-10-17", "Goals for bike races: \u2018What\u2019s holding you back\u2019 from the route itself \u2013 the climbs, the cut-offs and the climbing power they need, how long the day can be, durability and fuelling (no finish time: drafting and wind make that a guess)", 0],
     ["4.025", "2026-10-17", "Goals: \u2018What\u2019s holding you back\u2019 uses running power where you have it: threshold power, economy (speed per watt) against your own trend, and power drift late in long runs, all said as pace too", 0],
     ["4.024", "2026-10-17", "Goals: \u2018What\u2019s holding you back\u2019 is all measured: a fitness score for this point in the plan, endurance at race pace from your training, and how to fix it. Weekly km is advice, not a pass mark", 0],

@@ -16,7 +16,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <!-- Glass style (glass.css) and Plus Jakarta Sans: the only look since 3.78 (Jamie,
      14 Oct 2026). Set before first paint. -->
-<link rel="stylesheet" href="glass.css?v=186">
+<link rel="stylesheet" href="glass.css?v=187">
 <script>try{document.documentElement.classList.add('glass');
 var gf="jakarta";document.documentElement.setAttribute("data-font",gf);
 var GF={inter:'Inter:wght@400;500;600;700',manrope:'Manrope:wght@400;500;600;700',jakarta:'Plus+Jakarta+Sans:wght@400;500;600;700'};
@@ -1305,6 +1305,32 @@ body.drawn{overflow:hidden}
   transition:color .16s,border-color .16s;
 }
 .dr-x:hover,.dr-x:focus-visible{color:var(--accent);border-color:var(--accent)}
+/* Share a done session (17 Oct 2026): a round button beside close, then a sheet with the
+   image preview, the Image / Overlay switch and the stat chips. */
+.dr-sh + .dr-x{margin-left:8px}
+.dr-sh{display:grid;place-items:center;padding:0}
+.dr-sh svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.shr{position:fixed;inset:0;z-index:1000;background:rgba(10,12,16,.45);display:flex;align-items:flex-end;justify-content:center}
+.shr-p{box-sizing:border-box;min-width:0;background:var(--paper,#fff);width:100%;max-width:520px;max-height:94vh;overflow-y:auto;
+  border-radius:18px 18px 0 0;padding:16px 18px calc(18px + env(safe-area-inset-bottom,0px));
+  box-shadow:0 -8px 30px rgba(0,0,0,.18)}
+.shr-h{display:flex;align-items:center;margin-bottom:12px}
+.shr-h h2{margin:0;font-size:18px;font-weight:600}
+.shr-m{margin:0 0 12px}
+.shr-cvw{display:flex;justify-content:center}
+.shr-cv{display:block;width:auto;height:auto;max-width:100%;max-height:52vh;border-radius:12px}
+.shr-cv.see-through{background:#8a8f96 repeating-conic-gradient(#9aa0a7 0 25%,#7b8188 0 50%) 0 0/24px 24px}
+.shr-k{margin:14px 0 8px;font-size:13px;color:var(--muted)}
+.shr-c{display:flex;flex-wrap:wrap;gap:6px}
+.shr-c button{appearance:none;border:1px solid var(--rule);background:none;border-radius:999px;padding:6px 11px;
+  font:inherit;font-size:13px;color:var(--ink-2);cursor:pointer}
+.shr-c button b{font-weight:600;color:var(--ink)}
+.shr-c button[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:var(--paper,#fff)}
+.shr-c button[aria-pressed=true] b{color:inherit}
+.shr-b{flex-direction:row;margin-top:16px}
+.shr-b button{padding:10px 14px;font-size:15px}
+html body .shr .shr-b button:first-child{background:var(--ink);color:#fff;border-color:var(--ink)}
+.shr-msg{margin:8px 0 0;font-size:13px;color:var(--muted);min-height:1em}
 .dr-b{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:15px 18px 22px}
 .dr-b .card:last-child{margin-bottom:0}
 
@@ -1470,6 +1496,6 @@ body.drawn{overflow:hidden}
      broken launch. A new URL cannot hit that cache entry. It always equals the
      number in sw.js CACHE (peak-vN): bump both on every release, enforced by
      ClaudeCoach/ironman-analysis/tests/test_peak_release.py. -->
-<script src="app.js?v=186" defer></script>
+<script src="app.js?v=187" defer></script>
 </body>
 </html>

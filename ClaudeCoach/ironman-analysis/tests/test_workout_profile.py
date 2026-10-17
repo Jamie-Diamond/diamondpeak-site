@@ -72,3 +72,31 @@ def test_done_sessions_get_laps():
     assert max(main) - min(main) < 0.6                  # even, not 5 + 5 + 1
     short = {"velocity_smooth": [3.4] * 1500, "time": list(range(1500))}
     assert len(wp.completed(short, SS, "Run")) == 3      # 25 min easy: warm-up / main / down
+
+
+# ── over-unders and ramp tests keep their detail (Jamie, 17 Oct 2026) ──────────────
+def _ou_plan():
+    on, off = [120, 105, 5], [120, 95, 4]
+    return [[600, 60, 2]] + [on, off] * 4 + [[300, 50, 1]] + [on, off] * 4 + [[600, 55, 2]]
+
+
+def test_detailed_kind_spots_over_unders_and_ramp_tests_only():
+    assert wp.detailed_kind(_ou_plan()) == "over_under"
+    ramp = [[600, 50, 1]] + [[60, 50 + 5 * i, 3] for i in range(12)] + [[300, 40, 1]]
+    assert wp.detailed_kind(ramp) == "ramp"
+    threshold = [[600, 65, 2], [480, 98, 4], [240, 50, 1], [480, 98, 4], [240, 50, 1]]
+    assert wp.detailed_kind(threshold) is None
+    assert wp.detailed_kind([]) is None
+
+
+def test_fine_mode_keeps_each_over_and_under():
+    watts = [120] * 600
+    for _ in range(3):                      # 3 sets of 4 x (2 min at 105% / 2 min at 95%)
+        for _ in range(4):
+            watts += [210] * 120 + [190] * 120
+        watts += [100] * 300
+    ride = {"watts": watts, "time": list(range(len(watts)))}
+    coarse = wp.completed(ride, SS, "Ride")
+    fine = wp.completed(ride, SS, "Ride", fine=True)
+    assert sum(1 for b in fine if b[1] == 105) == 12 and sum(1 for b in fine if b[1] == 95) == 12
+    assert sum(1 for b in coarse if b[1] in (95, 105)) < 12     # the default view smooths them

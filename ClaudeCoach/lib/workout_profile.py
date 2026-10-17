@@ -103,8 +103,39 @@ def planned(doc: dict | None, ss: dict) -> list:
     return out
 
 
-def completed(streams: dict, ss: dict, sport: str, threshold_pace_s=None) -> list:
-    """Blocks for a done session from its streams ({type: data}); [] if nothing usable."""
+def detailed_kind(plan: list) -> str | None:
+    """'over_under' or 'ramp' when a planned workout's blocks ([[s, pct, z], ...]) are one
+    of the two shapes that the done chart must not smooth away (Jamie, 17 Oct 2026: show
+    the overs, unders and ramp steps, but only when that is what was planned).
+    Ramp test: five or more rising steps in a row, none over 3 min. Over-under: neighbouring
+    efforts (both >= WORK_PCT, at least 3 points apart) that go up, down, up... changing
+    direction three or more times; a ramp only ever goes up, so it never counts."""
+    if not plan:
+        return None
+    run = best = 1
+    for a, b in zip(plan, plan[1:]):
+        run = run + 1 if (b[1] > a[1] and a[0] <= 180 and b[0] <= 180) else 1
+        best = max(best, run)
+    if best >= 5:
+        return "ramp"
+    steps = [b[1] - a[1] for a, b in zip(plan, plan[1:])
+             if a[1] >= WORK_PCT and b[1] >= WORK_PCT and abs(a[1] - b[1]) >= 3]
+    turns = sum(1 for x, y in zip(steps, steps[1:]) if (x > 0) != (y > 0))
+    return "over_under" if turns >= 3 else None
+
+
+# Finer cut for the two detailed shapes: a 95/105% over-under (10 points apart) and a
+# ramp test's ~5% steps both survive; 1-minute ramp steps are two 30 s slices.
+FINE_MERGE_PCT = 3.0
+FINE_MIN_SEG_S = 45
+FINE_MAX_SEGS = 60
+
+
+def completed(streams: dict, ss: dict, sport: str, threshold_pace_s=None,
+              fine: bool = False) -> list:
+    """Blocks for a done session from its streams ({type: data}); [] if nothing usable.
+    fine=True (planned over-unders and ramp tests): keep each over, under and step, and
+    skip the lap re-cut, which would average them back together."""
     watts, vel, hr = streams.get("watts"), streams.get("velocity_smooth"), streams.get("heartrate")
     t = streams.get("time")
     n = max(len(watts or []), len(vel or []), len(hr or []))
@@ -139,7 +170,8 @@ def completed(streams: dict, ss: dict, sport: str, threshold_pace_s=None) -> lis
             metres = dur * sum(vv) / len(vv) if vv else None      # for lap lengths
             segs.append([dur, 100.0 * (sum(vals) / len(vals)) / ref, metres])
         i = max(j, i + 1)
-    blocks = laps(segs, _segment(segs), sport)
+    blocks = (_segment(segs, FINE_MERGE_PCT, FINE_MIN_SEG_S, FINE_MAX_SEGS) if fine
+              else laps(segs, _segment(segs), sport))
     out = []
     for dur, pct in blocks:
         if kind == "power":
@@ -158,7 +190,8 @@ MIN_SEG_S = 90           # anything shorter is folded into its closer neighbour
 MAX_SEGS = 16            # at most this many blocks in a session's profile
 
 
-def _segment(segs: list) -> list:
+def _segment(segs: list, merge_pct: float = MERGE_PCT, min_seg_s: int = MIN_SEG_S,
+             max_segs: int = MAX_SEGS) -> list:
     """Bottom-up merge of [seconds, pct] slices into blocks of steady effort (Jamie, 13 Oct
     2026: "where there are obvious intervals it should display as one block, not lots of
     little blocks"). Always merges the adjacent pair that distorts the picture least
@@ -175,10 +208,10 @@ def _segment(segs: list) -> list:
 
     while len(segs) > 1:
         gaps = [abs(segs[k][1] - segs[k + 1][1]) for k in range(len(segs) - 1)]
-        if len(segs) <= MAX_SEGS and min(gaps) >= MERGE_PCT:
+        if len(segs) <= max_segs and min(gaps) >= merge_pct:
             # The blocks are distinct: only a piece too short to read is folded now, into
             # its own nearer neighbour - never by merging two real blocks.
-            shorts = [i for i, x in enumerate(segs) if x[0] < MIN_SEG_S]
+            shorts = [i for i, x in enumerate(segs) if x[0] < min_seg_s]
             if not shorts:
                 break
             i = min(shorts, key=lambda i: segs[i][0])
@@ -337,6 +370,7 @@ def attach(client, base: Path, slug: str, recent: list, sport_settings: list,
         pass
     fetched = 0
     for row in recent:
+        eid = row.pop("_eid", None)          # the paired planned event; never published
         aid = row.get(id_key)
         if not aid or str(row.get("date") or "") < since:
             continue
@@ -362,7 +396,15 @@ def attach(client, base: Path, slug: str, recent: list, sport_settings: list,
                     prof = from_intervals(ivs, ss, css_s)
                 except Exception:
                     prof = []
-            prof = prof or completed(st, ss, icu_sport, css_s if "Swim" in icu_sport else None)
+            fine = False
+            if eid and not prof:                 # planned as over-unders or a ramp test?
+                try:
+                    ev = client.get_event(eid) or {}
+                    fine = bool(detailed_kind(planned(ev.get("workout_doc"), ss)))
+                except Exception:
+                    fine = False
+            prof = prof or completed(st, ss, icu_sport, css_s if "Swim" in icu_sport else None,
+                                     fine=fine)
             cache[aid] = prof or None
             fetched += 1
             if prof:

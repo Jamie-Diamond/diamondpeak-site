@@ -645,6 +645,7 @@ def _build_jamie_data(client) -> dict:
         norm_p = a.get("icu_weighted_avg_watts")
         recent.append({
             "_aid":   a.get("id"),   # removed by route_shape.attach_shapes
+            "_eid":   a.get("paired_event_id"),   # removed by workout_profile.attach
             "date":   a.get("start_date_local","")[:10],
             "sport":  sport,
             "name":   a.get("name",""),
@@ -1829,6 +1830,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
         norm_p = a.get("icu_weighted_avg_watts")
         recent.append({
             "_aid":   a.get("id"),   # removed by route_shape.attach_shapes
+            "_eid":   a.get("paired_event_id"),   # removed by workout_profile.attach
             "date":   a.get("start_date_local", "")[:10],
             "sport":  sport,
             "name":   a.get("name", ""),

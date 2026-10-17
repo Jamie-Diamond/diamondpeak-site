@@ -171,6 +171,7 @@ def attach_shapes(client, base: Path, slug: str, recent: list,
 
     for row in recent:
         aid = row.pop(id_key, None)
+        row.pop("_eid", None)          # backstop if workout_profile.attach never ran
         if not aid:
             continue
         if aid in cache:
