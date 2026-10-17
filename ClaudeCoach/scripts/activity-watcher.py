@@ -35,8 +35,12 @@ STRUCTURE_RULE = (
     " presses do not match the plan (e.g. two continuous blocks and no lap presses against a planned"
     " 8x100), the planned structure was NOT executed: output `PLAN_DELTA: none`, do NOT grade rep by"
     " rep against the plan, and say plainly 'planned structure not executed' before describing what"
-    " was actually done (blocks, durations, pace, HR). Grade only on what was done."
+    " was actually done in ONE line (block count and distances or durations, average pace, HR),"
+    " never a line per block. Grade only on what was done. A 'Structure:' line in COMPUTED FACTS"
+    " (swims) is that verdict, decided in code."
 )
+# ONE line: Haiku gave James's easy 16 Oct swim a line per block, 189 words against 46
+# (Jamie, 17 Oct 2026: shadow review).
 
 _WATER_SPORTS = {"sail", "watersport", "windsurf", "kitesurf", "kiteboard"}
 
@@ -185,10 +189,12 @@ def _quick_log_keyboard(activity_id, slug, sport, has_injury, duration_min):
 
 
 def _build_prompt(slug, first_name, ftp, injuries, profile=None, run_hr_cap=150, nutrition_target=90, nutrition_label="race target", recent_chat="",
-                  hr_note="", css=None):
+                  hr_note="", css=None, recent_fuel=None, target_id=None):
     """Build the per-athlete activity analysis prompt. `hr_note` is the code-side HR
     check for the recent activities (_hr_quality_pass); empty when every HR is fine.
-    `css` is the swim CSS (M:SS per 100m) from Intervals.icu (_resolve_css), or None."""
+    `css` is the swim CSS (M:SS per 100m) from Intervals.icu (_resolve_css), or None.
+    `recent_fuel` is _recent_fuel's figure and `target_id` _pick_target's activity, both
+    worked out in code (Jamie, 17 Oct 2026: shadow review); None = the old wording."""
     today = date.today().isoformat()
     # Injury context for the athlete line and run analysis
     injury_line = ""
@@ -243,6 +249,18 @@ def _build_prompt(slug, first_name, ftp, injuries, profile=None, run_hr_cap=150,
     css_line = (f" Swim CSS {css}/100m (Intervals.icu swim threshold - the only CSS to use)."
                 if css else " No swim CSS is set: give swim paces with no CSS comparison.")
 
+    # (Jamie, 17 Oct 2026: shadow review) the fuelling average was a sum left to the model
+    # (Sonnet "none logged", Haiku "~64 g/hr" off the same log), and which activity to
+    # debrief was its choice too (Calum's pair compared two different rides).
+    fuel_avg = recent_fuel or ("[avg g/hr from last 4 rides >90 min in session-log.json "
+                               "with nutrition_g_carb set]")
+    step3 = (f"Step 3 — Debrief activity {target_id} (picked in code: the most recent one not "
+             "yet in session-log.json; any other new activity gets its own run). If it IS "
+             "already in session-log.json, output ACTIVITY_ID: none.\n  Duplicate upload guard:"
+             if target_id else
+             "Step 3 — For the most recent activity that is NOT already in session-log.json:\n"
+             "  Duplicate upload guard:")
+
     return f"""\
 Check for new activities for {first_name} and stub them into the session log.
 
@@ -268,8 +286,7 @@ Step 2 — Read:
 - ClaudeCoach/athletes/{slug}/persistent-rules.md (permanent coaching rules — these override defaults)
 - ClaudeCoach/athletes/{slug}/session-log.json — note all existing activity_id values.
 
-Step 3 — For the most recent activity that is NOT already in session-log.json:
-  Duplicate upload guard: if multiple activities of the same sport on the same date are NOT in session-log.json, they are likely the same session uploaded from two sources (e.g. Garmin + Strava). Only process the one with the highest numeric ID. If that highest-ID activity is already in session-log.json (by ID, date, or both), output ACTIVITY_ID: none — the session is already logged.
+{step3} if multiple activities of the same sport on the same date are NOT in session-log.json, they are likely the same session uploaded from two sources (e.g. Garmin + Strava). Only process the one with the highest numeric ID. If that highest-ID activity is already in session-log.json (by ID, date, or both), output ACTIVITY_ID: none — the session is already logged.
 
   - Fetch full detail via Bash: python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --caller activity-watcher --endpoint activity_detail --activity-id <id>
   - If sport is Run, VirtualRun, or Swim: also fetch extended metrics:
@@ -298,7 +315,7 @@ Step 3 — For the most recent activity that is NOT already in session-log.json:
     {{
       "activity_id": "<id>", "date": "<YYYY-MM-DD>", "name": "<name>", "sport": "Swim",
       "tss": <tss>, "duration_min": <duration>, "distance_km": <distance_m / 1000>,
-      "pace_per_100m": <avg pace in seconds per 100m — distance_m / (duration_s / 100)>,
+      "pace_per_100m": <seconds per 100m: the figure on this swim's COMPUTED FACTS "Swim average" line; without one, moving_time_s / (distance_m / 100)>,
       "avg_hr": <avg_hr or null>,
       "rpe": null, "feel": null, "notes": null, "logged_at": "<current datetime as YYYY-MM-DDTHH:MM:SS>", "stub": true
     }}
@@ -358,7 +375,7 @@ RIDE:
   Rep lines: Rep N: DUR · XXXw (X% FTP) · AVGbpm/MAXbpm
   Final line: completion note if intervals missed, else "Nutrition — g carbs/hr, bottles, and sodium?"
 - Unstructured ≤90 min: NP + IF | "Nutrition — g carbs/hr, bottles, and sodium?"
-- Unstructured >90 min: NP + IF | aerobic decoupling % | "Nutrition — g carbs/hr, bottles, and sodium? (recent avg: [avg g/hr from last 4 rides >90 min in session-log.json with nutrition_g_carb set] · {nutrition_label} {nutrition_target}g/hr)"
+- Unstructured >90 min: NP + IF | aerobic decoupling % | "Nutrition — g carbs/hr, bottles, and sodium? (recent avg: {fuel_avg} · {nutrition_label} {nutrition_target}g/hr)"
 
 RUN:
 {run_injury_ask}
@@ -368,6 +385,7 @@ For ANY session (rides too): never name a hill, climb or terrain as the reason f
 Elevation source: total_elevation_gain / total_elevation_loss / total_ascent_m for a session ALWAYS come from the activity_detail root fields (whole-activity totals). NEVER read elevation from extended_metrics or icu_intervals entries — those are per-segment/per-interval values (often single-digit metres) and will misstate the session's actual terrain by an order of magnitude if quoted as the whole-activity gain.
 
 SWIM:
+- Whole-swim average pace and its gap to CSS: quote the COMPUTED FACTS "Swim average" line; never work an average pace out yourself.
 - Pool with Strava laps (fetched above): rep durations/paces come from the STRAVA LAPS — they are
   the native Garmin button-press boundaries and are correct. NEVER use icu_intervals for rep
   timings: ICU infers boundaries from velocity_smooth and over-extends every rep ~2-4s into the
@@ -385,7 +403,7 @@ SWIM:
 - Else (OWS or neither): use interval_summary from activity detail if present, else distance + avg pace vs CSS +/- seconds.
   Final line: "How did it feel?" (RPE is asked by the Quick log card, never in text)
 
-STRENGTH: duration | {strength_q}
+STRENGTH: one summary line (duration, Load, avg HR; no zone-by-zone breakdown) | {strength_q}
 CARDIO (sport Workout with a generic watch name such as "Cardio", and no distance): the watch does not say what it was, so never call it strength or guess the sport. Give duration, Load and avg HR, then END with exactly "What was this one - a run, a ride, or something else?" in place of any other question (Jamie, 14 Oct 2026: Kathryn's planned easy run came in as Garmin "Cardio").
 
 For unstructured rides > 3 hours (or structured rides > 3 hours where Pa:HR data is available): also output a DECOUPLING line:
@@ -429,7 +447,7 @@ leaving them null — data the athlete already gave must never be re-asked by th
 CRITICAL: Your entire response must contain only the five lines of Step 4 (ACTIVITY_ID, ANALYSIS, PLAN_DELTA, DECOUPLING, TEST_RESULT). Do not output reasoning steps, file read confirmations, tool call summaries, or any other text. All processing is internal and silent.
 ANALYSIS scope: describe only the activity being analysed. Do NOT mention other planned sessions from today's calendar, ask whether a different planned session happened, or comment on sessions that were not completed.
 No advice about tomorrow, the rest of the week or what to train next ("tomorrow should be bike or rest"): the morning card and the night-before brief own that. The one exception is the OVER PLAN line, where that block asks for it.
-At most ONE "Next time:" line, and only when this session clearly missed its own target. Any number in it must be one of the figures this prompt gives you (run HR cap {run_hr_cap} bpm, FTP {ftp} W, threshold pace {threshold_pace}/km, the swim CSS); never invent a pace, power or HR target. (Jamie, 16 Oct 2026: shadow review, an invented "Next time: run near 6:00/km".)"""
+At most ONE "Next time:" line, and only when this session clearly missed its own target. Never one for an activity with an OVER PLAN line: that line already says it. Any number in it must be one of the figures this prompt gives you (run HR cap {run_hr_cap} bpm, FTP {ftp} W, threshold pace {threshold_pace}/km, the swim CSS); never invent a pace, power or HR target. (Jamie, 16 Oct 2026: shadow review, an invented "Next time: run near 6:00/km".)"""
 
 
 def _notify(msg, chat_id, slug=None):
@@ -769,13 +787,16 @@ def _is_run(a: dict) -> bool:
     return "Run" in str(a.get("type") or "")
 
 
-def _zone_split_line(a: dict, hr_trusted: bool = True) -> str:
+def _zone_split_line(a: dict, hr_trusted: bool = True, hr_only: bool = False) -> str:
     """Labelled % time in zone, from Intervals.icu's zone times: POWER zones for a ride with
     power, HR zones otherwise. Group shares come from the raw seconds, never from the rounded
-    per-zone figures, so they always agree with the data. "" when there is nothing usable."""
+    per-zone figures, so they always agree with the data. "" when there is nothing usable.
+    HR zones also when the power is broken (_power_broken) or the athlete's level is HR only
+    (a beginner is told "effort and HR only - do not reference power"; Calum's ride was
+    described from power zones; Jamie, 17 Oct 2026: shadow review)."""
     typ = str(a.get("type") or "")
     secs, kind = [], ""
-    if "Ride" in typ and a.get("icu_average_watts"):
+    if "Ride" in typ and a.get("icu_average_watts") and not hr_only and not _power_broken(a):
         secs = [float(z.get("secs") or 0) for z in (a.get("icu_zone_times") or [])
                 if isinstance(z, dict) and str(z.get("id") or "").startswith("Z")]   # not "SS": it overlaps Z3/Z4
         kind = "power"
@@ -855,6 +876,194 @@ def _run_power_line(a: dict) -> str:
     return line
 
 
+# --- 17 Oct shadow review: more decisions and sums taken off the model -------------------
+# (Jamie, 17 Oct 2026: shadow review) James's 16 Oct swim: Sonnet said 1:37/100m for 1.7 km
+# in 29 min (the real figure is 1:43), because the swim stub told it pace = distance /
+# (time / 100), which is metres per 100 s; Haiku wrote a line per block for an easy swim;
+# and the two disagreed on PLAN_DELTA because nothing in code checked a swim's structure.
+# Jamie's ride got "no recent fuelling logged" from Sonnet and "~64 g/hr" from Haiku off
+# the same session log. James's gravel ride was called easy on 15 W of broken power.
+
+def _swim_pace_s(a: dict) -> float | None:
+    """Seconds per 100 m over the MOVING time: time / (distance / 100). None without both."""
+    dist = float(a.get("distance") or a.get("icu_distance") or 0)
+    secs = float(a.get("moving_time") or a.get("elapsed_time") or 0)
+    if dist <= 0 or secs <= 0:
+        return None
+    return secs / (dist / 100)
+
+
+def _swim_blocks(a: dict, intervals: list | None) -> list:
+    """[(distance_m, seconds)] for the swum blocks, from Intervals.icu's WORK intervals."""
+    out = []
+    for iv in intervals or []:
+        if str(iv.get("type") or "") != "WORK":
+            continue
+        d = float(iv.get("distance") or 0)
+        t = float(iv.get("moving_time") or iv.get("elapsed_time") or 0)
+        if d > 0 and t > 0:
+            out.append((d, t))
+    return out
+
+
+def _planned_reps(event: dict | None) -> tuple | None:
+    """(count, seconds) of the planned rep set: the short step (3 min or less) repeated
+    most, 3 times or more, after expanding nested repeats. None without such a set."""
+    steps = []
+
+    def walk(ss, reps=1):
+        for _ in range(max(1, int(reps or 1))):
+            for st in ss or []:
+                if isinstance(st, dict) and isinstance(st.get("steps"), list):
+                    walk(st["steps"], st.get("reps"))
+                elif isinstance(st, dict) and st.get("duration"):
+                    steps.append(st)
+    walk(((event or {}).get("workout_doc") or {}).get("steps"))
+    if len(steps) < 4:
+        return None
+    # the work step of a rep set is the one followed by a shorter recovery
+    counts: dict = {}
+    for i, st in enumerate(steps[:-1]):
+        d, nxt = int(st["duration"]), int(steps[i + 1]["duration"])
+        if d <= 180 and nxt < d:
+            counts[d] = counts.get(d, 0) + 1
+    if not counts:
+        return None
+    dur, n = max(counts.items(), key=lambda kv: kv[1])
+    return (n, dur) if n >= 3 else None
+
+
+def _swim_structure(event: dict | None, blocks: list) -> str | None:
+    """'NOT executed' verdict for a pool swim against its planned rep set, or None when
+    there is no rep set or it was done. Done = at least half the planned reps found as
+    blocks no longer than twice the planned rep (Jamie's rule, STRUCTURE_RULE: continuous
+    blocks against planned reps = not executed; 17 Oct 2026: shadow review)."""
+    reps = _planned_reps(event)
+    if not reps or not blocks:
+        return None
+    n, dur = reps
+    found = sum(1 for _, t in blocks if t <= 2 * dur)
+    if found * 2 >= n:
+        return None
+    dists = ", ".join(f"{round(d)}" for d, _ in blocks[:10])
+    return (f"planned structure NOT executed: plan had {n} x {_mmss(dur)} reps, the swim was "
+            f"{len(blocks)} continuous block{'s' if len(blocks) != 1 else ''} ({dists} m)")
+
+
+def _swim_lines(a: dict, intervals: list | None, css_s: float | None,
+                event: dict | None) -> tuple:
+    """(lines, not_executed) for a swim: the average pace worked out once, its CSS gap, the
+    blocks as ONE line, and the structure verdict. ([], False) for any other sport."""
+    if "Swim" not in str(a.get("type") or ""):
+        return [], False
+    lines = []
+    pace = _swim_pace_s(a)
+    if pace:
+        dist = float(a.get("distance") or a.get("icu_distance") or 0)
+        mins = round(float(a.get("moving_time") or a.get("elapsed_time") or 0) / 60)
+        line = (f"Swim average: {dist / 1000:.1f} km in {mins} min moving = "
+                f"{_secs_to_pace(pace, '/100m')}")
+        if css_s:
+            d = round(pace - css_s)
+            line += (f" ({'+' if d > 0 else '-' if d < 0 else '±'}{abs(d)} s vs CSS "
+                     f"{_secs_to_pace(css_s, '/100m')}; positive = slower)")
+        line += (f". The session-log and swim-log pace_per_100m for this swim is "
+                 f"{pace:.1f} (seconds per 100 m)")
+        lines.append(line)
+    blocks = _swim_blocks(a, intervals)
+    if blocks:
+        lines.append("Blocks swum (Intervals.icu, each ~2-4 s/100m pessimistic; Strava laps win "
+                     "when fetched): " + " · ".join(
+                         f"{round(d)} m {_secs_to_pace(t / (d / 100), '')}" for d, t in blocks[:12])
+                     + " - for an easy or technique swim give these as ONE short line at most "
+                     "(count, distances), never a line per block")
+    verdict = _swim_structure(event, blocks)
+    if verdict:
+        lines.append("Structure: " + verdict + ". Say 'planned structure not executed' once, "
+                     "then describe what was swum in one line")
+    return lines, bool(verdict)
+
+
+def _power_broken(a: dict) -> str:
+    """A ride whose power meter dropped out: average watts under a quarter of FTP over 20+
+    minutes while Intervals.icu's heart-rate Load is at least double the power Load. James's
+    17 Oct gravel ride: 15 W average (NP 98), power Load 31 against HR Load 124, and both
+    models called it easy at "98% in Zones 1-2". "" when power looks real."""
+    w, ftp = a.get("icu_average_watts"), a.get("icu_ftp")
+    if "Ride" not in str(a.get("type") or "") or not w or not ftp:
+        return ""
+    if float(a.get("moving_time") or 0) < 1200 or float(w) >= 0.25 * float(ftp):
+        return ""
+    pl, hl = a.get("power_load"), a.get("hr_load")
+    if not pl or not hl or float(hl) < 2 * float(pl):
+        return ""
+    return (f"POWER DATA BROKEN: avg {round(float(w))} W is {round(100 * float(w) / float(ftp))}% "
+            f"of FTP {round(float(ftp))} W, so the power meter dropped out. Load "
+            f"{a.get('icu_training_load')} comes from that power and reads far too low; the "
+            f"heart-rate Load is {round(float(hl))}. Give Load as '{a.get('icu_training_load')} "
+            f"from power, which reads low - heart rate puts it at {round(float(hl))}'. Describe "
+            "this ride by heart rate only: no watts, no power zones, never 'easy on power'")
+
+
+def _recent_fuel(session_log: list, exclude_id: str = "", n: int = 4) -> str:
+    """The 'recent avg' for the long-ride fuelling question: g carbs per hour over the last
+    n rides over 90 min with nutrition_g_carb logged (grams for the whole ride)."""
+    rates = []
+    for e in session_log or []:
+        if exclude_id and str(e.get("activity_id") or "") == exclude_id:
+            continue
+        if "Ride" not in str(e.get("sport") or ""):
+            continue
+        g, mins = e.get("nutrition_g_carb"), e.get("duration_min")
+        if not isinstance(g, (int, float)) or isinstance(g, bool) or not isinstance(mins, (int, float)):
+            continue
+        if mins > 90:
+            rates.append(g / (mins / 60))
+        if len(rates) >= n:
+            break
+    if not rates:
+        return "none logged on recent rides over 90 min"
+    return (f"{round(sum(rates) / len(rates))} g/hr over the last {len(rates)} "
+            f"ride{'s' if len(rates) != 1 else ''} over 90 min")
+
+
+def _decoupling_entry(a: dict, decoupling, hr_trusted: bool = True) -> dict | None:
+    """The decoupling-log entry, built in code: rides of 3 hours or more with an
+    Intervals.icu decoupling figure only (Sonnet wrote a DECOUPLING line for Fred's 124-min
+    ride; the prompt said over 3 hours, nothing held it; 17 Oct 2026: shadow review)."""
+    if "Ride" not in str(a.get("type") or "") or decoupling is None or not hr_trusted:
+        return None
+    mins = float(a.get("moving_time") or 0) / 60
+    if mins < 180:
+        return None
+    return {"activity_id": str(a.get("id")), "date": str(a.get("start_date_local") or "")[:10],
+            "name": a.get("name") or "", "duration_min": round(mins),
+            "if": round(float(a.get("icu_intensity") or 0) / 100, 2),
+            "decoupling_pct": round(float(decoupling), 1),
+            "tss": float(a.get("icu_training_load") or 0)}
+
+
+def _pick_target(cand_ids: list, acts: list | None) -> str | None:
+    """The one activity this run debriefs: the most recent unlogged one (the prompt's own
+    rule, now decided here), and of two copies of the same session the higher id. Calum's
+    17 Oct pair: Sonnet took the older ride, Haiku the newer, so the pair compared two
+    different sessions (17 Oct 2026: shadow review)."""
+    by_id = {str(a.get("id")): a for a in acts or []}
+    pool = [by_id[c] for c in cand_ids or [] if c in by_id]
+    if not pool:
+        return None
+    newest = max(pool, key=lambda a: (str(a.get("start_date_local") or ""), _num_id(a)))
+    group = [a for a in pool if a is newest or duplicates.same_session(a, newest)]
+    return str(max(group, key=_num_id).get("id"))
+
+
+def _num_id(a: dict) -> int:
+    try:
+        return int(re.sub(r"\D", "", str(a.get("id") or "")) or 0)
+    except ValueError:
+        return 0
+
+
 def _plan_delta(a: dict, event: dict | None) -> str | None:
     """`name|planned|actual|delta_pct` against the event Intervals.icu PAIRED with this
     activity (paired_event_id), or None. Whole numbers, and the % comes from the two whole
@@ -877,23 +1086,35 @@ def _plan_delta(a: dict, event: dict | None) -> str | None:
 
 
 def _activity_facts(a: dict, event: dict | None = None, intervals: list | None = None,
-                    hr_trusted: bool = True, threshold_s: float | None = None) -> tuple:
+                    hr_trusted: bool = True, threshold_s: float | None = None,
+                    css_s: float | None = None, hr_only: bool = False) -> tuple:
     """(lines, plan_delta_raw, tiny) for one activity. Pure: everything is passed in."""
     moving = float(a.get("moving_time") or a.get("elapsed_time") or 0)
     if 0 < moving < TINY_RECORDING_S:
         return ([f"TINY RECORDING: only {int(moving)} s recorded - no analysis, the code "
                  "writes this one's message"], None, True)
     lines = []
-    z = _zone_split_line(a, hr_trusted)
+    pb = "" if hr_only else _power_broken(a)
+    if pb:
+        lines.append(pb)
+    z = _zone_split_line(a, hr_trusted, hr_only)
     if z:
         lines.append(z)
     if _is_run(a) or "Ride" in str(a.get("type") or ""):
-        lines.append(_decoupling_line(a, hr_trusted))
+        # decoupling is power against HR: meaningless when the power dropped out
+        lines.append(_decoupling_line(a, hr_trusted and not pb))
     lines += _gap_lines(a, intervals, threshold_s)
     rp = _run_power_line(a)
     if rp:
         lines.append(rp)
+    swim, not_done = _swim_lines(a, intervals, css_s, event)
+    lines += swim
     pd = _plan_delta(a, event)
+    if pd and not_done:
+        # STRUCTURE_RULE: no vs-plan Load delta for a structure that was not swum, decided
+        # here so both models give the same answer (17 Oct 2026: shadow review).
+        lines.append("PLAN_DELTA: none (planned structure not executed)")
+        return lines, None, False
     lines.append(f"PLAN_DELTA: {pd or 'none'}"
                  + ("" if pd else " (Intervals.icu paired no planned session with it)"))
     return lines, pd, False
@@ -907,7 +1128,8 @@ def _tiny_message(a: dict) -> str:
             "or did the watch cut out?")
 
 
-def _facts_pass(slug: str, session_log_f: Path, threshold_s: float | None = None) -> tuple:
+def _facts_pass(slug: str, session_log_f: Path, threshold_s: float | None = None,
+                css_s: float | None = None, hr_only: bool = False) -> tuple:
     """COMPUTED FACTS for each activity in the last 3 days not yet in the session log.
     Returns (prompt block, {activity_id: {"plan_delta", "tiny", "decoupling", "activity"}}).
     Fail-soft: ("", {}) on any error, and the prompt's own rules still apply."""
@@ -932,15 +1154,17 @@ def _facts_pass(slug: str, session_log_f: Path, threshold_s: float | None = None
                     event = client.get_event(a["paired_event_id"])
                 except Exception as exc:
                     print(f"[facts:{slug}] event {a.get('paired_event_id')}: {exc}", file=sys.stderr)
-            if _is_run(a) and not _treadmill(a) and a.get("moving_time", 0) >= TINY_RECORDING_S:
+            if ((_is_run(a) and not _treadmill(a)) or "Swim" in str(a.get("type") or "")) \
+                    and a.get("moving_time", 0) >= TINY_RECORDING_S:
                 try:
                     intervals = (client.get_extended_metrics(aid) or {}).get("icu_intervals")
                 except Exception:
                     intervals = None
             trusted = not hr_quality.is_untrusted(slug, aid)
-            lines, pd, tiny = _activity_facts(a, event, intervals, trusted, threshold_s)
+            lines, pd, tiny = _activity_facts(a, event, intervals, trusted, threshold_s,
+                                              css_s=css_s, hr_only=hr_only)
             meta[aid] = {"plan_delta": pd, "tiny": tiny, "activity": a,
-                         "decoupling": a.get("decoupling") if trusted else None}
+                         "decoupling": a.get("decoupling") if trusted and not _power_broken(a) else None}
             blocks.append(f"{a.get('name') or a.get('type')} ({aid}, "
                           f"{str(a.get('start_date_local') or '')[:10]} {a.get('type')}):\n  "
                           + "\n  ".join(lines))
@@ -2265,14 +2489,25 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     # decoupling and tiny recordings to these figures whatever the model writes.
     _thr = profile_fields.pace(profile.get("run_threshold_pace_per_km"))
     _thr_s = (int(_thr.split(":")[0]) * 60 + int(_thr.split(":")[1])) if _thr else None
-    _facts, facts_meta = _facts_pass(slug, session_log_f, threshold_s=_thr_s)
+    # Swim pace vs CSS, swim structure, broken power, HR-only zones, the fuelling average and
+    # which activity to debrief: also decided here (Jamie, 17 Oct 2026: shadow review).
+    _css = _resolve_css(slug)
+    _css_s = (int(_css.split(":")[0]) * 60 + int(_css.split(":")[1])) if _css else None
+    _hr_only = str(profile.get("coaching_level") or "").lower() == "beginner"
+    _facts, facts_meta = _facts_pass(slug, session_log_f, threshold_s=_thr_s,
+                                     css_s=_css_s, hr_only=_hr_only)
     if _facts:
         hr_note = (hr_note + "\n\n" + _facts).strip()
+    try:
+        _fuel = _recent_fuel(json.loads(session_log_f.read_text()))
+    except Exception:
+        _fuel = None
     prompt = _build_prompt(slug, first_name, ftp, injuries, profile,
                            run_hr_cap=run_hr_cap, nutrition_target=nutrition_target,
                            nutrition_label=nutrition_label,
                            recent_chat=recent_chat, hr_note=hr_note,
-                           css=_resolve_css(slug))
+                           css=_css, recent_fuel=_fuel,
+                           target_id=_pick_target(cands, recent))
     prompt += coaching_prefs.prompt_note(slug)
 
     t_start = time.time()
@@ -2407,15 +2642,19 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
 
     # Log decoupling for long rides. Never for an activity whose HR failed the code-side
     # check (lib/hr_quality.py): the prompt says so too, this is the gate that holds.
-    if decoupling_raw and decoupling_raw != "none" and \
-            not hr_quality.is_untrusted(slug, decoupling_raw.split("|")[0].strip()):
-        try:
+    # With computed facts for this activity the entry is built in code from Intervals.icu
+    # (rides of 3 h or more, ICU's decoupling figure), whatever DECOUPLING line the model
+    # wrote: Sonnet logged Fred's 124-min ride (Jamie, 17 Oct 2026: shadow review), and both
+    # models once invented decoupling from laps (16 Oct). Without facts, the model's line.
+    try:
+        entry = None
+        _fm = facts_meta.get(activity_id)
+        if _fm is not None:
+            entry = _decoupling_entry(_fm["activity"], _fm.get("decoupling"),
+                                      not hr_quality.is_untrusted(slug, activity_id))
+        elif decoupling_raw and decoupling_raw != "none" and \
+                not hr_quality.is_untrusted(slug, decoupling_raw.split("|")[0].strip()):
             parts = decoupling_raw.split("|")
-            _fm = facts_meta.get(parts[0].strip())
-            if _fm is not None:
-                # Intervals.icu's figure only (Jamie, 16 Oct 2026: shadow review, both
-                # models invented decoupling from laps). None there = nothing to log.
-                parts[5] = "" if _fm.get("decoupling") is None else str(_fm["decoupling"])
             if len(parts) == 7 and parts[5].strip():
                 entry = {
                     "activity_id": parts[0].strip(),
@@ -2426,12 +2665,13 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
                     "decoupling_pct": float(parts[5].strip()),
                     "tss":          float(parts[6].strip()),
                 }
-                entries = json.loads(decoupling_log.read_text()) if decoupling_log.exists() else []
-                if not any(e.get("activity_id") == entry["activity_id"] for e in entries):
-                    entries.append(entry)
-                    decoupling_log.write_text(json.dumps(entries, indent=2))
-        except Exception:
-            pass
+        if entry:
+            entries = json.loads(decoupling_log.read_text()) if decoupling_log.exists() else []
+            if not any(e.get("activity_id") == entry["activity_id"] for e in entries):
+                entries.append(entry)
+                decoupling_log.write_text(json.dumps(entries, indent=2))
+    except Exception:
+        pass
 
     plan_delta_raw = _hold_plan_delta(plan_delta_raw, facts_meta.get(activity_id),
                                       "\n".join(analysis_lines), _struct, activity_id)

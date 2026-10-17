@@ -228,3 +228,126 @@ def test_activity_facts_ride_block():
     assert not tiny and pd == "Endurance ride|39|39|0"
     assert lines[-1] == "PLAN_DELTA: Endurance ride|39|39|0"
     assert any(l.startswith("Decoupling (Intervals.icu)") for l in lines)
+
+
+# 17 Oct shadow review (Jamie, 17 Oct 2026: shadow review) ------------------------------
+# James's 16 Oct swim: 1.7 km in 1753 s moving. Sonnet said 1:37/100m (the stub formula was
+# distance / (time / 100) = 97 m per 100 s); the real pace is 1:43. Haiku wrote a line per
+# block, and PLAN_DELTA split the two models because no code checked the swim structure.
+
+JM_SWIM = {"id": "i198039192", "type": "Swim", "name": "Pool Swim", "distance": 1700.0,
+           "moving_time": 1753, "icu_training_load": 13, "paired_event_id": 143809460,
+           "icu_hr_zone_times": [1700, 18, 18, 17]}
+JM_INTERVALS = [{"type": "WORK", "distance": 500.0, "moving_time": 519},
+                {"type": "RECOVERY", "distance": None, "moving_time": 61},
+                {"type": "WORK", "distance": 400.0, "moving_time": 419},
+                {"type": "RECOVERY", "distance": None, "moving_time": 67},
+                {"type": "WORK", "distance": 300.0, "moving_time": 314},
+                {"type": "WORK", "distance": 200.0, "moving_time": 211},
+                {"type": "WORK", "distance": 100.0, "moving_time": 101},
+                {"type": "WORK", "distance": 200.0, "moving_time": 206}]
+_DRILLS = [{"duration": 60, "pace": {"start": 62, "end": 72, "units": "%pace"}},
+           {"duration": 30, "pace": {"start": 58, "end": 66, "units": "%pace"}}] * 6
+JM_EVENT = {"name": "Easy technique swim 40 min", "type": "Swim", "icu_training_load": 26,
+            "workout_doc": {"steps": [{"duration": 480}] + _DRILLS
+                            + [{"duration": 1020}, {"duration": 360}]}}
+
+
+def test_swim_pace_is_time_over_distance_not_the_inverse():
+    assert round(aw._swim_pace_s(JM_SWIM), 1) == 103.1          # 1:43, not 97 (= "1:37")
+    lines, _ = aw._swim_lines(JM_SWIM, None, 95, None)
+    assert lines[0].startswith("Swim average: 1.7 km in 29 min moving = 1:43/100m (+8 s vs CSS 1:35/100m")
+    assert "103.1" in lines[0]
+
+
+def test_prompt_swim_stub_uses_computed_pace():
+    p = _prompt()
+    assert "distance_m / (duration_s / 100)" not in p
+    assert "moving_time_s / (distance_m / 100)" in p
+    assert 'COMPUTED FACTS "Swim average" line' in p
+
+
+def test_swim_blocks_one_line_and_structure_not_executed():
+    lines, pd, tiny = aw._activity_facts(JM_SWIM, JM_EVENT, JM_INTERVALS, css_s=95)
+    blocks = [l for l in lines if l.startswith("Blocks swum")]
+    assert len(blocks) == 1 and "500 m 1:44" in blocks[0] and "never a line per block" in blocks[0]
+    assert any("planned structure NOT executed: plan had 6 x 1:00 reps" in l for l in lines)
+    assert pd is None and lines[-1] == "PLAN_DELTA: none (planned structure not executed)"
+
+
+def test_swim_structure_done_keeps_plan_delta():
+    reps = [{"type": "WORK", "distance": 50.0, "moving_time": 62}] * 6
+    lines, pd, _ = aw._activity_facts(JM_SWIM, JM_EVENT, reps, css_s=95)
+    assert pd == "Easy technique swim 40 min|26|13|-50"
+    assert not any(l.startswith("Structure:") for l in lines)
+    # no rep set planned (one continuous swim): no verdict either way
+    assert aw._swim_structure({"workout_doc": {"steps": [{"duration": 2400}]}}, aw._swim_blocks(JM_SWIM, JM_INTERVALS)) is None
+
+
+def test_structure_rule_one_line_when_not_executed():
+    assert "in ONE line" in aw.STRUCTURE_RULE and "never a line per block" in aw.STRUCTURE_RULE
+
+
+# James's 17 Oct gravel ride: power meter dropped out (15 W avg), both models called it easy.
+JM_GRAVEL = {"id": "i198257887", "type": "GravelRide", "moving_time": 8220, "icu_training_load": 31,
+             "icu_average_watts": 15, "icu_ftp": 267, "power_load": 31, "hr_load": 124,
+             "decoupling": -6.9,
+             "icu_zone_times": [{"id": "Z1", "secs": 7684}, {"id": "Z2", "secs": 331},
+                                {"id": "Z3", "secs": 130}, {"id": "Z4", "secs": 64}],
+             "icu_hr_zone_times": [2582, 3521, 1454, 619, 44, 0, 0]}
+
+
+def test_broken_power_uses_hr_zones_and_drops_decoupling():
+    lines, _, _ = aw._activity_facts(JM_GRAVEL)
+    assert lines[0].startswith("POWER DATA BROKEN: avg 15 W is 6% of FTP 267 W")
+    assert "heart-rate Load is 124" in lines[0]
+    assert lines[1].startswith("Zone split (HR zones") and "Z1-Z2 74%" in lines[1]
+    assert lines[2].startswith("Decoupling: not available")
+    assert aw._power_broken(RIDE) == ""                          # real power left alone
+
+
+def test_hr_only_level_gets_hr_zones():
+    assert aw._zone_split_line(RIDE, hr_only=True).startswith("Zone split (HR zones")
+    assert aw._zone_split_line(RIDE).startswith("Zone split (power zones")
+
+
+def test_recent_fuel_computed_from_session_log():
+    log = [{"activity_id": "new", "sport": "Ride", "duration_min": 119, "nutrition_g_carb": None},
+           {"sport": "Ride", "duration_min": 207, "nutrition_g_carb": 165},
+           {"sport": "Run", "duration_min": 120, "nutrition_g_carb": 60},
+           {"sport": "Ride", "duration_min": 294.2, "nutrition_g_carb": 437},
+           {"sport": "Ride", "duration_min": 60, "nutrition_g_carb": 30},
+           {"sport": "Ride", "duration_min": 112, "nutrition_g_carb": 80},
+           {"sport": "VirtualRide", "duration_min": 230.08, "nutrition_g_carb": 291},
+           {"sport": "Ride", "duration_min": 183.9, "nutrition_g_carb": 165}]
+    assert aw._recent_fuel(log) == "64 g/hr over the last 4 rides over 90 min"   # Jamie, 17 Oct
+    assert aw._recent_fuel([]) == "none logged on recent rides over 90 min"
+    p = _prompt(recent_fuel="64 g/hr over the last 4 rides over 90 min")
+    assert "(recent avg: 64 g/hr over the last 4 rides over 90 min ·" in p
+    assert "[avg g/hr from last 4 rides" not in p
+
+
+def test_decoupling_entry_only_for_three_hour_rides():
+    fred = {"id": "i198246291", "type": "Ride", "moving_time": 124 * 60, "decoupling": 0.5,
+            "icu_intensity": 83, "icu_training_load": 143, "start_date_local": "2026-10-17T08:00:00"}
+    assert aw._decoupling_entry(fred, 0.5) is None
+    long = {**fred, "moving_time": 200 * 60}
+    e = aw._decoupling_entry(long, 0.5)
+    assert e["duration_min"] == 200 and e["if"] == 0.83 and e["decoupling_pct"] == 0.5
+    assert aw._decoupling_entry(long, None) is None
+    assert aw._decoupling_entry(long, 0.5, hr_trusted=False) is None
+
+
+def test_target_activity_picked_in_code():
+    acts = [{"id": "i198283108", "type": "Ride", "start_date_local": "2026-10-16T14:47:01",
+             "moving_time": 3793},
+            {"id": "i198283370", "type": "VirtualRide", "start_date_local": "2026-10-17T10:21:00",
+             "moving_time": 5398}]
+    assert aw._pick_target(["i198283108", "i198283370"], acts) == "i198283370"
+    p = _prompt(target_id="i198283370")
+    assert "Step 3 — Debrief activity i198283370 (picked in code" in p
+    assert "Duplicate upload guard:" in p
+
+
+def test_no_next_time_line_with_over_plan():
+    assert "Never one for an activity with an OVER PLAN line" in _prompt()
