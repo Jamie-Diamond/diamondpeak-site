@@ -6113,6 +6113,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.020", "2026-10-17", "Settings retries if an athlete\u2019s connections and coaching options don\u2019t load", 1],
     ["4.019", "2026-10-17", "Trends shows every sport you have done, not only the ones in your plan", 0],
     ["4.018", "2026-10-17", "If Peak can\u2019t reach the server when it opens, it keeps retrying and recovers by itself", 0],
     ["4.017", "2026-10-16", "Peak reloads itself when it is running older code than the latest release", 0],
@@ -6292,15 +6293,26 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   function athleteSettings(slug) {
     if (!state.me || !slug) return null;
     var got = ASET[slug];
-    if (!got || Date.now() - got._t > 60000) {
+    if (!got || !got._t || Date.now() - got._t > 60000) {   // !_t: never loaded, retry
       if (!(got && got._loading)) {
         ASET[slug] = got = got || {};
         got._loading = true;
-        fetch('/api/settings/' + encodeURIComponent(slug), { cache: 'no-store' })
+        // A hung or failed call left Settings on "checking…" with no Coaching options
+        // (Jamie, 17 Oct 2026, viewing Calum): 10 s timeout, then retry while Settings is open.
+        var ctl = window.AbortController ? new AbortController() : null;
+        var tmo = setTimeout(function () { if (ctl) ctl.abort(); }, 10000);
+        fetch('/api/settings/' + encodeURIComponent(slug), { cache: 'no-store', signal: ctl && ctl.signal })
           .then(function (r) { return r.ok ? r.json() : null; })
           .catch(function () { return null; })
           .then(function (j) {
-            if (!j) { ASET[slug]._loading = false; return; }
+            clearTimeout(tmo);
+            if (!j) {
+              ASET[slug]._loading = false;
+              setTimeout(function () {
+                if (state.tab === 'set' && state.slug === slug) { athleteSettings(slug); }
+              }, 4000);
+              return;
+            }
             j._t = Date.now();
             ASET[slug] = j;
             if (state.tab === 'set' && state.slug === slug) renderSettings();
