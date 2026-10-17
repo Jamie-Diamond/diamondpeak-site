@@ -634,4 +634,70 @@
         armL: { elev: 90, az: 120 } } }
     ]
   };
+
+  // ── Physio knee-rehab additions (17 Oct 2026) ──
+
+  A.single_leg_hamstring_curl = {
+    views: ['left', { yaw: -55, pitch: 30, label: 'Angle' }],
+    props: [{ type: 'bench', min: [-0.15, 0, -0.2], max: [0.15, 0.32, 0.36] },
+      { type: 'pad', at: 'shinL', side: 'back' }],
+    keys: [
+      { hold: 0.3, move: 1.0, pose: {
+        root: [0, 0.385, 0], pelvis: { pitch: 86 }, spine: { flex: -8 }, head: { flex: -30 },
+        legL: { elev: -4, knee: 0, point: 0 }, // elev -4 cancels the pelvis tilt: thighs flat on the pad
+        legR: { elev: -4, knee: 3, point: 30 },
+        arms: { hand: [0.18, 0.28, 0.36], pole: [0.5, -0.3, -0.5] } } },
+      { hold: 0.4, move: 1.8, pose: {
+        legL: { knee: 105 } } }
+    ]
+  };
+
+  A.single_leg_leg_extension = {
+    views: ['left', { yaw: 25, pitch: 10, label: 'Front' }],
+    props: [{ type: 'box', min: [-0.17, 0, -0.14], max: [0.17, 0.34, 0.22] },
+      { type: 'box', min: [-0.16, 0.34, -0.16], max: [0.16, 0.88, -0.11] },
+      { type: 'pad', at: 'shinL', side: 'front' }],
+    keys: [
+      { hold: 0.3, move: 1.0, pose: {
+        root: [0, 0.415, 0], pelvis: { pitch: -6 },
+        legL: { elev: 84, knee: 88, point: -5 },
+        legR: { elev: 84, knee: 92, point: 0 },
+        arms: { hand: [0.2, 0.38, 0.02], pole: [0.5, 0, -1] } } },
+      { hold: 0.4, move: 2.0, pose: {
+        legL: { knee: 2 } } }
+    ]
+  };
+
+  A.lateral_step_down = {
+    views: ['front', 'side'],
+    // 0.13 (~23 cm): the pelvis drops the full step height, so 0.2 would need ~110 deg of knee bend
+    props: [{ type: 'box', min: [0.005, 0, -0.2], max: [0.34, 0.13, 0.22] }],
+    keys: [
+      { hold: 0.4, move: 2.0, pose: {
+        root: [0.03, 0.658, -0.01], pelvis: { pitch: 2 }, head: { flex: 0 },
+        legL: { ankle: [0.09, 0.17, 0], pole: [-0.1, 0, 1] },
+        legR: { elev: 6, knee: 4, point: -10 },
+        arms: { hand: { rel: 'pelvis', at: [0.15, 0.08, -0.01] }, pole: [1, 0, -0.6] } } },
+      { hold: 0.15, move: 1.1, pose: {
+        root: [0.03, 0.531, -0.07], pelvis: { pitch: 22 }, head: { flex: -8 },
+        legR: { elev: 30 } } }
+    ]
+  };
+
+  A.raised_single_leg_hamstring_bridge = {
+    views: ['left', { yaw: -125, pitch: 40, label: 'Angle' }],
+    props: [{ type: 'mat', at: [0, 0, -0.2], size: [0.6, 1.1] },
+      { type: 'box', min: [-0.2, 0, 0.38], max: [0.2, 0.28, 0.7] }],
+    keys: [
+      { hold: 0.4, move: 1.0, pose: {
+        root: [0, 0.085, 0], pelvis: { pitch: -90 }, head: { flex: 0 },
+        legL: { ankle: [0.085, 0.32, 0.421], foot: { pitch: -100 }, pole: [0, 1, 0.3] },
+        legR: { elev: 90, knee: 0, point: 15 },
+        arms: { hand: [0.24, 0.035, -0.06], pole: [0.3, 1, 0] } } },
+      { hold: 0.5, move: 1.4, pose: {
+        // shoulders, hips and knee in line; the upper back rolls 0.02 toward the head, knee 20 -> 26 deg
+        root: [0, 0.224, -0.047], pelvis: { pitch: -114.5 }, head: { flex: 22 },
+        legR: { elev: 65.5 } } } // stays vertical
+    ]
+  };
 })(typeof window !== 'undefined' ? window : this);

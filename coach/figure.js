@@ -55,7 +55,7 @@
      'left', 'above' (high side view, for floor work), 'three' (front-right, raised), or
      {yaw, pitch, label}: yaw 0 = front, 90 = athlete's right side; pitch = degrees up.
 
-   PROPS (anchors: 'handL' 'handR' 'hands' 'kneeL' 'kneeR' 'knees' 'ankleL' 'ankleR'
+   PROPS (anchors: 'handL' 'handR' 'hands' 'kneeL' 'kneeR' 'knees' 'ankleL' 'ankleR' 'shinL' 'shinR'
    'footL' 'footR' 'elbowL' 'elbowR' 'back' (across the upper back) 'hips' (across the
    hip crease) 'chest', or a world point [x,y,z]):
      {type:'mat', at:[x,0,z], size:[width, length]}
@@ -71,6 +71,9 @@
      {type:'band', from: anchor, to: anchor}        resistance band (orange)
      {type:'bar', from:[x,y,z], to:[x,y,z]}         fixed bar (pull-up bar)
      {type:'cable', from: anchor, to:[x,y,z]}       cable to a pulley
+     {type:'pad', at: anchor, side:'front'|'back', axis, r, len, offset:[x,y,z]}
+       machine roller pad: leg extension {at:'shinL', side:'front'}; leg curl
+       {at:'shinL', side:'back'}. Anchors also include 'shinL'/'shinR' (low shin).
    Boxes, benches and walls are drawn behind the figure; give a box `depthBias: -1`
    to draw it in front. `fit: [[x,y,z],...]` on any prop adds points to the framing. */
 (function (global) {
@@ -432,6 +435,7 @@
     if (map[a]) return J[map[a]];
     if (a === 'hands') return mul(add(J.handL, J.handR), 0.5);
     if (a === 'knees') return mul(add(J.kneeL, J.kneeR), 0.5);
+    if (a === 'shinL' || a === 'shinR') { var sd = a.slice(-1); return add(J['ankle' + sd], mul(sub(J['knee' + sd], J['ankle' + sd]), 0.22)); }
     if (a === 'back') return add(J.neck, mv(J.T, [0, -0.04, -0.075]));
     if (a === 'hips') return add(J.root, mv(J.P, [0, 0.035, 0.085]));
     if (a === 'chest') return add(J.neck, mv(J.T, [0, -0.09, 0.15]));
@@ -513,6 +517,17 @@
       } else if (t === 'bar') {
         var a2 = anchor(J, pr.from), b2 = anchor(J, pr.to);
         push(mul(add(a2, b2), 0.5), line(P(a2), P(b2), pr.width || 0.022, C.metal), pr.depthBias || 0);
+      } else if (t === 'pad') {
+        // a machine's roller pad (leg curl, leg extension) riding on a joint
+        var pc = anchor(J, pr.at || 'ankleL'), pax = norm(axisOf(J, pr.axis || 'lateral'));
+        var off = pc;
+        if (pr.side === 'front' || pr.side === 'back') {
+          // sit on the front of the shin (leg extension) or the back of the ankle (leg curl)
+          var sd = /R$/.test(pr.at || '') ? 'R' : 'L', fw = mv(J['F' + sd], [0, 0, 1]);
+          off = add(off, mul(fw, (pr.side === 'front' ? 1 : -1) * (0.045 + (pr.r || 0.035))));
+        }
+        if (pr.offset) off = add(off, pr.offset);
+        push(off, poly(cylinder(cam, off, pax, pr.r || 0.035, pr.len || 0.16), C.pad, 0.006), pr.depthBias || -0.01);
       } else if (t === 'cable') {
         var a3 = anchor(J, pr.from), b3 = anchor(J, pr.to);
         push(mul(add(a3, b3), 0.5), line(P(a3), P(b3), 0.007, '#6b727c') + circle(P(b3), 0.03, C.metal), 0.2);

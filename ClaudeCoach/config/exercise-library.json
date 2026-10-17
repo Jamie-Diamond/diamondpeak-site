@@ -19,7 +19,9 @@
   "anti_extension": "Core that resists the low back arching.",
   "anti_rotation": "Core that resists twisting.",
   "lateral_core": "Core that resists bending sideways.",
-  "mobility": "Range-of-movement drills for warm-ups and mobility sessions."
+  "mobility": "Range-of-movement drills for warm-ups and mobility sessions.",
+  "knee_flexion": "Bending the knee against load (hamstrings at the knee).",
+  "knee_extension": "Straightening the knee against load (quads on their own)."
  },
  "equipment_ids": {
   "barbell": "Olympic barbell and plates",
@@ -33,7 +35,9 @@
   "mat": "Floor space and a mat or towel",
   "step": "A step, stair or low box",
   "chair": "Sturdy chair, sofa or bench to rest a foot, knee or back on",
-  "wall": "A wall"
+  "wall": "A wall",
+  "leg_curl_machine": "Hamstring curl machine, lying or seated",
+  "leg_extension_machine": "Leg extension machine"
  },
  "equipment_tiers": {
   "A": {
@@ -44,6 +48,8 @@
     "bench",
     "lat_pulldown",
     "pull_up_bar",
+    "leg_curl_machine",
+    "leg_extension_machine",
     "db_kb",
     "band",
     "mini_band",
@@ -179,6 +185,11 @@
     "tempo": "2-0-X",
     "note": "Lower under control, stand up fast. Stop about 2 reps short of failure. Do the paired upper-body lift in the rest."
    },
+   "log": "weight_reps",
+   "load_step_kg": 2.5,
+   "start": "First time: empty bar (20 kg) for 5, then add 10 kg a set until 5 reps leaves about 3 in the tank. That's your starting weight.",
+   "progress": "When all sets reach 6 with 2 left in the tank, add 2.5 kg next time and drop back to 4.",
+   "effort": "Last 2 reps hard but clean: you could do 2 more.",
    "cues": [
     "Brace your stomach before each rep",
     "Sit down between your heels, knees over toes",
@@ -235,6 +246,11 @@
     "tempo": "3-0-1",
     "note": "When the heaviest weight you have feels easy for 10, move to Bulgarian split squats (or back squats in a gym)."
    },
+   "log": "weight_reps",
+   "load_step_kg": 2,
+   "start": "Pick a weight you could squat about 15 times. Do 8; if it felt easy, go heavier on the next set.",
+   "progress": "When every set reaches 10 with 2 left in the tank, take the next dumbbell up (about 2 kg) and drop back to 6. Out of dumbbells? Move to Bulgarian split squats.",
+   "effort": "Last reps hard but clean: 2-3 more in the tank.",
    "cues": [
     "Hold the weight at your chest, elbows pointing down",
     "Sit between your knees with your chest tall",
@@ -287,6 +303,11 @@
     "tempo": "3-0-1",
     "note": "Mainly a warm-up or first-weeks exercise. Too light as a main lift for most athletes: use a split squat instead."
    },
+   "log": "reps",
+   "load_step_kg": 0,
+   "start": "Bodyweight. Squat to a chair if depth is new.",
+   "progress": "When 15 feels easy, move to goblet squats (or split squats if you have no weights).",
+   "effort": "Easy to moderate: 4 or more left in the tank.",
    "cues": [
     "Feet shoulder-width, toes turned out a little",
     "Sit back and down as if to a chair",
@@ -338,6 +359,11 @@
     "tempo": "3-0-1",
     "note": "Reps are per side. At home with no weights, do 8-12 slow reps. With dumbbells, 6-8. Rest after both legs."
    },
+   "log": "weight_reps",
+   "load_step_kg": 2,
+   "start": "Bodyweight, 8 per side. If that leaves 4+ in the tank, hold light dumbbells on the next set.",
+   "progress": "When every set reaches 10 per side with 2 left, add 2 kg per hand and drop back to 6. No weights? Slow the lowering to 4 s, then add a pause at the bottom.",
+   "effort": "Last 2 reps hard but clean: you could do 2 more.",
    "cues": [
     "Rear foot laces-down on the bench, front foot well forward",
     "Drop the back knee straight down",
@@ -388,6 +414,11 @@
     "tempo": "3-0-1",
     "note": "Reps are per side. Hold dumbbells when 12 feels easy."
    },
+   "log": "weight_reps",
+   "load_step_kg": 2,
+   "start": "Bodyweight first. Hold light dumbbells once 12 per side feels easy.",
+   "progress": "When every set reaches 12 per side with 2 left, add 2 kg per hand and drop back to 8. No weights? Move to reverse lunges.",
+   "effort": "Last reps hard but clean: 2-3 more in the tank.",
    "cues": [
     "Take a long stance with the back heel up",
     "Lower the back knee towards the floor",
@@ -439,6 +470,11 @@
     "tempo": "2-0-1",
     "note": "Reps are per side. Box height: top of the box at or just below knee height. Step down slowly: the way down counts."
    },
+   "log": "weight_reps",
+   "load_step_kg": 2,
+   "start": "Bodyweight on a knee-height step. Hold light dumbbells once 12 per side feels easy.",
+   "progress": "When every set reaches 12 per side with 2 left, add 2 kg per hand and drop back to 8. No weights? Move to split squats.",
+   "effort": "Last reps hard but clean: 2-3 more in the tank.",
    "cues": [
     "Put your whole foot on the box",
     "Stand up with the top leg, don't bounce off the bottom one",
@@ -489,6 +525,11 @@
     "tempo": "2-0-1",
     "note": "Reps are per side. Alternate legs, or do all reps on one side first."
    },
+   "log": "weight_reps",
+   "load_step_kg": 2,
+   "start": "Bodyweight first. Hold light dumbbells once 10 per side feels easy.",
+   "progress": "When every set reaches 10 per side with 2 left, add 2 kg per hand and drop back to 8. No weights? Move to Bulgarian split squats.",
+   "effort": "Last reps hard but clean: 2-3 more in the tank.",
    "cues": [
     "Step back long and land on the ball of the back foot",
     "Lower until both knees are bent about 90 degrees",
@@ -543,6 +584,11 @@
     "tempo": "3-0-1",
     "note": "Barbell in a gym, dumbbells elsewhere. Grip is often the limit, which is fine: it trains grip too."
    },
+   "log": "weight_reps",
+   "load_step_kg": 2,
+   "start": "Pick a weight you could lift about 15 times with a flat back. Do 6-8; go heavier next set if it was easy. Barbell: start with the empty bar.",
+   "progress": "When every set reaches 8 with 2 left in the tank, add 2 kg dumbbells (2.5 kg on a bar) and drop back to 6.",
+   "effort": "Last 2 reps hard but clean: you could do 2 more.",
    "cues": [
     "Soften the knees and push your hips back",
     "Keep the weight close to your legs and your back flat",
@@ -593,6 +639,11 @@
     "tempo": "3-0-1",
     "note": "Reps are per side. At home, reach your hands to the floor. Add a dumbbell in the opposite hand when it gets easy."
    },
+   "log": "weight_reps",
+   "load_step_kg": 2,
+   "start": "Bodyweight reach first. Hold a light dumbbell once 10 per side is steady and easy.",
+   "progress": "When every set reaches 10 per side with 2 left, use a dumbbell 2 kg heavier and drop back to 8. No weights? Slow the lowering to 4 s.",
+   "effort": "Last reps hard but clean and balanced: 2-3 more in the tank.",
    "cues": [
     "Tip forward as the free leg goes back, like a see-saw",
     "Keep your hips square to the floor",
@@ -649,6 +700,11 @@
     "tempo": null,
     "note": "This is power, not cardio: end the set as soon as the bell slows. A dumbbell held by one end works."
    },
+   "log": "weight_reps",
+   "load_step_kg": 4,
+   "start": "Pick a bell you could deadlift 20 times easily (often 8-16 kg). If it floats to chest height with no effort, go heavier.",
+   "progress": "When 15 stays fast and powerful in every set, use the next bell up (usually 4 kg) and drop back to 10.",
+   "effort": "Powerful every rep. End the set when the bell slows; breathing hard is fine, form never slips.",
    "cues": [
     "Hike the bell back between your thighs",
     "Snap your hips forward to float it to chest height",
@@ -700,6 +756,11 @@
     "tempo": "2-1-1",
     "note": "Gym: barbell over the hips with a pad. Home: a band across the hips held down by your hands, or a dumbbell on the hips. Pause 1 s at the top."
    },
+   "log": "weight_reps",
+   "load_step_kg": 2.5,
+   "start": "Bodyweight for 12 first. Then a band or a light bar; add weight while the top position stays clean.",
+   "progress": "When every set reaches 12 with 2 left in the tank, add 2.5 kg (or a stronger band) and drop back to 8.",
+   "effort": "Last 2 reps hard but clean: you could do 2 more.",
    "cues": [
     "Upper back on the bench edge, feet flat, shins upright at the top",
     "Tuck your chin and keep your ribs down",
@@ -753,6 +814,11 @@
     "tempo": "2-1-1",
     "note": "Good in warm-ups and for beginners. A band above the knees, pushed apart, works the side glutes too."
    },
+   "log": "reps",
+   "load_step_kg": 0,
+   "start": "Bodyweight.",
+   "progress": "When 15 is easy, move to single-leg glute bridges.",
+   "effort": "Moderate: a clear glute squeeze, 4 or so more in the tank.",
    "cues": [
     "Lie on your back with heels close to your bottom",
     "Press through your heels and lift your hips",
@@ -800,6 +866,11 @@
     "tempo": "2-1-1",
     "note": "Reps are per side. Put your shoulders up on a sofa to make it harder."
    },
+   "log": "reps",
+   "load_step_kg": 0,
+   "start": "Bodyweight.",
+   "progress": "When 12 per side is easy, raise your shoulders on a sofa, then move to hip thrusts.",
+   "effort": "Last reps hard but clean: 2-3 more in the tank.",
    "cues": [
     "One foot down, the other knee pulled in or leg held straight",
     "Drive through the heel to lift your hips",
@@ -849,6 +920,11 @@
     "tempo": null,
     "note": "Band above the knees is easier; around the ankles or feet is harder. Works well in the warm-up."
    },
+   "log": "band_reps",
+   "load_step_kg": 0,
+   "start": "Lightest band, above the knees.",
+   "progress": "When 15 steps each way is easy, use a stronger band or move it lower (ankles, then feet).",
+   "effort": "A real burn in the side of the hip by the end, 2-3 more steps in the tank.",
    "cues": [
     "Sit into a half-squat, chest up",
     "Step sideways and keep the band tight",
@@ -900,6 +976,11 @@
     "tempo": null,
     "note": "Per side. Start short lever: knee on the bench. Go long lever (ankle on the bench) when 30 s is easy."
    },
+   "log": "reps",
+   "load_step_kg": 0,
+   "start": "Short lever (knee on the bench), 6 lifts or 15 s per side.",
+   "progress": "When 10 lifts (or 30 s) per side is easy, move to the long lever (ankle on the bench).",
+   "effort": "Hard but steady: 2-3 more lifts (or about 10 s more) in the tank.",
    "cues": [
     "Lie on your side, top knee (or ankle) on the bench",
     "Lift your hips until your body is straight",
@@ -951,8 +1032,13 @@
     "rpe": "7-8",
     "rest_s": 45,
     "tempo": "3-1-1",
-    "note": "Per side, off a step. Beginners start on two feet. Eccentric option: rise on two feet, lower on one over 3 s. Add a dumbbell when 15 is easy. Aim for about 25 clean single-leg reps before hopping work."
+    "note": "Per side, off a step. Beginners start on two feet. Eccentric option: rise on two feet, lower on one over 3 s. Add a dumbbell when 15 is easy."
    },
+   "log": "weight_reps",
+   "load_step_kg": 2,
+   "start": "Bodyweight, holding a wall. Two feet first if one leg can't do 10.",
+   "progress": "When every set reaches 15 per side with 2 left, hold a dumbbell 2 kg heavier next time and drop back to 12.",
+   "effort": "Calves burning by the end, 2-3 more in the tank.",
    "cues": [
     "Ball of the foot on the step edge, knee straight",
     "Rise as high as you can",
@@ -1003,6 +1089,11 @@
     "tempo": "2-1-1",
     "note": "Per side. Keep the knee bent about 30-45 degrees the whole time. Gym: seated calf machine. Home: a dumbbell on the knee or a loaded backpack."
    },
+   "log": "weight_reps",
+   "load_step_kg": 2,
+   "start": "Bodyweight. Add a backpack or a dumbbell on the knee once 20 per side is easy.",
+   "progress": "When every set reaches 20 per side with 2 left, add 2 kg and drop back to 15.",
+   "effort": "Calves burning by the end, 2-3 more in the tank.",
    "cues": [
     "Bend the knee and keep it bent",
     "Rise onto the ball of the foot",
@@ -1053,6 +1144,11 @@
     "tempo": null,
     "note": "Per side. Progress in order: eyes closed, then reach the free foot to 3 points, then react to a gentle push or catch a ball, then stand on a cushion."
    },
+   "log": "seconds",
+   "load_step_kg": 0,
+   "start": "30 s per side on a firm floor, next to a wall.",
+   "progress": "When 45 s is steady, take the next step: eyes closed, then reaches, then gentle pushes, then a cushion.",
+   "effort": "Comfortable, no strain. A little wobble is the point.",
    "cues": [
     "Stand tall on one foot with a soft knee",
     "Keep the arch of the foot lifted and toes relaxed",
@@ -1101,6 +1197,11 @@
     "tempo": "2-1-1",
     "note": "Per side. Sit with the band round the forefoot, anchored on the inside. Hold the end position for 1 s."
    },
+   "log": "band_reps",
+   "load_step_kg": 0,
+   "start": "Lightest band.",
+   "progress": "When 20 is easy, use the next band up and drop back to 15.",
+   "effort": "A mild burn on the outside of the shin, 2-3 more in the tank.",
    "cues": [
     "Keep the heel still and the knee pointing up",
     "Turn the sole of the foot outward against the band",
@@ -1146,8 +1247,13 @@
     "rpe": "6",
     "rest_s": 60,
     "tempo": null,
-    "note": "Quality over quantity: quiet, quick contacts. Start with 2 x 10 on two feet. Add sets before height. Only after 4 weeks of pain-free calf raises."
+    "note": "Quality over quantity: quiet, quick contacts. Start with 2 x 10 on two feet. Add sets before height. Beginners and anyone with a lower-limb issue do 4 weeks of calf raises first (template.plyo_start)."
    },
+   "log": "reps",
+   "load_step_kg": 0,
+   "start": "2 sets of 10 low, quiet hops.",
+   "progress": "Add a set before adding height. When 3 x 20 stays quiet and springy, move to squat jumps.",
+   "effort": "Fast and springy every rep. Stop before they slow down; never breathless.",
    "cues": [
     "Stay tall with knees almost straight",
     "Bounce off the balls of your feet, heels just kiss the floor",
@@ -1198,6 +1304,11 @@
     "tempo": null,
     "note": "Every rep at full effort, with full rest. Land softly into a quarter squat and stick it before the next jump."
    },
+   "log": "reps",
+   "load_step_kg": 0,
+   "start": "3 sets of 4 at full effort.",
+   "progress": "Keep reps low. When 3 x 6 stays fast with quiet landings, hold it there: this is power, not volume.",
+   "effort": "Every jump at full height. Stop the set if they get lower; never breathless.",
    "cues": [
     "Dip quickly into a quarter squat",
     "Jump as high as you can, arms swinging up",
@@ -1252,6 +1363,11 @@
     "tempo": "2-0-1",
     "note": "Hands on a bench or wall makes it easier; feet up makes it harder. Stop 2-3 reps before form breaks."
    },
+   "log": "reps",
+   "load_step_kg": 0,
+   "start": "Find the height where 8-12 clean reps is possible: floor, bench or wall.",
+   "progress": "When every set reaches 15 with 2 left in the tank, lower the hand height (wall, bench, floor), then raise the feet.",
+   "effort": "Last reps hard but your body stays straight: 2-3 more in the tank.",
    "cues": [
     "Hands just wider than your shoulders",
     "Body straight from head to heels",
@@ -1304,6 +1420,11 @@
     "tempo": "2-0-1",
     "note": "Bench if there is one. No bench? Do it lying on the floor (floor press). Upper-body work stays at RPE 7-8: it supports the legs, it doesn't take over."
    },
+   "log": "weight_reps",
+   "load_step_kg": 2,
+   "start": "Pick dumbbells you could press about 15 times. Do 8; go heavier next set if it was easy.",
+   "progress": "When every set reaches 10 with 2 left in the tank, take the next dumbbells up (about 2 kg) and drop back to 6.",
+   "effort": "Last reps hard but clean: 2-3 more in the tank.",
    "cues": [
     "Feet flat, shoulder blades squeezed back",
     "Lower the dumbbells to the sides of your chest",
@@ -1358,6 +1479,11 @@
     "tempo": "2-0-1",
     "note": "Standing makes the trunk work too. One arm at a time is fine."
    },
+   "log": "weight_reps",
+   "load_step_kg": 2,
+   "start": "Pick dumbbells you could press overhead about 12-15 times. Go lighter than you think.",
+   "progress": "When every set reaches 10 with 2 left, take the next dumbbells up (about 2 kg) and drop back to 6.",
+   "effort": "Last reps hard but clean: 2-3 more in the tank.",
    "cues": [
     "Squeeze your glutes and keep your ribs down",
     "Press up and slightly back so the weights finish over your ears",
@@ -1414,6 +1540,11 @@
     "tempo": "2-1-1",
     "note": "Hinge to about 45 degrees and hold it: your hamstrings and back work too. Beginners: one hand on a bench, one arm at a time."
    },
+   "log": "weight_reps",
+   "load_step_kg": 2,
+   "start": "Pick dumbbells you could row about 15 times with a flat back.",
+   "progress": "When every set reaches 12 with 2 left, take the next dumbbells up (about 2 kg) and drop back to 8.",
+   "effort": "Last reps hard but clean: 2-3 more in the tank.",
    "cues": [
     "Hinge forward with a flat back",
     "Pull the dumbbells to your lower ribs",
@@ -1468,6 +1599,11 @@
     "tempo": "2-0-1",
     "note": "Pull to the upper chest, never behind the neck."
    },
+   "log": "weight_reps",
+   "load_step_kg": 2.5,
+   "start": "Pick a weight you could pull about 15 times. Do 8-10; go heavier next set if it was easy.",
+   "progress": "When every set reaches 12 with 2 left, add one plate (about 2.5 kg) and drop back to 8. Pulling about your bodyweight? Try pull-ups.",
+   "effort": "Last reps hard but clean: 2-3 more in the tank.",
    "cues": [
     "Grip just wider than your shoulders, lean back slightly",
     "Pull your elbows down to your sides",
@@ -1524,6 +1660,11 @@
     "tempo": "3-0-1",
     "note": "Can't do one yet? Jump to the top and lower slowly over 3-5 s, or loop a band under your feet. A doorway bar at home counts."
    },
+   "log": "reps",
+   "load_step_kg": 0,
+   "start": "Try one clean rep. Can't yet? Do slow lowerings (3-5 s) or loop a band under your feet.",
+   "progress": "Add a rep per set until 8. Then add slow lowerings at the end of each set.",
+   "effort": "Last 2 reps hard but full range: you could do 2 more.",
    "cues": [
     "Hang with straight arms and shoulders pulled down",
     "Drive elbows to your ribs until your chin clears the bar",
@@ -1574,6 +1715,11 @@
     "tempo": "2-1-1",
     "note": "Band anchored high (top of a door) or a cable in the gym. Arms long with a slight elbow bend."
    },
+   "log": "band_reps",
+   "load_step_kg": 0,
+   "start": "A light band (or light cable) you could do 20 times.",
+   "progress": "When 15 is easy, use the next band up (or add a plate) and drop back to 12.",
+   "effort": "Lats working, smooth all the way: 2-3 more in the tank.",
    "cues": [
     "Hinge slightly, arms long and up in front holding the band",
     "Sweep your hands down to your thighs with straight arms",
@@ -1625,6 +1771,11 @@
     "tempo": "2-1-1",
     "note": "Great in the warm-up. Palms facing up works more of the rotator cuff."
    },
+   "log": "band_reps",
+   "load_step_kg": 0,
+   "start": "Light band.",
+   "progress": "When 20 is easy, use a stronger band or hold it with hands closer together.",
+   "effort": "Light to moderate: smooth all the way, 3-4 more in the tank.",
    "cues": [
     "Arms straight out at shoulder height, band tight",
     "Pull the band to your chest by squeezing your shoulder blades",
@@ -1674,6 +1825,11 @@
     "tempo": "2-1-1",
     "note": "Per side. Elbow tucked at your side with a small towel between arm and body. Light band: this is control, not a strength test."
    },
+   "log": "band_reps",
+   "load_step_kg": 0,
+   "start": "Lightest band.",
+   "progress": "Stay light. When 15 is smooth and easy, use the next band up and drop back to 12.",
+   "effort": "Light: smooth control, several more in the tank. Never a strain.",
    "cues": [
     "Elbow at your side, bent to 90 degrees",
     "Turn the hand outward against the band",
@@ -1726,6 +1882,11 @@
     "tempo": null,
     "note": "Heavy enough that you want to put them down by the end. One weight in one hand (suitcase carry) works the side trunk harder."
    },
+   "log": "seconds",
+   "load_step_kg": 2,
+   "start": "Weights you could hold for about 60 s. Walk 30 m (or 30 s).",
+   "progress": "When you can walk 40 m (or 45 s) without putting them down, take the next weights up (about 2 kg per hand).",
+   "effort": "Grip nearly gone by the end, posture still tall.",
    "cues": [
     "Stand tall, shoulders back and down",
     "Squeeze the handles hard",
@@ -1776,6 +1937,11 @@
     "tempo": null,
     "note": "Per side. Breathe out as the arm and leg reach. Slow is the point."
    },
+   "log": "reps",
+   "load_step_kg": 0,
+   "start": "6 slow reps per side.",
+   "progress": "When 10 slow reps per side is easy, straighten the legs further or hold a light weight.",
+   "effort": "Slow and steady: the last reps take focus and the low back never lifts.",
    "cues": [
     "Lie on your back, arms up, knees over hips",
     "Press your low back gently into the floor",
@@ -1827,6 +1993,11 @@
     "tempo": null,
     "note": "Holding past 60 s adds little. Make it harder instead: squeeze everything, or lift one foot."
    },
+   "log": "seconds",
+   "load_step_kg": 0,
+   "start": "20 s. Knees down if needed.",
+   "progress": "When 45 s is easy, lift one foot or squeeze harder. Don't go past 60 s.",
+   "effort": "Shaking by the end but the shape holds: you could hold about 10 s more.",
    "cues": [
     "Elbows under your shoulders",
     "Squeeze your glutes and pull your ribs down",
@@ -1878,6 +2049,11 @@
     "tempo": null,
     "note": "Per side. Knees bent is easier; lifting the top leg is harder."
    },
+   "log": "seconds",
+   "load_step_kg": 0,
+   "start": "20 s per side. Knees bent if needed.",
+   "progress": "When 40 s per side is easy, lift the top leg, then move to Copenhagen planks.",
+   "effort": "Shaking by the end but the shape holds: you could hold about 10 s more.",
    "cues": [
     "Elbow under shoulder, feet stacked",
     "Lift your hips into a straight line",
@@ -1928,6 +2104,11 @@
     "tempo": null,
     "note": "Per side. Hold 2 s with the arms out on each rep."
    },
+   "log": "band_reps",
+   "load_step_kg": 0,
+   "start": "Light band, standing a big step from the anchor.",
+   "progress": "When 12 per side with a 2 s hold is easy, use a stronger band or step further away.",
+   "effort": "Trunk working hard to stay still: 2-3 more in the tank.",
    "cues": [
     "Stand side-on to the anchor, band at your chest",
     "Press your hands straight out and hold 2 s",
@@ -1977,6 +2158,11 @@
     "tempo": null,
     "note": "Per side. Hold 3-5 s at full reach."
    },
+   "log": "reps",
+   "load_step_kg": 0,
+   "start": "6 slow reps per side.",
+   "progress": "When 10 per side is easy, hold each rep 5 s, then move to the Pallof press.",
+   "effort": "Easy to moderate: slow and steady, no strain.",
    "cues": [
     "Hands under shoulders, knees under hips",
     "Reach the opposite arm and leg out long",
@@ -2026,6 +2212,11 @@
     "tempo": null,
     "note": "Per side, forward-back and side-to-side. Hold a wall. Let the swings grow gradually."
    },
+   "log": "reps",
+   "load_step_kg": 0,
+   "start": "Small swings, growing bigger.",
+   "progress": "No need to progress: aim for a little more range, never strain.",
+   "effort": "Comfortable, no strain.",
    "cues": [
     "Hold a wall and stand tall",
     "Swing forward and back, then across the body and out",
@@ -2076,6 +2267,11 @@
     "tempo": null,
     "note": "Per side. Move the foot back until the knee only just touches. Note that toe-to-wall distance now and then: a clear left-right difference is worth flagging."
    },
+   "log": "reps",
+   "load_step_kg": 0,
+   "start": "Foot a few inches from the wall.",
+   "progress": "No need to progress: aim for a little more range, never strain.",
+   "effort": "Comfortable, no strain.",
    "cues": [
     "Foot a few inches from the wall, heel down",
     "Drive the knee forward to touch the wall, over the 2nd-3rd toe",
@@ -2125,6 +2321,11 @@
     "tempo": null,
     "note": "Per side. Squeeze the glute of the back leg: the stretch comes from tucking the pelvis, not lunging deep."
    },
+   "log": "seconds",
+   "load_step_kg": 0,
+   "start": "30 s per side, gentle.",
+   "progress": "No need to progress: aim for a little more range, never strain.",
+   "effort": "Comfortable, no strain: a gentle stretch, never pain.",
    "cues": [
     "Half-kneel with the back knee on a pad",
     "Tuck your pelvis and squeeze the back glute",
@@ -2176,6 +2377,11 @@
     "tempo": null,
     "note": "Per side. Breathe out as you open. Knees stay stacked on the floor."
    },
+   "log": "reps",
+   "load_step_kg": 0,
+   "start": "8 per side, gentle.",
+   "progress": "No need to progress: aim for a little more range, never strain.",
+   "effort": "Comfortable, no strain.",
    "cues": [
     "Lie on your side, knees bent to 90 degrees and stacked",
     "Sweep the top arm over to the other side, eyes following the hand",
@@ -2187,6 +2393,231 @@
    ],
    "cautions": {
     "shoulder": "Bend the elbow and keep the hand on your chest."
+   }
+  },
+  "single_leg_hamstring_curl": {
+   "name": "Single-leg hamstring curl (machine)",
+   "pattern": "knee_flexion",
+   "tier": "A",
+   "equipment": [
+    "leg_curl_machine"
+   ],
+   "level": 1,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Hamstrings"
+    ],
+    "synergists": [
+     "Gastrocnemius"
+    ]
+   },
+   "sports": {
+    "run": 2,
+    "bike": 1,
+    "swim": 0,
+    "health": 1
+   },
+   "why": "Strengthens the hamstrings at the knee, one leg at a time, so a weaker side can't hide.",
+   "easier": null,
+   "harder": null,
+   "swaps": {
+    "B": "raised_single_leg_hamstring_bridge",
+    "C": "raised_single_leg_hamstring_bridge"
+   },
+   "dose": {
+    "sets": "3",
+    "reps": "8-12",
+    "rpe": "7-8",
+    "rest_s": 60,
+    "tempo": "3-0-1",
+    "note": "Per side. Lying or seated machine both work. Lower slowly: the way down does a lot of the work."
+   },
+   "log": "weight_reps",
+   "load_step_kg": 2.5,
+   "start": "Lightest pin for 10 per side, then move up a pin until 10 leaves about 3 in the tank. In rehab, use the physio's setting.",
+   "progress": "When every set reaches 12 per side with 2 left, move up one pin (about 2.5 kg) and drop back to 8. In rehab, the physio sets the weight.",
+   "effort": "Hamstring working hard by the last reps: 2-3 more in the tank.",
+   "cues": [
+    "Set the pad just above the heel, knee lined up with the machine's pivot",
+    "Curl the heel towards your bottom",
+    "Lower slowly over 3 s"
+   ],
+   "mistakes": [
+    "Hips lifting off the pad",
+    "Letting the weight drop"
+   ],
+   "cautions": {
+    "knee": "Lighter load and a pain-free range. In rehab, use the physio's settings.",
+    "low_back": "On a lying machine, squeeze your glutes so the low back doesn't arch."
+   }
+  },
+  "single_leg_leg_extension": {
+   "name": "Single-leg leg extension (machine)",
+   "pattern": "knee_extension",
+   "tier": "A",
+   "equipment": [
+    "leg_extension_machine"
+   ],
+   "level": 1,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Quadriceps"
+    ],
+    "synergists": []
+   },
+   "sports": {
+    "run": 2,
+    "bike": 2,
+    "swim": 0,
+    "health": 1
+   },
+   "why": "Works the thigh muscles on their own, one leg at a time, so a weaker side can't hide.",
+   "easier": null,
+   "harder": null,
+   "swaps": {
+    "B": "lateral_step_down",
+    "C": "lateral_step_down"
+   },
+   "dose": {
+    "sets": "3",
+    "reps": "10-15",
+    "rpe": "7-8",
+    "rest_s": 60,
+    "tempo": "3-1-1",
+    "note": "Per side. Squeeze for a second with the knee straight."
+   },
+   "log": "weight_reps",
+   "load_step_kg": 2.5,
+   "start": "Lightest pin for 12 per side, then move up a pin until 12 leaves about 3 in the tank. In rehab, use the physio's setting.",
+   "progress": "When every set reaches 15 per side with 2 left, move up one pin (about 2.5 kg) and drop back to 10. In rehab, the physio sets the weight.",
+   "effort": "Thigh burning by the last reps: 2-3 more in the tank.",
+   "cues": [
+    "Line your knee up with the machine's pivot, pad on the lower shin",
+    "Straighten the knee fully and squeeze the thigh",
+    "Lower slowly"
+   ],
+   "mistakes": [
+    "Swinging the weight up",
+    "Hips lifting off the seat"
+   ],
+   "cautions": {
+    "knee": "Use only the pain-free part of the range. In rehab, follow the physio's range and load."
+   }
+  },
+  "lateral_step_down": {
+   "name": "Lateral step-down",
+   "pattern": "single_leg",
+   "tier": "C",
+   "equipment": [
+    "step"
+   ],
+   "level": 2,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Quadriceps",
+     "Gluteus medius & minimus"
+    ],
+    "synergists": [
+     "Gluteus maximus",
+     "Soleus",
+     "Foot intrinsics"
+    ]
+   },
+   "sports": {
+    "run": 3,
+    "bike": 2,
+    "swim": 0,
+    "health": 2
+   },
+   "why": "Slow single-leg control that teaches the knee to stay in line when you land and climb.",
+   "easier": "step_up",
+   "harder": "bulgarian_split_squat",
+   "swaps": {},
+   "dose": {
+    "sets": "3",
+    "reps": "8-12",
+    "rpe": "7-8",
+    "rest_s": 60,
+    "tempo": "3-0-1",
+    "note": "Per side. A stair is enough to start. Hold a light dumbbell once the higher step is easy."
+   },
+   "log": "reps",
+   "load_step_kg": 0,
+   "start": "A low step (a stair) first. Go higher only once 10 per side is slow and clean.",
+   "progress": "When 12 per side is slow and clean, use a higher step, then hold a light dumbbell.",
+   "effort": "Slow and in control the whole way: 2-3 more in the tank.",
+   "cues": [
+    "Stand side-on on a step, one foot hanging off the edge",
+    "Slowly lower the free heel to tap the floor, knee over the middle toes",
+    "Push back up through the standing leg"
+   ],
+   "mistakes": [
+    "Knee caving inward",
+    "Hip dropping or hitching up"
+   ],
+   "cautions": {
+    "knee": "Use a lower step. In rehab, use the physio's height.",
+    "ankle": "Hold a rail or wall.",
+    "hip": "Keep the step low and the hips level."
+   }
+  },
+  "raised_single_leg_hamstring_bridge": {
+   "name": "Single-leg hamstring bridge, foot raised",
+   "pattern": "bridge",
+   "tier": "C",
+   "equipment": [
+    "chair"
+   ],
+   "level": 2,
+   "per_side": true,
+   "muscles": {
+    "target": [
+     "Hamstrings",
+     "Gluteus maximus"
+    ],
+    "synergists": [
+     "Gastrocnemius",
+     "Erector spinae"
+    ]
+   },
+   "sports": {
+    "run": 3,
+    "bike": 2,
+    "swim": 0,
+    "health": 2
+   },
+   "why": "Works the hamstrings hard with no machine: the home version of a hamstring curl.",
+   "easier": "single_leg_glute_bridge",
+   "harder": null,
+   "swaps": {},
+   "dose": {
+    "sets": "3",
+    "reps": "8-12",
+    "rpe": "7-8",
+    "rest_s": 45,
+    "tempo": "2-1-2",
+    "note": "Per side. Heel on a bench, box or sofa. A straighter knee makes it harder."
+   },
+   "log": "reps",
+   "load_step_kg": 0,
+   "start": "Two-leg version first if one leg can't do 8 with the hips level.",
+   "progress": "When 12 per side is easy, straighten the knee a little more or pause 2 s at the top.",
+   "effort": "Last reps hard but clean: 2-3 more in the tank.",
+   "cues": [
+    "Lie on your back, one heel on the bench, knee slightly bent",
+    "Dig the heel down and lift your hips",
+    "Hold a second, lower slowly"
+   ],
+   "mistakes": [
+    "Pushing through the toes",
+    "Arching the low back at the top"
+   ],
+   "cautions": {
+    "knee": "Bend the knee more if the back of the knee aches or cramps.",
+    "low_back": "Stop at a flat body line."
    }
   }
  },
@@ -2229,7 +2660,7 @@
      "calf_raise"
     ]
    },
-   "notes": "Calves (straight and bent knee) in both sessions: they carry most of the load in running. Single-leg work is the main lift in Session B. Plyometrics from build, after 4 weeks of pain-free calf raises. Heavy squat/hinge stay in Session A."
+   "notes": "Calves (straight and bent knee) in both sessions: they carry most of the load in running. Single-leg work is the main lift in Session B. Plyometrics from build (template.plyo_start). Heavy squat/hinge stay in Session A."
   },
   "bike": {
    "priority": [
@@ -2383,7 +2814,7 @@
     "upper_body": "At least 1 push and 1 pull in every session.",
     "bone_heavy": "At least 1 lower-body lift a week at 6 reps or fewer and RPE 7+ (level 2 and up).",
     "bone_impact": "At least 1 plyometric a week once cleared (see beginners rule).",
-    "balance": "single_leg_balance or single_leg_rdl every week.",
+    "balance": "A short balance item in every session (template.balance_every_session).",
     "grip": "farmers_carry, pull_up, romanian_deadlift or kettlebell_swing every week. Tier C has no carry: use pull_up if a bar exists, else accept the gap."
    },
    "warm_up_add": [
@@ -2393,7 +2824,8 @@
    "power": {
     "A": "pogo_hops",
     "B": "squat_jump",
-    "from_phase": "base_after_week_4"
+    "from_phase": "build",
+    "no_event": "after the 4-week calf lead-in"
    },
    "sport_block": {
     "A": [
@@ -2405,7 +2837,7 @@
      "single_leg_balance"
     ]
    },
-   "notes": "Health needs every major muscle group, heavy loading and impact for bone, balance and grip. For no-sport athletes the sport block becomes this balance-and-grip block. Adults 65+: see the older-adults decision in docs/strength-methodology.md."
+   "notes": "Health needs every major muscle group, heavy loading and impact for bone, balance and grip. For no-sport athletes the sport block becomes this balance-and-grip block. Balance goes in every session for every athlete, all ages (decided 17 Oct)."
   }
  },
  "issues": {
@@ -2565,17 +2997,14 @@
    "avoid_list": "Exercises on avoid are never prescribed while the issue is current.",
    "plyo_block": "No plyometric-pattern exercises while any lower-limb issue is active or rehab, unless that issue has plyo_cleared true. Managed issues don't block.",
    "free_text": "Protocol items may use name instead of ex for exercises not in the library. They show without an animation and are added to library_candidates.",
+   "progression": "Items from a physio or doctor are never auto-progressed (progression.never_progress). Self or coach items follow the progression block.",
    "debrief": "The strength debrief asks about the issue area (already in lib/strength_ask.py).",
    "review_by": "On or after review_by, ask the athlete for an update and whether the source has changed anything. Never expire an issue silently.",
    "outside_cap": "Short sessions with counts_as_strength false (balance, mobility) sit outside the cap and use the session_type given (e.g. ankle_mobility, mobility).",
-   "taper_race_week": "Follow the source. If it says nothing: keep rehab sessions, drop top-ups. Draft: see docs/strength-methodology.md decision 6."
+   "taper_race_week": "Open decision. Until decided: follow the source's instruction; if there is none, ask the athlete when the taper starts."
   },
-  "library_candidates": [
-   "Single-leg hamstring curl (machine)",
-   "Single-leg leg extension (machine)",
-   "Lateral step-down",
-   "Single-leg hamstring bridge, foot raised"
-  ],
+  "library_candidates": [],
+  "library_candidates_note": "Empty: the four free-text exercises from the knee rehab example were added to the library on 17 Oct. New free-text protocol items land here.",
   "examples": [
    {
     "id": "knee_ligament_rehab",
@@ -2613,7 +3042,7 @@
           "load": "set by physio"
          },
          {
-          "name": "Single-leg hamstring curl (machine)",
+          "ex": "single_leg_hamstring_curl",
           "sets": "set by physio",
           "reps": "set by physio",
           "load": "set by physio"
@@ -2625,8 +3054,7 @@
           "load": "set by physio"
          },
          {
-          "name": "Single-leg hamstring bridge, foot raised",
-          "pattern": "bridge",
+          "ex": "raised_single_leg_hamstring_bridge",
           "sets": "set by physio",
           "reps": "set by physio",
           "load": "set by physio"
@@ -2651,14 +3079,13 @@
           "load": "set by physio"
          },
          {
-          "name": "Single-leg leg extension (machine)",
+          "ex": "single_leg_leg_extension",
           "sets": "set by physio",
           "reps": "set by physio",
           "load": "set by physio"
          },
          {
-          "name": "Lateral step-down",
-          "pattern": "single_leg",
+          "ex": "lateral_step_down",
           "sets": "set by physio",
           "reps": "set by physio",
           "load": "set by physio"
@@ -2675,7 +3102,7 @@
      }
     },
     "builder_output": {
-     "cap": "The 2 physio sessions fill the 2/week strength cap. No general strength session is added.",
+     "cap": "The 2 physio sessions fill the 2/week strength cap. No strength_general session is added.",
      "covered_by_protocol": [
       "squat",
       "hinge",
@@ -2684,7 +3111,7 @@
       "core_lateral",
       "balance"
      ],
-     "covered_note": "Bridge work (hip thrust, the raised bridge) counts under hinge. Adductor work and lateral core come from copenhagen plank. Balance comes from single-leg romanian deadlift.",
+     "covered_note": "Bridge work (hip_thrust, raised_single_leg_hamstring_bridge) counts under hinge. lateral_step_down adds single-leg. The curl and extension add knee_flexion and knee_extension. Adductor work and lateral core come from copenhagen_plank. Balance comes from single_leg_rdl.",
      "missing": [
       "push",
       "pull",
@@ -2732,12 +3159,13 @@
       "pogo_hops",
       "squat_jump"
      ],
-     "blocked_note": "No plyometrics: a lower-limb issue in rehab, and the physio hasn't cleared them. Bone impact stays a gap until the physio clears it.",
+     "blocked_note": "No plyometrics: lower-limb issue in rehab and plyo_cleared is false. Bone impact stays a gap until the physio clears it.",
      "grip_note": "No carries (they add walking load to the knee). Grip stays a gap; ask the physio before adding any.",
      "cautions_note": "Knee cautions would show on any library lower-body exercise the builder added. Here it adds none.",
      "conflict_to_flag": "If a hard ride lands within 8 h of a protocol session, say so. Never move or edit the physio session.",
      "debrief": "How did the knee feel - any pain or swelling during or after?",
-     "free_text_items": "4 items show without an animation and are listed in library_candidates."
+     "balance_note": "Balance comes from the physio's single_leg_rdl. Ask the physio before adding single_leg_balance to the top-up.",
+     "logging": "Each side is logged separately; left and right loads usually differ in rehab. The physio's numbers are shown, never auto-progressed."
     }
    },
    {
@@ -2795,7 +3223,7 @@
      }
     },
     "builder_output": {
-     "cap": "Outside the cap: it doesn't count as strength, so it goes in as a 15-min mobility session. The 2 normal strength sessions stay.",
+     "cap": "Outside the cap: counts_as_strength is false, so it goes in as the 15-min ankle_mobility session type. The 2 normal strength sessions stay.",
      "covered_by_protocol": [
       "calf_ankle",
       "balance"
@@ -2809,6 +3237,133 @@
    }
   ]
  },
+ "logging": {
+  "per_set": {
+   "weight_kg": "Number. 0 = bodyweight.",
+   "reps": "Integer.",
+   "seconds": "Integer, for holds and carries.",
+   "band": "Band name, colour or level.",
+   "side": "left or right, for per_side exercises only.",
+   "warm_up": "true for ramp-up sets: logged, ignored by progression."
+  },
+  "types": {
+   "weight_reps": "weight_kg + reps every set.",
+   "reps": "reps every set (weight_kg too if load is added, e.g. a vest or dumbbell).",
+   "seconds": "seconds every set (weight_kg too if something is held, e.g. farmers_carry).",
+   "band_reps": "band + reps every set (a cable machine logs weight_kg instead)."
+  },
+  "per_side": "Exercises with per_side true log each side as its own set. Left and right loads and reps can differ (common in rehab).",
+  "swapped_kit": "If the athlete uses different kit (a band instead of a weight, a cable instead of a band), log what was used.",
+  "effort_question": {
+   "when": "Once after each exercise, not after each set.",
+   "text": "How did that feel?",
+   "answers": [
+    "easy",
+    "right",
+    "hard"
+   ],
+   "skip_for_patterns": [
+    "mobility",
+    "balance"
+   ],
+   "see": "effort_guide"
+  },
+  "feeds": "The logged sets and the effort answer set the next session's suggested weight and reps (progression block). Last time's numbers show as the starting point.",
+  "skipped": "A skipped exercise is logged as skipped; the next suggestion stays the same.",
+  "issue_debrief": "Athletes with a current issue are also asked about the issue area after the session (lib/strength_ask.py)."
+ },
+ "effort_guide": {
+  "question": "How did that feel?",
+  "answers": [
+   {
+    "id": "easy",
+    "label": "Could have done 4+ more",
+    "rpe": "6 or less",
+    "reps_in_reserve": "4+",
+    "action": "add"
+   },
+   {
+    "id": "right",
+    "label": "2-3 more in the tank",
+    "rpe": "7-8",
+    "reps_in_reserve": "2-3",
+    "action": "build"
+   },
+   {
+    "id": "hard",
+    "label": "0-1 more, or form slipped",
+    "rpe": "9-10",
+    "reps_in_reserve": "0-1",
+    "action": "hold_or_drop"
+   }
+  ],
+  "actions": {
+   "add": "progression.actions.easy",
+   "build": "progression.actions.right",
+   "hold_or_drop": "progression.actions.hard"
+  },
+  "target": "Most working sets should feel 'right'. Main lifts sit at the hard end of right: about 2 left.",
+  "no_strain": "Warm-ups, mobility and balance: comfortable, no strain. No effort question.",
+  "power": "Plyos and swings: fast every rep. 'hard' means they slowed down."
+ },
+ "progression": {
+  "method": "double_progression",
+  "inputs": [
+   "this session's logged sets (weight_kg, reps or seconds, band, side)",
+   "the effort answer for the exercise"
+  ],
+  "rep_range": "The phase dose (dose_by_phase) if it sets one, else exercise.dose.reps.",
+  "per_side": "per_side exercises progress each side on its own.",
+  "first_time": "No history: use exercise.start. The first session's log becomes the baseline.",
+  "steps": {
+   "rep": 1,
+   "rep_easy_load_step_0": 2,
+   "seconds_right": 5,
+   "seconds_easy": 10,
+   "drop_fraction": 0.1
+  },
+  "actions": {
+   "easy": {
+    "load_step_gt_0": "Next time: weight + load_step_kg, same reps.",
+    "load_step_0": "Next time: +2 reps per set (holds: +10 s). At the top of the range: exercise.harder, or the note's harder variation if harder is null.",
+    "band": "Next band up, same reps."
+   },
+   "right": {
+    "below_top": "Same weight, +1 rep per set (holds: +5 s).",
+    "at_top_all_sets": "load_step_gt_0: weight + load_step_kg and back to the bottom of the range. load_step_0: exercise.harder (or the note's variation). band: next band up, bottom of the range."
+   },
+   "hard": {
+    "reps_in_range": "Same weight, same target.",
+    "reps_below_range_or_form_broke": "Drop about 10%, rounded to the load step (band: the band below; bodyweight: exercise.easier).",
+    "twice_running": "Move to exercise.easier, or drop 10%."
+   }
+  },
+  "bodyweight": "Reps up to the top of the range, then the harder exercise.",
+  "rounding": "Round to load_step_kg, or the nearest weight the athlete has.",
+  "no_weights_this_week": "Tier C week: treat load_step_kg as 0.",
+  "phase_gates": {
+   "base": "active",
+   "build": "active",
+   "offseason": "active",
+   "specific": "hold: no added load or reps. 'hard' still drops.",
+   "peak": "hold, as specific",
+   "taper": "hold, as specific"
+  },
+  "never_progress": [
+   "Issue protocol items with source physio or doctor: show the source's numbers."
+  ],
+  "pain_override": "Pain above 3/10, or still there next morning: exercise.easier or a swap, whatever the effort answer."
+ },
+ "equipment_ask": {
+  "weekly": "Tier A, B or C (blueprint: asked every week in the Sunday plan message).",
+  "once_and_stored": [
+   "band",
+   "mini_band",
+   "pull_up_bar",
+   "bench"
+  ],
+  "note": "Asked once and stored (decided 17 Oct). Re-ask only if the athlete says their kit changed."
+ },
  "template": {
   "session_minutes": "35-45",
   "alternation": "Session A and Session B alternate across the week (blueprint).",
@@ -2816,12 +3371,12 @@
    {
     "id": "warm_up",
     "minutes": 5,
-    "picks": "leg_swings always + 1 lower mobility drill (knee_to_wall or hip_flexor_stretch) + module.warm_up_add + 1-2 lighter ramp-up sets of the first main lift. 3 min easy spin or row first if a machine is there (blueprint)."
+    "picks": "leg_swings always + 1 lower mobility drill (knee_to_wall or hip_flexor_stretch) + module.warm_up_add + a short balance item (template.balance_every_session) + 1-2 lighter ramp-up sets of the first main lift. 3 min easy spin or row first if a machine is there (blueprint)."
    },
    {
     "id": "power",
     "minutes": 3,
-    "picks": "module.power[A|B] from the module's from_phase. Skipped for level-1 athletes in their first 4 weeks, and blocked by issues.rules.plyo_block. Done fresh, before the main lifts."
+    "picks": "module.power[A|B]. Who starts when: template.plyo_start. Blocked by issues.rules.plyo_block. Done fresh, before the main lifts."
    },
    {
     "id": "main",
@@ -2926,13 +3481,14 @@
     ],
     "also": [
      "single_leg_rdl"
-    ]
+    ],
+    "note": "Every session, not just every week (template.balance_every_session)."
    },
    "bone_impact": {
     "patterns": [
      "plyometric"
     ],
-    "note": "Once cleared: level 2+, or level 1 after 4 weeks."
+    "note": "From build, per template.plyo_start."
    },
    "bone_heavy": {
     "rule": "At least 1 lower-body lift a week at 6 reps or fewer, RPE 7+ (level 2+)."
@@ -2975,8 +3531,57 @@
    "3": "A year or more, solid technique on level-2 lifts."
   },
   "one_session_week": "If only one session fits (peak, travel, a busy week): run Session A, but swap the squat for the single-leg pick every other week, and keep the sport block.",
-  "progression_rule": "Add load when every set hits the top of the rep range at RPE 7 or less for 2 sessions in a row, then restart at the bottom of the range. No more load to add (tier C, or the heaviest dumbbell)? Add reps, then slow the lowering to 3-4 s, then move to exercise.harder.",
-  "regression_rule": "Drop 5-10% load, or move to exercise.easier, if reps fall below the range or RPE hits 9+ in 2 sessions running, or if pain goes above 3/10 or is still there the next morning.",
+  "progression": "See the top-level progression block (driven by logged sets and the effort answer).",
+  "plyo_start": {
+   "phase": "build",
+   "no_event": "Athletes with no event start once the 4-week lead-in (if needed) is done.",
+   "straight_away_if": {
+    "all": [
+     "no active or rehab lower-limb issue"
+    ],
+    "any": [
+     "level 2 or 3",
+     "already does an impact sport (running, team sport)"
+    ]
+   },
+   "lead_in_if": {
+    "any": [
+     "level 1 and no impact sport",
+     "an active or rehab lower-limb issue"
+    ]
+   },
+   "lead_in": {
+    "weeks": 4,
+    "exercises": [
+     "calf_raise",
+     "bent_knee_calf_raise"
+    ],
+    "note": "Calf work in the sport block every session, then the first plyo session at the low end of the phase dose."
+   },
+   "issue_block": "issues.rules.plyo_block still applies: a lower-limb issue in rehab gets no plyos until its source clears them, lead-in or not."
+  },
+  "balance_every_session": {
+   "rule": "Every athlete, every session, all ages: one short balance item.",
+   "pick": "single_leg_balance",
+   "dose": "1-2 x 30 s per side",
+   "where": "Warm-up, unless the session already has single_leg_balance.",
+   "effort": "Comfortable, no strain.",
+   "issues": "With a lower-limb issue in rehab, only if the source's protocol allows it."
+  },
+  "order": {
+   "within_session": "suggestion",
+   "any_next_if_busy": true,
+   "soft_rules": [
+    "Power and plyos first, while fresh.",
+    "Heavy main lifts before their accessories when possible.",
+    "Core last."
+   ],
+   "pairs": "Pairs can be split: if the partner's kit is taken, do the sets with plain rest.",
+   "rest": "Rest still applies between sets of the same exercise.",
+   "warm_up": "Whatever lift comes first, do 1-2 lighter ramp-up sets.",
+   "part_order": "Each example-session part has order: 'any' (items in any order) or 'suggested' (listed order advised, not required).",
+   "alt": "Each example-session item has alt: a same-job library swap for when that kit is taken (null if none fits)."
+  },
   "notes": "RPE uses the reps-in-reserve scale: RPE 8 = about 2 reps left, RPE 7 = about 3. Never train to failure. Tempo = seconds lowering - pause - lifting; X = as fast as possible. In example sessions, items with the same 'pair' label alternate; rest_s is the rest after each item, so the lower-body lift gets the combined rest. swaps[tier] = the exercise to use on that tier; a missing tier means keep this exercise."
  },
  "dose_by_phase": {
@@ -3012,10 +3617,10 @@
     "rest_s": 60
    },
    "power": {
-    "sets": "2",
-    "reps": "10 pogo contacts, from week 4 only",
-    "rpe": "6",
-    "rest_s": 60
+    "sets": "0",
+    "reps": "none: plyos start in build (template.plyo_start)",
+    "rpe": null,
+    "rest_s": 0
    },
    "sport_prehab": "Exercise default doses.",
    "core": {
@@ -3129,7 +3734,7 @@
     "minutes": "4"
    },
    "progress": "Same load, fewer reps. Nothing new, no soreness.",
-   "notes": "Blueprint: 1-2/wk, maintenance, nothing new. Kept. NB session-library.json peak menu lacks strength_general (see decisions)."
+   "notes": "Blueprint: 1-2/wk, maintenance, nothing new. Kept. Decided 17 Oct: add strength_general to the session-library.json peak menu (later code step)."
   },
   "taper": {
    "frequency": "1/wk light; none in race week",
@@ -3164,7 +3769,7 @@
     "minutes": "3"
    },
    "progress": "Same load as specific, very few reps: a neuromuscular touch only.",
-   "notes": "Blueprint: 1/wk light, none in race week, neuromuscular touch only. Kept. NB session-library.json taper menu lacks strength_general (see decisions)."
+   "notes": "Blueprint: 1/wk light, none in race week, neuromuscular touch only. Kept. Decided 17 Oct: add strength_general to the session-library.json taper menu (later code step)."
   },
   "offseason": {
    "frequency": "2/wk",
@@ -3216,50 +3821,58 @@
     {
      "title": "Warm-up",
      "minutes": 5,
+     "order": "any",
      "items": [
       {
        "ex": "leg_swings",
        "sets": 1,
        "reps": "10 each way",
-       "rest_s": 0
+       "rest_s": 0,
+       "alt": null
       },
       {
        "ex": "knee_to_wall",
        "sets": 1,
        "reps": "10/side",
-       "rest_s": 0
+       "rest_s": 0,
+       "alt": null
       },
       {
        "ex": "band_pull_apart",
        "sets": 1,
        "reps": "15",
-       "rest_s": 0
+       "rest_s": 0,
+       "alt": "bent_over_row"
       },
       {
        "ex": "band_external_rotation",
        "sets": 1,
        "reps": "12/side",
        "rest_s": 0,
-       "note": "Then 2 light ramp-up sets of back squat."
+       "note": "Then 2 light ramp-up sets of back squat.",
+       "alt": null
       }
      ]
     },
     {
      "title": "Power",
      "minutes": 3,
+     "order": "suggested",
      "items": [
       {
        "ex": "pogo_hops",
        "sets": 3,
        "reps": "10-15 contacts",
        "rest_s": 45,
-       "rpe": "6"
+       "rpe": "6",
+       "alt": null
       }
      ]
     },
     {
      "title": "Main",
      "minutes": 20,
+     "order": "suggested",
      "items": [
       {
        "ex": "back_squat",
@@ -3267,7 +3880,8 @@
        "reps": "5",
        "rest_s": 60,
        "rpe": "8",
-       "pair": "1"
+       "pair": "1",
+       "alt": "goblet_squat"
       },
       {
        "ex": "lat_pulldown",
@@ -3275,7 +3889,8 @@
        "reps": "8-10",
        "rest_s": 60,
        "rpe": "7-8",
-       "pair": "1"
+       "pair": "1",
+       "alt": "straight_arm_pulldown"
       },
       {
        "ex": "romanian_deadlift",
@@ -3284,7 +3899,8 @@
        "rest_s": 60,
        "rpe": "8",
        "pair": "2",
-       "note": "Barbell."
+       "note": "Barbell.",
+       "alt": "single_leg_rdl"
       },
       {
        "ex": "dumbbell_bench_press",
@@ -3292,13 +3908,15 @@
        "reps": "8",
        "rest_s": 60,
        "rpe": "7-8",
-       "pair": "2"
+       "pair": "2",
+       "alt": "push_up"
       }
      ]
     },
     {
      "title": "Sport",
      "minutes": 7,
+     "order": "any",
      "items": [
       {
        "ex": "calf_raise",
@@ -3306,44 +3924,51 @@
        "reps": "12/side",
        "rest_s": 20,
        "rpe": "7-8",
-       "note": "3 s lowering."
+       "note": "3 s lowering.",
+       "alt": null
       },
       {
        "ex": "bent_knee_calf_raise",
        "sets": 2,
        "reps": "15/side",
        "rest_s": 20,
-       "rpe": "7-8"
+       "rpe": "7-8",
+       "alt": "calf_raise"
       },
       {
        "ex": "single_leg_balance",
        "sets": 2,
        "reps": "30 s/side, with reach",
-       "rest_s": 0
+       "rest_s": 0,
+       "alt": null
       }
      ]
     },
     {
      "title": "Core",
      "minutes": 5,
+     "order": "any",
      "items": [
       {
        "ex": "front_plank",
        "sets": 2,
        "reps": "30-45 s",
-       "rest_s": 15
+       "rest_s": 15,
+       "alt": null
       },
       {
        "ex": "side_plank",
        "sets": 2,
        "reps": "30 s/side",
-       "rest_s": 15
+       "rest_s": 15,
+       "alt": null
       },
       {
        "ex": "pallof_press",
        "sets": 2,
        "reps": "10/side",
-       "rest_s": 15
+       "rest_s": 15,
+       "alt": "bird_dog"
       }
      ]
     }
@@ -3362,49 +3987,65 @@
     {
      "title": "Warm-up",
      "minutes": 5,
+     "order": "any",
      "items": [
       {
        "ex": "leg_swings",
        "sets": 1,
        "reps": "10 each way",
-       "rest_s": 0
+       "rest_s": 0,
+       "alt": null
+      },
+      {
+       "ex": "single_leg_balance",
+       "sets": 1,
+       "reps": "30 s/side",
+       "rest_s": 0,
+       "note": "Comfortable, no strain.",
+       "alt": null
       },
       {
        "ex": "hip_flexor_stretch",
        "sets": 1,
        "reps": "30 s/side",
-       "rest_s": 0
+       "rest_s": 0,
+       "alt": null
       },
       {
        "ex": "thoracic_open_book",
        "sets": 1,
        "reps": "8/side",
-       "rest_s": 0
+       "rest_s": 0,
+       "alt": null
       },
       {
        "ex": "band_external_rotation",
        "sets": 1,
        "reps": "12/side",
-       "rest_s": 0
+       "rest_s": 0,
+       "alt": null
       }
      ]
     },
     {
      "title": "Power",
      "minutes": 3,
+     "order": "suggested",
      "items": [
       {
        "ex": "squat_jump",
        "sets": 3,
        "reps": "5",
        "rest_s": 60,
-       "rpe": "6-7"
+       "rpe": "6-7",
+       "alt": null
       }
      ]
     },
     {
      "title": "Main",
      "minutes": 20,
+     "order": "suggested",
      "items": [
       {
        "ex": "bulgarian_split_squat",
@@ -3413,7 +4054,8 @@
        "rest_s": 60,
        "rpe": "8",
        "pair": "1",
-       "note": "Dumbbells in each hand."
+       "note": "Dumbbells in each hand.",
+       "alt": "split_squat"
       },
       {
        "ex": "overhead_press",
@@ -3421,7 +4063,8 @@
        "reps": "8",
        "rest_s": 60,
        "rpe": "7-8",
-       "pair": "1"
+       "pair": "1",
+       "alt": "push_up"
       },
       {
        "ex": "hip_thrust",
@@ -3430,7 +4073,8 @@
        "rest_s": 60,
        "rpe": "8",
        "pair": "2",
-       "note": "Barbell."
+       "note": "Barbell.",
+       "alt": "single_leg_glute_bridge"
       },
       {
        "ex": "bent_over_row",
@@ -3439,51 +4083,59 @@
        "rest_s": 60,
        "rpe": "7-8",
        "pair": "2",
-       "note": "Level-3 athletes can swap in pull_up 3 x 4-8."
+       "note": "Level-3 athletes can swap in pull_up 3 x 4-8.",
+       "alt": "lat_pulldown"
       }
      ]
     },
     {
      "title": "Sport",
      "minutes": 7,
+     "order": "any",
      "items": [
       {
        "ex": "copenhagen_plank",
        "sets": 2,
        "reps": "6-8/side, short lever",
-       "rest_s": 20
+       "rest_s": 20,
+       "alt": "side_plank"
       },
       {
        "ex": "banded_lateral_walk",
        "sets": 2,
        "reps": "12 steps each way",
-       "rest_s": 20
+       "rest_s": 20,
+       "alt": "side_plank"
       },
       {
        "ex": "straight_arm_pulldown",
        "sets": 2,
        "reps": "12-15",
        "rest_s": 20,
-       "rpe": "7"
+       "rpe": "7",
+       "alt": "lat_pulldown"
       }
      ]
     },
     {
      "title": "Core",
      "minutes": 5,
+     "order": "any",
      "items": [
       {
        "ex": "dead_bug",
        "sets": 2,
        "reps": "8/side",
-       "rest_s": 15
+       "rest_s": 15,
+       "alt": null
       },
       {
        "ex": "farmers_carry",
        "sets": 2,
        "reps": "40 m",
        "rest_s": 45,
-       "rpe": "7-8"
+       "rpe": "7-8",
+       "alt": null
       }
      ]
     }
@@ -3502,43 +4154,58 @@
     {
      "title": "Warm-up",
      "minutes": 4,
+     "order": "any",
      "items": [
       {
        "ex": "leg_swings",
        "sets": 1,
        "reps": "10 each way",
-       "rest_s": 0
+       "rest_s": 0,
+       "alt": null
+      },
+      {
+       "ex": "single_leg_balance",
+       "sets": 1,
+       "reps": "30 s/side",
+       "rest_s": 0,
+       "note": "Comfortable, no strain.",
+       "alt": null
       },
       {
        "ex": "knee_to_wall",
        "sets": 1,
        "reps": "10/side",
-       "rest_s": 0
+       "rest_s": 0,
+       "alt": null
       },
       {
        "ex": "banded_lateral_walk",
        "sets": 1,
        "reps": "10 steps each way",
-       "rest_s": 0
+       "rest_s": 0,
+       "alt": "side_plank"
       }
      ]
     },
     {
      "title": "Power",
      "minutes": 3,
+     "order": "suggested",
      "items": [
       {
        "ex": "pogo_hops",
        "sets": 3,
        "reps": "15 contacts",
        "rest_s": 45,
-       "rpe": "6"
+       "rpe": "6",
+       "alt": null
       }
      ]
     },
     {
      "title": "Main",
      "minutes": 16,
+     "order": "suggested",
      "items": [
       {
        "ex": "bulgarian_split_squat",
@@ -3547,7 +4214,8 @@
        "rest_s": 45,
        "rpe": "8",
        "pair": "1",
-       "note": "3 s lowering; rear foot on the sofa."
+       "note": "3 s lowering; rear foot on the sofa.",
+       "alt": "split_squat"
       },
       {
        "ex": "push_up",
@@ -3555,7 +4223,8 @@
        "reps": "8-15",
        "rest_s": 45,
        "rpe": "7-8",
-       "pair": "1"
+       "pair": "1",
+       "alt": null
       },
       {
        "ex": "single_leg_rdl",
@@ -3563,7 +4232,8 @@
        "reps": "10/side",
        "rest_s": 30,
        "rpe": "7-8",
-       "pair": "2"
+       "pair": "2",
+       "alt": null
       },
       {
        "ex": "straight_arm_pulldown",
@@ -3572,13 +4242,15 @@
        "rest_s": 30,
        "rpe": "7",
        "pair": "2",
-       "note": "Band over the top of a door."
+       "note": "Band over the top of a door.",
+       "alt": null
       }
      ]
     },
     {
      "title": "Sport",
      "minutes": 8,
+     "order": "any",
      "items": [
       {
        "ex": "calf_raise",
@@ -3586,39 +4258,45 @@
        "reps": "12-15/side",
        "rest_s": 20,
        "rpe": "8",
-       "note": "Off a stair, 3 s lowering."
+       "note": "Off a stair, 3 s lowering.",
+       "alt": null
       },
       {
        "ex": "bent_knee_calf_raise",
        "sets": 2,
        "reps": "15-20/side",
        "rest_s": 20,
-       "rpe": "7-8"
+       "rpe": "7-8",
+       "alt": "calf_raise"
       },
       {
        "ex": "copenhagen_plank",
        "sets": 2,
        "reps": "6-8/side, short lever",
        "rest_s": 20,
-       "note": "Knee on the sofa."
+       "note": "Knee on the sofa.",
+       "alt": "side_plank"
       }
      ]
     },
     {
      "title": "Core",
      "minutes": 4,
+     "order": "any",
      "items": [
       {
        "ex": "side_plank",
        "sets": 2,
        "reps": "30 s/side",
-       "rest_s": 10
+       "rest_s": 10,
+       "alt": null
       },
       {
        "ex": "dead_bug",
        "sets": 2,
        "reps": "8/side",
-       "rest_s": 10
+       "rest_s": 10,
+       "alt": null
       }
      ]
     }
@@ -3637,36 +4315,50 @@
     {
      "title": "Warm-up",
      "minutes": 5,
+     "order": "any",
      "items": [
       {
        "ex": "leg_swings",
        "sets": 1,
        "reps": "10 each way",
-       "rest_s": 0
+       "rest_s": 0,
+       "alt": null
+      },
+      {
+       "ex": "single_leg_balance",
+       "sets": 1,
+       "reps": "30 s/side",
+       "rest_s": 0,
+       "note": "Comfortable, no strain.",
+       "alt": null
       },
       {
        "ex": "hip_flexor_stretch",
        "sets": 1,
        "reps": "30 s/side",
-       "rest_s": 0
+       "rest_s": 0,
+       "alt": null
       },
       {
        "ex": "thoracic_open_book",
        "sets": 1,
        "reps": "8/side",
-       "rest_s": 0
+       "rest_s": 0,
+       "alt": null
       },
       {
        "ex": "goblet_squat",
        "sets": 1,
        "reps": "8, light",
-       "rest_s": 30
+       "rest_s": 30,
+       "alt": "bulgarian_split_squat"
       }
      ]
     },
     {
      "title": "Power",
      "minutes": 3,
+     "order": "suggested",
      "items": [
       {
        "ex": "squat_jump",
@@ -3674,13 +4366,15 @@
        "reps": "5",
        "rest_s": 60,
        "rpe": "6-7",
-       "note": "For bone: riding alone doesn't load it."
+       "note": "For bone: riding alone doesn't load it.",
+       "alt": null
       }
      ]
     },
     {
      "title": "Main",
      "minutes": 20,
+     "order": "suggested",
      "items": [
       {
        "ex": "goblet_squat",
@@ -3689,7 +4383,8 @@
        "rest_s": 60,
        "rpe": "8",
        "pair": "1",
-       "note": "When the heaviest weight is easy for 10, switch to bulgarian_split_squat with dumbbells."
+       "note": "When the heaviest weight is easy for 10, switch to bulgarian_split_squat with dumbbells.",
+       "alt": "bulgarian_split_squat"
       },
       {
        "ex": "bent_over_row",
@@ -3697,7 +4392,8 @@
        "reps": "10",
        "rest_s": 60,
        "rpe": "7-8",
-       "pair": "1"
+       "pair": "1",
+       "alt": "band_pull_apart"
       },
       {
        "ex": "romanian_deadlift",
@@ -3705,7 +4401,8 @@
        "reps": "8",
        "rest_s": 60,
        "rpe": "8",
-       "pair": "2"
+       "pair": "2",
+       "alt": "single_leg_rdl"
       },
       {
        "ex": "push_up",
@@ -3713,52 +4410,60 @@
        "reps": "8-15",
        "rest_s": 60,
        "rpe": "7-8",
-       "pair": "2"
+       "pair": "2",
+       "alt": null
       }
      ]
     },
     {
      "title": "Sport",
      "minutes": 7,
+     "order": "any",
      "items": [
       {
        "ex": "bulgarian_split_squat",
        "sets": 2,
        "reps": "8/side",
        "rest_s": 45,
-       "rpe": "8"
+       "rpe": "8",
+       "alt": "split_squat"
       },
       {
        "ex": "calf_raise",
        "sets": 2,
        "reps": "12/side",
        "rest_s": 20,
-       "rpe": "7-8"
+       "rpe": "7-8",
+       "alt": null
       }
      ]
     },
     {
      "title": "Core",
      "minutes": 5,
+     "order": "any",
      "items": [
       {
        "ex": "dead_bug",
        "sets": 2,
        "reps": "8/side",
-       "rest_s": 15
+       "rest_s": 15,
+       "alt": null
       },
       {
        "ex": "side_plank",
        "sets": 2,
        "reps": "30 s/side",
-       "rest_s": 15
+       "rest_s": 15,
+       "alt": null
       },
       {
        "ex": "farmers_carry",
        "sets": 2,
        "reps": "40 m",
        "rest_s": 45,
-       "rpe": "7-8"
+       "rpe": "7-8",
+       "alt": null
       }
      ]
     }
@@ -3772,35 +4477,40 @@
    "level": 1,
    "phase": "base_intro",
    "module": "health",
-   "for": "Adult with no sport goal, new to lifting, light dumbbells (tier B). Weeks 1-4. From week 5 add 2 x 10 pogo_hops for bone if joints are happy.",
+   "for": "Adult with no sport goal, new to lifting, light dumbbells (tier B). Weeks 1-4, which double as the calf lead-in. From week 5 add 2 x 10 pogo_hops for bone if joints are happy.",
    "parts": [
     {
      "title": "Warm-up",
      "minutes": 4,
+     "order": "any",
      "items": [
       {
        "ex": "leg_swings",
        "sets": 1,
        "reps": "10 each way",
-       "rest_s": 0
+       "rest_s": 0,
+       "alt": null
       },
       {
        "ex": "thoracic_open_book",
        "sets": 1,
        "reps": "6/side",
-       "rest_s": 0
+       "rest_s": 0,
+       "alt": null
       },
       {
        "ex": "bodyweight_squat",
        "sets": 1,
        "reps": "10",
-       "rest_s": 0
+       "rest_s": 0,
+       "alt": null
       }
      ]
     },
     {
      "title": "Main",
      "minutes": 16,
+     "order": "suggested",
      "items": [
       {
        "ex": "goblet_squat",
@@ -3808,7 +4518,8 @@
        "reps": "10",
        "rest_s": 45,
        "rpe": "6-7",
-       "pair": "1"
+       "pair": "1",
+       "alt": "split_squat"
       },
       {
        "ex": "push_up",
@@ -3817,7 +4528,8 @@
        "rest_s": 45,
        "rpe": "6-7",
        "pair": "1",
-       "note": "Hands on a bench or table if needed."
+       "note": "Hands on a bench or table if needed.",
+       "alt": null
       },
       {
        "ex": "glute_bridge",
@@ -3825,7 +4537,8 @@
        "reps": "12",
        "rest_s": 30,
        "rpe": "6-7",
-       "pair": "2"
+       "pair": "2",
+       "alt": null
       },
       {
        "ex": "bent_over_row",
@@ -3834,64 +4547,74 @@
        "rest_s": 30,
        "rpe": "6-7",
        "pair": "2",
-       "note": "One hand on a bench if the back complains."
+       "note": "One hand on a bench if the back complains.",
+       "alt": "band_pull_apart"
       },
       {
        "ex": "step_up",
        "sets": 2,
        "reps": "8/side",
        "rest_s": 45,
-       "rpe": "6-7"
+       "rpe": "6-7",
+       "alt": "split_squat"
       }
      ]
     },
     {
      "title": "Balance & grip",
      "minutes": 5,
+     "order": "any",
      "items": [
       {
        "ex": "single_leg_balance",
        "sets": 2,
        "reps": "20-30 s/side",
-       "rest_s": 0
+       "rest_s": 0,
+       "alt": null
       },
       {
        "ex": "calf_raise",
        "sets": 2,
        "reps": "10/side",
        "rest_s": 20,
-       "note": "Hold a wall."
+       "note": "Hold a wall.",
+       "alt": null
       },
       {
        "ex": "farmers_carry",
        "sets": 2,
        "reps": "30 m",
        "rest_s": 45,
-       "rpe": "7"
+       "rpe": "7",
+       "alt": null
       }
      ]
     },
     {
      "title": "Core",
      "minutes": 5,
+     "order": "any",
      "items": [
       {
        "ex": "dead_bug",
        "sets": 2,
        "reps": "6/side",
-       "rest_s": 15
+       "rest_s": 15,
+       "alt": null
       },
       {
        "ex": "side_plank",
        "sets": 2,
        "reps": "20 s/side, knees down",
-       "rest_s": 15
+       "rest_s": 15,
+       "alt": null
       },
       {
        "ex": "bird_dog",
        "sets": 2,
        "reps": "6/side",
-       "rest_s": 15
+       "rest_s": 15,
+       "alt": null
       }
      ]
     }
@@ -3910,30 +4633,43 @@
     {
      "title": "Warm-up",
      "minutes": 3,
+     "order": "any",
      "items": [
       {
        "ex": "leg_swings",
        "sets": 1,
        "reps": "10 each way",
-       "rest_s": 0
+       "rest_s": 0,
+       "alt": null
+      },
+      {
+       "ex": "single_leg_balance",
+       "sets": 1,
+       "reps": "30 s/side",
+       "rest_s": 0,
+       "note": "Comfortable, no strain.",
+       "alt": null
       },
       {
        "ex": "knee_to_wall",
        "sets": 1,
        "reps": "8/side",
-       "rest_s": 0
+       "rest_s": 0,
+       "alt": null
       },
       {
        "ex": "bodyweight_squat",
        "sets": 1,
        "reps": "10",
-       "rest_s": 0
+       "rest_s": 0,
+       "alt": null
       }
      ]
     },
     {
      "title": "Main circuit (3 rounds)",
      "minutes": 12,
+     "order": "any",
      "items": [
       {
        "ex": "bulgarian_split_squat",
@@ -3942,7 +4678,8 @@
        "rest_s": 15,
        "rpe": "8",
        "pair": "circuit",
-       "note": "Rear foot on the bed or a chair."
+       "note": "Rear foot on the bed or a chair.",
+       "alt": "split_squat"
       },
       {
        "ex": "push_up",
@@ -3950,7 +4687,8 @@
        "reps": "8-15",
        "rest_s": 15,
        "rpe": "7-8",
-       "pair": "circuit"
+       "pair": "circuit",
+       "alt": null
       },
       {
        "ex": "single_leg_rdl",
@@ -3958,7 +4696,8 @@
        "reps": "8/side",
        "rest_s": 15,
        "rpe": "7-8",
-       "pair": "circuit"
+       "pair": "circuit",
+       "alt": null
       },
       {
        "ex": "band_pull_apart",
@@ -3966,13 +4705,15 @@
        "reps": "15",
        "rest_s": 60,
        "pair": "circuit",
-       "note": "Skip if no band."
+       "note": "Skip if no band.",
+       "alt": null
       }
      ]
     },
     {
      "title": "Ankle & core",
      "minutes": 5,
+     "order": "any",
      "items": [
       {
        "ex": "calf_raise",
@@ -3980,19 +4721,22 @@
        "reps": "12/side",
        "rest_s": 15,
        "rpe": "7-8",
-       "note": "Off a stair or the bed frame edge."
+       "note": "Off a stair or the bed frame edge.",
+       "alt": null
       },
       {
        "ex": "side_plank",
        "sets": 1,
        "reps": "30 s/side",
-       "rest_s": 10
+       "rest_s": 10,
+       "alt": null
       },
       {
        "ex": "dead_bug",
        "sets": 1,
        "reps": "8/side",
-       "rest_s": 0
+       "rest_s": 0,
+       "alt": null
       }
      ]
     }

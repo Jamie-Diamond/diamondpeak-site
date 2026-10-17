@@ -86,6 +86,10 @@ h2{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
 .row.free .th{display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted);text-align:center;line-height:1.2;padding:4px}
 .note{font-size:14px;line-height:1.45;color:var(--ink2);margin:4px 0}
 .note b{color:var(--ink)}
+.start{display:block;width:100%;border:0;background:var(--accent);color:#fff;border-radius:14px;padding:13px;font:inherit;font-size:16px;font-weight:700;cursor:pointer;margin:12px 0 4px}
+.start.sm{display:inline-block;width:auto;padding:8px 14px;font-size:14px;margin:0 0 8px}
+.resume{display:flex;align-items:center;gap:10px;background:#fff;border-radius:14px;padding:10px 12px;margin:14px 0 0;font-size:14px}
+.resume b{flex:1}
 </style>
 </head>
 <body>
@@ -93,6 +97,7 @@ h2{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
   <div class="kicker">Preview · not in Peak yet</div>
   <h1>Strength library</h1>
   <p class="intro" id="intro">Loading…</p>
+  <div id="resume"></div>
   <div class="seg" role="tablist">
     <button class="on" data-tab="ex">Exercises</button><button data-tab="ss">Suggested sessions</button>
   </div>
@@ -108,6 +113,7 @@ h2{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
 
 <script src="figure.js"></script>
 <script src="exercise-anims.js"></script>
+<script src="strength-player.js"></script>
 <script>
 (function () {
   'use strict';
@@ -218,6 +224,7 @@ h2{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
       (pr.sessions || []).map(function (ss) {
         return '<div class="part"><h4>' + esc(ss.title) + ' · ' + esc(ss.per_week) + '× a week' + (ss.minutes ? ' · ' + ss.minutes + ' min' : '') +
           (ss.counts_as_strength === false ? ' · outside the strength cap' : '') + '</h4>' +
+          '<button class="start sm" data-play="is.' + esc(x.id) + '.' + (pr.sessions || []).indexOf(ss) + '">Start this session</button>' +
           (ss.items || []).map(function (it) { return itemRow(it, itemRx(it)); }).join('') + '</div>';
       }).join('') +
       (bo.top_up ? '<div class="part"><h4>What Peak adds · ' + esc(bo.top_up.title) + (bo.top_up.minutes ? ' · ' + bo.top_up.minutes + ' min' : '') + '</h4>' +
@@ -279,6 +286,14 @@ h2{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
       (e.dose && e.dose.note ? '<p class="why" style="font-size:13px">' + esc(e.dose.note) + '</p>' : '') +
       (e.cues && e.cues.length ? '<div class="box"><h4>How to do it</h4><ol>' + e.cues.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ol></div>' : '') +
       (e.mistakes && e.mistakes.length ? '<div class="box"><h4>Watch out for</h4><ul>' + e.mistakes.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul></div>' : '') +
+      (function () {
+        var l = window.PeakStrengthPlayer && PeakStrengthPlayer.lastFor(id);
+        if (!l) return '';
+        var sg = PeakStrengthPlayer.suggest(e, { reps: e.dose && e.dose.reps });
+        return '<div class="box"><h4>Your log</h4><p class="note">' + esc(sg.lines.join(' ')) + '</p></div>';
+      })() +
+      (e.effort ? '<div class="box"><h4>How it should feel</h4><p class="note">' + esc(e.effort) + '</p>' +
+        (e.progress ? '<h4 style="margin-top:8px">How to build</h4><p class="note">' + esc(e.progress) + '</p>' : '') + '</div>' : '') +
       '<div class="ladder"><button ' + (e.easier ? 'data-ex="' + e.easier + '"' : 'disabled') + '><small>Easier</small>' + esc(e.easier ? exName(e.easier) : 'None') + '</button>' +
       '<button ' + (e.harder ? 'data-ex="' + e.harder + '"' : 'disabled') + '><small>Harder</small>' + esc(e.harder ? exName(e.harder) : 'None') + '</button></div>' +
       (e.cautions && Object.keys(e.cautions).length ? '<div class="box"><h4>If something hurts</h4>' + Object.keys(e.cautions).map(function (k) {
@@ -301,6 +316,7 @@ h2{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
     if (!s) return;
     var html = '<div class="bar"><button class="close" data-close aria-label="Close">×</button></div>' +
       '<div class="ex"><h3 style="margin-top:0">' + esc(s.title) + '</h3><p class="why">' + esc((s.minutes ? s.minutes + ' min · ' : '') + (s['for'] || '')) + '</p>' +
+      '<button class="start" data-play="ss.' + esc(s.id) + '">Start session</button>' +
       (s.parts || []).map(function (p) {
         return '<div class="part"><h4>' + esc(p.title) + '</h4>' + (p.items || []).map(function (it) {
           var e = LIB.exercises[it.ex] || {};
@@ -317,6 +333,30 @@ h2{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
     });
   }
 
+  // ── the guided player (strength-player.js): #play/ss.<id>, #play/is.<issue>.<n>, #play/resume ──
+  function sessionFor(key) {
+    var bits = key.split('.');
+    if (bits[0] === 'ss') return (LIB.example_sessions || []).filter(function (s) { return s.id === bits[1]; })[0] || null;
+    if (bits[0] === 'is') {
+      var x = ((LIB.issues || {}).examples || []).filter(function (e) { return e.id === bits[1]; })[0];
+      var ss = x && ((x.issue || {}).protocol || {}).sessions[+bits[2]];
+      return ss ? { id: key, title: ss.title + ' · ' + x.title.split(' · ')[0], parts: [{ title: ss.title, order: 'any', items: ss.items }] } : null;
+    }
+    return null;
+  }
+  function play(key) {
+    if (PeakStrengthPlayer.isOpen()) return;
+    closeSheet();
+    var ok = PeakStrengthPlayer.open({ lib: LIB, anims: ANIMS, session: key === 'resume' ? null : sessionFor(key),
+      onExit: function () { if (history.length > 1) history.back(); else location.hash = ''; } });
+    if (!ok) location.replace('#');
+  }
+  function resumeBanner() {
+    var l = window.PeakStrengthPlayer && PeakStrengthPlayer.live(), el = document.getElementById('resume');
+    el.innerHTML = l && !PeakStrengthPlayer.isOpen() ? '<div class="resume"><b>Session in progress: ' + esc(l.title) +
+      '</b><button class="start sm" style="margin:0" data-play="resume">Resume</button></div>' : '';
+  }
+
   // ── routing: #ex/<id>, #ss/<id>, so the back button closes a sheet ──
   function route() {
     var h = location.hash.slice(1).split('/');
@@ -324,9 +364,12 @@ h2{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
     else if (h[0] === 'ss' && h[1]) showSession(h[1]);
     else if (h[0] === 'is' && h[1]) showIssue(h[1]);
     else closeSheet();
+    if (h[0] !== 'play' && window.PeakStrengthPlayer && PeakStrengthPlayer.isOpen()) PeakStrengthPlayer.close();
+    if (h[0] === 'play' && h[1]) play(h[1]);
+    resumeBanner();
   }
   document.addEventListener('click', function (ev) {
-    var t = ev.target.closest('[data-k],[data-ex],[data-ss],[data-is],[data-close],[data-tab]');
+    var t = ev.target.closest('[data-k],[data-ex],[data-ss],[data-is],[data-play],[data-close],[data-tab]');
     if (!t) { if (ev.target.id === 'sheet') history.back(); return; }
     if (t.hasAttribute('data-k')) { state[t.getAttribute('data-k')] = t.getAttribute('data-v'); renderLib(); }
     else if (t.hasAttribute('data-ex')) {
@@ -335,6 +378,7 @@ h2{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
     }
     else if (t.hasAttribute('data-ss')) location.hash = 'ss/' + t.getAttribute('data-ss');
     else if (t.hasAttribute('data-is')) location.hash = 'is/' + t.getAttribute('data-is');
+    else if (t.hasAttribute('data-play')) location.hash = 'play/' + t.getAttribute('data-play');
     else if (t.hasAttribute('data-close')) { if (history.length > 1) history.back(); else location.hash = ''; }
     else if (t.hasAttribute('data-tab')) {
       var tab = t.getAttribute('data-tab');

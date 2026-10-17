@@ -1,14 +1,14 @@
 # Strength Library & Session-Building Methodology (DRAFT for red-line)
 
-Status: **draft for Jamie's red-line** · 17 Oct 2026 · feeds `config/exercise-library.json`.
+Status: **decisions taken 17 Oct; one item open (§13)** · 17 Oct 2026 · feeds `config/exercise-library.json`.
 Builds on `blueprints/strength.md` (signed off 10 Jun 2026). **Nothing here is live** until you sign it off.
 
 | In one look | |
 |---|---|
-| **What it is** | 40 exercises, 5 modules (run, bike, swim, triathlon, health), an **athlete-issues layer**, one session template, doses by phase, 6 example sessions |
+| **What it is** | 44 exercises, 5 modules (run, bike, swim, triathlon, health), an **athlete-issues layer**, one session template, doses by phase, 6 example sessions |
 | **What stays** | Everything the blueprint decided: 2/wk cap, RPE not 1RM, tiers A/B/C, A/B sessions, phase table, scheduling rules |
-| **What changes** | Upper body added at **no extra time**, a 3-min **power block**, a **sport block** per sport, a **learning block** for new lifters, and **each athlete's own issues** (§9) |
-| **What you decide** | 8 decisions in §13. The top 3: upper body for all, the peak/taper planner gap, plyometrics for all |
+| **What changes** | Upper body added at **no extra time**, a 3-min **power block**, a **sport block** per sport, a **learning block** for new lifters, **each athlete's own issues** (§9), **logged weights and reps** with a one-tap effort answer that sets next time's weight (§8), and **any order in a busy gym** (§5) |
+| **Decided** | 8 decisions taken 17 Oct (§13). **One open:** issue protocols in taper and race week |
 
 ---
 
@@ -16,7 +16,7 @@ Builds on `blueprints/strength.md` (signed off 10 Jun 2026). **Nothing here is l
 
 - **Confidence tags:** ✅ verified (research, cited) · 🟡 extrapolated from verified anchors · 🔴 weak evidence / needs your judgment. **Red-line the 🟡 and 🔴 first.**
 - Every ✅ has author, year and a link. **I checked each link resolves** (17 Oct).
-- **RPE** uses the reps-in-reserve scale: **RPE 8 = about 2 reps left**, RPE 7 = about 3. ✅ Zourdos et al. 2016, [doi:10.1519/JSC.0000000000001049](https://doi.org/10.1519/JSC.0000000000001049).
+- **RPE** uses the reps-in-reserve scale: **RPE 8 = about 2 reps left**, RPE 7 = about 3. Athletes never see RPE: they tap **easy / right / hard** (§8b). ✅ Zourdos et al. 2016, [doi:10.1519/JSC.0000000000001049](https://doi.org/10.1519/JSC.0000000000001049).
 - Muscle names follow **ExRx's anatomical naming**. All wording is original.
 - The JSON is the machine version of this doc. **If they disagree, this doc wins** until you red-line it.
 
@@ -76,9 +76,10 @@ Two jobs. **Make the sport faster and more durable.** Keep the athlete **healthy
 | Heavy + impact loading helps **healthy younger** athletes' bones | 🟡 | LIFTMOR tested older adults with low bone mass |
 | Lat, cuff and shoulder-blade work **prevents swimmer's shoulder** or makes you faster | 🔴 | No trial checked. Standard practice |
 | Bent-knee calf raise **targets the soleus** | 🟡 | Standard anatomy (bent knee slackens the gastrocnemius). Not checked against a study |
-| Progression rule (top of range at RPE 7 or less, twice running) | 🟡 | My version of the common "2-for-2" rule, which secondary sources credit to NSCA/ACSM ([HPRC](https://www.hprc-online.org/physical-fitness/training-performance/guidelines-progress-your-physical-training-over-time)) |
+| Double progression driven by the effort answer (§8c) | 🟡 | A standard method, close to the "2-for-2" rule that secondary sources credit to NSCA/ACSM ([HPRC](https://www.hprc-online.org/physical-fitness/training-performance/guidelines-progress-your-physical-training-over-time)). The exact steps are mine |
+| Athletes can rate effort within about 1 rep | ✅ for trained lifters, 0-3 reps from failure | Zourdos et al. 2016 (above). Less sure for beginners 🟡 |
 | Pain up to **3/10** is OK if gone by next morning | 🟡 | A cautious version of Silbernagel's model. I couldn't confirm the paper's exact threshold |
-| 4 weeks of calf work and ~25 single-leg calf raises **before hopping** | 🔴 | Coaching convention, not checked |
+| A **4-week calf lead-in** before plyos for beginners and lower-limb issues | 🔴 | Coaching convention, not checked |
 | Max **60 foot contacts** a session in build | 🔴 | My number |
 | **No plyos** during lower-limb rehab unless the source clears them | 🟡 | A cautious default, not trial-based |
 | Heavy = **4-6 reps at RPE 8** | 🟡 | Blueprint's signed-off 3×5 @ RPE 8, and the review's "heavy" label. Rep counts not checked |
@@ -88,14 +89,14 @@ Two jobs. **Make the sport faster and more durable.** Keep the athlete **healthy
 
 ## 3. Movement patterns and weekly coverage
 
-**18 patterns.** Every exercise has exactly one.
+**20 patterns.** Every exercise has exactly one.
 
-| Pattern | Exercises in the 40 |
+| Pattern | Exercises in the 44 |
 |---|---|
 | squat | back_squat, goblet_squat, bodyweight_squat |
 | hinge | romanian_deadlift, single_leg_rdl, kettlebell_swing |
-| single_leg | bulgarian_split_squat, split_squat, step_up, reverse_lunge |
-| bridge | hip_thrust, glute_bridge, single_leg_glute_bridge |
+| single_leg | bulgarian_split_squat, split_squat, step_up, reverse_lunge, lateral_step_down |
+| bridge | hip_thrust, glute_bridge, single_leg_glute_bridge, raised_single_leg_hamstring_bridge |
 | hip_stability | banded_lateral_walk, copenhagen_plank |
 | calf_ankle | calf_raise, bent_knee_calf_raise, banded_ankle_eversion |
 | balance | single_leg_balance |
@@ -110,6 +111,8 @@ Two jobs. **Make the sport faster and more durable.** Keep the athlete **healthy
 | anti_rotation | pallof_press, bird_dog |
 | lateral_core | side_plank |
 | mobility | leg_swings, knee_to_wall, hip_flexor_stretch, thoracic_open_book |
+| knee_flexion | single_leg_hamstring_curl **(new)** |
+| knee_extension | single_leg_leg_extension **(new)** |
 
 ### Weekly coverage rule (everyone, every week)
 
@@ -124,8 +127,8 @@ Two jobs. **Make the sport faster and more durable.** Keep the athlete **healthy
 | **Core: anti-extension** | dead_bug, front_plank | 🟡 |
 | **Core: anti-rotation** | pallof_press, bird_dog | 🟡 |
 | **Core: lateral** | side_plank, copenhagen_plank, farmers_carry | 🟡 |
-| **Balance** | single_leg_balance, single_leg_rdl | ✅ CMO, Sherrington |
-| **Bone: impact** | pogo_hops, squat_jump (once cleared) | ✅ CMO "impact helps bone" |
+| **Balance** | **Every session**, all ages: a short single_leg_balance item (decided 17 Oct) | ✅ CMO, Sherrington |
+| **Bone: impact** | pogo_hops, squat_jump, from build (§5) | ✅ CMO "impact helps bone" |
 | **Bone: heavy** | 1 lower-body lift at 6 reps or fewer, RPE 7+ (level 2+) | ✅ LIFTMOR (older adults) · 🟡 others |
 | **Grip** | farmers_carry, pull_up, romanian_deadlift, kettlebell_swing | 🟡 |
 
@@ -165,8 +168,8 @@ An athlete's **own issues** (injury, rehab, a physio programme) sit **on top of*
 
 | Block | Min | What goes in | vs blueprint |
 |---|---|---|---|
-| **Warm-up** | 5 | leg_swings + 1 lower mobility drill + module warm-up adds + 1-2 ramp-up sets. Easy spin/row first if there's a machine | Kept, plus mobility and swim prep |
-| **Power** | 3 | module.power[A or B], from the module's start phase. Done fresh | **New** |
+| **Warm-up** | 5 | leg_swings + 1 lower mobility drill + module warm-up adds + **a short balance item** + 1-2 ramp-up sets. Easy spin/row first if there's a machine | Kept, plus mobility, balance and swim prep |
+| **Power** | 3 | module.power[A or B], **from build**. Who starts straight away: see below. Done fresh | **New** |
 | **Main** | 20 | **Two pairs**, each = 1 lower lift + 1 upper lift. The upper lift fills the lower lift's rest | Lower lifts kept. **Upper added at no extra time** |
 | **Sport** | 8 | module.sport_block[A or B]. Skips anything an issue protocol already covered that week | Replaces the blueprint's fixed block |
 | **Core** | 5 | 2 rounds: 1 anti-extension + 1 anti-rotation + 1 lateral. B may use farmers_carry. 7 min in base (no power block yet) | Was 7 min. Same exercises plus options |
@@ -194,6 +197,33 @@ The blueprint's lower-body lifts sit in exactly the same places.
 
 **One-session week:** run Session A, swap the squat for the single-leg pick every other week, keep the sport block.
 
+### Who starts plyos when (decided 17 Oct)
+
+| Athlete | Plyos |
+|---|---|
+| Level 2+ **or** already does an impact sport (running, team sport), **and** no active or rehab lower-limb issue | **Straight away** from build |
+| Level 1 with no impact sport | **4-week calf lead-in** first (calf_raise, bent_knee_calf_raise) |
+| Active or rehab lower-limb issue | Lead-in, **and** blocked until the source clears them (§9) |
+| No event (no phases) | Start once any lead-in is done |
+
+### Balance in every session (decided 17 Oct)
+
+**Every athlete, every session, all ages:** single_leg_balance, 1-2 × 30 s per side, in the warm-up. Skipped if the session already has it. **Comfortable, no strain.**
+
+### Order is flexible in the gym (decided 17 Oct)
+
+The listed order is **a suggestion**. If kit is busy, **do any exercise next**.
+
+| Soft rule | Why |
+|---|---|
+| Power and plyos first | They need you fresh |
+| Heavy main lifts before their accessories, when possible | Best quality on the lifts that matter most |
+| Core last | A tired trunk makes heavy lifts riskier |
+| Pairs can be split | Do the sets with plain rest if the partner's kit is taken |
+| Rest still applies | Between sets of the same exercise |
+
+Each example-session part is marked **order: any** or **suggested**. Each item has an **alt**: a same-job swap for when that kit is taken (none for kit-free exercises).
+
 ### How this maps to the planner's session types
 
 | `session-library.json` type | Built from |
@@ -212,9 +242,9 @@ The blueprint's lower-body lifts sit in exactly the same places.
 | Phase | Freq | Main lift | Single-leg | Upper | Power | Core | Rule | Tag |
 |---|---|---|---|---|---|---|---|---|
 | **Base · intro** (level 1, 3 wks) | 2/wk | 2-3 × 8-12 @ RPE 6-7 | same | same | none | 2 rounds | Learn the moves | 🟡 **new** |
-| **Base** | 2/wk | 3 × 5-6 @ RPE 8 | 3 × 6-8/side @ 8 | 2-3 × 8-12 @ 7 | pogo 2 × 10 from wk 4 | 2 rounds, 5-7 min | Add load weekly | Blueprint ✅ kept |
-| **Build** | 2/wk | 3 × 4-6 @ RPE 8, fast up | 3 × 6-8/side @ 8 | 3 × 6-10 @ 7-8 | 3 sets, ≤60 contacts | 2 rounds | Add load weekly | Blueprint kept · power new |
-| **Specific** | 2/wk | **2** × 4-6 @ 7-8 | 2 × 6-8/side | 2 × 6-10 @ 7 | 2 sets, ≤40 contacts | 2 rounds | **Hold load, nothing new** | Blueprint kept exactly |
+| **Base** | 2/wk | 3 × 5-6 @ RPE 8 | 3 × 6-8/side @ 8 | 2-3 × 8-12 @ 7 | none (lead-in athletes do calf work) | 2 rounds, 5-7 min | Progress per §8c | Blueprint ✅ kept |
+| **Build** | 2/wk | 3 × 4-6 @ RPE 8, fast up | 3 × 6-8/side @ 8 | 3 × 6-10 @ 7-8 | **starts here**: 3 sets, ≤60 contacts | 2 rounds | Progress per §8c | Blueprint kept · power new |
+| **Specific** | 2/wk | **2** × 4-6 @ 7-8 | 2 × 6-8/side | 2 × 6-10 @ 7 | 2 sets, ≤40 contacts | 2 rounds | **Hold load, nothing new** (progression paused) | Blueprint kept exactly |
 | **Peak** | 1-2/wk | 2 × 3-5 @ 7 | 2 × 5/side | 1-2 × 6-8 | 2 × 3-5 jumps | 1-2 rounds | Same load, fewer reps | Blueprint kept · ✅ Rønnestad 2010 |
 | **Taper** | 1/wk light, **none in race week** | 1-2 × 3 @ 6 | 1 × 4/side | 0-1 set | 1-2 × 3 jumps | 1 round | Neuromuscular touch only | Blueprint kept |
 | **Off-season** | 2/wk | 3-4 × 4-8 @ 8 | 3 × 6-10/side | 3 × 8-12 | 3 sets, ≤80 contacts | 2-3 rounds | Biggest strength block of the year | 🟡 **new** |
@@ -236,7 +266,7 @@ The blueprint's lower-body lifts sit in exactly the same places.
 
 | Tier | Kit | Main lifts (blueprint) |
 |---|---|---|
-| **A** full gym | barbell, rack, bench, lat pulldown, pull-up bar + all of B | back_squat, romanian_deadlift (barbell), hip_thrust (barbell) |
+| **A** full gym | barbell, rack, bench, lat pulldown, pull-up bar, leg curl and leg extension machines + all of B | back_squat, romanian_deadlift (barbell), hip_thrust (barbell) |
 | **B** dumbbells / kettlebells | dumbbells or kettlebells + all of C. **No bench assumed** | goblet_squat, single_leg_rdl (DB), split_squat (DB), kettlebell_swing |
 | **C** bodyweight + band (default) | band, mini band, step, chair, wall, mat | bulgarian_split_squat, single_leg_rdl, step_up, hip_thrust (banded) |
 
@@ -254,6 +284,8 @@ The blueprint's lower-body lifts sit in exactly the same places.
 | overhead_press | (itself) | push_up |
 | bent_over_row | (itself) | band_pull_apart |
 | farmers_carry | (itself) | **no swap**: grip gap at tier C |
+| single_leg_hamstring_curl | raised_single_leg_hamstring_bridge | raised_single_leg_hamstring_bridge |
+| single_leg_leg_extension | lateral_step_down | lateral_step_down |
 
 | Upgrades (higher tier) | |
 |---|---|
@@ -261,36 +293,81 @@ The blueprint's lower-body lifts sit in exactly the same places.
 | glute_bridge → hip_thrust | at A or B |
 | push_up → dumbbell_bench_press | at A |
 
-**Kit gaps to ask about:** a **band** (needed for 7 exercises), a **pull-up bar** (doorway bars count), a **bench** (else floor press). See decision 8.
+**Asked once and stored** (decided 17 Oct): a **band** (needed for 7 exercises), a **mini band**, a **pull-up bar** (doorway bars count), a **bench** (else floor press). Only the tier is asked weekly.
 
 ---
 
-## 8. Progression and regression
+## 8. Logging, effort and progression
 
-### When to move
+**Jamie, 17 Oct:** "Make sure you log weights and reps", "be clear on how to build", and say "what should be comfortable". **Logs + one tap → next session's suggestion.**
 
-| Signal | Action | Tag |
+### 8a. What gets logged
+
+Every exercise has a **`log`** type.
+
+| Type | Logged every set | Used for |
 |---|---|---|
-| Every set at the **top of the rep range** at **RPE 7 or less**, **2 sessions running** | Add the smallest load step (next dumbbell, or 2.5 kg on a bar). Restart at the bottom of the range | 🟡 |
-| Can't add load (tier C, heaviest dumbbell) | Add reps → slow the lowering to 3-4 s → move to `harder` | 🟡 |
-| Reps below range, or **RPE 9+**, **2 sessions running** | Drop 5-10% load, or move to `easier` | 🟡 |
-| Pain **above 3/10**, or still there next morning | Move to `easier` or swap (§9) | 🟡 |
+| **weight_reps** | kg + reps (0 kg = bodyweight) | Barbell, dumbbell, machine lifts, loaded single-leg work |
+| **reps** | reps (kg too if load is added) | Bodyweight: push-ups, bridges, plyos, dead bugs |
+| **seconds** | seconds (kg too if something is held) | Planks, balance, carries |
+| **band_reps** | band + reps (cable logs kg) | Band exercises |
 
-### The ladders (within the 40)
+| Rule | Detail |
+|---|---|
+| **Per side** | One-leg and one-arm exercises log **left and right separately**. Loads can differ (common in rehab) |
+| Ramp-up sets | Logged, ignored by progression |
+| Different kit | Log what was used (a band instead of a weight) |
+| Skipped | Logged as skipped. Next suggestion stays the same |
+
+### 8b. The effort answer (one tap after each exercise)
+
+**"How did that feel?"** Asked once per exercise, not per set. Not asked for warm-ups, mobility or balance.
+
+| Answer | Label the athlete sees | RPE | Next time |
+|---|---|---|---|
+| **easy** | Could have done 4+ more | 6 or less | **Add** |
+| **right** | 2-3 more in the tank | 7-8 | **Build** |
+| **hard** | 0-1 more, or form slipped | 9-10 | **Hold or drop** |
+
+**Most working sets should feel "right".** Main lifts sit at its hard end: about 2 left. Every exercise has an **`effort`** line saying how it should feel, e.g. "Last 2 reps hard but clean: you could do 2 more." **Warm-ups, mobility and balance: "Comfortable, no strain."**
+
+### 8c. How to build (double progression)
+
+| Answer | Weighted (`load_step_kg` > 0) | Bodyweight (`load_step_kg` = 0) | Band |
+|---|---|---|---|
+| **easy** | Add the load step, same reps | +2 reps a set (holds +10 s). At the top: the `harder` exercise | Next band up |
+| **right**, below top of range | Same weight, **+1 rep a set** | +1 rep a set (holds +5 s) | +1 rep a set |
+| **right**, top of range on every set | Add the load step, back to the bottom of the range | The `harder` exercise | Next band up, bottom of range |
+| **hard**, reps in range | Same weight, same target | Same | Same band |
+| **hard**, reps below range or form broke | **Drop about 10%** (rounded to the step) | The `easier` exercise | Band below |
+| **hard** twice running | `easier` exercise, or drop 10% | `easier` | `easier` |
+
+| Rule | Detail |
+|---|---|
+| **Load steps** | 2.5 kg barbell and machines, 2 kg dumbbells, 4 kg kettlebells, 0 for bodyweight, band and time |
+| **Per side** | Each side progresses on its own |
+| **First time** | Every exercise has a **`start`** line: how to pick a weight with no history. That first log is the baseline |
+| **Plain English** | Every exercise has a **`progress`** line, e.g. "When every set reaches 10 with 2 left in the tank, take the next dumbbell up and drop back to 6." |
+| **No weights this week** | Tier C week: the load step counts as 0 |
+| **Phases** | Active in base, build and off-season. **Paused** in specific, peak and taper (hold load); "hard" still drops |
+| **Physio or doctor items** | Never auto-progressed. Show the source's numbers |
+| **Pain** | Above 3/10, or still there next morning: `easier` or swap, whatever the answer |
+
+### 8d. The ladders (within the 44)
 
 | Family | Easier → harder |
 |---|---|
 | Squat | bodyweight_squat → goblet_squat → back_squat |
-| Single-leg | bodyweight_squat → step_up → split_squat → reverse_lunge → bulgarian_split_squat |
+| Single-leg | bodyweight_squat → step_up → split_squat → reverse_lunge → bulgarian_split_squat · step_up → lateral_step_down → bulgarian_split_squat |
 | Hinge | glute_bridge → romanian_deadlift → single_leg_rdl · romanian_deadlift → kettlebell_swing |
-| Bridge | glute_bridge → single_leg_glute_bridge → hip_thrust |
+| Bridge | glute_bridge → single_leg_glute_bridge → hip_thrust · single_leg_glute_bridge → raised_single_leg_hamstring_bridge |
 | Calf → plyo | calf_raise → pogo_hops → squat_jump |
 | Vertical pull | lat_pulldown → pull_up |
 | Anti-extension | dead_bug → front_plank |
 | Anti-rotation | bird_dog → pallof_press |
 | Lateral | side_plank → copenhagen_plank |
 
-**No ladder** (progress by load, reps or the note's variations): push, overhead press, row, carries, cuff work, balance, mobility.
+**No ladder** (progress by load, reps or the note's variations): push, overhead press, row, carries, cuff work, balance, mobility, hamstring curl, leg extension. Swaps link the machines to their home versions (§7).
 
 ---
 
@@ -329,11 +406,14 @@ They live in the profile's existing **`injuries[]`** list. **I extend it. No new
 | **Counts toward coverage** | Protocol items count toward the weekly coverage list (§3) |
 | **Top up only** | The builder adds **only what's missing**: usually upper body + core, 10-20 min, added to a protocol session. **Never a competing lower-body session** |
 | **Never edit the source** | Never change a physio's or doctor's exercises, sets, reps or loads. The coach may **only point out a conflict** and suggest the athlete checks with the source |
-| **Self-managed can progress** | Source self or coach: the normal progression rules (§8) apply |
+| **Physio items never auto-progress** | Source physio or doctor: the log shows their numbers; the progression engine stays off |
+| **Self-managed can progress** | Source self or coach: the normal progression rules (§8c) apply |
 | **Cautions apply automatically** | Every library exercise's caution for the issue's area applies: follow it, or swap |
 | **Avoid list** | Never prescribed while the issue is current |
 | **No plyos in lower-limb rehab** | Knee, ankle or hip issue that is active or in rehab: **no plyometrics** unless the source clears them. Managed issues don't block. 🟡 |
 | **Free-text exercises allowed** | Shown **without an animation**. Added to the library candidates list (§9f) |
+| **Logged per side** | Left and right are logged separately, so a rehab leg's numbers stay visible (§8a) |
+| **Taper and race week** | **Open decision** (§13). Until then: follow the source; with no instruction, **ask the athlete when the taper starts** |
 | **Debrief** | Asks about the issue area. Already built (`lib/strength_ask.py`) |
 | **Review date** | On the `review_by` date, ask for an update. Never let an issue expire silently |
 | **Short sessions outside the cap** | Balance or mobility work with `counts_as_strength: false` uses the `mobility` or `ankle_mobility` session type |
@@ -348,11 +428,11 @@ Issue: area knee · status **rehab** · source **physio** · priority **first** 
 |---|---|---|---|
 | Single-leg deadlift | single_leg_rdl | Barbell back squat | back_squat |
 | Hip thrust | hip_thrust | Bulgarian split squat | bulgarian_split_squat |
-| Single-leg hamstring curl (machine) | **free text** | Single-leg leg extension (machine) | **free text** |
-| Single-leg calf raise | calf_raise | Lateral step-down | **free text** |
-| Single-leg hamstring bridge, foot raised | **free text** | Copenhagen plank | copenhagen_plank |
+| Single-leg hamstring curl (machine) | single_leg_hamstring_curl **(new)** | Single-leg leg extension (machine) | single_leg_leg_extension **(new)** |
+| Single-leg calf raise | calf_raise | Lateral step-down | lateral_step_down **(new)** |
+| Single-leg hamstring bridge, foot raised | raised_single_leg_hamstring_bridge **(new)** | Copenhagen plank | copenhagen_plank |
 
-**Loads: set by the physio.** The library never copies or changes them.
+**Loads: set by the physio.** The library never copies or changes them. **All 10 exercises are now in the library**, so every one has an animation slot.
 
 **What the builder does:**
 
@@ -365,6 +445,8 @@ Issue: area knee · status **rehab** · source **physio** · priority **first** 
 | Blocked | **pogo_hops, squat_jump**: knee in rehab, not cleared |
 | Grip | No carries (walking load on the knee). Gap until the physio says otherwise |
 | Conflict to flag | A hard ride within 8 h of a physio session. **Flag it; never move the physio session** |
+| Balance | Comes from the physio's single_leg_rdl. **Ask the physio** before adding single_leg_balance to the top-up |
+| Logging | Each side logged separately; the physio's numbers shown, never auto-progressed |
 | Debrief | "How did the knee feel - any pain or swelling during or after?" |
 
 ### 9d. Worked example 2: old ankle sprain (self-managed)
@@ -406,16 +488,18 @@ Each exercise carries cautions **only for the areas it affects**. They switch on
 
 **Stop and refer** (not a library job): sharp or worsening pain, swelling, pain at night or at rest, giving way. 🟡
 
-### 9f. Next library candidates
+### 9f. Library candidates
 
-The four free-text exercises from example 1 are **first in line** for the next batch:
+The four free-text exercises from example 1 were **added to the library on 17 Oct**, with full entries:
 
-| # | Exercise | Pattern it would add |
-|---|---|---|
-| 1 | Single-leg hamstring curl (machine) | knee flexion (new pattern) |
-| 2 | Single-leg leg extension (machine) | knee extension (new pattern) |
-| 3 | Lateral step-down | single_leg |
-| 4 | Single-leg hamstring bridge, foot raised | bridge |
+| Exercise | Library id | Pattern | Tier |
+|---|---|---|---|
+| Single-leg hamstring curl (machine) | single_leg_hamstring_curl | knee_flexion **(new)** | A (leg curl machine) |
+| Single-leg leg extension (machine) | single_leg_leg_extension | knee_extension **(new)** | A (leg extension machine) |
+| Lateral step-down | lateral_step_down | single_leg | C (a step) |
+| Single-leg hamstring bridge, foot raised | raised_single_leg_hamstring_bridge | bridge | C (bench or box) |
+
+**The candidates list is now empty.** New free-text items from athletes' protocols land there for the next batch.
 
 ---
 
@@ -424,14 +508,14 @@ The four free-text exercises from example 1 are **first in line** for the next b
 | Group | Rule | Tag |
 |---|---|---|
 | **Beginners (level 1)** | 3-week learning block (8-12 reps, RPE 6-7). Level-1 exercises only | 🟡 (✅ NSCA for older beginners) |
-| | **No plyometrics for 4 weeks**, then pogo 2 × 10 | 🔴 |
+| | **4-week calf lead-in** before plyos, unless they already do an impact sport (§5) | 🔴 |
 | | First 2 sessions: 2 sets, technique first | 🟡 |
 | **Masters** | **Same programme.** Heavy strength still works | ✅ Fragala 2019 |
 | | Keep **heavy + impact** in (bone), and **balance** every week (falls) | ✅ LIFTMOR, Sherrington |
 | | Power work stays: explosive intent at moderate load (squat jumps, swings) | ✅ Fragala 2019 |
 | | Longer warm-up (add 2 min). Plyo volume at the low end of the phase range | 🟡 |
 | **Women peri / post-menopause** | Prioritise heavy lifts and impact | ✅ LIFTMOR (women with low bone mass) |
-| **Over 65** | WHO says balance + strength on **3+ days**. We cap strength at 2 | ✅ WHO · see decision 5 |
+| **Everyone, all ages** | A short **balance item in every session** (decided 17 Oct). WHO's 3+ days for over-65s is met only if they also do a mobility session | ✅ CMO, Sherrington · 🟡 WHO gap |
 
 ---
 
@@ -450,7 +534,7 @@ The four free-text exercises from example 1 are **first in line** for the next b
 | Issue protocols with priority **first** | Placed before swim, bike and run. They count toward the cap | rule (§9) |
 | Compliance flag (T11) | Unchanged | kept |
 
-**Planner gap:** `session-library.json` peak and taper menus **don't include `strength_general`**. The blueprint says peak 1-2/wk and taper 1/wk. So today the planner **can't place** the strength the blueprint asks for. See decision 2.
+**Planner gap:** `session-library.json` peak and taper menus **don't include `strength_general`**. The blueprint says peak 1-2/wk and taper 1/wk. So today the planner **can't place** the strength the blueprint asks for. **Decided 17 Oct: add it** (a later code step).
 
 ---
 
@@ -470,11 +554,17 @@ The four free-text exercises from example 1 are **first in line** for the next b
 | **Changed** | Core block | 7 → 5 min once the power block starts. More exercise options |
 | **Changed** | Warm-up | Adds mobility drills and swim shoulder prep |
 | **Changed** | Doses | Words → numbers per phase. Tier C rep shift kept (8-12) |
-| **New** | 40-exercise library | Patterns, muscles, levels, ladders, swaps, cues, cautions |
+| **Changed** | Plyos | From build. Straight away for level 2+ or impact-sport athletes; 4-week calf lead-in for beginners and lower-limb issues |
+| **New** | 44-exercise library | Patterns, muscles, levels, ladders, swaps, cues, cautions, log type, start, progress and effort lines |
 | **New** | Power block | 3 min of plyos from build |
 | **New** | Sport and health modules | Run, bike, swim, triathlon, health |
 | **New** | Athlete-issues layer | Extends the profile's `injuries[]`: structured protocols, counted toward cap and coverage, avoid list, plyo block (§9) |
-| **New** | Library candidates | 4 exercises from a rehab protocol, first in line for the next batch (§9f) |
+| **New** | 4 more exercises | From a physio rehab protocol: hamstring curl, leg extension, lateral step-down, raised hamstring bridge (§9f) |
+| **New** | Logging | Weight and reps (or seconds, or band) every set, left and right separately (§8a) |
+| **New** | Effort answer | One tap after each exercise: easy, right, hard (§8b) |
+| **New** | Progression engine | Logs + effort answer set next time's weight and reps (§8c). Replaces my earlier "RPE 7, two sessions" rule |
+| **New** | Balance in every session | All athletes, all ages (§5) |
+| **New** | Flexible order | Any order when gym kit is busy; every example item has an alt (§5) |
 | **New** | Weekly coverage rule | §3 |
 | **New** | Progression / regression rules | §8 |
 | **New** | Learning block for new lifters | §6 |
@@ -485,89 +575,30 @@ The four free-text exercises from example 1 are **first in line** for the next b
 
 ---
 
-## 13. Decisions for Jamie
+## 13. Decisions
 
-### 1. Upper body for every athlete?
-The blueprint is lower body only. WHO says **all major muscle groups**.
+### Decided 17 Oct
 
-| Option | Impact |
-|---|---|
-| **a. Yes, everyone** (push + pull paired into rests) | **No extra time.** Meets WHO/CMO. Swimmers get lats and cuff. Slightly more fatigue |
-| b. Swimmers, triathletes and health-only athletes | Runners and cyclists miss the health benefit |
-| c. Keep legs-only | Simplest. "All-round health" claim doesn't hold |
+| # | Decision | What it means | Where |
+|---|---|---|---|
+| 1 | **Upper body for everyone** | Push + pull every session, paired into lower-body rests. No extra time | §5 |
+| 2 | **Fix the peak / taper gap** | Add `strength_general` to the planner's peak and taper menus with the §6 doses. **The menu change is a later code step** | §6, §11 |
+| 3 | **Plyos from build for everyone** | Level 2+ or impact-sport athletes start straight away. Beginners and lower-limb issues do a 4-week calf lead-in first | §5 |
+| 4 | **Learning block for new lifters** | 3 weeks at 8-12 reps, RPE 6-7, for level 1 only | §6 |
+| 5 | **Balance for everyone** | A short balance item in every session, all ages (not just over-65s) | §5 |
+| 7 | **Pain rule** | Up to 3/10 during and gone by next morning is OK. A source's own pain rule always wins | §8c, §9 |
+| 8 | **Equipment extras asked once** | Band, mini band, pull-up bar, bench: asked once and stored. Only the tier is asked weekly | §7 |
+| 9 | **Add the 4 physio exercises to the library** | Full entries; the knee example now uses them | §9f |
 
-**Recommend a.** It's free in time and it's what "all-round health" means.
+### Open
 
-### 2. Fix the peak / taper planner gap?
-The planner's peak and taper menus have **no `strength_general`**. The blueprint wants strength in both.
-
-| Option | Impact |
-|---|---|
-| **a. Add it to both** with the §6 doses | Matches the blueprint. 1/wk keeps gains (✅ Rønnestad 2010) |
-| b. Peak only | Taper goes strength-free. Small detraining risk |
-| c. Leave it | Strength stops after specific. Contradicts the signed-off blueprint |
-
-**Recommend a.** It's a menu edit plus a test.
-
-### 3. Plyometrics (power block) for everyone?
+#### 6. Issue protocols in taper and race week
+The blueprint says **light strength in taper, none in race week**. An athlete's own protocol may say something different. **Jamie: "unsure".**
 
 | Option | Impact |
 |---|---|
-| **a. Everyone from build**, after 4 weeks of calf work, contact caps per phase | Better running economy (✅). Bone loading for all (✅). Small injury risk if overdone |
-| b. Runners and triathletes only | Cyclists and swimmers miss the bone benefit they most need (✅ Olmedillas, Gómez-Bruton) |
-| c. None | Simplest. Loses both benefits |
-
-**Recommend a.** Separately, a lower-limb issue in rehab blocks plyos until its source clears them (§9). That's a rule, not part of this choice.
-
-### 4. Learning block for new lifters?
-The blueprint starts at 3×5 @ RPE 8 from day one.
-
-| Option | Impact |
-|---|---|
-| **a. 3-week block (8-12 reps, RPE 6-7) for level-1 athletes only** | Safer start for beginners. Experienced lifters unchanged |
-| b. Everyone | Costs experienced lifters 3 weeks |
-| c. None | Beginners go heavy before learning the lifts |
-
-**Recommend a.**
-
-### 5. Over-65s: a third balance day?
-WHO says over-65s do balance + strength on **3+ days**. Our cap is 2 strength sessions.
-
-| Option | Impact |
-|---|---|
-| **a. Add a 10-min balance + mobility session** (`mobility` type, outside the cap) | Meets WHO. No extra strength load |
-| b. Fold balance into the 2 sessions only | Meets CMO (2 days), not WHO (3) |
-| c. Raise the cap to 3 for over-65s | More load on older athletes. Changes a validator rule |
-
-**Recommend a.** 🔴 your judgment on the age line (65, or masters 50+?).
-
-### 6. Issue protocols in taper and race week?
-The blueprint says **light strength in taper, none in race week**. An athlete's own protocol may say something different.
-
-| Option | Impact |
-|---|---|
-| **a. Follow the source. If it says nothing: keep rehab sessions, drop the top-ups** | Rehab never stalls for a race. Library extras go quiet |
+| a. Follow the source; with no instruction, keep rehab sessions and drop top-ups | Rehab never stalls for a race. Library extras go quiet |
 | b. Drop everything in race week, protocol included | Clean rule. Can break a physio's programme |
 | c. Keep everything as normal | Top-ups add fatigue in race week |
 
-**Recommend a.** Managed (self-run) protocols follow the normal taper doses.
-
-### 7. Pain rule?
-
-| Option | Impact |
-|---|---|
-| **a. Up to 3/10 during, gone by next morning = OK** | Athletes keep training through minor niggles. Cautious version of Silbernagel (✅ no harm at its threshold) |
-| b. Any pain = stop and swap | Safer-sounding. Lots of needless swaps |
-
-**Recommend a.** A source's own pain rule always wins (§9).
-
-### 8. Extend the equipment ask?
-The weekly ask is A/B/C. The library also needs a **band**, a **pull-up bar** and a **bench**.
-
-| Option | Impact |
-|---|---|
-| **a. Ask the 3 extras once, store them, re-ask only the tier weekly** | One extra question, once. Unlocks 7 band exercises and pull-ups |
-| b. Assume every tier has a band | Band exercises fail silently for athletes without one |
-| c. Ask all of it weekly | More nagging every Sunday |
-
-**Recommend a.**
+**Default until decided:** follow the source's instruction. If there is none, **ask the athlete when the taper starts.**
