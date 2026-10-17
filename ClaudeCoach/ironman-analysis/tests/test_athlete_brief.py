@@ -60,6 +60,18 @@ def test_manual_names_the_athlete_and_keeps_chart_json():
     assert '<<<CHART:load:{"today":"MM-DD"' in m
 
 
+def test_manual_claims_proposes_and_keeps_internals_from_athletes():
+    """17 Oct 2026 picker review: "Saved" before the write, internals leaked to Fred
+    ("flagged it for Jamie", "day_rules ... needs updating"), 2-3 questions instead of a plan."""
+    m = ab.manual("Fred", "fred")
+    assert "succeeded in THIS turn" in m and "say what you WILL save" in m
+    assert "Fred never hears about files, tools, config" in m
+    assert "Follow-ups go silently into feedback-log.json" in m
+    assert "say day_rules" not in m and "needs updating so future plans" not in m
+    assert "without telling Fred" in m
+    assert "with your pick and at most ONE question" in m
+
+
 def test_engine_puts_the_manual_in_front_of_a_new_brief_only(tmp_path):
     import engine
     d = tmp_path / "athletes" / "tess"
