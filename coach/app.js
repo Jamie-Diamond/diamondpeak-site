@@ -2937,7 +2937,9 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     };
 
     var NAME = { swim: 'Swim', bike: 'Bike', run: 'Run', strength: 'Str', other: 'Other' };
-    var mTot = { mins: 0, tss: 0, sessions: 0, rest: 0, nodata: 0 };
+    // Completed only (Jamie, 17 Oct 2026): mins is hours done, tssDone/daysDone the
+    // average TSS per day over the month's days so far that have data.
+    var mTot = { mins: 0, tssDone: 0, daysDone: 0, rest: 0, before: false };
     var rows = [];
 
     for (var cur = new Date(monday); cur <= lastDay; cur.setDate(cur.getDate() + 7)) {
@@ -2958,13 +2960,15 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
           var fam = SPORT[x.sport] || 'other';
           wk.sports[fam] = (wk.sports[fam] || 0) + mn;
           if (x.status === 'completed') wk.done += mn; else wk.planned += mn;
-          if (inMonth) { mTot.mins += mn; mTot.tss += x.tss || 0; mTot.sessions++; }
+          // Hours too are what is done, so all four minis measure the same thing.
+          if (inMonth && key <= t && x.status === 'completed') {
+            mTot.mins += mn; mTot.tssDone += x.tss || 0;
+          }
         });
-        if (inMonth && !items.length) {
-          // Only a covered day with nothing on it is a rest day.
-          if (covered && key <= t) mTot.rest++;
-          else if (!covered) mTot.nodata++;
-        }
+        if (inMonth && covered && key <= t) mTot.daysDone++;
+        // Only a covered day with nothing on it is a rest day.
+        if (inMonth && !items.length && covered && key <= t) mTot.rest++;
+        if (inMonth && cov && key < cov.from) mTot.before = true;
       }
       rows.push(wk);
     }
@@ -3028,15 +3032,40 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     var h = card(monthName(y, m), head + '<div class="wkrows">' + grid + '</div>',
       { action: nav });
 
-    h += '<div class="minis">' + mini(hhmm(mTot.mins), 'this month') +
-      mini(Math.round(mTot.tss), 'tss') + mini(mTot.sessions, 'sessions') +
-      mini(mTot.rest, 'rest days') + '</div>';
+    // Distance by sport in one cell, completed activities only: a planned session has no
+    // distance (Jamie, 17 Oct 2026: "distance count by sport", not a session count).
+    var mKey = state.calMonth, dist = { swim: 0, bike: 0, run: 0 };
+    (state.data.recent || []).forEach(function (r) {
+      var f = SPORT[r.sport];
+      if (r.date && r.date.slice(0, 7) === mKey && r.date <= t && f in dist) dist[f] += r.dist || 0;
+    });
+    var distSports = ['swim', 'bike', 'run'].filter(function (k) {
+      return shownSports().indexOf(k) >= 0 || dist[k];
+    });
+    var km = function (v) { return (v < 10 ? v.toFixed(1) : String(Math.round(v))) + ' km'; };
+    var distCell = '<div class="mini mini-dist"><div class="md">' +
+      (mTot.daysDone && distSports.length ? distSports.map(function (k) {
+        return '<i title="' + sportWord(k) + '"><svg class="sp-ic wk-ic ic-' + k +
+          '" viewBox="0 0 24 24" aria-hidden="true">' + SPORT_ICON[k] + '</svg>' + km(dist[k]) + '</i>';
+      }).join('') : '<b>—</b>') + '</div><span>Distance</span></div>';
 
-    // Say what is not known rather than folding it into a number.
-    if (mTot.nodata) {
-      h += '<p class="hint">' + mTot.nodata + ' day' + (mTot.nodata === 1 ? '' : 's') +
-        ' with no data, not counted as rest.</p>';
+    h += '<div class="minis">' + mini(hhmm(mTot.mins), 'this month') +
+      mini(mTot.daysDone ? Math.round(mTot.tssDone / mTot.daysDone) : '—', 'TSS/day') +
+      distCell + mini(mTot.rest, 'rest days') + '</div>';
+
+    // Plain words for what the month is missing: the days still to come, and any days
+    // before the published data starts (Jamie, 17 Oct 2026: "7 days with no data, not
+    // counted as rest" was AI speak - and it counted days past the plan, not days left).
+    var notes = [];
+    if (mTot.before) {
+      notes.push('No data before ' + new Date(cov.from + 'T12:00:00')
+        .toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
     }
+    if (t.slice(0, 7) === mKey) {
+      var left = lastDay.getDate() - +t.slice(8, 10);
+      if (left > 0) notes.push(left + ' day' + (left === 1 ? '' : 's') + ' to go');
+    }
+    if (notes.length) h += '<p class="hint">' + notes.join(' · ') + '</p>';
 
     var sel = state.calDay && by[state.calDay] ? by[state.calDay] : null;
     if (state.calDay) {
@@ -6982,6 +7011,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.046", "2026-10-17", "Calendar month: average TSS per day instead of the month\u2019s TSS, and distance for swim, bike and run instead of a session count. Hours, TSS and distance count what you\u2019ve done, not what\u2019s planned. The note under it now just says how many days are left", 0],
     ["4.045", "2026-10-17", "Sport colours easier to tell apart: swim is now a clear blue (it was close to bike\u2019s teal), run a brighter amber, strength near-black. The same colours on the calendar dots, session cards and charts. Calendar: each sport in the weekly totals has its icon, including a new one for other activities", 0],
     ["4.044", "2026-10-17", "Trends: \u2018What\u2019s holding you back\u2019 has its own Race tab with a Run / Ride / Swim picker, starting on your target sport. Drift is measured one way everywhere: warm-up and cool-down cut, coasting and stops left out, hills taken out (power against heart rate, or grade-adjusted pace)", 0],
     ["4.043", "2026-10-17", "\u2018What\u2019s holding you back\u2019 says which sport it is about: on Trends it follows the Ride / Run / Swim picker (All is your goal sport), and on Goals the title names the sport and the race", 0],
