@@ -12,7 +12,7 @@ against second half of the STEADY part only:
   - coasting (power 0) and stops (speed under STOP_MS) are dropped, so freewheeling
     downhill or waiting at lights doesn't read as "HR rising against output"
   - only for a session long enough to mean something (MIN_STEADY_S left after the cuts)
-    and steady enough (rides: VI <= MAX_VI) - on intervals the halves hold different work,
+    and steady enough (rides: pedalling VI <= drift.MAX_VI) - on intervals the halves hold different work,
     so the number would describe the session plan, not the athlete's durability.
 Positive = HR drifted up against output. Under 5% is the usual "aerobically sound" mark.
 """
@@ -21,7 +21,6 @@ from __future__ import annotations
 WARMUP_S = 10 * 60
 COOLDOWN_S = 5 * 60
 MIN_STEADY_S = 30 * 60
-MAX_VI = 1.10
 STOP_MS = 1.0
 PEAKS = ((5, "5 s"), (60, "1 min"), (300, "5 min"), (1200, "20 min"), (3600, "60 min"))
 
@@ -125,19 +124,15 @@ def build(act: dict, raw_streams: list, sport: str, history: list | None = None,
     if cad:
         add("Cadence", f"{cad * 2:.0f} spm" if run else f"{cad:.0f} rpm")
     if ride or run:
-        dec = None
-        # Variability while PEDALLING: coasting zeros (gravel, descents) inflate plain VI,
-        # which blocked decoupling on exactly the long Z2 rides it is for (VI 1.42 on a
-        # 3.5 h Z2 gravel ride). Intervals still read high here.
-        ped = [w for w in watts if _num(w) and w > 0]
-        vi_ped = np_ / (sum(ped) / len(ped)) if np_ and ped else None
-        if ride and watts and hr and vi_ped and vi_ped > MAX_VI:
+        # One drift method everywhere (lib/drift.py, Jamie 17 Oct 2026): warm-up/cool-down
+        # cut, freewheeling and stops dropped, power:HR (or grade-adjusted pace on a run with
+        # no power) so hills don't read as drift, steady sessions only.
+        import drift as _drift
+        d = _drift.session_drift(act, st)
+        if d["pct"] is not None:
+            add("Decoupling", f"{d['pct']:+.1f}%")
+        elif d["reason"] and d["reason"].startswith("intervals"):
             add("Decoupling", "n/a: intervals or surges (power too variable)")
-        elif ride and watts and hr:
-            dec = decoupling(watts, hr, act, True)
-        elif run and vel and hr:
-            dec = decoupling(vel, hr, act, False)
-        add("Decoupling", f"{dec:+.1f}%" if dec is not None else None)
         ef = _num(act.get("icu_efficiency_factor"))     # NP per beat; runs' uses running power
         add("Efficiency (EF)", f"{ef:.2f}" if ride and ef else None)
         el = _num(act.get("total_elevation_gain"))

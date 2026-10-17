@@ -105,6 +105,10 @@
     // it there was. They share the seasons, the sport chips and the race alignment, so
     // they are one view of one thing rather than two tabs (Jamie, 13 Aug 2026).
     { id: 'fit',  label: 'Fitness' },
+    // What's holding you back, week by week (17 Oct 2026): the factors behind the Goals card,
+    // with a sport picker of its own. Labelled 'Race', or 'Goal' for an athlete with a goal
+    // and no A race (see trendTabs); hidden when there is nothing to show.
+    { id: 'race', label: 'Race' },
     { id: 'load', label: 'Load' },
     // Weight, HRV, resting HR and sleep over the 90 days published (Jamie, 15 Oct 2026:
     // "need to also go in trends"): the Today cards, drawn over the longer window. Third,
@@ -138,7 +142,7 @@
     me: null, updated: null, refreshing: false,
     // fitMetric is 'tss' (CTL) or 'dur' (hours/week). fitSport is shared by both, so
     // the discipline you were looking at survives a switch of metric.
-    chart: null, todayChart: null, trend: 'fit', fitSport: 'all', fitMetric: 'tss',
+    chart: null, todayChart: null, trend: 'fit', fitSport: 'all', fitMetric: 'tss', limSport: null,
     calMonth: null, calDay: null, libGroup: null,
     lrMode: 'long', pcMode: 'avg', zoneWin: 'week'
   };
@@ -3109,7 +3113,10 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     return TRENDS.filter(function (t) {
       if (t.id === 'heat' && !heatOn()) return false;
       if (t.id === 'body') return !!(bodyCards(state.data || {}));
+      if (t.id === 'race') return raceTabOn(state.data);
       return t.id !== 'longrun' || fs.indexOf('run') >= 0;
+    }).map(function (t) {
+      return t.id === 'race' ? { id: t.id, label: raceTabLabel(state.data) } : t;
     });
   }
 
@@ -3212,6 +3219,32 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       return;
     }
 
+    // The factors over time: its own sport picker, and a pointer to today's diagnosis.
+    if (sel === 'race') {
+      var rk = limitersKind((d.season || {}).limiters);
+      $('#v-trends').innerHTML = seg +
+        (rk ? '<p class="hint">Today\u2019s diagnosis is on <button type="button" class="linkish" ' +
+          'id="toGoals">Goals</button>.</p>' : '') +
+        subSeg('limSport', limSport(d), limOptions(d)) + factorCard(d);
+      $('#trendSeg').onclick = function (e) {
+        var b = e.target.closest('button');
+        if (!b) return;
+        state.trend = b.dataset.t;
+        renderTrends();
+        drawTrend();
+      };
+      var tg = $('#toGoals');
+      if (tg) tg.onclick = function () { show('goals'); };
+      $('#limSport').onclick = function (e) {
+        var b = e.target.closest('button');
+        if (!b) return;
+        state.limSport = b.dataset.s;
+        renderTrends();
+      };
+      wireFactorScrub($('#v-trends'));
+      return;
+    }
+
     var zoomable = (sel === 'fit' || sel === 'heat');
     var action = zoomable
       ? '<button type="button" class="card-a" id="zreset">Reset zoom</button>' : '';
@@ -3224,11 +3257,8 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       '<div class="chartbox tall"><canvas id="c-now"></canvas></div>',
       { action: action, foot: META.foot });
 
-    // Right after the first card, on the Fitness view (the factors behind the Goals card).
-    if (sel === 'fit') h += factorCard(d);
     h += trendExtras(sel, d);
     $('#v-trends').innerHTML = h;
-    if (sel === 'fit') wireFactorScrub($('#v-trends'));
 
     $('#trendSeg').onclick = function (e) {
       var b = e.target.closest('button');
@@ -3601,8 +3631,8 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   /* history: performance.history (weekly rows, oldest first, any field may be missing).
      L: the Goals card (season.limiters) or undefined. view (optional): {sport, single} -
      sport 'run' | 'bike' | 'tri' picks that panel set instead of the goal card's own;
-     single = one sport picked on the Fitness chips, which relabels Fitness, because the
-     history's ctl is every sport's. The limiter highlight applies only when the shown
+     single = run or bike on its own, which relabels Fitness, because the history's
+     ctl is every sport's. The limiter highlight applies only when the shown
      sport is the goal's (a triathlon goal counts for run, bike and tri alike).
      Returns the panels to draw, in
      order: {key, label, unit, dp, fixed, points: [{week, t, v}], highlight, tick, lo, hi,
@@ -3728,20 +3758,44 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       '</div>';
   }
 
-  /* Which sport the card is about: the Fitness chips (state.fitSport - 'all', or the
-     sport's own name) when one is picked, else the goal's sport, else - no Goals card -
-     running if there is anything run-specific to chart, otherwise cycling. Fitness is not
-     run-specific (it is every sport's), so it does not count. */
-  function factorView(d) {
-    var L = (d.season || {}).limiters, kind = limitersKind(L);
-    var pick = state.fitSport === 'all' ? 'all' : family(state.fitSport);
-    if (pick === 'swim' || pick === 'run' || pick === 'bike') {
-      return { sport: pick, single: true, goal: false };
-    }
-    if (kind) return { sport: kind, single: false, goal: true };
+  /* The Race / Goal sub-tab. It is offered when there is a Goals card or any factor with
+     history to draw, and named for what the athlete is working towards. */
+  function raceTabOn(d) {
+    d = d || {};
+    if (limitersKind((d.season || {}).limiters)) return true;
     var hist = (d.performance || {}).history;
+    return ['run', 'bike'].some(function (s) { return factorPanels(hist, null, { sport: s }).length > 0; });
+  }
+  function raceTabLabel(d) {
+    var sv = (d || {}).season || {};
+    return !sv.aRace && sv.goal ? 'Goal' : 'Race';
+  }
+
+  // The picker's options: Run, Ride, Swim, and Triathlon only when the goal is one.
+  function limOptions(d) {
+    var o = [['run', 'Run'], ['bike', 'Ride'], ['swim', 'Swim']];
+    if (limitersKind(((d || {}).season || {}).limiters) === 'tri') o.push(['tri', 'Triathlon']);
+    return o;
+  }
+
+  /* The sport shown (state.limSport) if it is still on offer, else the goal's own: the Goals
+     card's type, or - no card - running if there is anything run-specific to chart,
+     otherwise cycling. Fitness is not run-specific (it is every sport's), so it does not
+     count. */
+  function limSport(d) {
+    var pick = state.limSport;
+    if (limOptions(d).some(function (o) { return o[0] === pick; })) return pick;
+    var kind = limitersKind(((d || {}).season || {}).limiters);
+    if (kind) return kind;
+    var hist = ((d || {}).performance || {}).history;
     var hasRun = factorPanels(hist, null, { sport: 'run' }).some(function (p) { return p.key !== 'ctl'; });
-    return { sport: hasRun ? 'run' : 'bike', single: false, goal: false };
+    return hasRun ? 'run' : 'bike';
+  }
+
+  function factorView(d) {
+    var sport = limSport(d), kind = limitersKind(((d || {}).season || {}).limiters);
+    // single: one sport of several, so the history's all-sports Fitness is labelled as such.
+    return { sport: sport, single: sport === 'run' || sport === 'bike', goal: sport === kind };
   }
 
   var fpShown = [];
@@ -3757,9 +3811,8 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       }
       var panels = factorPanels((d.performance || {}).history, L, v);
       if (!panels.length) {
-        // Quiet when nothing is picked; once a sport is, say there is nothing to draw.
-        return v.single ? card(title, '<div class="empty">Not enough ' + SPORT_NAME[v.sport].toLowerCase() +
-          ' history yet to draw these.</div>') : '';
+        return card(title, '<div class="empty">Not enough ' + SPORT_NAME[v.sport].toLowerCase() +
+          ' history yet to draw these.</div>');
       }
       fpShown = panels;
       var vo2 = panels.filter(function (p) { return p.tick; })[0];
@@ -6918,6 +6971,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.044", "2026-10-17", "Trends: \u2018What\u2019s holding you back\u2019 has its own Race tab with a Run / Ride / Swim picker, starting on your target sport. Drift is measured one way everywhere: warm-up and cool-down cut, coasting and stops left out, hills taken out (power against heart rate, or grade-adjusted pace)", 0],
     ["4.043", "2026-10-17", "\u2018What\u2019s holding you back\u2019 says which sport it is about: on Trends it follows the Ride / Run / Swim picker (All is your goal sport), and on Goals the title names the sport and the race", 0],
     ["4.042", "2026-10-17", "Goals: a goal can run with no set target, to see how far you can take it. The coach won\u2019t ask for one", 0],
     ["4.041", "2026-10-17", "Trends: \u2018What\u2019s holding you back, over time\u2019 \u2013 each factor week by week for the past year, the limiter highlighted. Goals: where the minutes are \u2013 what a realistic gain in each is worth on race day", 0],

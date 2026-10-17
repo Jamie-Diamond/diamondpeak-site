@@ -111,6 +111,7 @@ import profile_fields
 import claude_call
 import claude_billing
 import hr_quality              # per-activity HR trust (wrist-sensor artefacts)
+import drift                   # one corrected drift figure (lib/drift.py), not Intervals.icu's raw decoupling
 import baseline as baseline_lib   # new athletes' baseline block: test capture + close
 import duplicates                  # a session in Intervals.icu twice: ask, then delete or merge
 import goals as goals_lib         # a goal without a race: block 1 pinned when baseline closes
@@ -366,7 +367,7 @@ Then choose the metric set BY SESSION TYPE and surface only what else matters fo
 - Brick (bike and run in one activity, or bike then run back-to-back): ALWAYS report the bike and run legs separately, splitting time and Load per leg.
 This selection is authoritative and governs the per-sport RIDE / RUN / SWIM formats below: use a format's full header and per-rep breakdown ONLY when the session is intervals/structured, or when the athlete has asked for the full breakdown. For easy/steady/recovery and long-endurance sessions, stay with the verdict plus Load and the few other relevant numbers above. Where these rules conflict with the per-sport format instructions below, these rules win.
 
-Decoupling / HR drift: quote ONLY the Intervals.icu decoupling figure on this activity's COMPUTED FACTS line. Never work out decoupling or HR drift yourself from laps, splits or streams. When that line says it is not available (or there is no COMPUTED FACTS line), leave decoupling and HR drift out of the message entirely.
+Decoupling / HR drift: quote ONLY the Drift figure (the corrected aerobic decoupling, warm-up, cool-down, coasting and stops already taken out) on this activity's COMPUTED FACTS line. Never work out decoupling or HR drift yourself from laps, splits or streams. When that line says it is not available (or there is no COMPUTED FACTS line), leave decoupling and HR drift out of the message entirely.
 
 RIDE:
 - For Ride sessions: the Zone split line in COMPUTED FACTS (computed in code from Intervals.icu zone times; power zones when the ride has power) is the primary intensity descriptor. Quote its figures as given; never add zone percentages up yourself. NP and IF are secondary and must be qualified against the zone split. Do not characterise a ride as Z2/easy unless its Z1-Z2 figure is above 70% (power zones).
@@ -408,7 +409,7 @@ CARDIO (sport Workout with a generic watch name such as "Cardio", and no distanc
 
 For unstructured rides > 3 hours (or structured rides > 3 hours where Pa:HR data is available): also output a DECOUPLING line:
 DECOUPLING: <activity_id>|<date>|<name>|<duration_min>|<intensity_factor>|<decoupling_pct>|<tss>
-decoupling_pct is the COMPUTED FACTS decoupling figure. If conditions not met or that line says not available: DECOUPLING: none
+decoupling_pct is the COMPUTED FACTS Drift figure. If conditions not met or that line says not available: DECOUPLING: none
 
 PLAN_DELTA: copy the PLAN_DELTA line from this activity's COMPUTED FACTS exactly. It is
 computed from the planned session Intervals.icu paired with the activity; never match events
@@ -818,12 +819,22 @@ def _zone_split_line(a: dict, hr_trusted: bool = True, hr_only: bool = False) ->
     return f"Zone split ({kind} zones, % of time): {per} | " + " · ".join(groups)
 
 
-def _decoupling_line(a: dict, hr_trusted: bool = True) -> str:
-    d = a.get("decoupling")
-    if d is None or not hr_trusted:
-        return ("Decoupling: not available - leave decoupling and HR drift out of this "
-                "debrief entirely")
-    return f"Decoupling (Intervals.icu): {float(d):.1f}%"
+def _decoupling_line(a: dict, hr_trusted: bool = True, drift_result: dict | None = None,
+                     hr_only: bool = False) -> str:
+    """The Drift line for the debrief: lib/drift.session_drift's corrected figure and how it
+    was measured, never Intervals.icu's raw decoupling (it counts the warm-up, coasting and
+    hills as drift; Jamie, 17 Oct 2026). `drift_result` is that function's dict; None (never
+    computed) or no pct gives the leave-it-out instruction, with the reason when there is one."""
+    r = drift_result or {}
+    pct = r.get("pct")
+    if pct is not None and hr_trusted:
+        if hr_only:                        # an HR-only athlete: never prompt talk of power
+            return f"Drift (warm-up and cool-down cut, coasting and stops removed): {float(pct):+.1f}%"
+        return (f"Drift (warm-up and cool-down cut, coasting and stops removed, "
+                f"{r.get('method') or 'power:HR'}): {float(pct):+.1f}%")
+    why = f" ({r['reason']})" if r.get("reason") and hr_trusted else ""
+    return (f"Decoupling: not available{why} - leave decoupling and HR drift out of this "
+            "debrief entirely")
 
 
 def _gap_lines(a: dict, intervals: list | None = None, threshold_s: float | None = None) -> list:
@@ -1027,20 +1038,25 @@ def _recent_fuel(session_log: list, exclude_id: str = "", n: int = 4) -> str:
             f"ride{'s' if len(rates) != 1 else ''} over 90 min")
 
 
-def _decoupling_entry(a: dict, decoupling, hr_trusted: bool = True) -> dict | None:
-    """The decoupling-log entry, built in code: rides of 3 hours or more with an
-    Intervals.icu decoupling figure only (Sonnet wrote a DECOUPLING line for Fred's 124-min
-    ride; the prompt said over 3 hours, nothing held it; 17 Oct 2026: shadow review)."""
+def _decoupling_entry(a: dict, decoupling, hr_trusted: bool = True,
+                      method: str | None = None) -> dict | None:
+    """The decoupling-log entry, built in code: rides of 3 hours or more with a corrected
+    drift figure (lib/drift.py, not Intervals.icu's raw one) only. `method` ("power:HR"...)
+    goes in the entry when known. (Sonnet wrote a DECOUPLING line for Fred's 124-min ride;
+    the prompt said over 3 hours, nothing held it; 17 Oct 2026: shadow review.)"""
     if "Ride" not in str(a.get("type") or "") or decoupling is None or not hr_trusted:
         return None
     mins = float(a.get("moving_time") or 0) / 60
     if mins < 180:
         return None
-    return {"activity_id": str(a.get("id")), "date": str(a.get("start_date_local") or "")[:10],
-            "name": a.get("name") or "", "duration_min": round(mins),
-            "if": round(float(a.get("icu_intensity") or 0) / 100, 2),
-            "decoupling_pct": round(float(decoupling), 1),
-            "tss": float(a.get("icu_training_load") or 0)}
+    entry = {"activity_id": str(a.get("id")), "date": str(a.get("start_date_local") or "")[:10],
+             "name": a.get("name") or "", "duration_min": round(mins),
+             "if": round(float(a.get("icu_intensity") or 0) / 100, 2),
+             "decoupling_pct": round(float(decoupling), 1),
+             "tss": float(a.get("icu_training_load") or 0)}
+    if method:
+        entry["method"] = method
+    return entry
 
 
 def _pick_target(cand_ids: list, acts: list | None) -> str | None:
@@ -1087,8 +1103,10 @@ def _plan_delta(a: dict, event: dict | None) -> str | None:
 
 def _activity_facts(a: dict, event: dict | None = None, intervals: list | None = None,
                     hr_trusted: bool = True, threshold_s: float | None = None,
-                    css_s: float | None = None, hr_only: bool = False) -> tuple:
-    """(lines, plan_delta_raw, tiny) for one activity. Pure: everything is passed in."""
+                    css_s: float | None = None, hr_only: bool = False,
+                    drift_result: dict | None = None) -> tuple:
+    """(lines, plan_delta_raw, tiny) for one activity. Pure: everything is passed in,
+    `drift_result` being lib/drift.session_drift's dict (None: no figure)."""
     moving = float(a.get("moving_time") or a.get("elapsed_time") or 0)
     if 0 < moving < TINY_RECORDING_S:
         return ([f"TINY RECORDING: only {int(moving)} s recorded - no analysis, the code "
@@ -1102,7 +1120,7 @@ def _activity_facts(a: dict, event: dict | None = None, intervals: list | None =
         lines.append(z)
     if _is_run(a) or "Ride" in str(a.get("type") or ""):
         # decoupling is power against HR: meaningless when the power dropped out
-        lines.append(_decoupling_line(a, hr_trusted and not pb))
+        lines.append(_decoupling_line(a, hr_trusted and not pb, drift_result, hr_only))
     lines += _gap_lines(a, intervals, threshold_s)
     rp = _run_power_line(a)
     if rp:
@@ -1128,10 +1146,40 @@ def _tiny_message(a: dict) -> str:
             "or did the watch cut out?")
 
 
+DRIFT_MIN_S = 2400    # drift is only worked out for a ride or run of 40 minutes or more
+
+
+def _session_drift(client, a: dict, trusted: bool) -> dict:
+    """lib/drift.session_drift for one activity: {"pct", "method", "reason"}. Streams are
+    fetched once, and only for a ride or run of DRIFT_MIN_S moving time or more with a
+    trusted heart rate and working power. Fail-soft: any error is "no figure", never a crash.
+    This replaces Intervals.icu's raw `decoupling`, which counts the warm-up, coasting and
+    hills as drift (Jamie, 17 Oct 2026)."""
+    typ = str(a.get("type") or "")
+    no = lambda why: {"pct": None, "method": None, "reason": why}
+    if "Ride" not in typ and "Run" not in typ:
+        return no("not a ride or run")
+    if float(a.get("moving_time") or 0) < DRIFT_MIN_S:
+        return no("under 40 minutes")
+    if not trusted:
+        return drift.session_drift(a, [], False)
+    if _power_broken(a):
+        return no("power meter dropped out")
+    try:
+        streams = client.get_activity_streams(str(a["id"]))
+        if not streams:
+            return no("no stream data")
+        return drift.session_drift(a, streams, True)
+    except Exception as exc:
+        print(f"[drift:{a.get('id')}] {exc}", file=sys.stderr)
+        return no("streams unavailable")
+
+
 def _facts_pass(slug: str, session_log_f: Path, threshold_s: float | None = None,
                 css_s: float | None = None, hr_only: bool = False) -> tuple:
     """COMPUTED FACTS for each activity in the last 3 days not yet in the session log.
-    Returns (prompt block, {activity_id: {"plan_delta", "tiny", "decoupling", "activity"}}).
+    Returns (prompt block, {activity_id: {"plan_delta", "tiny", "decoupling", "drift", "activity"}}),
+    "decoupling" being the corrected drift pct (lib/drift.py) and "drift" its whole result.
     Fail-soft: ("", {}) on any error, and the prompt's own rules still apply."""
     try:
         from icu_api import IcuClient
@@ -1161,10 +1209,11 @@ def _facts_pass(slug: str, session_log_f: Path, threshold_s: float | None = None
                 except Exception:
                     intervals = None
             trusted = not hr_quality.is_untrusted(slug, aid)
+            dr = _session_drift(client, a, trusted)
             lines, pd, tiny = _activity_facts(a, event, intervals, trusted, threshold_s,
-                                              css_s=css_s, hr_only=hr_only)
+                                              css_s=css_s, hr_only=hr_only, drift_result=dr)
             meta[aid] = {"plan_delta": pd, "tiny": tiny, "activity": a,
-                         "decoupling": a.get("decoupling") if trusted and not _power_broken(a) else None}
+                         "decoupling": dr.get("pct"), "drift": dr}
             blocks.append(f"{a.get('name') or a.get('type')} ({aid}, "
                           f"{str(a.get('start_date_local') or '')[:10]} {a.get('type')}):\n  "
                           + "\n  ".join(lines))
@@ -2656,7 +2705,7 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     # Log decoupling for long rides. Never for an activity whose HR failed the code-side
     # check (lib/hr_quality.py): the prompt says so too, this is the gate that holds.
     # With computed facts for this activity the entry is built in code from Intervals.icu
-    # (rides of 3 h or more, ICU's decoupling figure), whatever DECOUPLING line the model
+    # (rides of 3 h or more, the corrected drift figure of lib/drift.py), whatever DECOUPLING line the model
     # wrote: Sonnet logged Fred's 124-min ride (Jamie, 17 Oct 2026: shadow review), and both
     # models once invented decoupling from laps (16 Oct). Without facts, the model's line.
     try:
@@ -2664,7 +2713,8 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
         _fm = facts_meta.get(activity_id)
         if _fm is not None:
             entry = _decoupling_entry(_fm["activity"], _fm.get("decoupling"),
-                                      not hr_quality.is_untrusted(slug, activity_id))
+                                      not hr_quality.is_untrusted(slug, activity_id),
+                                      (_fm.get("drift") or {}).get("method"))
         elif decoupling_raw and decoupling_raw != "none" and \
                 not hr_quality.is_untrusted(slug, decoupling_raw.split("|")[0].strip()):
             parts = decoupling_raw.split("|")

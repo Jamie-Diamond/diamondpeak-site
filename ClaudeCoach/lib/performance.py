@@ -214,12 +214,22 @@ def threshold(acts: list, today: date) -> dict | None:
     return None
 
 
-def durability(acts: list, today: date, dur_log: list | None = None) -> dict | None:
+def durability(acts: list, today: date, dur_log: list | None = None, drift: dict | None = None) -> dict | None:
     longs = [a for a in _recent_runs(acts, today, 56) if (a.get("moving_time") or 0) >= LONG_RUN_S]
     if not longs:
         return None
     longest = round(max((a.get("distance") or 0) for a in longs) / 1000, 1)
     ids = {str(a.get("id")) for a in longs}
+    got = [(drift or {}).get(i) for i in ids]
+    got = [g for g in got if g and g.get("pct") is not None]
+    if got:
+        methods = {g.get("method") for g in got}
+        cost = [e["cost_fade_pct"] for e in dur_log or [] if str(e.get("activity_id")) in ids
+                and e.get("cost_fade_pct") is not None]
+        return {"drift_pct": _median(g["pct"] for g in got),
+                "cost_fade_pct": round(statistics.median(cost), 1) if cost else None,
+                "n": len(got), "longest_km": longest,
+                "source": "power" if methods == {"power:HR"} else "pace"}
     logged = [e for e in dur_log or [] if str(e.get("activity_id")) in ids
               and e.get("decoupling_pct") is not None]
     if logged:
@@ -273,7 +283,7 @@ def economy(acts: list, today: date) -> dict | None:
 
 
 def bike(acts: list, today: date, power: dict | None, ftp: dict | None,
-         dur_log: list | None = None) -> dict | None:
+         dur_log: list | None = None, drift: dict | None = None) -> dict | None:
     """The bike block (lib/limiters.diagnose_bike): FTP, outdoor power coverage, longest
     ride, durability (power:HR drift on 3h+ rides, from the activity watcher's
     decoupling-log.json, so only rides with power) and fuelling logged on long rides."""
@@ -284,7 +294,10 @@ def bike(acts: list, today: date, power: dict | None, ftp: dict | None,
     outdoor = [a for a in rides if a.get("type") in OUTDOOR_RIDES and (a.get("moving_time") or 0) >= 3600]
     longs = [a for a in rides if (a.get("moving_time") or 0) >= LONG_RIDE_S]
     ids = {str(a.get("id")) for a in longs}
-    logged = [e for e in dur_log or [] if str(e.get("activity_id")) in ids and e.get("decoupling_pct") is not None]
+    if drift:
+        logged = [{"decoupling_pct": drift[i]["pct"]} for i in ids if drift.get(i) and drift[i].get("pct") is not None]
+    else:
+        logged = [e for e in dur_log or [] if str(e.get("activity_id")) in ids and e.get("decoupling_pct") is not None]
     fuel = [(a["carbs_ingested"], a["moving_time"] / 3600) for a in longs if a.get("carbs_ingested")]
     weight = (power or {}).get("weight") or next((a.get("icu_weight") for a in rides if a.get("icu_weight")), None)
     return {"ftp": (ftp or {}).get("watts"), "ftp_source": (ftp or {}).get("source"),
@@ -299,7 +312,7 @@ def bike(acts: list, today: date, power: dict | None, ftp: dict | None,
 
 def determinants(acts: list, today: date, profile: dict | None = None,
                  training: list | None = None, cs_mps: float | None = None,
-                 power: dict | None = None, dur_log: list | None = None) -> dict:
+                 power: dict | None = None, dur_log: list | None = None, drift: dict | None = None) -> dict:
     """The run block of `build`, from data already fetched. Pure."""
     profile = profile or {}
     races = rm.detect_races(acts, profile.get("race_results"), profile.get("race_results_exclude"))
@@ -319,7 +332,7 @@ def determinants(acts: list, today: date, profile: dict | None = None,
         prev = rm.efficiency(acts, today - timedelta(days=41))
         eff["prev"] = prev["value"] if prev and prev["device"] == eff["device"] else None
     out = {"engine": engine(acts, today), "threshold": threshold(acts, today),
-           "durability": durability(acts, today, dur_log),
+           "durability": durability(acts, today, dur_log, drift),
            "power": power, "economy": economy(acts, today) if power else None,
            "races": races, "k": rm.personal_k(races, today), "predictions": preds,
            "weeklyKm": weekly_km, "longestKm": longest, "recentBreakDays": brk, "efficiency": eff,
@@ -338,11 +351,54 @@ def _median(xs):
     return round(statistics.median(xs), 1) if xs else None
 
 
-def _log_drift(log: list, as_of: date, min_minutes: int, days: int = 56):
-    """Median drift (%) of logged sessions of min_minutes+ in the `days` before as_of."""
-    return _median(e.get("decoupling_pct") for e in log or []
+def _log_drift(log, as_of: date, min_minutes: int, days: int = 56, sport: str | None = None):
+    """Median drift (%) of sessions of min_minutes+ in the `days` before as_of. `log` is the
+    drift cache ({id: entry}, lib/drift.py, one method everywhere) or a list of log entries."""
+    entries = log.values() if isinstance(log, dict) else (log or [])
+    return _median(e.get("pct", e.get("decoupling_pct")) for e in entries
                    if (e.get("duration_min") or 0) >= min_minutes
+                   and (sport is None or e.get("sport") == sport)
                    and (d := rm._d(e.get("date"))) and 0 < (as_of - d).days <= days)
+
+
+DRIFT_RUN_MIN, DRIFT_RIDE_MIN = 75, 180
+DRIFT_DAYS = 400
+DRIFT_NEW_PER_BUILD = 30              # stream fetches per build: a year fills over a few builds
+
+
+def drift_cache(slug: str, client, acts: list, today: date, trusted=None) -> dict:
+    """{activity_id: {"date", "sport", "duration_min", "pct", "method", "reason"}} for long runs
+    and rides of the last DRIFT_DAYS, worked out once from each one's streams (lib/drift.py)
+    and kept in athletes/<slug>/drift-cache.json."""
+    import drift as _drift
+    path = _athlete_dir(slug) / "drift-cache.json"
+    cache = _load(path, {})
+    todo = []
+    for a in acts:
+        d = rm._d(a.get("start_date_local"))
+        t, mins = str(a.get("type") or ""), (a.get("moving_time") or 0) / 60
+        sport = "Run" if t == "Run" else "Ride" if t in RIDE_TYPES else None
+        if not sport or not d or (today - d).days > DRIFT_DAYS:
+            continue
+        if (cache.get(str(a.get("id"))) or {}).get("v") == _drift.VERSION:
+            continue
+        if mins >= (DRIFT_RUN_MIN if sport == "Run" else DRIFT_RIDE_MIN) and not a.get("race"):
+            todo.append((a, sport, d, mins))
+    todo.sort(key=lambda x: x[2], reverse=True)          # newest first
+    for a, sport, d, mins in todo[:DRIFT_NEW_PER_BUILD]:
+        try:
+            raw = client.get_activity_streams(a["id"])
+        except Exception:
+            continue
+        ok = trusted(a["id"]) if trusted else True
+        r = _drift.session_drift(a, raw, ok)
+        cache[str(a["id"])] = {"date": d.isoformat(), "sport": sport, "duration_min": round(mins),
+                               "v": _drift.VERSION, **r}
+    try:
+        path.write_text(json.dumps(cache, separators=(",", ":")))
+    except OSError:
+        pass
+    return cache
 
 
 def _curve_history(client, sport: str, ends: list) -> dict:
@@ -377,9 +433,10 @@ def history_row(as_of: date, acts: list, run_cp=None, bike_cp=None, ctl=None,
     row = {"week": (as_of - timedelta(days=as_of.weekday())).isoformat(), "date": as_of.isoformat(),
            "v": HISTORY_V, "vo2max": eng.get("vo2max"), "vo2max_source": eng.get("source"),
            "cp": run_cp, "economy": eco.get("value"), "weeklyKm": km, "longestKm": longest,
-           "drift": _log_drift(run_log, as_of, 75), "bike_cp": bike_cp,
+           "drift": _log_drift(run_log, as_of, DRIFT_RUN_MIN, sport="Run" if isinstance(run_log, dict) else None),
+           "bike_cp": bike_cp,
            "bike_ftp": ftps[-1][1] if ftps else None,
-           "bike_drift": _log_drift(ride_log, as_of, 180),
+           "bike_drift": _log_drift(ride_log, as_of, DRIFT_RIDE_MIN, sport="Ride" if isinstance(ride_log, dict) else None),
            "longest_ride_h": round(max(((a.get("moving_time") or 0) for a in rides), default=0) / 3600, 1),
            "ctl": ctl}
     if races is not None:
@@ -456,7 +513,13 @@ def build(slug: str, client, cfg: dict | None = None, profile: dict | None = Non
     except Exception:
         power = None
     dur_log = _load(_athlete_dir(slug) / "run-durability-log.json", [])
-    run = determinants(acts, today, profile, training, cs, power, dur_log)
+    try:
+        import hr_quality
+        trusted = lambda aid: not hr_quality.is_untrusted(slug, aid)
+    except Exception:
+        trusted = None
+    drift = drift_cache(slug, client, acts, today, trusted)
+    run = determinants(acts, today, profile, training, cs, power, dur_log, drift)
     out = {"asOf": today.isoformat(), "run": run}
     try:
         ride_power = run_power(client._get("power-curves", {"type": "Ride", "curves": "90d"}))
@@ -469,7 +532,7 @@ def build(slug: str, client, cfg: dict | None = None, profile: dict | None = Non
     except Exception:
         ftp = None
     out["bike"] = bike(acts, today, ride_power, ftp,
-                       _load(_athlete_dir(slug) / "decoupling-log.json", []))
+                       _load(_athlete_dir(slug) / "decoupling-log.json", []), drift)
     out["tri"] = tri_block(acts, run, profile, client)
     # Trends (Jamie, 17 Oct 2026): this week's row, and a year rebuilt once from Intervals.
     path = _athlete_dir(slug) / "performance-history.json"
@@ -486,11 +549,18 @@ def build(slug: str, client, cfg: dict | None = None, profile: dict | None = Non
         ctl = round(float(wl[-1].get("ctl")), 1) if wl and wl[-1].get("ctl") is not None else None
     except Exception:
         ctl = None
-    now = history_row(today + timedelta(days=1), acts, None, (ride_power or {}).get("cp"), ctl,
-                      _load(_athlete_dir(slug) / "run-durability-log.json", []),
-                      _load(_athlete_dir(slug) / "decoupling-log.json", []))
+    now = history_row(today + timedelta(days=1), acts, None, (ride_power or {}).get("cp"), ctl, drift, drift)
     extra = {k: now[k] for k in ("v", "bike_cp", "bike_ftp", "bike_drift", "longest_ride_h", "ctl", "vo2max_source")}
-    out["history"] = record_week(slug, run, today, extra)[-BACKFILL_WEEKS:]
+    rows = record_week(slug, run, today, extra)
+    # Drift in every row from the one method (lib/drift.py), as the cache fills.
+    for r in rows:
+        r["drift"] = _log_drift(drift, rm._d(r["date"]), DRIFT_RUN_MIN, sport="Run")
+        r["bike_drift"] = _log_drift(drift, rm._d(r["date"]), DRIFT_RIDE_MIN, sport="Ride")
+    try:
+        path.write_text(json.dumps(rows, indent=1))
+    except OSError:
+        pass
+    out["history"] = rows[-BACKFILL_WEEKS:]
     return out
 
 

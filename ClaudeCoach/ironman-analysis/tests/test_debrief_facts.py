@@ -145,10 +145,13 @@ def test_prompt_points_zone_rules_at_computed_line():
 
 # 4. Decoupling --------------------------------------------------------------------------
 
-def test_decoupling_is_icu_field_only():
-    assert aw._decoupling_line(RIDE) == "Decoupling (Intervals.icu): -5.4%"
+def test_decoupling_line_is_the_corrected_figure_never_the_icu_field():
+    # RIDE carries Intervals.icu's raw decoupling (-5.4): the line must never quote it
+    assert "not available" in aw._decoupling_line(RIDE)
+    assert "-5.4" not in aw._decoupling_line(RIDE)
     assert "not available" in aw._decoupling_line(KATHRYN_RUN)
-    assert "not available" in aw._decoupling_line(RIDE, hr_trusted=False)
+    ok = {"pct": 3.2, "method": "power:HR", "reason": None}
+    assert "not available" in aw._decoupling_line(RIDE, hr_trusted=False, drift_result=ok)
 
 
 def test_prompt_never_asks_model_to_compute_decoupling_from_laps():
@@ -224,10 +227,12 @@ def test_prompt_run_power_never_easy_at_z3_plus():
 
 def test_activity_facts_ride_block():
     ev = {"name": "Endurance ride", "type": "Ride", "icu_training_load": 39}
-    lines, pd, tiny = aw._activity_facts(RIDE, ev)
+    dr = {"pct": -1.5, "method": "power:HR", "reason": None}
+    lines, pd, tiny = aw._activity_facts(RIDE, ev, drift_result=dr)
     assert not tiny and pd == "Endurance ride|39|39|0"
     assert lines[-1] == "PLAN_DELTA: Endurance ride|39|39|0"
-    assert any(l.startswith("Decoupling (Intervals.icu)") for l in lines)
+    assert any(l.startswith("Drift (") and l.endswith("power:HR): -1.5%") for l in lines)
+    assert not any("Intervals.icu): -5.4" in l for l in lines)
 
 
 # 17 Oct shadow review (Jamie, 17 Oct 2026: shadow review) ------------------------------
@@ -336,6 +341,135 @@ def test_decoupling_entry_only_for_three_hour_rides():
     assert e["duration_min"] == 200 and e["if"] == 0.83 and e["decoupling_pct"] == 0.5
     assert aw._decoupling_entry(long, None) is None
     assert aw._decoupling_entry(long, 0.5, hr_trusted=False) is None
+    assert "method" not in e                                       # not known: not written
+    assert aw._decoupling_entry(long, 0.5, True, "power:HR")["method"] == "power:HR"
+
+
+# The corrected drift figure (lib/drift.py), not Intervals.icu's raw decoupling -----------
+# Jamie, 17 Oct 2026: "make sure drift uses a good drift metric, takes out hills, freewheeling
+# etc". Stub clients and 1 Hz streams: nothing here touches Intervals.icu.
+
+import drift as drift_lib                                            # noqa: E402
+
+
+def _ride_streams(n=7200, watts=200.0, hr0=130.0, hr1=140.0):
+    return [{"type": "watts", "data": [watts] * n},
+            {"type": "heartrate", "data": [hr0 + (hr1 - hr0) * i / (n - 1) for i in range(n)]},
+            {"type": "velocity_smooth", "data": [8.0] * n}]
+
+
+def _long_ride(**kw):
+    return {"id": "i1", "type": "Ride", "name": "Long ride", "moving_time": 7200,
+            "start_date_local": "2026-10-17T08:00:00", "icu_training_load": 120,
+            "icu_average_watts": 200, "icu_weighted_avg_watts": 200, "icu_ftp": 250,
+            "decoupling": -9.9, **kw}                               # -9.9: Intervals.icu's raw figure
+
+
+class _Client:
+    def __init__(self, acts, streams=None, fail=False):
+        self.acts, self.streams, self.fail, self.fetched = acts, streams, fail, []
+
+    def get_training_history(self, days=3):
+        return self.acts
+
+    def get_activity_streams(self, aid):
+        self.fetched.append(aid)
+        if self.fail:
+            raise RuntimeError("boom: ICU 500")
+        return self.streams
+
+
+def _facts(monkeypatch, tmp_path, client, untrusted=()):
+    cfg = tmp_path / "athletes.json"
+    cfg.write_text(json.dumps({"x": {"icu_athlete_id": "1", "icu_api_key": "k"}}))
+    monkeypatch.setattr(aw, "ATHLETES_CONFIG", cfg)
+    monkeypatch.setitem(sys.modules, "icu_api", types.SimpleNamespace(IcuClient=lambda *a: client))
+    monkeypatch.setattr(aw.hr_quality, "is_untrusted", lambda slug, aid: aid in untrusted)
+    return aw._facts_pass("x", tmp_path / "session-log.json")
+
+
+def test_long_ride_meta_carries_the_corrected_pct_not_icus(monkeypatch, tmp_path):
+    ride, streams = _long_ride(), _ride_streams()
+    want = drift_lib.session_drift(ride, streams)
+    assert want["pct"] is not None and want["pct"] > 0               # HR rose 130 -> 140 at 200 W
+    client = _Client([ride], streams)
+    block, meta = _facts(monkeypatch, tmp_path, client)
+    assert meta["i1"]["decoupling"] == want["pct"] != ride["decoupling"]
+    assert meta["i1"]["drift"] == want and want["method"] == "power:HR"
+    assert client.fetched == ["i1"]                                  # streams fetched once
+    assert f"power:HR): {want['pct']:+.1f}%" in block and "-9.9" not in block
+
+
+def test_decoupling_log_entry_gets_the_corrected_figure_and_method(monkeypatch, tmp_path):
+    ride = _long_ride(id="i2", moving_time=12000, icu_intensity=70)   # 200 min
+    streams = _ride_streams(n=12000)
+    _, meta = _facts(monkeypatch, tmp_path, _Client([ride], streams))
+    m = meta["i2"]
+    entry = aw._decoupling_entry(m["activity"], m["decoupling"], True, m["drift"]["method"])
+    assert entry["decoupling_pct"] == round(drift_lib.session_drift(ride, streams)["pct"], 1)
+    assert entry["decoupling_pct"] != -9.9 and entry["method"] == "power:HR"
+    assert entry["duration_min"] == 200
+
+
+def test_debrief_line_states_figure_and_method():
+    line = aw._decoupling_line(RIDE, True, {"pct": 3.2, "method": "power:HR", "reason": None})
+    assert line == ("Drift (warm-up and cool-down cut, coasting and stops removed, "
+                    "power:HR): +3.2%")
+    gap = aw._decoupling_line(RUN, True, {"pct": -0.8, "method": "grade-adjusted pace:HR",
+                                          "reason": None})
+    assert gap.endswith("grade-adjusted pace:HR): -0.8%")
+    assert aw._decoupling_line(RUN, True, {"pct": 0.0, "method": "pace:HR",
+                                           "reason": None}).endswith("pace:HR): +0.0%")
+
+
+def test_no_figure_line_gives_the_reason_and_still_says_leave_it_out():
+    line = aw._decoupling_line(RIDE, True, {"pct": None, "method": None,
+                                            "reason": "intervals or surges (power too variable)"})
+    assert "not available (intervals or surges (power too variable))" in line
+    assert line.endswith("leave decoupling and HR drift out of this debrief entirely")
+    bare = aw._decoupling_line(RIDE, True, {"pct": None, "method": None, "reason": None})
+    assert bare == ("Decoupling: not available - leave decoupling and HR drift out of this "
+                    "debrief entirely")
+    assert aw._decoupling_line(RIDE, True, None) == bare
+
+
+def test_surgy_ride_has_no_figure_and_the_block_says_why(monkeypatch, tmp_path):
+    ride = _long_ride(icu_weighted_avg_watts=300)                    # VI 1.5: intervals
+    client = _Client([ride], _ride_streams())
+    block, meta = _facts(monkeypatch, tmp_path, client)
+    assert meta["i1"]["decoupling"] is None
+    assert meta["i1"]["drift"]["reason"] == "intervals or surges (power too variable)"
+    assert "not available (intervals or surges (power too variable)) - leave decoupling" in block
+
+
+def test_stream_fetch_error_gives_no_figure_and_no_crash(monkeypatch, tmp_path):
+    client = _Client([_long_ride()], fail=True)
+    block, meta = _facts(monkeypatch, tmp_path, client)
+    assert "i1" in meta and meta["i1"]["decoupling"] is None         # not the outer fail-soft ("", {})
+    assert meta["i1"]["drift"]["pct"] is None and meta["i1"]["drift"]["reason"]
+    assert "leave decoupling and HR drift out of this debrief entirely" in block
+    assert client.fetched == ["i1"]
+
+
+def test_short_activity_fetches_no_streams(monkeypatch, tmp_path):
+    ride = _long_ride(moving_time=1800)                              # 30 minutes
+    run = {"id": "i3", "type": "Run", "name": "Short run", "moving_time": 2399,
+           "start_date_local": "2026-10-17T07:00:00", "decoupling": 4.0}
+    client = _Client([ride, run], _ride_streams())
+    block, meta = _facts(monkeypatch, tmp_path, client)
+    assert client.fetched == []
+    assert meta["i1"]["decoupling"] is None and meta["i3"]["decoupling"] is None
+    assert "4.0" not in block and "-9.9" not in block
+
+
+def test_no_fetch_when_hr_untrusted_or_power_broken(monkeypatch, tmp_path):
+    broken = _long_ride(id="i4", icu_average_watts=15, power_load=31, hr_load=124)
+    bad_hr = _long_ride(id="i5")
+    client = _Client([broken, bad_hr], _ride_streams())
+    block, meta = _facts(monkeypatch, tmp_path, client, untrusted=("i5",))
+    assert client.fetched == []
+    assert meta["i4"]["decoupling"] is None and meta["i5"]["decoupling"] is None
+    assert meta["i5"]["drift"]["reason"] == "heart rate failed the check"
 
 
 def test_target_activity_picked_in_code():
