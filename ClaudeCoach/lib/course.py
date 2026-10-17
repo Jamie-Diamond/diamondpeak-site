@@ -113,17 +113,17 @@ def climbs(ele: list, summits: list | None = None, step_m: int = STEP_M) -> list
 
 # ── physics ───────────────────────────────────────────────────────────────────
 
-def speed(power_w: float, grade: float, mass_kg: float) -> float:
+def speed(power_w: float, grade: float, mass_kg: float, cda: float = CDA) -> float:
     """m/s at a steady power on a grade (solo). Descents capped at VMAX."""
     a = math.atan(grade)
     f = mass_kg * G * (math.sin(a) + CRR * math.cos(a))
     p = power_w * DRIVETRAIN
-    if f * VMAX + 0.5 * RHO * CDA * VMAX ** 3 <= p:
+    if f * VMAX + 0.5 * RHO * cda * VMAX ** 3 <= p:
         return VMAX
     lo, hi = 0.3, VMAX
     for _ in range(50):
         v = (lo + hi) / 2
-        if f * v + 0.5 * RHO * CDA * v ** 3 > p:
+        if f * v + 0.5 * RHO * cda * v ** 3 > p:
             hi = v
         else:
             lo = v

@@ -261,6 +261,35 @@ def limiters_for(event, goal_s, goal, data: dict, fb: dict | None, phases: list 
     return limiters.diagnose(km * 1000, goal_s, goal, run, fb, _phase_frac(phases, today))
 
 
+def _tri_limiters(slug, a_view, a_race, cfg, profile, data, fb, frac, today, all_races):
+    """The triathlon card (lib/tri.py + limiters.diagnose_tri): each leg predicted from the
+    athlete's measures against the split the goal needs."""
+    import course as cs
+    import limiters
+    import race_fitness as rf
+    import tri
+    perf = data.get("performance") or {}
+    kind = a_view.get("event")
+    if kind not in tri.DIST:
+        return None
+    tb = perf.get("tri") or {}
+    key = cs._norm(a_view.get("name"))
+    earlier = [r["date"] for r in all_races if cs._norm(r.get("name")) == key and r.get("date") < a_view["date"]]
+    past = [r for r in tb.get("races") or [] if r["kind"] == kind]
+    is_current = str(cfg.get("race_name") or "").strip().lower() == str(a_view.get("name") or "").strip().lower()
+    splits = tri.goal_splits(a_view.get("goal_s") or rf.parse_goal_s(a_view.get("goal") or "", kind),
+                             cfg.get("race_target_splits") if is_current else None,
+                             past[-1] if past else None)
+    course = cs.for_race(a_view.get("name"), slug)
+    legs = tri.legs(kind, tb, perf.get("run"), perf.get("bike"), (course or {}).get("ele"), earlier, today,
+                    (splits or {}).get("bike", 0) / 3600 or None)
+    drifts = [x.get("drift_pct") for x in ((perf.get("bike") or {}).get("durability"), (perf.get("run") or {}).get("durability"))
+              if x and x.get("drift_pct") is not None]
+    return limiters.diagnose_tri(kind, splits, legs, fb, frac,
+                                 {"drift_pct": max(drifts)} if drifts else None,
+                                 (perf.get("bike") or {}).get("fuel"), a_view.get("goal"))
+
+
 def _phase_frac(phases: list | None, today: date | None):
     """Share of the race-day fitness band due by the current phase (before the plan
     starts: base); None without phases."""
@@ -307,7 +336,10 @@ def payload(slug: str, cfg: dict, profile: dict, data: dict, today: date | None 
         except Exception:
             pass
         try:
-            if a_view.get("kind") == "bike":
+            if a_view.get("kind") == "tri":
+                out["limiters"] = _tri_limiters(slug, a_view, a_race, cfg, profile, data, out.get("fitness"),
+                                                _phase_frac(phases, today), today, all_races)
+            elif a_view.get("kind") == "bike":
                 import course as cs
                 import limiters
                 out["limiters"] = limiters.diagnose_bike(

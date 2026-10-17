@@ -65,8 +65,9 @@ RUN_TYPES = ("Run", "TrailRun", "VirtualRun", "Treadmill")
 SLIM = ("id", "start_date_local", "type", "name", "distance", "moving_time", "elapsed_time",
         "average_heartrate", "athlete_max_hr", "icu_resting_hr", "icu_ignore_hr", "gap",
         "average_speed", "device_name", "race", "VO2MaxGarmin", "lthr", "decoupling",
-        "threshold_pace", "icu_average_watts", "icu_weight", "carbs_ingested")
-CACHE_VERSION = 4                    # bump when SLIM grows: forces a full refetch
+        "threshold_pace", "icu_average_watts", "icu_weight", "carbs_ingested",
+        "icu_weighted_avg_watts")
+CACHE_VERSION = 5                    # bump when SLIM grows: forces a full refetch
 RIDE_TYPES = ("Ride", "VirtualRide", "GravelRide", "MountainBikeRide")
 OUTDOOR_RIDES = ("Ride", "GravelRide", "MountainBikeRide")
 LONG_RIDE_S = 3 * 3600
@@ -381,4 +382,43 @@ def build(slug: str, client, cfg: dict | None = None, profile: dict | None = Non
         ftp = None
     out["bike"] = bike(acts, today, ride_power, ftp,
                        _load(_athlete_dir(slug) / "decoupling-log.json", []))
+    out["tri"] = tri_block(acts, run, profile, client)
     return out
+
+
+def _css_s(profile: dict | None, client=None) -> float | None:
+    """CSS in seconds per 100 m: the profile's "1:41", else Intervals' Swim threshold pace."""
+    v = str((profile or {}).get("swim_css_per_100m") or "")
+    try:
+        m, s = v.split(":")[:2]
+        return int(m) * 60 + float(s)
+    except ValueError:
+        pass
+    try:
+        sw = client.get_sport_settings("Swim") if client else None
+        sw = sw[0] if isinstance(sw, list) else sw
+        mps = (sw or {}).get("threshold_pace")
+        return round(100 / mps, 1) if mps else None
+    except Exception:
+        return None
+
+
+def tri_block(acts: list, run: dict, profile: dict | None, client=None) -> dict | None:
+    """Triathlon measures (lib/tri.py): past tri races, CSS and the open-water factor, bike
+    variability, and the off-the-bike factor per distance against the open-run potential
+    the athlete had on each race date."""
+    import tri
+    races = tri.tri_races(acts)
+    css = _css_s(profile, client)
+    if not races and not css:
+        return None
+    run_races = (run or {}).get("races") or []
+
+    def open_s(dist_m, iso):
+        d = rm._d(iso)
+        p = rm.predict(dist_m, [r for r in run_races if r["date"] < iso], d, _volume(acts, d)[0])
+        return p["now_s"] if p else None
+    kinds = sorted({r["kind"] for r in races})
+    return {"races": races, "css_s": css, "swim_factor": list(tri.swim_factor(races, css)),
+            "vi": tri.variability(races),
+            "off_bike": {k: list(tri.off_bike_factor(races, k, open_s)) for k in kinds}}

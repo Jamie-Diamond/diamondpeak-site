@@ -6526,6 +6526,8 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.031", "2026-10-17", "Your weekly plan leans its quality sessions toward what\u2019s holding you back (the blueprint still sets the volume, zones and phases)", 0],
+    ["4.031", "2026-10-17", "Goals for triathlons: \u2018What\u2019s holding you back\u2019 by leg \u2013 swim, bike, run off the bike \u2013 from your own numbers against the splits your goal needs", 0],
     ["4.030", "2026-10-17", "Share cards: choose the route or the effort graph, and light or dark type for the overlay so it reads on bright photos too. Fixed: a session with an accidental second start the same day (a few seconds long) took that one\u2019s time and heart rate.", 0],
     ["4.029", "2026-10-17", "Share cards carry the Peak logo beside the name.", 0],
     ["4.028", "2026-10-17", "Strength sessions you can follow and log: tap a strength session, Start, and each exercise shows from two angles with how it should feel; log weight and reps for every set (each leg on its own), rest timer, any order when kit is busy. It goes into your watch\u2019s session in Intervals.icu, and next time\u2019s weights come from it. Physio sessions are logged as set. Pilot: Jamie and Fred", 1],

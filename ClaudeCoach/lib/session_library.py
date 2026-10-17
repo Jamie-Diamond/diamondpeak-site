@@ -563,6 +563,14 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
                       "The Z2 body stays; only the closing block is at intensity (counts to the quality "
                       "share). Long RUNS keep their structure — no quality added unless the rules allow.")
 
+    limiter = None
+    if req.get("week_type") not in pt.DOWN_WEEK_TYPES and phase_name != "taper":
+        try:
+            import limiters as _lim
+            limiter = _lim.nudge(((pt._training_data(slug).get("season") or {}).get("limiters")))
+        except Exception:
+            limiter = None
+
     # Menstrual-cycle forecast (tracking athletes only) — Python-computed from the bot-logged
     # anchor, aligned to the PLANNED week. Shapes WHERE quality lands, never the total TSS.
     menstrual_forecast = None
@@ -673,6 +681,9 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         **({"every_week_minimum": (cfg.get("day_rules") or {}).get("min_per_week")}
            if (cfg.get("day_rules") or {}).get("min_per_week") else {}),
         "durability": durability,
+        # What's holding them back (Goals card, lib/limiters.py): steers WHICH quality session
+        # fills the blueprint's quality minutes, never the volume (Jamie, 17 Oct 2026).
+        **({"limiter": limiter} if limiter else {}),
         "menstrual_forecast": menstrual_forecast,
         "thresholds": {"ftp": thresh["ftp_watts"], "run": thresh["run_threshold_per_km"],
                        "swim_css": thresh["swim_css_per_100m"]},

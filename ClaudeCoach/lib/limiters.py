@@ -447,3 +447,147 @@ def _bike_foot(course, bike, no_meter) -> str:
                     "can't be measured: a power meter on the road bike would fill those in.")
     bits.append("Fuelling counts carbs logged on rides over 3 hours.")
     return " ".join(b.strip() for b in bits)
+
+
+# ── Triathlon (lib/tri.py) ────────────────────────────────────────────────────
+#
+# Each leg predicted from the athlete's own measures and set against the split the goal
+# needs; the leg costing the most minutes is the limiter. Status by % over the split:
+# within TRI_GREEN fine, past TRI_RED red. Validated on Cervia 2026, 8 weeks out:
+# Jamie swim +2.4%, bike -3.6% (a windier year), run +16.5% (his off-the-bike factor
+# carried two Ironman runs with walk breaks, which he fixed); James swim -1.4%, bike +3.5%.
+
+TRI_GREEN, TRI_RED = 0.02, 0.06
+TRI_LABELS = {"fitness": "Fitness", "swim": "Swim", "bike": "Bike", "run": "Run off the bike",
+              "durability": "Durability", "fuelling": "Fuelling"}
+
+
+def _trow(key, you, need, short, minutes=None, status=None, source=None) -> dict:
+    s = None if short is None else round(max(0.0, short), 3)
+    st = status or ("unknown" if s is None else "green" if s <= TRI_GREEN else "amber" if s <= TRI_RED else "red")
+    return {"key": key, "label": TRI_LABELS[key], "you": you, "need": need, "short": s,
+            "minutes": None if minutes is None else round(minutes), "status": st, "source": source}
+
+
+def _hms(s) -> str:
+    s = int(round(s))
+    return f"{s // 3600}:{s % 3600 // 60:02d}"
+
+
+def diagnose_tri(kind: str, splits: dict | None, legs: dict, fitness: dict | None,
+                 phase_frac: float | None = None, durability: dict | None = None,
+                 fuel: dict | None = None, goal: str | None = None) -> dict | None:
+    """`legs`: {"swim": {"time_s", "you"}, "bike": {...}, "run": {...}} - predicted seconds and
+    a "you" line saying how (lib/tri.py via season_view). `splits`: the goal's seconds per leg
+    (tri.goal_splits) or None - then the legs are shown without a verdict."""
+    rows = []
+    if fitness and fitness.get("now") is not None:
+        due = fitness["lo"] * (phase_frac or 1.0)
+        need = (f"~{due:.0f} by now · {fitness['lo']}–{fitness['hi']} race day"
+                if phase_frac and phase_frac < 1 else f"{fitness['lo']}–{fitness['hi']}")
+        short = max(0.0, (due - fitness["now"]) / due)
+        rows.append(_trow("fitness", f"{fitness['now']:.0f}", need, short,
+                          status="green" if short <= GREEN else "amber" if short <= RED else "red"))
+    else:
+        rows.append(_trow("fitness", "—", "—", None))
+    for leg in ("swim", "bike", "run"):
+        p, need = (legs.get(leg) or {}).get("time_s"), (splits or {}).get(leg)
+        you = (legs.get(leg) or {}).get("you") or "—"
+        if p and need:
+            rows.append(_trow(leg, you, _hms(need), (p - need) / need, (p - need) / 60,
+                              source=(legs.get(leg) or {}).get("source")))
+        else:
+            rows.append(_trow(leg, you, _hms(need) if need else "no goal split", None,
+                              source=(legs.get(leg) or {}).get("source")))
+    d = durability or {}
+    if d.get("drift_pct") is not None:
+        rows.append(_trow("durability", f"{d['drift_pct']:+.0f}% drift on long sessions", f"under {DRIFT_OK:.0f}%",
+                          max(0.0, d["drift_pct"] - DRIFT_OK) / DRIFT_SCALE,
+                          status="green" if d["drift_pct"] <= DRIFT_OK else "amber" if d["drift_pct"] <= 10 else "red"))
+    else:
+        rows.append(_trow("durability", "—", f"under {DRIFT_OK:.0f}%", None))
+    if fuel:
+        short = max(0.0, (FUEL_G_H[0] - fuel["g_per_h"]) / FUEL_G_H[0])
+        rows.append(_trow("fuelling", f"{fuel['g_per_h']} g carbs an hour", f"{FUEL_G_H[0]}–{FUEL_G_H[1]} g an hour",
+                          short, status="green" if short <= GREEN else "amber" if short <= RED else "red"))
+    else:
+        rows.append(_trow("fuelling", "not logged on long sessions", f"{FUEL_G_H[0]}–{FUEL_G_H[1]} g an hour", None))
+    legs_flagged = [r for r in rows if r["key"] in ("swim", "bike", "run") and r["status"] in ("amber", "red")]
+    other = [r for r in rows if r["key"] not in ("swim", "bike", "run") and r["status"] in ("amber", "red")]
+    sev = {"red": 2, "amber": 1}
+    limiter = (max(legs_flagged, key=lambda r: r["minutes"] or 0)["key"] if legs_flagged
+               else max(other, key=lambda r: (sev[r["status"]], r["short"] or 0))["key"] if other else None)
+    by = {r["key"]: r for r in rows}
+    g = f"for {goal}" if goal else "for your goal"
+    if not splits:
+        head = "Set a goal time (or target splits) and the coach shows which leg costs you most."
+    elif limiter in ("swim", "bike", "run"):
+        r = by[limiter]
+        head = (f"{r['label']} is the issue: about {_hms(legs[limiter]['time_s'])} against "
+                f"{r['need']} {g} (+{r['minutes']} min).")
+    elif limiter:
+        head = f"{by[limiter]['label']} is the issue: {by[limiter]['you']}, against {by[limiter]['need']}."
+    elif not any(r["status"] in ("green", "amber", "red") for r in rows):
+        head = "Not enough measured yet to say what's holding you back."
+    else:
+        head = f"Nothing is holding you back {g} on these numbers."
+    fix = {"swim": "CSS sets and open-water swims with sighting.",
+           "bike": "Long rides at race power, and FTP work in the build.",
+           "run": "Runs off long rides, the race fuelling practised, and a bike paced to leave a run.",
+           "fitness": "More training builds it.", "durability": "Long steady sessions, fuelled, with a strong finish.",
+           "fuelling": "Practise 60-90 g of carbs an hour on long sessions."}.get(limiter)
+    foot = ("Each leg from your own numbers: swim from CSS and how much slower your race swims are; "
+            "bike from your past rides on this course (or the course and a typical age-group position "
+            "the first time), wind moving it by 5-10% either way; run from your open-run fitness and how "
+            "much your past triathlon runs slowed.")
+    return {"rows": rows, "limiter": limiter, "headline": head, "fix": fix, "foot": foot}
+
+
+# ── The plan nudge ─────────────────────────────────────────────────────────────
+#
+# Jamie, 17 Oct 2026: "lets not throw away the blueprints, it's just something to subtly
+# influence it". The blueprint keeps the volume, phases, zone targets, TSS and the long
+# sessions; the limiter only steers WHICH quality session fills the quality minutes and
+# what the long session finishes with. Fitness has no nudge: volume is the blueprint's job.
+
+NUDGES = {
+    "run": {
+        "engine": "Run quality: give the Z4-5 share to VO2 reps (3-5 min at 3k-5k effort) rather than shorter speed work.",
+        "threshold": "Run quality: give the Z3 share to threshold work (cruise intervals, 2x15-20 min) rather than tempo variety.",
+        "efficiency": "Run: add strides (6-8 x 20 s) to two easy runs and make the Z4-5 touch hill reps; almost no extra load.",
+        "endurance": "Long run: when it allows, finish the last 20-30 min at goal race pace (inside its cap).",
+        "durability": "Long run: steady and fuelled as on race day, the final 15-20 min at goal pace.",
+    },
+    "bike": {
+        "climbing": "Bike quality: threshold work as seated climbing repeats (or low-cadence big-gear efforts indoors) rather than flat sweetspot.",
+        "day": "Long ride: fuelled exactly as on the day (60-90 g carbs an hour), steady to the end.",
+        "durability": "Long ride: the closing block at race effort.",
+        "fuelling": "Long ride: practise 60-90 g of carbs an hour and log it.",
+    },
+    "tri": {
+        "swim": "Swim: the CSS set stays the key swim; add sighting every 6-8 strokes on the long swim.",
+        "bike": "Bike: the long ride's closing block at race power (NP target) rather than sweetspot.",
+        "run": "Run: a short run straight off the long ride (15-30 min at race pace) when a brick fits the day rules.",
+        "durability": "Long ride and long run: steady, fuelled, finishing at race effort.",
+        "fuelling": "Long ride: practise 60-90 g of carbs an hour and log it.",
+    },
+}
+
+
+def card_type(card: dict) -> str:
+    keys = {r.get("key") for r in (card or {}).get("rows") or []}
+    return "bike" if "climbing" in keys else "tri" if "swim" in keys else "run"
+
+
+def nudge(card: dict | None) -> dict | None:
+    """{"area", "headline", "nudge"} for the weekly planning brief, or None when nothing is
+    flagged, the area has no nudge, or there is no card."""
+    if not card or not card.get("limiter"):
+        return None
+    row = next((r for r in card.get("rows") or [] if r.get("key") == card["limiter"]), {})
+    if row.get("status") not in ("amber", "red", "unshown"):
+        return None
+    text = NUDGES[card_type(card)].get(card["limiter"])
+    if not text:
+        return None
+    return {"area": card["limiter"], "headline": card.get("headline"), "nudge": text}

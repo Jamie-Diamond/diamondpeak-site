@@ -990,6 +990,11 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
   a block that focuses on another sport. Easy or technique sessions are fine; never drop one.
 - DURABILITY: if the brief has a non-null "durability", apply it to the long ride (closing block
   at race intensity), expressed in the long ride's segments + notes.
+- LIMITER: if the brief has a "limiter", it is what is holding this athlete back right now
+  (their Goals page). Let its "nudge" decide WHICH quality session fills the quality minutes and
+  what the long session finishes with. It never adds volume or TSS, never takes a zone above
+  its target, never breaks a cap, day rule or hard_rule, and never changes the phase: the
+  blueprint still sets all of those. Mention it in one line of the plan notes.
 - MENSTRUAL: if the brief has a non-null "menstrual_forecast", follow its "apply" guidance when
   PLACING quality vs easy sessions across the week (never breaking a day rule, never cutting TSS).
 - Do NOT output load_target, TSS numbers, or %FTP/pace targets — code derives them.
