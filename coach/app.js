@@ -776,7 +776,8 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
 
     var stLive = strengthOn() && PeakStrengthPlayer.live(state.slug);
     if (stLive) h = '<div class="card st-resume"><b>Strength session in progress: ' + esc(stLive.title) +
-      '</b><button type="button" data-st-resume>Resume</button></div>' + h;
+      '</b><button type="button" class="st-discard" data-st-discard data-sets="' + stLive.sets + '">Discard</button>' +
+      '<button type="button" data-st-resume>Resume</button></div>' + h;
     $('#v-today').innerHTML = setupCard() + '<div id="todayNote">' + todayNoteHtml(TODAY_NOTE[state.slug]) + '</div>' + h;
     loadTodayNote();
     var sgo = $('#v-today').querySelector('.notify-go');
@@ -790,6 +791,8 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
         try {
           if (e.target.closest('[data-tnote]')) { openTodayNote(e); return; }
           if (e.target.closest('[data-st-resume]')) { startStrength(null); return; }
+          var sd = e.target.closest('[data-st-discard]');
+          if (sd) { discardStrength(sd); return; }
           var head = e.target.closest('[data-sess]');
           if (head && head.dataset.d) openDetail(head.dataset.d, head.dataset.sp, head.dataset.n);
         } catch (err) {
@@ -7176,6 +7179,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.050", "2026-10-17", "Strength: the \u2018session in progress\u2019 card on Today has a Discard button, so a session you\u2019re not going back to goes away. If you\u2019d logged sets it asks once more first. Pilot: Jamie and Fred", 1],
     ["4.049", "2026-10-17", "Fixed: with no goal time, the fitness target for a race came from your current fitness, so it always looked nearly met. It now comes from the event: its finish level, and for a long bike day the fitness a day that long needs (10 h+: 50\u201365)", 0],
     ["4.048", "2026-10-17", "Trends: a Best efforts tab (Bike power, Run best times for 1 km to the marathon, Swim best pace from 100 m to 3.8 km, each against a year ago); target bands on the Race charts; climbing power in W/kg; a long day is judged on durability and fuelling, not on having ridden one", 0],
     ["4.047", "2026-10-17", "Calendar: TSS per day counts rest days, and today only once you\u2019ve trained, so a morning before your session doesn\u2019t pull it down", 0],
@@ -8139,6 +8143,19 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
         }).join('') + '</div></section>';
     }
     return h;
+  }
+  // Discard on the Today resume card. With sets logged it takes a second tap, as they're lost.
+  function discardStrength(btn) {
+    var n = +btn.dataset.sets || 0;
+    if (n && !btn.classList.contains('armed')) {
+      var b = btn.parentNode.querySelector('b'), was = b.textContent;
+      btn.classList.add('armed');
+      b.textContent = 'Discard it? The ' + n + (n === 1 ? ' set' : ' sets') + ' you logged won\u2019t be saved.';
+      setTimeout(function () { if (btn.isConnected) { btn.classList.remove('armed'); b.textContent = was; } }, 4000);
+      return;
+    }
+    PeakStrengthPlayer.discard(state.slug);
+    renderToday();
   }
   // id null = resume the session in progress
   function startStrength(id, pl) {

@@ -19,8 +19,8 @@
 // APP_VERSION is what the athlete sees in Settings; CACHE is the precache key.
 // Bump BOTH on every deploy that changes a precached file - the visible number
 // exists so Jamie can tell current from syncing from stale at a glance.
-const APP_VERSION = '4.049';
-const CACHE = 'peak-v209';
+const APP_VERSION = '4.050';
+const CACHE = 'peak-v210';
 
 // SHELL paths are relative to /coach/, where this worker actually lives - the app moved
 // out of /coach/app/ and these entries were left pointing at the old tree. addAll's
@@ -32,7 +32,7 @@ const SHELL = [
   // - app.html is the real entry point and is precached explicitly.
   './app.html',
   './app.js',
-  './glass.css?v=209',
+  './glass.css?v=210',
   './figure.js',
   './exercise-anims.js',
   './strength-player.js',

@@ -485,7 +485,12 @@
     open: open,
     close: function () { if (root) close(true, false); },
     isOpen: function () { return !!root; },
-    live: function (key) { var l = load(KEY_LIVE + (key ? '.' + key : ''), null); return l && l.items ? { sid: l.sid, title: l.title } : null; },
+    live: function (key) {
+      var l = load(KEY_LIVE + (key ? '.' + key : ''), null);
+      return l && l.items ? { sid: l.sid, title: l.title, sets: l.items.reduce(function (n, x) { return n + x.rows.filter(function (r) { return r.done; }).length; }, 0) } : null;
+    },
+    // drop the session in progress without saving it (Jamie, 17 Oct 2026: a button to cancel it)
+    discard: function (key) { save(KEY_LIVE + (key ? '.' + key : ''), null); },
     lastFor: lastFor, history: history, suggest: suggest, setsTxt: setsTxt
   };
 })(typeof window !== 'undefined' ? window : this);

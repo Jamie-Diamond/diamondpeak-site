@@ -1,5 +1,5 @@
 // Strength-player test: the "next time" suggestion built from the log (double
-// progression), and a physio's numbers never being moved.
+// progression), a physio's numbers never being moved, and discarding a session in progress.
 //
 //   node coach/test/strength-player-test.js
 const path = require('path').resolve(__dirname, '../../') + '/';
@@ -43,5 +43,13 @@ withLog([{ ex: 'single_leg_hamstring_curl', effort: 'easy', sets: [{ side: 'L', 
 eq('physio: each side keeps its own weight, never progressed',
   sug('single_leg_hamstring_curl', { sets: 'set by physio', reps: 'set by physio' }).kg, { L: 27.5, R: 32.5 });
 
+// Discard (Today's resume card): the session in progress goes, and only that athlete's.
+store['peakStrength.live.v1.jamie'] = JSON.stringify({ sid: 's', title: 'Gym A', items: [{ rows: [{ done: true }, { done: true }, { done: false }] }] });
+store['peakStrength.live.v1.fred'] = JSON.stringify({ sid: 's', title: 'Gym B', items: [{ rows: [] }] });
+eq('live counts the sets logged', P.live('jamie'), { sid: 's', title: 'Gym A', sets: 2 });
+P.discard('jamie');
+eq('discarded: nothing to resume', P.live('jamie'), null);
+eq('another athlete keeps theirs', P.live('fred') && P.live('fred').title, 'Gym B');
+
 if (fails.length) { console.log('FAIL\n  ' + fails.join('\n  ')); process.exit(1); }
-console.log('ok: next-time suggestions follow the log; physio weights are never moved');
+console.log('ok: next-time suggestions follow the log; physio weights are never moved; discard clears only that session');
