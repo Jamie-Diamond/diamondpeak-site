@@ -261,3 +261,60 @@ def test_hrv_trend_reaches_the_card_and_stops_fresh():
     assert "never call it a good day for quality" in block
     assert mc._with_trends("Off your normal: resting HR 56 (usual 52)", [], today) \
         == "Off your normal: resting HR 56 (usual 52)"
+
+
+# ── 17 Oct shadow review (Jamie, 17 Oct 2026: shadow review) ───────────────────
+
+SAT = date(2026, 10, 17)
+
+
+def _goal_cfg(start, weeks=4, typ="run"):
+    return {"goal": {"type": typ, "set": "2026-10-01", "start": start, "block_weeks": weeks}}
+
+
+def test_coming_up_names_a_goal_block_starting_monday():
+    f = mc._coming_up_fact(_goal_cfg("2026-10-19"), None, SAT)
+    assert f == "Coming up: the Run faster plan starts Monday, in 2 days."
+    assert "tomorrow" in mc._coming_up_fact(_goal_cfg("2026-10-19"), None, SAT + timedelta(days=1))
+
+
+def test_coming_up_is_silent_mid_block_and_without_a_goal():
+    # Fred: block 1 started 12 Oct, so Mon 19 Oct is week 2 - nothing is starting.
+    assert mc._coming_up_fact(_goal_cfg("2026-10-12", typ="ftp"), None, SAT) == ""
+    assert mc._coming_up_fact({}, None, SAT) == ""
+    assert mc._coming_up_fact(_goal_cfg("2026-11-02"), None, SAT) == ""     # 16 days out
+
+
+def test_coming_up_names_the_next_block_after_a_test_week():
+    f = mc._coming_up_fact(_goal_cfg("2026-09-21"), None, SAT)              # 4 weeks on
+    assert "block 2 of the Run faster plan starts" in f
+
+
+def test_coming_up_fact_reaches_the_prompt_and_owns_plan_starts():
+    p = mc._build_prompt("x", "X", "", "", None, [], coming_up="Coming up: the Run faster plan starts Monday, in 2 days.")
+    assert "## Coming up (pre-computed" in p and "Run faster plan starts Monday" in p
+    assert "a week of sessions already booked on the calendar is NOT coming-up news" in p
+    assert "## Coming up (pre-computed" not in mc._build_prompt("x", "X", "", "", None, [])
+
+
+def test_green_score_is_not_all_clear_beside_an_off_normal_line():
+    rec = {"score": 83, "label": "GREEN", "recommendation": "All signals clear — train as planned.",
+           "signals": {"hrv": {"ratio": 0.93}}}
+    p = mc._build_prompt("x", "X", "", "", None, [], recovery=rec, wellness_line="Sleep: 8.0h",
+                         off_normal="Off your normal: 7-day HRV average 39 vs 43 the 7 days before (-8%)")
+    assert "All signals clear" not in p and "NOT all clear" in p
+    p2 = mc._build_prompt("x", "X", "", "", None, [], recovery=rec, wellness_line="Sleep: 8.0h")
+    assert "All signals clear" in p2
+
+
+def test_opening_must_name_todays_session():
+    p = mc._build_prompt("x", "X", "", "", None, [])
+    assert "The FIRST sentence names today's\n session in words" in p
+
+
+def test_fuel_line_has_no_progress_toward_itself_and_no_model_sum():
+    p = mc._build_prompt("x", "X", "", "", None, [], fuel_target_g_hr=45, nutrition_race=45)
+    assert "aim for 45g/hr · eat" in p and "progress toward" not in p
+    p = mc._build_prompt("x", "X", "", "", None, [], fuel_target_g_hr=60, nutrition_race=90)
+    assert "aim for 60g/hr (progress toward 90g/hr" in p
+    assert "Compute each g_per_hr" not in p

@@ -223,7 +223,7 @@ def _is_labelled(line: str) -> bool:
     return bool(re.match(r"^\s*(?:[-*]\s+)?\*\*", line))
 
 
-def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, nutrition_label="race target", heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None, wellness_finalized=True, race_block="", prescription_note="", post_race_recovery=False, watchdog_flags=None, off_normal="", form=None, week_so_far="", question=""):
+def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, nutrition_label="race target", heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None, wellness_finalized=True, race_block="", prescription_note="", post_race_recovery=False, watchdog_flags=None, off_normal="", form=None, week_so_far="", question="", coming_up=""):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -279,6 +279,13 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
         # Form is not listed here: it reaches the card only as the word in the Form block.
         if slp_v  is not None: parts.append(f"sleep {slp_v:.1f}h")
         if pain_v is not None and pain_v > 0: parts.append(f"pain {pain_v}/10")
+        # Not "All signals clear" beside an off-normal line (Jamie, 17 Oct 2026: shadow
+        # review): the 09:08 card's prompt said GREEN "all signals clear - train as planned"
+        # and, two blocks down, HRV off normal. Both models reported the HRV, but the prompt
+        # contradicted itself; the off-normal fact wins, so the green verdict is qualified here.
+        if off_normal and label == "GREEN":
+            rec = ("Score green, but NOT all clear: the 'Off your normal' block below is a real "
+                   "signal and gets the Recovery line.")
         recovery_block = (
             f"\n## Recovery score (pre-computed)\n"
             f"Score: {score}/100 — {label}. {rec}\n"
@@ -301,6 +308,14 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
         f"\n## Today's planned sessions (pre-computed — authoritative)\n{planned_block}\n"
         if planned_block else ""
     )
+
+    # The goal-block start, decided in code (_coming_up_fact; Jamie, 17 Oct 2026: shadow review).
+    coming_up_block = (f"\n## Coming up (pre-computed — the ONLY source for a plan or goal block starting)\n"
+                       f"{coming_up}\n" if coming_up else "")
+    # Fuel: no "progress toward 45 from 45" when the target already is the ceiling (Fred's
+    # 17 Oct prompt read "aim for 45g/hr (progress toward 45g/hr ...)").
+    fuel_progress = (f" (progress toward {nutrition_race}g/hr {nutrition_label})"
+                     if nutrition_race and fuel_target_g_hr != nutrition_race else "")
 
     heat_block = ""
     form_block, form_card_line = _form_block(form, post_race_recovery=post_race_recovery,
@@ -355,7 +370,7 @@ You are generating the morning briefing for {first_name}'s training day.
 
 {_level_block(coaching_level)}
 {illness_lib.prompt_block(slug, first_name=first_name)}
-{recovery_block}{form_block}{week_block}{wellness_block}{flags_block}{cycle_block}{planned_section}{race_block}{long_run_cap_block}{heat_block}{prescription_block}
+{recovery_block}{form_block}{week_block}{wellness_block}{flags_block}{cycle_block}{planned_section}{coming_up_block}{race_block}{long_run_cap_block}{heat_block}{prescription_block}
 Step 1 — Fetch data via Bash. EVERY icu_fetch.py call you make must carry
 `--caller morning-checkin`. This job reads what is planned and asks how the athlete is; it
 does not write the calendar, and that flag is what makes the refusal automatic rather than a
@@ -368,7 +383,6 @@ Step 2 — Read:
 - ClaudeCoach/athletes/{slug}/current-state.md (open actions and travel blocks; watchdog flags are already chosen in the block below — do not pick others from this file)
 - ClaudeCoach/athletes/{slug}/current-state.json (weight_readings, injury pain scores)
 {"- ClaudeCoach/athletes/" + slug + "/heat-log.json (count entries in current ISO week to get sessions_this_week)" if heat_protocol else ""}
-- ClaudeCoach/athletes/{slug}/session-log.json — only if today's planned event is a Ride or Brick >90 min: extract the last 4 entries with sport Ride/GravelRide/Brick, duration_min ≥ 90, and nutrition_g_carb set. Compute each g_per_hr and the avg.
 
 Step 3 — No question from you. Ask NOTHING: no line ending in "?". The card's one question,
 if one is due today, is chosen in code and added below your note after you write it.
@@ -381,8 +395,9 @@ week, this is what to think about").
 
 Use the recovery score and signals ONLY to decide what to flag — do NOT show the score, label, HRV ratio, or any internal metric to the athlete. Write like a coach talking, not a dashboard.
 
-[Opening: TWO sentences at most, in a coach's voice. How training is going right now and
- what that means for today's session: the one thing to think about. e.g. "Big ride today,
+[Opening: TWO sentences at most, in a coach's voice. The FIRST sentence names today's
+ session in words (or says it is a rest day), e.g. "a short strength session", "a long
+ easy ride". Then how training is going and what that means for it: the one thing to think about. e.g. "Big ride today,
  and you're fresh after an easy week: hold the first hour back and finish strong." Every
  part comes from a block above, never from a guess: the week so far ONLY from the "Week so
  far" block; how fresh or loaded ONLY from the Form block (no Form word = say nothing about
@@ -394,8 +409,9 @@ Use the recovery score and signals ONLY to decide what to flag — do NOT show t
 [For EACH flag in the "Watchdog flags to show" block: **[one-word label]:** [that flag in plain English, one line]. None listed: no flag line.]
 [If the pre-verified 05:00 prescription check block above is present and says today's session was modified or swapped: **Changed:** [what changed and why — one plain line, e.g. "Swapped to an easy spin because HRV is low". If it confirmed the session as planned, or the block is absent, say nothing]]
 {cycle_card_line}
-[If today's session is Ride or Brick >90 min: **Fuel:** aim for {fuel_target_g_hr}g/hr (progress toward {nutrition_race}g/hr {nutrition_label}) · eat at 15 min then every 25 min]
-[If any travel block, race, or constraint from current-state.md "Travel & training blocks" STARTS or ENDS within 5 days, or a training plan or goal block starts within 5 days: **Coming up:** [what] in [N] days — [one-line impact], e.g. "Back from your trip in 2 days. Monday's hamstring strength starts the week."]
+[If today's session is Ride or Brick >90 min: **Fuel:** aim for {fuel_target_g_hr}g/hr{fuel_progress} · eat at 15 min then every 25 min]
+[If the "Coming up" block above is present: **Coming up:** that fact in plain words, e.g. "**Coming up:** the Run faster plan starts Monday."]
+[If a trip or race from current-state.md "Travel & training blocks" STARTS or ENDS within 5 days: **Coming up:** [what] in [N] days — [one-line impact], e.g. "Back from your trip in 2 days." A plan or goal block starting comes ONLY from the "Coming up" block; a week of sessions already booked on the calendar is NOT coming-up news.]
 [If open action is due within 3 days: **To do:** [action] by [day]]
 {heat_card_line}
 
@@ -849,6 +865,39 @@ def _block_fact(athlete_cfg, today):
     return f"You have {weeks} weeks of work behind you for this one"
 
 
+def _coming_up_fact(athlete_cfg, slug, today, horizon: int = 5) -> str:
+    """A goal block starting in the next `horizon` days, worked out from athletes.json
+    `goal` (lib/goals.py), or "". Jamie, 17 Oct 2026: shadow review - the "Coming up" line
+    was left to the model to date-match from current-state.md prose. Haiku printed Fred's
+    booked next week as a garbled "Coming up", and both models missed Kathryn's Run faster
+    block starting Monday because current-state.md never mentioned it. The block start is
+    structured data, so it is decided here and the model only says it in words."""
+    try:
+        import goals as _goals
+        import plan_tools as _pt
+        g = _goals.goal_cfg(athlete_cfg or {})
+        if not g:
+            return ""
+        weeks = _goals.block_weeks(athlete_cfg)
+        for d in range(1, horizon + 1):
+            day = today + timedelta(days=d)
+            if day.weekday() != 0 or not _pt.goal_active(athlete_cfg, day):
+                continue
+            start = _pt.goal_start(athlete_cfg, slug, day)
+            if not start:
+                continue
+            n = (day - start).days // 7
+            if n < 0 or n % weeks:
+                continue
+            when = "tomorrow" if d == 1 else f"Monday, in {d} days"
+            what = f"the {_goals.label(g)} plan starts" if n == 0 else \
+                f"block {n // weeks + 1} of the {_goals.label(g)} plan starts (a new build after the test week)"
+            return f"Coming up: {what} {when}."
+    except Exception:
+        return ""
+    return ""
+
+
 def run_athlete(slug, athlete_cfg, early=False):
     """early=True is the just-after-midnight run: the Today note from the plan and the
     load, before any wellness exists. The morning runs then rewrite it once sleep / HRV /
@@ -1214,6 +1263,7 @@ def run_athlete(slug, athlete_cfg, early=False):
                            nutrition_race=fuel_basis.ceiling(athlete_cfg),
                            nutrition_label=fuel_basis.label(athlete_cfg),
                            form=form, week_so_far=week_so_far, question=question,
+                           coming_up=_coming_up_fact(athlete_cfg, slug, date.today()),
                            heat_accl_pct=heat_accl_pct, heat_accl_trend=heat_accl_trend,
                            long_run_cap_km=_long_run_cap_km,
                            wellness_finalized=wellness_finalized,
