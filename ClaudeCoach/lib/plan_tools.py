@@ -3447,7 +3447,11 @@ def cmd_strength_session(args) -> dict:
     if not sess:
         return {"error": "no strength session this day (race week, or the athlete's own protocol covers it)"}
     title = name if sess.get("kind") == "protocol" else sess["title"]
-    client.edit_workout(args.event_id, name=title, description=strength_builder.describe(sess, lib))
+    from primitives.planned_tss import planned_session_tss
+    minutes = int(sess.get("minutes") or 40)
+    load = planned_session_tss({"type": "WeightTraining", "name": title, "moving_time": minutes * 60})["tss"]
+    client.edit_workout(args.event_id, name=title, description=strength_builder.describe(sess, lib),
+                        moving_time=minutes * 60, load_target=load)
     strength_builder.write_plan(args.athlete, args.event_id, sess)
     return {"athlete": args.athlete, "event_id": args.event_id, "date": day, "name": title,
             "tier": args.tier, "minutes": sess.get("minutes"),
