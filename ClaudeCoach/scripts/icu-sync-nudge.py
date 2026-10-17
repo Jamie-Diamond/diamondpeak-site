@@ -35,19 +35,9 @@ ATHLETES = CC / "config" / "athletes.json"
 SOURCE = "coach-sync-check"        # the first send (2 Oct, by hand) used this too
 MIN_GAP = timedelta(hours=20)      # once a day, even if cron drifts a few minutes
 
-NUDGES = {
-    "calum": {
-        "last_seen": "2026-08-01T07:54:01",   # Isle of Wight Road Cycling
-        "text": (
-            "*Your rides stopped reaching Intervals.icu on 1 August.* Nothing has come "
-            "through since, not even Tour de Stations, so I can't see your training.\n\n"
-            "To fix it, in Intervals.icu go to *Settings*, then *Connections*. Disconnect "
-            "*Garmin* and connect it again, with _Download activities_ ticked. Then tap "
-            "_Download old data_ under activities to bring in August to now.\n\n"
-            "If you've switched to a different bike computer or watch since August, tell "
-            "me which one instead."
-        ),
-    },
+# Calum stopped 17 Oct 2026 (Jamie: "Stop the nudge"): 14 daily messages since 4 Oct,
+# no reply and nothing synced. The message text is in git history (fcd0f7b2 and before).
+NUDGES: dict = {
 }
 
 
