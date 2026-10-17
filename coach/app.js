@@ -5070,7 +5070,12 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     var same = function (a, b) { return a && b && (SPORT[a] || a) === (SPORT[b] || b); };
 
     var onDate = (d.recent || []).filter(function (r) { return r.date === dateISO; });
-    var act = onDate.filter(function (r) { return !sport || same(r.sport, sport); })[0]
+    // Two of a sport on one day: the one tapped (by name), else the longest. Jamie, 17 Oct
+    // 2026: a 13-second accidental watch start after a 16 km run gave the run's sheet and
+    // share card "0m" and "71 bpm".
+    var ofSport = onDate.filter(function (r) { return !sport || same(r.sport, sport); })
+      .sort(function (p, q) { return (q.dur || 0) - (p.dur || 0); });
+    var act = ofSport.filter(function (r) { return name && r.name === name; })[0] || ofSport[0]
       // Fall back to any activity that day: plan and activity sport names differ
       // ("Bike" vs "Ride", "Brick" vs "Run"), and a route is better than a blank.
       || onDate.filter(function (r) { return r.shape; })[0]
@@ -5303,7 +5308,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   var SHARE_MAX = 4;
   var shareTrack = null;      // the /api/track stats of the open session (loadTrack)
   var shr = null;             // { x, fam, pool, pick, mode, file }
-  var shareMark = null;       // the Peak mark (icons/dpc-mark.png), recoloured white once
+  var shareMark = null;       // the Peak mark (icons/dpc-mark.png), recoloured white (c) and dark (d) once
 
   function shareMarkLoad() {
     // The mark's light parts are transparent, so filling over it (source-in) gives a
@@ -5313,14 +5318,18 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     shareMark.p = new Promise(function (ok) {
       var im = new Image();
       im.onload = function () {
-        var c = document.createElement('canvas');
-        c.width = c.height = 256;
-        var x = c.getContext('2d');
-        x.drawImage(im, 0, 0, 256, 256);
-        x.globalCompositeOperation = 'source-in';
-        x.fillStyle = '#fff';
-        x.fillRect(0, 0, 256, 256);
-        shareMark.c = c;
+        var tint = function (col) {
+          var c = document.createElement('canvas');
+          c.width = c.height = 256;
+          var x = c.getContext('2d');
+          x.drawImage(im, 0, 0, 256, 256);
+          x.globalCompositeOperation = 'source-in';
+          x.fillStyle = col;
+          x.fillRect(0, 0, 256, 256);
+          return c;
+        };
+        shareMark.c = tint('#fff');
+        shareMark.d = tint('#0b0d10');
         ok();
       };
       im.onerror = function () { ok(); };
@@ -5335,10 +5344,17 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   }
   function sharePool(x, fam) {
     var a = x.act || {}, lg = x.log || {}, pool = [], seen = {};
-    var add = function (s) { if (s && s.v && !seen[s.k]) { seen[s.k] = 1; pool.push(s); } };
+    var add = function (s) {
+      if (!s || !s.v || seen[s.k]) return;
+      var n = parseFloat(String(s.v).replace(',', '.'));
+      if (!isNaN(n) && n <= 0 && String(s.v).indexOf(':') < 0) return;   // a 0 says nothing
+      if (s.k === 'Calories' && n < 20) return;
+      seen[s.k] = 1;
+      pool.push(s);
+    };
     var dist = a.dist || lg.distance_km;
     if (dist) add({ k: 'Distance', v: Number(dist).toFixed(dist >= 100 ? 0 : 1), u: 'km' });
-    if (a.dur != null) add({ k: 'Time', v: hhmm(a.dur), u: '' });
+    if (a.dur > 0) add({ k: 'Time', v: hhmm(a.dur), u: '' });
     var rows = (shareTrack && shareTrack.date === x.date) ? shareTrack.stats : [];
     var row = function (l) { return (rows.filter(function (r) { return r[0] === l; })[0] || [])[1]; };
     if (fam === 'bike') {
@@ -5426,10 +5442,12 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     var ctx = cv.getContext('2d');
     ctx.clearRect(0, 0, W, H);
     if (img) { ctx.fillStyle = '#06080a'; ctx.fillRect(0, 0, W, H); shareTopo(ctx, W, H); }
-    var white = function (a) { return 'rgba(255,255,255,' + a + ')'; };
-    // On someone's photo the type needs a soft shadow to read; on the dark card it doesn't.
+    // Overlay ink (Jamie, 17 Oct 2026): light type for dark photos, dark for bright ones.
+    var dark = !img && o.ink === 'dark';
+    var white = function (a) { return 'rgba(' + (dark ? '11,13,16' : '255,255,255') + ',' + a + ')'; };
+    // On someone's photo the type needs a soft halo to read; on the dark card it doesn't.
     var shadow = function (on) {
-      ctx.shadowColor = on && !img ? 'rgba(0,0,0,.45)' : 'transparent';
+      ctx.shadowColor = on && !img ? (dark ? 'rgba(255,255,255,.55)' : 'rgba(0,0,0,.45)') : 'transparent';
       ctx.shadowBlur = on && !img ? 18 : 0;
     };
     shadow(true);
@@ -5450,7 +5468,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     }
     // The picture: the route if there is one, else the session's effort profile.
     var top = img ? 320 : 160, boxH = img ? 540 : 470;
-    if (o.shape && o.shape.length > 3) {
+    if (o.pic !== 'graph' && o.shape && o.shape.length > 3) {
       var xs = o.shape.map(function (p) { return p[0]; }), ys = o.shape.map(function (p) { return p[1]; });
       var mnx = Math.min.apply(null, xs), mxx = Math.max.apply(null, xs);
       var mny = Math.min.apply(null, ys), mxy = Math.max.apply(null, ys);
@@ -5511,9 +5529,10 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     });
     // Watermark: the Peak mark beside the word, as in the app's masthead.
     var mk = 104, mTop = H - (img ? 70 : 52) - mk, wx = P;
-    if (shareMark && shareMark.c) {
+    var mc = shareMark && (dark ? shareMark.d : shareMark.c);
+    if (mc) {
       ctx.globalAlpha = img ? .95 : .92;
-      ctx.drawImage(shareMark.c, P - 6, mTop, mk, mk);
+      ctx.drawImage(mc, P - 6, mTop, mk, mk);
       ctx.globalAlpha = 1;
       wx = P + mk + 8;
     }
@@ -5541,7 +5560,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       kicker: dow(x.date) + ' ' + dnum(x.date) + ' ' +
         new Date(x.date + 'T12:00:00').toLocaleDateString('en-GB', { month: 'short' }) +
         (sportWord(pl.sport || a.type || x.sport) ? ' · ' + sportWord(pl.sport || a.type || x.sport) : ''),
-      stats: shr.pick, shape: a.shape, prof: profFor({ date: x.date, sport: x.sport, prof: a.prof }) || a.prof
+      ink: shr.ink, pic: shr.pic, stats: shr.pick, shape: a.shape, prof: shr.prof
     });
     shr.file = null;
     var stamp = shr.stamp = Date.now();
@@ -5559,7 +5578,11 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
 
   function openShare(x, fam) {
     var pool = sharePool(x, fam);
-    shr = { x: x, fam: fam, pool: pool, pick: shareDefaults(pool), mode: 'image', file: null };
+    var a = x.act || {};
+    var prof = profFor({ date: x.date, sport: x.sport, prof: a.prof }) || a.prof || null;
+    var both = !!(a.shape && a.shape.length > 3 && prof && prof.length);
+    shr = { x: x, fam: fam, pool: pool, pick: shareDefaults(pool), mode: 'image', ink: 'light',
+            pic: a.shape && a.shape.length > 3 ? 'route' : 'graph', prof: prof, file: null };
     var el = document.createElement('div');
     el.className = 'shr';
     el.id = 'shr';
@@ -5567,6 +5590,11 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       '<header class="shr-h"><h2>Share</h2><button type="button" class="dr-x" id="shrX" aria-label="Close">✕</button></header>' +
       '<div class="seg sub shr-m"><button type="button" data-m="image" aria-selected="true">Image</button>' +
       '<button type="button" data-m="overlay" aria-selected="false">Overlay</button></div>' +
+      // Route or effort graph on the card (Jamie, 17 Oct 2026), only when there is a choice.
+      (both ? '<div class="seg sub shr-g"><button type="button" data-g="route" aria-selected="true">Route</button>' +
+        '<button type="button" data-g="graph" aria-selected="false">Graph</button></div>' : '') +
+      '<div class="seg sub shr-i" hidden><button type="button" data-i="light" aria-selected="true">Light</button>' +
+      '<button type="button" data-i="dark" aria-selected="false">Dark</button></div>' +
       '<div class="shr-cvw"><canvas id="shrCv" class="shr-cv"></canvas></div>' +
       '<p class="shr-k">Pick up to ' + SHARE_MAX + ' stats</p><div class="shr-c" id="shrChips"></div>' +
       '<div class="btns shr-b"><button type="button" id="shrGo">Share</button>' +
@@ -5581,6 +5609,22 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
         shr.mode = b.getAttribute('data-m');
         el.querySelectorAll('.shr-m button').forEach(function (o) { o.setAttribute('aria-selected', o === b); });
         $('#shrCv').classList.toggle('see-through', shr.mode === 'overlay');
+        el.querySelector('.shr-i').hidden = shr.mode !== 'overlay';
+        shareRender();
+      };
+    });
+    el.querySelectorAll('.shr-g button').forEach(function (b) {
+      b.onclick = function () {
+        shr.pic = b.getAttribute('data-g');
+        el.querySelectorAll('.shr-g button').forEach(function (o) { o.setAttribute('aria-selected', o === b); });
+        shareRender();
+      };
+    });
+    el.querySelectorAll('.shr-i button').forEach(function (b) {
+      b.onclick = function () {
+        shr.ink = b.getAttribute('data-i');
+        el.querySelectorAll('.shr-i button').forEach(function (o) { o.setAttribute('aria-selected', o === b); });
+        $('#shrCv').classList.toggle('light-bg', shr.ink === 'dark');
         shareRender();
       };
     });
@@ -6482,6 +6526,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.030", "2026-10-17", "Share cards: choose the route or the effort graph, and light or dark type for the overlay so it reads on bright photos too. Fixed: a session with an accidental second start the same day (a few seconds long) took that one\u2019s time and heart rate.", 0],
     ["4.029", "2026-10-17", "Share cards carry the Peak logo beside the name.", 0],
     ["4.028", "2026-10-17", "Strength sessions you can follow and log: tap a strength session, Start, and each exercise shows from two angles with how it should feel; log weight and reps for every set (each leg on its own), rest timer, any order when kit is busy. It goes into your watch\u2019s session in Intervals.icu, and next time\u2019s weights come from it. Physio sessions are logged as set. Pilot: Jamie and Fred", 1],
     ["4.027", "2026-10-17", "Share a finished session: the share button on a done session makes an image with your key stats on the dark map background, or a see-through overlay to put on your own photo for Instagram or Strava. Pick up to four stats. Over-unders and ramp tests now show each over, under and step in the session chart.", 0],

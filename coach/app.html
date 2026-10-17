@@ -16,7 +16,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <!-- Glass style (glass.css) and Plus Jakarta Sans: the only look since 3.78 (Jamie,
      14 Oct 2026). Set before first paint. -->
-<link rel="stylesheet" href="glass.css?v=189">
+<link rel="stylesheet" href="glass.css?v=190">
 <script>try{document.documentElement.classList.add('glass');
 var gf="jakarta";document.documentElement.setAttribute("data-font",gf);
 var GF={inter:'Inter:wght@400;500;600;700',manrope:'Manrope:wght@400;500;600;700',jakarta:'Plus+Jakarta+Sans:wght@400;500;600;700'};
@@ -1311,12 +1311,15 @@ body.drawn{overflow:hidden}
 .dr-sh{display:grid;place-items:center;padding:0}
 .dr-sh svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .shr{position:fixed;inset:0;z-index:1000;background:rgba(10,12,16,.45);display:flex;align-items:flex-end;justify-content:center}
-.shr-p{box-sizing:border-box;min-width:0;background:var(--paper,#fff);width:100%;max-width:520px;max-height:94vh;overflow-y:auto;
+.shr-p{box-sizing:border-box;min-width:0;background:#f4f5f7;width:100%;max-width:520px;max-height:94vh;overflow-y:auto;
   border-radius:18px 18px 0 0;padding:16px 18px calc(18px + env(safe-area-inset-bottom,0px));
   box-shadow:0 -8px 30px rgba(0,0,0,.18)}
 .shr-h{display:flex;align-items:center;margin-bottom:12px}
 .shr-h h2{margin:0;font-size:18px;font-weight:600}
 .shr-m{margin:0 0 12px}
+.shr-i,.shr-g{margin:-4px 0 12px}
+.shr-i[hidden]{display:none}
+.shr-cv.see-through.light-bg{background:#e9ebee repeating-conic-gradient(#f6f7f8 0 25%,#dfe2e6 0 50%) 0 0/24px 24px}
 .shr-cvw{display:flex;justify-content:center}
 .shr-cv{display:block;width:auto;height:auto;max-width:100%;max-height:52vh;border-radius:12px}
 .shr-cv.see-through{background:#8a8f96 repeating-conic-gradient(#9aa0a7 0 25%,#7b8188 0 50%) 0 0/24px 24px}
@@ -1510,6 +1513,6 @@ html body .shr .shr-b button:first-child{background:var(--ink);color:#fff;border
 <script src="figure.js?v=188" defer></script>
 <script src="exercise-anims.js?v=188" defer></script>
 <script src="strength-player.js?v=188" defer></script>
-<script src="app.js?v=189" defer></script>
+<script src="app.js?v=190" defer></script>
 </body>
 </html>
