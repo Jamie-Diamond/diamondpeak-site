@@ -5,7 +5,7 @@
 `performance` in the athlete's training data:
 
     {"asOf": iso, "run": {
-        "races":       race results (lib/run_model.detect_races), last four years
+        "races":       race results (lib/run_model.detect_races), last two years
         "k":           {"k", "pairs", "own"} - how much they slow as races get longer
         "predictions": {"5k" | "10k" | "half_marathon" | "marathon": {now_s, model}}
         "weeklyKm":    mean running km a week, last 8 weeks
@@ -19,7 +19,7 @@
 and appends one row per week to athletes/<slug>/performance-history.json, so the trend
 of each determinant is kept for the coach and for the "where to improve" work next.
 
-COST. The race history needs four years of activities, which is one large call. It is
+COST. The race history needs two years of activities, which is one large call. It is
 fetched in full at most weekly (FULL_EVERY_DAYS) and topped up with the last
 OVERLAP_DAYS otherwise, into athletes/<slug>/run-history.json, keeping only the fields
 the model reads. The pace curve is one small call per build. Every failure returns
@@ -34,7 +34,7 @@ from pathlib import Path
 import run_model as rm
 
 BASE = Path(__file__).resolve().parent.parent
-HISTORY_DAYS = 4 * 365 + 60          # k window plus the efficiency window before it
+HISTORY_DAYS = rm.K_WINDOW_DAYS + 60  # race window plus the efficiency window before it
 FULL_EVERY_DAYS = 7
 OVERLAP_DAYS = 7
 KEEP_WEEKS = 156
@@ -61,7 +61,7 @@ def _load(p: Path, default):
 
 
 def activities(slug: str, client, today: date) -> list:
-    """Four years of slim activities, from the cache topped up with recent ones."""
+    """Two years of slim activities, from the cache topped up with recent ones."""
     path = _athlete_dir(slug) / "run-history.json"
     cache = _load(path, {})
     full = rm._d(cache.get("full"))

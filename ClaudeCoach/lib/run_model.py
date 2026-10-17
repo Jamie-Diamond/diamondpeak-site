@@ -64,9 +64,12 @@ K_PRIOR_WEIGHT = 0.3             # shrink a personal k towards DEFAULT_K on thin
 K_BOUNDS = (1.01, 1.20)
 K_PAIR_MIN_RATIO = 1.8           # distances must differ by this much to read a k
 K_PAIR_GAP_DAYS = 120            # e-folding gap between the two races of a pair
-K_WINDOW_DAYS = 4 * 365
 
-RACE_WINDOW_DAYS = 730           # races older than two years don't set "now"
+# Nothing older than two years predicts (Jamie, 17 Oct 2026: "you can't use races from
+# 2024 to predict 2027, but it's useful for validating the model"). Older races are for
+# backtesting only (the 2023-25 races are how the 2.5% error was measured).
+RACE_WINDOW_DAYS = 730           # sets "now"
+K_WINDOW_DAYS = RACE_WINDOW_DAYS  # sets the fade with distance
 RECENCY_HALF_LIFE_DAYS = 270
 DIST_SIGMA = 0.8                 # nearness of a race to the target, in ln(distance)
 
