@@ -3577,6 +3577,8 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     fitness: 'ctl', climbing: 'bike_ftp', day: 'longest_ride_h'
   };
 
+  var SPORT_NAME = { run: 'Running', bike: 'Cycling', tri: 'Triathlon', swim: 'Swimming' };
+
   // Which kind of Goals card this is, from its rows (lib/limiters.py): climbing = bike,
   // swim = triathlon, anything else = run. null when there is no card.
   function limitersKind(L) {
@@ -3597,20 +3599,26 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   }
 
   /* history: performance.history (weekly rows, oldest first, any field may be missing).
-     L: the Goals card (season.limiters) or undefined. Returns the panels to draw, in
+     L: the Goals card (season.limiters) or undefined. view (optional): {sport, single} -
+     sport 'run' | 'bike' | 'tri' picks that panel set instead of the goal card's own;
+     single = one sport picked on the Fitness chips, which relabels Fitness, because the
+     history's ctl is every sport's. The limiter highlight applies only when the shown
+     sport is the goal's (a triathlon goal counts for run, bike and tri alike).
+     Returns the panels to draw, in
      order: {key, label, unit, dp, fixed, points: [{week, t, v}], highlight, tick, lo, hi,
      x0, x1}. points holds measured weeks only; a gap in the weeks stays a gap (the chart
      breaks the line there). x0/x1 are the whole history's first and last week, the same
      for every panel. tick: the first Garmin week of a VO2max series that was estimated
      from heart rate before it, else null. Fewer than 3 points: no panel. */
-  function factorPanels(history, L) {
+  function factorPanels(history, L, view) {
     var rows = (history || []).filter(function (r) { return r && r.week; });
-    var kind = limitersKind(L), hot = limiterFactor(L, kind);
+    var kind = limitersKind(L), shown = (view && view.sport) || kind;
+    var hot = kind && (kind === shown || kind === 'tri') ? limiterFactor(L, kind) : null;
     var stamp = function (w) { return Date.parse(w + 'T12:00:00'); };
     var x0 = rows.length ? stamp(rows[0].week) : 0;
     var x1 = rows.length ? stamp(rows[rows.length - 1].week) : 0;
     var out = [];
-    FACTOR_SETS[kind || 'any'].forEach(function (key) {
+    FACTOR_SETS[shown || 'any'].forEach(function (key) {
       var f = FACTORS[key], pts = [], src = [];
       rows.forEach(function (r) {
         var v = r[key];
@@ -3629,7 +3637,8 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
         }
       }
       var vals = pts.map(function (q) { return q.v; });
-      out.push({ key: key, label: f.label, unit: f.unit, dp: f.dp, fixed: !!f.fixed,
+      out.push({ key: key, label: key === 'ctl' && view && view.single ? 'Fitness (all sports)' : f.label,
+        unit: f.unit, dp: f.dp, fixed: !!f.fixed,
         points: pts, highlight: key === hot, tick: tick,
         lo: Math.min.apply(null, vals), hi: Math.max.apply(null, vals), x0: x0, x1: x1 });
     });
@@ -3719,18 +3728,45 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       '</div>';
   }
 
+  /* Which sport the card is about: the Fitness chips (state.fitSport - 'all', or the
+     sport's own name) when one is picked, else the goal's sport, else - no Goals card -
+     running if there is anything run-specific to chart, otherwise cycling. Fitness is not
+     run-specific (it is every sport's), so it does not count. */
+  function factorView(d) {
+    var L = (d.season || {}).limiters, kind = limitersKind(L);
+    var pick = state.fitSport === 'all' ? 'all' : family(state.fitSport);
+    if (pick === 'swim' || pick === 'run' || pick === 'bike') {
+      return { sport: pick, single: true, goal: false };
+    }
+    if (kind) return { sport: kind, single: false, goal: true };
+    var hist = (d.performance || {}).history;
+    var hasRun = factorPanels(hist, null, { sport: 'run' }).some(function (p) { return p.key !== 'ctl'; });
+    return { sport: hasRun ? 'run' : 'bike', single: false, goal: false };
+  }
+
   var fpShown = [];
   function factorCard(d) {
     fpShown = [];
     try {
-      var panels = factorPanels((d.performance || {}).history, (d.season || {}).limiters);
-      if (!panels.length) return '';
+      var v = factorView(d), L = (d.season || {}).limiters;
+      var title = 'What\u2019s holding you back, over time \u00b7 ' + SPORT_NAME[v.sport] +
+        (v.goal ? ' (your goal sport)' : '');
+      // Swim keeps its card, so picking it does not make the card vanish without a word.
+      if (v.sport === 'swim') {
+        return card(title, '<div class="empty">Swim factors aren\u2019t tracked here yet.</div>');
+      }
+      var panels = factorPanels((d.performance || {}).history, L, v);
+      if (!panels.length) {
+        // Quiet when nothing is picked; once a sport is, say there is nothing to draw.
+        return v.single ? card(title, '<div class="empty">Not enough ' + SPORT_NAME[v.sport].toLowerCase() +
+          ' history yet to draw these.</div>') : '';
+      }
       fpShown = panels;
       var vo2 = panels.filter(function (p) { return p.tick; })[0];
-      return card('What’s holding you back, over time',
+      return card(title,
         '<div class="figures two">' + panels.map(factorTile).join('') + '</div>',
         { foot: 'Each point is how that factor stood that week, rebuilt from Intervals.icu for the past year.' +
-          (vo2 ? ' VO2max: Garmin’s estimate from ' + fpDate(vo2.tick.week, true) +
+          (vo2 ? ' VO2max: Garmin\u2019s estimate from ' + fpDate(vo2.tick.week, true) +
             '; heart-rate estimate before.' : '') });
     } catch (err) {
       // A card that cannot be built costs the card, not the whole Trends tab.
@@ -5112,7 +5148,12 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     var lev = (L.levers || []).filter(function (x) {
       return x && x.label && x.minutes != null && Math.round(Number(x.minutes)) >= 1;
     }).slice(0, 3);
-    return card('What\u2019s holding you back', '<p class="gv' + (L.limiter ? ' warn' : '') + '" style="margin:12px 16px">' +
+    // Which sport and which race or goal this is about (Jamie, 17 Oct 2026): the A race's
+    // name, else the goal's label, else just the sport.
+    var sv = (state.data || {}).season || {};
+    var what = [SPORT_NAME[limitersKind(L)], (sv.aRace && sv.aRace.name) || (sv.goal && sv.goal.label)];
+    return card(['What\u2019s holding you back'].concat(what.filter(Boolean)).join(' \u00b7 '),
+      '<p class="gv' + (L.limiter ? ' warn' : '') + '" style="margin:12px 16px">' +
       esc(L.headline) + '</p><table class="tbl"><thead><tr><th></th><th>You</th><th>Goal needs</th><th></th>' +
       '</tr></thead><tbody>' + rows + '</tbody></table>' +
       (L.fix ? '<p class="gv" style="margin:10px 16px 12px">How to fix it: ' + esc(L.fix) + '</p>' : '') +
@@ -6877,6 +6918,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.043", "2026-10-17", "\u2018What\u2019s holding you back\u2019 says which sport it is about: on Trends it follows the Ride / Run / Swim picker (All is your goal sport), and on Goals the title names the sport and the race", 0],
     ["4.042", "2026-10-17", "Goals: a goal can run with no set target, to see how far you can take it. The coach won\u2019t ask for one", 0],
     ["4.041", "2026-10-17", "Trends: \u2018What\u2019s holding you back, over time\u2019 \u2013 each factor week by week for the past year, the limiter highlighted. Goals: where the minutes are \u2013 what a realistic gain in each is worth on race day", 0],
     ["4.040", "2026-10-17", "Strength sessions: one look for every session (a physio's is just one with exact sets, reps and weights), nothing added on top of physio sessions, and a cleaner session sheet: time, exercises and Load in one row, a proper Start button, the exercise list underneath. Pilot: Jamie and Fred", 1],
