@@ -5436,8 +5436,9 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   }
 
   function shareDraw(cv, o) {
-    // o: { mode: 'overlay'|'image', title, kicker, stats, shape, prof }
-    var img = o.mode === 'image', W = 1080, H = img ? 1350 : 1080, P = 84;
+    // o: { mode: 'overlay'|'image', ink, pic, title, kicker, stats, shape, prof }
+    // Square, both kinds (Jamie, 17 Oct 2026: "it should be a 1:1 aspect ratio").
+    var img = o.mode === 'image', W = 1080, H = 1080, P = 84;
     cv.width = W; cv.height = H;
     var ctx = cv.getContext('2d');
     ctx.clearRect(0, 0, W, H);
@@ -5451,23 +5452,25 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       ctx.shadowBlur = on && !img ? 18 : 0;
     };
     shadow(true);
-    var y = img ? 150 : 110;
+    var y = 110, titleEnd = y;
     ctx.fillStyle = white(.62);
     ctx.font = '500 26px "DM Mono", monospace';
     ctx.fillText(o.kicker.toUpperCase(), P, y);
     if (img && o.title) {
       ctx.fillStyle = white(.96);
-      ctx.font = '600 56px "Plus Jakarta Sans", system-ui, sans-serif';
+      ctx.font = '600 52px "Plus Jakarta Sans", system-ui, sans-serif';
       var words = String(o.title).split(/\s+/), line = '', lines = [];
       words.forEach(function (w) {
         var t = line ? line + ' ' + w : w;
         if (ctx.measureText(t).width > W - 2 * P && line) { lines.push(line); line = w; } else line = t;
       });
       if (line) lines.push(line);
-      lines.slice(0, 2).forEach(function (l, i) { ctx.fillText(l, P, y + 74 + i * 66); });
+      lines = lines.slice(0, 2);
+      lines.forEach(function (l, i) { ctx.fillText(l, P, y + 70 + i * 62); });
+      titleEnd = y + 70 + (lines.length - 1) * 62;
     }
     // The picture: the route if there is one, else the session's effort profile.
-    var top = img ? 320 : 160, boxH = img ? 540 : 470;
+    var top = img ? titleEnd + 50 : 160, boxH = 650 - top;
     if (o.pic !== 'graph' && o.shape && o.shape.length > 3) {
       var xs = o.shape.map(function (p) { return p[0]; }), ys = o.shape.map(function (p) { return p[1]; });
       var mnx = Math.min.apply(null, xs), mxx = Math.max.apply(null, xs);
@@ -5489,7 +5492,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     } else if (o.prof && o.prof.length) {
       var tot = o.prof.reduce(function (a, b) { return a + (b[0] || 0); }, 0) || 1;
       var mx = Math.max.apply(null, o.prof.map(function (b) { return b[1] || 0; })) || 100;
-      var ph = 300, base = top + (boxH + ph) / 2, x = P;
+      var ph = Math.min(300, boxH - 30), base = top + (boxH + ph) / 2, x = P;
       shadow(false);
       o.prof.forEach(function (b) {
         var w = (W - 2 * P) * (b[0] || 0) / tot, hgt = Math.max(10, (b[1] || 0) / mx * ph);
@@ -5503,7 +5506,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     }
     // The stats: up to four, value large, label small above it.
     var st = o.stats.slice(0, SHARE_MAX), n = st.length || 1, cw = (W - 2 * P) / n;
-    var sy = img ? 990 : 790;
+    var sy = 770;
     st.forEach(function (s, i) {
       var sx = P + i * cw;
       var lx = sx;
@@ -5528,7 +5531,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       }
     });
     // Watermark: the Peak mark beside the word, as in the app's masthead.
-    var mk = 104, mTop = H - (img ? 70 : 52) - mk, wx = P;
+    var mk = 104, mTop = H - 52 - mk, wx = P;
     var mc = shareMark && (dark ? shareMark.d : shareMark.c);
     if (mc) {
       ctx.globalAlpha = img ? .95 : .92;
@@ -5543,7 +5546,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       ctx.fillStyle = white(.45);
       ctx.font = '500 22px "DM Mono", monospace';
       ctx.textAlign = 'right';
-      ctx.fillText('diamondpeak.uk', W - P, H - 70 - mk / 2 + 8);
+      ctx.fillText('diamondpeak.uk', W - P, mTop + mk / 2 + 8);
       ctx.textAlign = 'left';
     }
     shadow(false);
@@ -6526,6 +6529,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.032", "2026-10-17", "Share cards are square (1:1), both the image and the overlay.", 0],
     ["4.031", "2026-10-17", "Your weekly plan leans its quality sessions toward what\u2019s holding you back (the blueprint still sets the volume, zones and phases)", 0],
     ["4.031", "2026-10-17", "Goals for triathlons: \u2018What\u2019s holding you back\u2019 by leg \u2013 swim, bike, run off the bike \u2013 from your own numbers against the splits your goal needs", 0],
     ["4.030", "2026-10-17", "Share cards: choose the route or the effort graph, and light or dark type for the overlay so it reads on bright photos too. Fixed: a session with an accidental second start the same day (a few seconds long) took that one\u2019s time and heart rate.", 0],
