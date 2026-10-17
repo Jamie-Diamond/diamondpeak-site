@@ -119,6 +119,24 @@ def _cached_get(session, url: str, params: dict | None):
 NOTES_MARK = "Notes"
 
 
+def pace_floor_guard(sport: str, description: str) -> None:
+    """Refuse a run or swim step slower than a sane floor, from ANY source (Jamie, 17 Oct
+    2026). For four months the renderer pushed run warm-ups at 56-64% of threshold pace
+    and swim warm-ups at 58-66% of CSS, and a model writing description text by hand can
+    do the same, so the check sits here, on the two calls every calendar write goes
+    through. Raises primitives.planned_tss.PaceFloorError (a ValueError) before anything
+    is sent. The floors and the parser live with the bands they protect."""
+    if not description:
+        return
+    try:
+        from primitives.planned_tss import assert_pace_floor
+    except ImportError:
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "ironman-analysis"))
+        from primitives.planned_tss import assert_pace_floor
+    assert_pace_floor(sport or "", description)
+
+
 def with_notes(description: str, notes: str) -> str:
     """The event text Intervals.icu keeps: steps first, then the coaching notes.
 
@@ -358,6 +376,7 @@ class IcuClient:
         day_of_week: e.g. 'Monday' — used to sanity-check date arithmetic.
         athlete_timezone: from get_athlete_profile, prevents UTC date bugs.
         """
+        pace_floor_guard(sport, description)     # raises before anything is sent
         date_str = event_date if "T" in event_date else f"{event_date}T00:00:00"
         # A day the athlete moved indoors (lib/indoor.py, Peak's Ride indoors button)
         # stays indoors when that day is planned again.
@@ -388,6 +407,11 @@ class IcuClient:
         """Update a planned event. NOTE: mark_as_done does NOT create an activity
         (verified 5 Jul 2026) — use create_manual_activity for that."""
         payload = dict(fields)
+        # Only a description the CALLER sends is checked: a notes-only or type-only edit
+        # must not be refused over steps it does not touch (plan_audit flags those).
+        if payload.get("description"):
+            sport = payload.get("type") or (self.get_event(event_id).get("type") or "")
+            pace_floor_guard(sport, payload["description"])
         if "description_raw" in payload:          # dropped by Intervals.icu: see with_notes
             raw = payload.pop("description_raw") or ""
             base = payload["description"] if "description" in payload else (self.get_event(event_id).get("description") or "")

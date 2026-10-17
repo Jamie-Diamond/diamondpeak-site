@@ -18,6 +18,7 @@ tune against logged history if they drift from ICU's post-hoc numbers.
 from __future__ import annotations
 
 import re
+import sys
 
 from primitives.modulation import classify_session_type
 
@@ -57,10 +58,12 @@ _ZONE_IF = {
     # 0.60 / drill 0.68 with the faster bands; pull 0.85 -> 0.80 (it now renders at aerobic
     # pace, not near steady, and 0.85 made a pull set count as quality).
     # scripts/stage1-plan.py:_ZLABEL_IF swim z1/z2 must equal recovery/easy here.
+    # `rest` is standing at the wall between reps (Jamie, 17 Oct 2026, "Rest"): no pace
+    # target is pushed, so Intervals.icu scores it at zero, and so does this.
     "swim": {"recovery": 0.65, "easy": 0.78, "warmup": 0.75, "cooldown": 0.72,
              "aerobic": 0.80, "drill": 0.72, "kick": 0.70, "pull": 0.80,
              "steady": 0.88, "race": 0.95, "css": 1.00, "threshold": 1.00,
-             "speed": 1.08, "sprint": 1.12},
+             "speed": 1.08, "sprint": 1.12, "rest": 0.0},
     # Run easy blocks re-centred 17 Oct 2026 with _ZONE_BAND below (Jamie: "what the hell
     # is going on with Jamie's pacing").
     "run":  {"recovery": 0.72, "easy": 0.83, "z2": 0.83, "warmup": 0.74,
@@ -132,7 +135,8 @@ def segment_if(sport: str, zone: str) -> float:
     table = _ZONE_IF.get(sp, {})
     if z not in table:
         z = _TID_ALIAS.get(sp, {}).get(z, z)
-    return table.get(z, _ZONE_DEFAULT_IF.get(sp, 0.75))
+    v = table.get(z)
+    return v if v is not None else _ZONE_DEFAULT_IF.get(sp, 0.75)
 
 
 # %-of-threshold bands per zone for STRUCTURED workout steps (what syncs to
@@ -264,7 +268,9 @@ _HR_SATISFIES_AT_PCT = 97
 # target on a step, so each %-range is read SEPARATELY with its own unit word: the
 # first version of this matched once per line and read "Pace ... LTHR" as one HR
 # target, which mis-scored every dual-target step.
-_STEP_LINE_RE = re.compile(r"^-\s*\d+(?:\.\d+)?\s*[ms]\b", re.IGNORECASE)
+# "Kick" may lead the step: render_workout marks swim kick steps that way so the pace
+# floor below can exempt them.
+_STEP_LINE_RE = re.compile(r"^-\s*(?:kick\s+)?\d+(?:\.\d+)?\s*[ms]\b", re.IGNORECASE)
 _TARGET_RE = re.compile(r"(\d+)\s*-\s*(\d+)\s*%\s*([A-Za-z]*)", re.IGNORECASE)
 
 
@@ -372,6 +378,78 @@ def name_intensity_mismatch(sport: str, name: str, description: str) -> dict | N
     return {"claim": word, "required": need, "found": found}
 
 
+# ── pace floor: the other direction ─────────────────────────────────────────────
+# name_intensity_mismatch catches a hard session built easy. Nothing caught an easy
+# step built absurdly slow, and for four months every run warm-up went to the watch at
+# 56-64% of threshold pace (6:18-7:12/km off a 4:02 threshold) and swim warm-ups at 58-66%
+# of CSS (Jamie, 17 Oct 2026). A "% Pace" step below these floors is refused at push
+# (lib/icu_api.py), clamped up with a warning at render (render_workout), and flagged on
+# the live calendar by lib/plan_audit.py.
+#   run  68% = the bottom of the recovery band (_ZONE_BAND run recovery 68-76).
+#   swim 78% = the bottom of the drill band, the slowest swimming step (78-86).
+# Swim KICK is the one exception: genuinely slow (64-74% of CSS), and render_workout
+# writes it as "- Kick 5m 64-74% Pace" so the step says what it is. Rest between reps has
+# no pace target at all ("- Rest 30s"), so it never reaches this check.
+PACE_FLOOR_PCT = {"run": 68, "swim": 78}
+_PACE_TARGET_RE = re.compile(r"(\d+(?:\.\d+)?)(?:\s*-\s*(\d+(?:\.\d+)?))?\s*%\s*pace\b",
+                             re.IGNORECASE)
+_KICK_RE = re.compile(r"\bkick", re.IGNORECASE)
+
+
+class PaceFloorError(ValueError):
+    """A run or swim step slower than PACE_FLOOR_PCT, refused before it reaches a watch."""
+
+
+def slow_pace_steps(sport: str, description: str) -> list[dict]:
+    """Step lines whose "% Pace" target starts below the sport's floor.
+
+    [{line, pct, floor}], empty when the sport has no floor (bike, strength) or every
+    step is at or above it. Reads the LOW edge of each range: a 64-74% step asks the
+    athlete to go as slow as 64%. Only lines starting "-" are steps; notes written by
+    icu_api.with_notes have their dashes turned into bullets, so prose is never read.
+    """
+    floor = PACE_FLOOR_PCT.get(_norm_sport(sport))
+    if floor is None:
+        return []
+    out = []
+    for raw in (description or "").splitlines():
+        line = raw.strip()
+        if not line.startswith("-"):
+            continue
+        if _norm_sport(sport) == "swim" and _KICK_RE.search(line):
+            continue
+        for m in _PACE_TARGET_RE.finditer(line):
+            lo = float(m.group(1))
+            if m.group(2) is not None:
+                lo = min(lo, float(m.group(2)))
+            if lo < floor:
+                out.append({"line": line, "pct": int(lo) if lo == int(lo) else lo,
+                            "floor": floor})
+                break
+    return out
+
+
+def pace_floor_message(sport: str, bad: list[dict]) -> str:
+    """One readable refusal for a list from slow_pace_steps."""
+    sp = _norm_sport(sport)
+    first = bad[0]
+    more = f" (and {len(bad) - 1} more)" if len(bad) > 1 else ""
+    fix = ("run steps start at 68% of threshold pace (recovery 68-76%)" if sp == "run" else
+           "swim steps start at 78% of CSS (drill 78-86%, warm-up/recovery 85-91%); rest "
+           "between reps is written '- Rest 30s' with no target, and kick steps start "
+           "'- Kick'")
+    return (f"{sport} step '{first['line']}' is {first['pct']}% of threshold pace, below "
+            f"the {first['floor']}% floor{more}. That is slower than any easy pace "
+            f"(Jamie, 17 Oct 2026): {fix}.")
+
+
+def assert_pace_floor(sport: str, description: str) -> None:
+    """Raise PaceFloorError if any step is slower than the floor. For every push path."""
+    bad = slow_pace_steps(sport, description)
+    if bad:
+        raise PaceFloorError(pace_floor_message(sport, bad))
+
+
 # RPE-only rendering (27 Sep 2026, lib/baseline.py). A new athlete's sport with no
 # TESTED threshold is prescribed by feel: a "% Pace" step would resolve against a guessed
 # (or absent) Intervals.icu threshold and put a wrong number on the watch. Each step keeps
@@ -425,7 +503,7 @@ def render_workout(sport: str, segments: list, name: str = "", rpe_only: bool = 
     sp = _norm_sport(sport)
     suffix = "" if sp == "bike" else " Pace"   # bare % = power; "% Pace" = pace
     claim_zone = claimed_zone(sport, name) if name else None
-    lines, flat = [], []
+    lines, flat, clamped = [], [], []
 
     def _zone_of(seg):
         """The segment's zone, with a coarse TID label narrowed to the name's claim.
@@ -436,62 +514,98 @@ def render_workout(sport: str, segments: list, name: str = "", rpe_only: bool = 
             return zone
         return _refine_to_claim(sport, zone, claim_zone)
 
-    def _line(seg):
-        """Return the structured-text line for a segment, or None; never mutates flat.
+    def _resolved(zone) -> str:
+        """The _ZONE_BAND key a zone renders through (a TID label via its alias)."""
+        z = (zone or "").lower().strip()
+        return z if z in _ZONE_BAND.get(sp, {}) or z == "rest" else _TID_ALIAS.get(sp, {}).get(z, z)
+
+    def _line(seg, rest: bool = False):
+        """(structured-text line or None, minutes, flat entry). Never mutates flat.
 
         Sub-minute segments (e.g. a 15-20s swim rest) used to round to 0 minutes
         and silently vanish from the pushed workout, leaving no rest cue on the
         watch (confirmed 2026-07-09). Durations under 60s now render in seconds —
         ICU's structured-text format accepts "Ns" steps same as "Nm".
+
+        `rest` (swim only): standing at the wall between reps (Jamie, 17 Oct 2026, chose
+        "Rest" over swimming the recovery). Rendered "- Rest 30s": text then duration and
+        NO target, the form baseline.py's CSS test pushes ("- Rest 15s", verified live 27
+        Sep 2026; Intervals.icu stores {"text": "Rest", "duration": 15}). A step with no
+        target gets no zone time and no Load on Intervals.icu (Jamie's 6 May 2026 swim:
+        its 280 s of target-less rests sit in no zone), so it is scored here at IF 0.
         """
         raw_min = float(seg.get("minutes") or seg.get("min") or 0)
         secs = int(round(raw_min * 60))
         if secs <= 0:
-            return None, 0
+            return None, 0, None
+        mins = secs / 60.0 if secs < 60 else int(round(secs / 60.0))
+        dur = f"{secs}s" if secs < 60 else f"{mins}m"
+        if rest:
+            return f"- Rest {dur}", mins, {"minutes": mins, "zone": "rest", "if": None}
         zone = _zone_of(seg)
-        lo, hi = (_band(sport, zone, float(seg["if"])) if seg.get("if") is not None
+        explicit_if = seg.get("if")
+        lo, hi = (_band(sport, zone, float(explicit_if)) if explicit_if is not None
                   else _band(sport, zone))
+        # PACE FLOOR (Jamie, 17 Oct 2026). No run step below 68% of threshold pace and no
+        # swim step below 78% of CSS (kick excepted) leaves here: an explicit low `if` or
+        # an unknown zone's default would otherwise push one. Clamped, keeping the band's
+        # width, and said on stderr; the push path refuses outright (assert_pace_floor).
+        floor = PACE_FLOOR_PCT.get(sp)
+        is_kick = sp == "swim" and _resolved(zone) == "kick"
+        if floor and lo < floor and not is_kick:
+            was = (lo, hi)
+            lo, hi = floor, max(hi, floor + (hi - lo))
+            clamped.append({"zone": zone, "was": f"{was[0]}-{was[1]}%", "now": f"{lo}-{hi}%"})
+            print(f"[planned_tss] WARNING: {sport} {zone or 'step'} rendered at "
+                  f"{was[0]}-{was[1]}% pace, below the {floor}% floor; clamped to "
+                  f"{lo}-{hi}%", file=sys.stderr)
+            if sp == "run":           # run's IF is its %pace: score what is pushed
+                explicit_if = round((lo + hi) / 200, 3)
+        entry = {"minutes": mins, "zone": zone, "if": explicit_if}
         # NO trailing zone label: a token like "Z2" makes ICU parse the step as power
         # ZONE 2 and discard the explicit %-range target (-> empty chart). The %-range
         # IS the target; the human zone name lives in description_raw.
         if rpe_only:
-            cue = rpe_cue(sport, lo, hi)
-            if secs < 60:
-                return f"- {cue} {secs}s", secs / 60.0
-            mins = int(round(secs / 60.0))
-            return f"- {cue} {mins}m", mins
-        if secs < 60:
-            return f"- {secs}s {lo}-{hi}%{suffix}", secs / 60.0
-        mins = int(round(secs / 60.0))
-        return f"- {mins}m {lo}-{hi}%{suffix}", mins
+            return f"- {rpe_cue(sport, lo, hi)} {dur}", mins, entry
+        # Kick says so on the step ("- Kick 5m 64-74% Pace"): text before the duration is
+        # the step's cue on Intervals.icu, and it is what exempts kick from the floor.
+        cue = "Kick " if is_kick else ""
+        return f"- {cue}{dur} {lo}-{hi}%{suffix}", mins, entry
 
-    def _flat(seg, mins):
-        # The REFINED zone, so the computed TSS is the load of the steps actually pushed.
-        flat.append({"minutes": mins, "zone": _zone_of(seg), "if": seg.get("if")})
+    def _rest_zone(zone) -> bool:
+        return sp == "swim" and _resolved(zone) in ("recovery", "rest")
 
     # Render FLAT — one line per interval, no "Nx" header (ICU's API collapses
     # repeat-header blocks to unique steps; a fully-expanded flat list parses into
     # the correct step sequence and ICU then auto-computes the load — verified).
     for seg in segments:
         if seg.get("repeat") and seg.get("steps"):
+            # A swim recovery INSIDE a repeat block is the rest between reps. A block of
+            # nothing but recovery is a recovery swim, and stays swimming.
+            has_work = any(not _rest_zone(_zone_of(sub)) for sub in seg["steps"])
             for _ in range(int(seg["repeat"])):
                 for sub in seg["steps"]:
-                    line, mins = _line(sub)
+                    zone = _zone_of(sub)
+                    rest = sp == "swim" and (_resolved(zone) == "rest"
+                                             or (has_work and _rest_zone(zone)))
+                    line, mins, entry = _line(sub, rest=rest)
                     if line:
                         lines.append(line)
-                        _flat(sub, mins)
+                        flat.append(entry)
         else:
-            line, mins = _line(seg)
+            rest = sp == "swim" and _resolved(_zone_of(seg)) == "rest"
+            line, mins, entry = _line(seg, rest=rest)
             if line:
                 lines.append(line)
-                _flat(seg, mins)
+                flat.append(entry)
 
     calc = tss_from_segments(sport, [{"minutes": s["minutes"], "zone": s["zone"],
                                       **({"if": s["if"]} if s.get("if") is not None else {})}
                                      for s in flat])
     return {"description": "\n".join(lines), "tss": calc["tss"],
             "duration_min": calc["duration_min"], "avg_if": calc["avg_if"],
-            "steps": len([l for l in lines if l.strip().startswith("-")])}
+            "steps": len([l for l in lines if l.strip().startswith("-")]),
+            **({"pace_floor_clamped": clamped} if clamped else {})}
 
 
 def tss_from_segments(sport: str, segments: list) -> dict:

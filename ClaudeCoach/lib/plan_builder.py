@@ -38,7 +38,8 @@ sys.path.insert(0, str(BASE / "ironman-analysis"))
 sys.path.insert(0, str(BASE / "lib"))
 import ramp as _ramp  # noqa: E402  weekly CTL ramp cap, one rule (lib/ramp.py)
 
-from primitives.planned_tss import render_workout, planned_session_tss  # noqa: E402
+from primitives.planned_tss import (render_workout, planned_session_tss,  # noqa: E402
+                                    assert_pace_floor)
 import coaching_prefs  # noqa: E402
 import fuel_basis  # noqa: E402
 from primitives.nutrition import (fuel_target, last_ride_g_hr,           # noqa: E402
@@ -501,14 +502,21 @@ def push(slug: str, built: dict, replace: bool = True):
     any interpreter flag."""
     from icu_api import IcuClient
     from datetime import date as _d, timedelta as _td
-    cfg = _cfg(slug)
-    c = IcuClient(cfg["icu_athlete_id"], cfg["icu_api_key"])
-    ws = _d.fromisoformat(built["week_start"])
-    pinned = pinned_dates_for(slug, built)
     # Map proposal sports to valid intervals.icu event types (Bike/Brick/Strength are NOT
     # valid ICU types — Brick pushes as a Ride; the run leg is in description_raw).
     icu_type = {"Bike": "Ride", "Brick": "Ride", "Strength": "WeightTraining",
                 "Weights": "WeightTraining"}
+    # PACE FLOOR, the whole week before the first push (Jamie, 17 Oct 2026). push_workout
+    # refuses a too-slow run/swim step itself, but one session refused mid-loop would leave
+    # the sessions before it pushed beside the old week (duplicates). render_workout clamps,
+    # so this only fires on a description that came from somewhere else.
+    for s in built["sessions"]:
+        if not s.get("pinned"):
+            assert_pace_floor(icu_type.get(s["sport"], s["sport"]), s.get("description") or "")
+    cfg = _cfg(slug)
+    c = IcuClient(cfg["icu_athlete_id"], cfg["icu_api_key"])
+    ws = _d.fromisoformat(built["week_start"])
+    pinned = pinned_dates_for(slug, built)
     # SAFE ORDERING: capture the OLD events, PUSH the new ones FIRST, and only delete the
     # old ones once every new push succeeded. If a push fails the old plan is left intact
     # (worst case: transient duplicates), so a failure can NEVER empty the week.

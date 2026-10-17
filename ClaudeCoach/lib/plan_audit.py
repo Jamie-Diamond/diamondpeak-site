@@ -8,7 +8,9 @@ standalone (cron) or right after a generation/replan.
 Invariants (per the planning architecture doc):
   STRUCTURE   every Swim/Run/Ride/Brick session has structured workout steps
               (workout_doc.steps non-empty) — i.e. it will sync to Garmin as a
-              follow-along workout, not a prose note.
+              follow-along workout, not a prose note; its name's claim is met by its
+              steps; and no run/swim step is slower than the pace floor
+              (planned_tss.PACE_FLOOR_PCT, 17 Oct 2026).
   FUELLING    every >90-min ride/brick states the deterministic fuel-target g/hr.
   LONG_RIDE   no ride exceeds the event-anchored long-ride ceiling.
   WEEKLY_LOAD weekly planned TSS is within tolerance of the phase target.
@@ -45,7 +47,8 @@ from primitives.blueprint import current_phase                # noqa: E402
 import fuel_basis                                               # noqa: E402
 import coaching_prefs  # noqa: E402
 from primitives.nutrition import fuel_target, recent_avg_g_hr  # noqa: E402
-from primitives.planned_tss import name_intensity_mismatch     # noqa: E402
+from primitives.planned_tss import (name_intensity_mismatch,    # noqa: E402
+                                    slow_pace_steps, pace_floor_message)
 import planning_pause                                          # noqa: E402
 import baseline as baseline_block                              # noqa: E402
 import plan_tools as pt                                        # noqa: E402
@@ -277,6 +280,14 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
                 f"{nm} ({sport}) — name claims {mm['claim']} but hardest step is "
                 f"{mm['found']}%, short of {mm['required']}%")
             hard_ids.append(f"STRUCTURE:{day}:name_intensity_mismatch:{nm}")
+        # The other direction (Jamie, 17 Oct 2026): a run or swim step slower than any
+        # easy pace. push_workout now refuses these, so this finds what is already on
+        # the calendar from before, or anything that reached it another way. Today on:
+        # a session already done cannot be re-prescribed, so it is not a finding.
+        slow = slow_pace_steps(sport, desc) if day >= today.isoformat() else []
+        if slow:
+            fails["STRUCTURE"].append(f"{nm} ({sport}) — {pace_floor_message(sport, slow)}")
+            hard_ids.append(f"STRUCTURE:{day}:slow_pace_step:{nm}")
         if sport in _FUEL_SPORTS and dur >= 90 and coaching_prefs.fuelling_on(slug):
             g = re.findall(r"(\d+)\s*g\s*(?:CHO\s*)?/?\s*hr", desc, re.I)
             if not g:

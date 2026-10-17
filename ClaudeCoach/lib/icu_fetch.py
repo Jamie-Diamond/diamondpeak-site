@@ -319,6 +319,27 @@ def _pin_after_write(args, client, fields: dict, result, segments) -> None:
             pass
 
 
+def _floor_checked(args, write):
+    """Run a push/edit; a step slower than the pace floor (IcuClient.pace_floor_guard,
+    Jamie 17 Oct 2026) exits 2 with the reason, like every other refusal here, and is
+    logged for the dev inbox: something wrote an absurdly slow step and that is a defect
+    to find, whoever wrote it. Nothing has been sent when this fires."""
+    try:
+        return write()
+    except ValueError as e:
+        if type(e).__name__ != "PaceFloorError":
+            raise
+        print(f"REFUSED: {e} Fix the steps (plan_tools render-workout builds them) and "
+              f"push again.", file=sys.stderr)
+        try:
+            import ops_log
+            ops_log.alert("icu_fetch", f"pace floor refused a {args.endpoint} "
+                          f"(caller {args.caller or 'unnamed'}): {e}", athlete=args.athlete)
+        except Exception:
+            pass
+        sys.exit(2)
+
+
 def load_client(slug: str) -> IcuClient:
     athletes = json.loads(CONFIG.read_text())
     if slug not in athletes:
@@ -475,13 +496,13 @@ def main():
         if not args.payload:
             print("ERROR: --payload JSON required for push_workout", file=sys.stderr)
             sys.exit(1)
-        result = client.push_workout(**fields)
+        result = _floor_checked(args, lambda: client.push_workout(**fields))
         _pin_after_write(args, client, fields, result, segments)
     elif ep == "edit_workout":
         if not args.event_id or not args.payload:
             print("ERROR: --event-id and --payload required for edit_workout", file=sys.stderr)
             sys.exit(1)
-        result = client.edit_workout(args.event_id, **fields)
+        result = _floor_checked(args, lambda: client.edit_workout(args.event_id, **fields))
         _pin_after_write(args, client, fields, result, segments)
     elif ep == "edit_activity":
         if not args.activity_id or not args.payload:
