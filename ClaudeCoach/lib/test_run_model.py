@@ -244,13 +244,16 @@ def test_a_parkrun_on_a_day_with_a_ride_still_counts_but_a_triathlon_does_not():
 
 import limiters as lim  # noqa: E402
 
-SUB3 = {"run_km": [80, 110], "long_run_km": [32, 35]}
+FIT = {"now": 55, "lo": 70, "hi": 95}
 
 
-def run_stats(km=40, vo2=59.3, thr=242, drift=-2.0, longest=32.0):
+def run_stats(km=40, vo2=59.3, thr=242, drift=-1.0, longest=32.0, half=6155):
     return {"weeklyKm": km, "engine": {"vo2max": vo2, "source": "Garmin", "n": 9},
             "threshold": {"pace_s_km": thr, "source": "heart rate", "lthr": 170, "hr_top": 146},
-            "durability": {"drift_pct": drift, "n": 4, "longest_km": longest}}
+            "durability": {"drift_pct": drift, "n": 5, "longest_km": longest},
+            "training": [{"event": "5k", "dist_m": 5000.0, "time_s": 1237},
+                         {"event": "half_marathon", "dist_m": 21097.5, "time_s": half},
+                         {"event": "30k", "dist_m": 30000.0, "time_s": 8808}]}
 
 
 def test_threshold_pace_for_a_sub3_marathon_is_about_4_01():
@@ -258,52 +261,60 @@ def test_threshold_pace_for_a_sub3_marathon_is_about_4_01():
     assert 238 <= need <= 244
 
 
-def test_jamie_today_fitness_is_the_issue():
-    d = lim.diagnose(42195, 10800, "sub 3", run_stats(), {"now": 55, "lo": 70, "hi": 95}, SUB3)
+def test_jamie_today_endurance_not_shown_yet_and_weekly_km_is_never_the_verdict():
+    d = lim.diagnose(42195, 10800, "sub 3", run_stats(), FIT, phase_frac=0.70)
     by = {r["key"]: r for r in d["rows"]}
-    assert d["limiter"] == "fitness" and by["fitness"]["status"] == "red"
+    assert by["fitness"]["status"] == "green" and by["fitness"]["need"] == "~49 by now · 70–95 race day"
     assert by["engine"]["status"] == by["efficiency"]["status"] == by["durability"]["status"] == "green"
-    assert d["headline"] == "Fitness is the issue: 40 km a week against 80–110 for sub 3."
-    assert "146 bpm, threshold 170" in d["foot"]
+    assert by["endurance"]["status"] == "unshown" and by["endurance"]["you"] == "4:52/km for 21.1 km"
+    assert d["limiter"] == "endurance"
+    assert d["headline"] == ("You have the engine and efficiency for sub 3. Not shown yet: holding "
+                             "4:16/km for long. Your fastest 21.1 km in training is 4:52/km.")
+    assert d["fix"] == "Race-pace long runs show it."
+    assert not any("km a week" in r["need"] for r in d["rows"])          # no volume pass mark
+
+
+def test_low_fitness_score_names_fitness_with_km_only_as_the_fix():
+    d = lim.diagnose(42195, 10800, "sub 3", run_stats(), {"now": 40, "lo": 70, "hi": 95}, phase_frac=0.8)
+    assert d["limiter"] == "fitness" and d["headline"].startswith("Fitness is the issue: your running fitness is 40")
+    assert d["fix"] == "More running builds it: you're at 40 km a week."
 
 
 def test_engine_short_names_the_engine():
-    d = lim.diagnose(42195, 10800, "sub 3", run_stats(km=95, vo2=48, thr=232),
-                     {"now": 80, "lo": 70, "hi": 95}, SUB3)
+    d = lim.diagnose(42195, 10800, "sub 3", run_stats(vo2=48, thr=232), FIT, phase_frac=0.7)
     assert d["limiter"] == "engine" and d["headline"].startswith("Your engine is the issue: VO2max 48")
 
 
 def test_efficiency_is_named_when_it_also_shows_as_drift():
-    d = lim.diagnose(42195, 10800, "sub 3", run_stats(km=95, thr=262, drift=12),
-                     {"now": 80, "lo": 70, "hi": 95}, SUB3)
+    d = lim.diagnose(42195, 10800, "sub 3", run_stats(thr=262, drift=12), FIT, phase_frac=0.7)
     by = {r["key"]: r for r in d["rows"]}
     assert by["durability"]["short"] > by["efficiency"]["short"]          # drift is the bigger gap
     assert d["limiter"] == "efficiency" and d["headline"].endswith("It also shows up late in your long runs.")
 
 
-def test_short_long_runs_are_durability_and_all_clear_says_so():
-    d = lim.diagnose(42195, 10800, "sub 3", run_stats(km=95, longest=21),
-                     {"now": 80, "lo": 70, "hi": 95}, SUB3)
-    assert d["limiter"] == "durability" and "longest run 21 km against 32–35" in d["headline"]
-    ok = lim.diagnose(42195, 10800, "sub 3", run_stats(km=95), {"now": 80, "lo": 70, "hi": 95}, SUB3)
-    assert ok["limiter"] is None and ok["headline"].startswith("Nothing is holding you back")
+def test_all_shown_says_nothing_is_holding_you_back():
+    d = lim.diagnose(42195, 10800, "sub 3", run_stats(half=5380), FIT, phase_frac=0.7)
+    assert d["limiter"] is None and d["headline"].startswith("Nothing is holding you back")
 
 
 def test_missing_measures_are_unknown_not_guessed():
-    d = lim.diagnose(10000, 3000, "10k in 50 min", {"weeklyKm": 20}, None, {"run_km": [25, 40]})
+    d = lim.diagnose(10000, 3000, "10k in 50 min", {"weeklyKm": 20}, {"now": 15, "lo": 22, "hi": 36})
     by = {r["key"]: r for r in d["rows"]}
-    assert by["engine"]["status"] == by["efficiency"]["status"] == by["durability"]["status"] == "unknown"
+    assert {by[k]["status"] for k in ("engine", "efficiency", "endurance", "durability")} == {"unknown"}
     assert d["limiter"] == "fitness"
-    assert lim.diagnose(10000, None, "", {"weeklyKm": 20}, None, None) is None
+    assert lim.diagnose(10000, None, "", {"weeklyKm": 20}, None) is None
 
 
-def test_goals_payload_carries_the_card(monkeypatch):
+def test_goals_payload_carries_the_card_with_the_phase(monkeypatch):
     import planning_pause
     import races
     import season_view as sv
     monkeypatch.setattr(planning_pause, "is_paused", lambda slug, cfg=None: False)
     monkeypatch.setattr(races, "load_races", lambda slug, config=None: [
         {"name": "Brighton Marathon", "date": "2027-04-04", "priority": "A", "distance": "Marathon"}])
-    p = sv.payload("x", {"race_goal": "sub 3"}, {}, {"recent": [], "performance": {"run": run_stats()}},
+    cfg = {"race_goal": "sub 3", "plan_start": "2026-11-02", "race_date": "2027-04-04",
+           "phase_tss": {"base_end_week": 6, "build_end_week": 14}}
+    p = sv.payload("x", cfg, {}, {"recent": [], "performance": {"run": run_stats()}},
                    today=date(2026, 10, 17))
-    assert p["limiters"]["limiter"] == "fitness" and len(p["limiters"]["rows"]) == 4
+    L = p["limiters"]
+    assert len(L["rows"]) == 5 and L["limiter"] in ("endurance", "fitness")

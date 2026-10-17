@@ -2357,7 +2357,7 @@ def cmd_run_predict(args) -> dict:
                "out_of_date": bool(r.get("stale"))}
               for r in (data.get("season") or {}).get("races") or [] if r.get("kind") == "run"]
     lim = (data.get("season") or {}).get("limiters") or {}
-    holding = ({"headline": lim.get("headline"), "limiter": lim.get("limiter"),
+    holding = ({"headline": lim.get("headline"), "limiter": lim.get("limiter"), "fix": lim.get("fix"),
                 "areas": [{k: r.get(k) for k in ("label", "you", "need", "status", "source")}
                           for r in lim.get("rows") or []], "how": lim.get("foot")} if lim else None)
     return {"athlete": args.athlete, "as_of": (data.get("performance") or {}).get("asOf"),

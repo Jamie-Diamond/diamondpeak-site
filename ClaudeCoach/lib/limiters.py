@@ -1,28 +1,31 @@
 """What is holding the athlete back from their run goal (Jamie, 17 Oct 2026: "I want the
 app to be able to say: your fitness is the issue, or it's your durability or efficiency").
 
-Four areas, each measured from TRAINING (lib/performance.py), each against what the goal
-time needs:
+Every row is MEASURED from training (lib/performance.py) and set against what the goal
+time physically needs. No row passes or fails on a training prescription (Jamie, 17 Oct:
+"I don't like a hard 'do 80k and it's all ok'"): weekly km only appears in "how to fix".
 
-  FITNESS     Running fitness (with the blueprint's cycling credit) and weekly km, against
-              the race-day band and weekly km for the goal's level (config/event-levels.json,
-              the same tables the plan is built from).
+  FITNESS     Running fitness score (42-day running load, with the blueprint's cycling
+              credit) against where it should be at this point of the build: the race-day
+              band (config/event-levels.json) x the phase's share (race_fitness.PHASE_FRACTION).
   ENGINE      VO2max (Garmin's estimate, else the heart-rate one) against the VDOT the goal
               time needs (Daniels & Gilbert).
   EFFICIENCY  Threshold pace, fresh, against Daniels' threshold pace for that VDOT
-              (THRESHOLD_FRAC of it): how well the engine is turned into speed - economy
-              and how much of VO2max can be held.
-  DURABILITY  How much the athlete drops late in their own long runs (pace:HR drift; under
-              DRIFT_OK is the usual "aerobically sound" mark) and their longest run against
-              the level's long run.
+              (THRESHOLD_FRAC of it): how well the engine is turned into speed.
+  ENDURANCE   The fastest the athlete has held for a long stretch in training (Run pace
+              curve, last 90 days, at half the race distance: 21 km for a marathon) against
+              goal pace. Training isn't a max effort, so short of goal pace reads "not shown
+              yet", never red; it turns green once a session shows it.
+  DURABILITY  How much the athlete drifts late in their own long runs (pace:HR; under
+              DRIFT_OK is the usual "aerobically sound" mark).
 
 Efficiency and durability overlap: poor economy makes every km cost more, so it fades
-sooner too (Jamie, 17 Oct 2026). Durability is measured against the start of the same
-run, so an uneconomical but steady runner shows on efficiency only; when both flag and
-the durability problem is drift, efficiency is named as the cause.
+sooner too (Jamie, 17 Oct 2026). Durability is drift against the start of the same run, so
+an uneconomical but steady runner shows on efficiency only; when both flag, efficiency is
+named as the cause.
 
-The limiter is the area furthest short of the goal. An area within GREEN of what's needed
-is fine, past RED it is red. Thresholds are judgement, here so they can be tuned.
+The limiter is the area furthest short. Within GREEN of what's needed is fine, past RED is
+red. Thresholds are judgement, here so they can be tuned.
 """
 from __future__ import annotations
 
@@ -33,9 +36,14 @@ RED = 0.10
 THRESHOLD_FRAC = 0.88            # Daniels: threshold pace ~88% of VDOT
 DRIFT_OK = 5.0                   # % pace:HR drift
 DRIFT_SCALE = 20.0               # % points of drift over DRIFT_OK that count as 100% short
+ENDURANCE_MIN_M, ENDURANCE_MAX_M = 5000.0, 30000.0
 
 LABELS = {"fitness": "Fitness", "engine": "Engine (VO2max)", "efficiency": "Efficiency",
-          "durability": "Durability"}
+          "endurance": "Endurance at race pace", "durability": "Durability"}
+
+
+def _km(m: float) -> str:
+    return f"{m / 1000:.1f}".rstrip("0").rstrip(".")
 
 
 def _pace(s) -> str:
@@ -62,115 +70,129 @@ def threshold_pace_for(vdot: float) -> float:
     return 60000.0 / v
 
 
-def _row(key, you, need, short, source=None, why=None) -> dict:
-    return {"key": key, "label": LABELS[key], "you": you, "need": need,
-            "short": None if short is None else round(max(0.0, short), 3),
-            "status": _status(None if short is None else max(0.0, short)),
-            "source": source, "why": why}
+def _row(key, you, need, short, source=None, status=None) -> dict:
+    s = None if short is None else round(max(0.0, short), 3)
+    return {"key": key, "label": LABELS[key], "you": you, "need": need, "short": s,
+            "status": status or _status(s), "source": source}
+
+
+def _endurance_effort(dist_m: float, training: list) -> dict | None:
+    """The training effort at the longest distance up to half the race (5-30 km)."""
+    target = min(ENDURANCE_MAX_M, max(ENDURANCE_MIN_M, dist_m / 2))
+    fits = [e for e in training or [] if e.get("dist_m") and e["dist_m"] <= target + 1]
+    return max(fits, key=lambda e: e["dist_m"]) if fits else None
 
 
 def diagnose(dist_m: float, goal_s: int, goal: str, run: dict, fitness: dict | None,
-             level: dict | None) -> dict | None:
-    """{"rows": [...], "limiter": key | None, "headline", "foot"} for a run goal, or None
-    without a goal time or training data."""
+             phase_frac: float | None = None) -> dict | None:
+    """{"rows": [...], "limiter": key | None, "headline", "fix", "foot"} for a run goal,
+    or None without a goal time or training data. `phase_frac`: how much of the race-day
+    fitness band is due by now (None: the whole band)."""
     if not dist_m or not goal_s or not run:
         return None
     need_vdot = rm.vdot(dist_m, goal_s)
+    goal_pace = goal_s / (dist_m / 1000)
     rows = []
 
-    # Fitness: running fitness and weekly km against the goal level.
-    km = run.get("weeklyKm")
-    km_band = (level or {}).get("run_km")
-    parts, you, need, why = [], [], [], None
     if fitness and fitness.get("now") is not None:
-        parts.append(((fitness["lo"] - fitness["now"]) / fitness["lo"], "fitness"))
-        you.append(f"{fitness['now']:.0f} fitness")
-        need.append(f"{fitness['lo']}–{fitness['hi']}")
-    if km is not None and km_band:
-        parts.append(((km_band[0] - km) / km_band[0], "km"))
-        you.append(f"{km:.0f} km a week")
-        need.append(f"{km_band[0]}–{km_band[1]} km")
-    if parts:
-        short, why = max(parts)
-        rows.append(_row("fitness", " · ".join(you), " · ".join(need), short, why=why))
+        due = fitness["lo"] * (phase_frac or 1.0)
+        need = (f"~{due:.0f} by now · {fitness['lo']}–{fitness['hi']} race day"
+                if phase_frac and phase_frac < 1 else f"{fitness['lo']}–{fitness['hi']}")
+        rows.append(_row("fitness", f"{fitness['now']:.0f}", need, (due - fitness["now"]) / due))
     else:
         rows.append(_row("fitness", "—", "—", None))
 
     eng = run.get("engine")
-    if eng and need_vdot:
+    if eng:
         rows.append(_row("engine", f"{eng['vo2max']:.0f}", f"~{need_vdot:.0f}",
                          (need_vdot - eng["vo2max"]) / need_vdot, source=eng["source"]))
     else:
-        rows.append(_row("engine", "—", f"~{need_vdot:.0f}" if need_vdot else "—", None))
+        rows.append(_row("engine", "—", f"~{need_vdot:.0f}", None))
 
     thr = run.get("threshold")
-    need_pace = threshold_pace_for(need_vdot) if need_vdot else None
-    if thr and need_pace:
-        rows.append(_row("efficiency", f"{_pace(thr['pace_s_km'])}/km threshold",
-                         f"~{_pace(need_pace)}/km", (thr["pace_s_km"] - need_pace) / need_pace,
-                         source=thr["source"]))
+    need_pace = threshold_pace_for(need_vdot)
+    if thr:
+        rows.append(_row("efficiency", f"{_pace(thr['pace_s_km'])}/km threshold", f"~{_pace(need_pace)}/km",
+                         (thr["pace_s_km"] - need_pace) / need_pace, source=thr["source"]))
     else:
-        rows.append(_row("efficiency", "—", f"~{_pace(need_pace)}/km" if need_pace else "—", None))
+        rows.append(_row("efficiency", "—", f"~{_pace(need_pace)}/km", None))
+
+    eff = _endurance_effort(dist_m, run.get("training"))
+    if eff:
+        pace = eff["time_s"] / (eff["dist_m"] / 1000)
+        short = (pace - goal_pace) / goal_pace
+        rows.append(_row("endurance", f"{_pace(pace)}/km for {_km(eff['dist_m'])} km",
+                         f"{_pace(goal_pace)}/km for {_km(dist_m)} km", short,
+                         source="training, last 90 days",
+                         status="green" if short <= GREEN else "unshown"))
+    else:
+        rows.append(_row("endurance", "—", f"{_pace(goal_pace)}/km for {_km(dist_m)} km", None))
 
     dur = run.get("durability")
-    long_band = (level or {}).get("long_run_km")
-    if dur:
-        parts, you, need = [], [], []
-        if dur.get("drift_pct") is not None:
-            parts.append((max(0.0, dur["drift_pct"] - DRIFT_OK) / DRIFT_SCALE, "drift"))
-            you.append(f"{dur['drift_pct']:+.0f}% drift")
-            need.append(f"under {DRIFT_OK:.0f}%")
-        if long_band:
-            parts.append(((long_band[0] - dur["longest_km"]) / long_band[0], "long"))
-            you.append(f"{dur['longest_km']:.0f} km longest")
-            need.append(f"{long_band[0]}–{long_band[1]} km")
-        if parts:
-            short, why = max(parts)
-            rows.append(_row("durability", " · ".join(you), " · ".join(need), short,
-                             source=f"{dur['n']} long runs", why=why))
-        else:
-            rows.append(_row("durability", "—", "—", None))
+    if dur and dur.get("drift_pct") is not None:
+        rows.append(_row("durability", f"{dur['drift_pct']:+.0f}% drift · {dur['longest_km']:.0f} km longest",
+                         f"under {DRIFT_OK:.0f}% drift",
+                         max(0.0, dur["drift_pct"] - DRIFT_OK) / DRIFT_SCALE,
+                         source=f"{dur['n']} long runs"))
     else:
-        rows.append(_row("durability", "no long runs lately",
-                         f"{long_band[0]}–{long_band[1]} km" if long_band else "—", None))
+        rows.append(_row("durability", "no long runs lately" if not dur else "—",
+                         f"under {DRIFT_OK:.0f}% drift", None))
 
     by = {r["key"]: r for r in rows}
     flagged = [r for r in rows if r["status"] in ("amber", "red")]
     limiter = max(flagged, key=lambda r: r["short"])["key"] if flagged else None
     also = None
-    if (limiter == "durability" and by["durability"]["why"] == "drift"
-            and by["efficiency"]["status"] in ("amber", "red")):
+    if limiter == "durability" and by["efficiency"]["status"] in ("amber", "red"):
         limiter, also = "efficiency", "It also shows up late in your long runs."
+    unshown = by["endurance"]["status"] == "unshown"
+    if limiter is None and unshown:
+        limiter = "endurance"
     return {"rows": rows, "limiter": limiter,
-            "headline": _headline(limiter, by, goal, fitness, km_band, long_band, run, also),
-            "foot": _foot(by, run)}
+            "headline": _headline(limiter, by, goal, fitness, run, eff, goal_pace, also),
+            "fix": _fix(limiter, run, dist_m),
+            "foot": _foot(run)}
 
 
-def _headline(limiter, by, goal, fitness, km_band, long_band, run, also) -> str:
+def _headline(limiter, by, goal, fitness, run, eff, goal_pace, also) -> str:
     g = f"for {goal}" if goal else "for your goal"
     if limiter is None:
         return f"Nothing is holding you back {g} on these numbers."
     r = by[limiter]
     if limiter == "fitness":
-        if r["why"] == "km":
-            s = f"Fitness is the issue: {run['weeklyKm']:.0f} km a week against {km_band[0]}–{km_band[1]} {g}."
-        else:
-            s = f"Fitness is the issue: running fitness {fitness['now']:.0f} against {fitness['lo']}–{fitness['hi']} {g}."
-    elif limiter == "engine":
-        s = f"Your engine is the issue: VO2max {r['you']} against {r['need']} {g}."
-    elif limiter == "efficiency":
-        s = f"Efficiency is the issue: {r['you']} against {r['need']} {g}."
-    elif r["why"] == "drift":
-        s = (f"Durability is the issue: you drift {run['durability']['drift_pct']:.0f}% late in long "
-             f"runs (under {DRIFT_OK:.0f}% is sound).")
-    else:
-        s = (f"Durability is the issue: longest run {run['durability']['longest_km']:.0f} km "
-             f"against {long_band[0]}–{long_band[1]} {g}.")
-    return s + (f" {also}" if also else "")
+        return f"Fitness is the issue: your running fitness is {r['you']}, against {r['need']}."
+    if limiter == "engine":
+        return f"Your engine is the issue: VO2max {r['you']} against {r['need']} {g}."
+    if limiter == "efficiency":
+        return f"Efficiency is the issue: {r['you']} against {r['need']} {g}." + (f" {also}" if also else "")
+    if limiter == "durability":
+        return (f"Durability is the issue: you drift {run['durability']['drift_pct']:.0f}% late in "
+                f"long runs (under {DRIFT_OK:.0f}% is sound).")
+    have = [x["label"].split(" (")[0].lower() for x in by.values()
+            if x["key"] in ("engine", "efficiency") and x["status"] == "green"]
+    lead = f"You have the {' and '.join(have)} {g}. " if have else ""
+    return (f"{lead}Not shown yet: holding {_pace(goal_pace)}/km for long. Your fastest "
+            f"{_km(eff['dist_m'])} km in training is {r['you'].split(' for')[0]}.")
 
 
-def _foot(by, run) -> str:
-    bits = ["Each against what the goal time needs; the biggest gap is named."]
+def _fix(limiter, run, dist_m) -> str | None:
+    km = run.get("weeklyKm")
+    if limiter == "fitness":
+        return (f"More running builds it: you're at {km:.0f} km a week." if km is not None
+                else "More running builds it.")
+    if limiter == "endurance":
+        return ("Race-pace long runs show it." if dist_m >= 21000
+                else "A race-pace session or a time trial shows it.")
+    if limiter == "engine":
+        return "VO2max intervals (3-5 min hard) raise it."
+    if limiter == "efficiency":
+        return "Threshold sessions and strides raise it."
+    if limiter == "durability":
+        return "Longer steady runs, fuelled, build it."
+    return None
+
+
+def _foot(run) -> str:
+    bits = ["Each measured from your training against what the goal time needs."]
     thr = run.get("threshold") or {}
     if thr.get("source") == "heart rate":
         bits.append(f"Threshold pace is estimated from your runs' heart rate (they reach "

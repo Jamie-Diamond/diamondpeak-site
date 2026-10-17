@@ -4815,7 +4815,9 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     }).join('');
     return card('What\u2019s holding you back', '<p class="gv' + (L.limiter ? ' warn' : '') + '" style="margin:12px 16px">' +
       esc(L.headline) + '</p><table class="tbl"><thead><tr><th></th><th>You</th><th>Goal needs</th><th></th>' +
-      '</tr></thead><tbody>' + rows + '</tbody></table>', { flush: true, foot: L.foot });
+      '</tr></thead><tbody>' + rows + '</tbody></table>' +
+      (L.fix ? '<p class="gv" style="margin:10px 16px 12px">How to fix it: ' + esc(L.fix) + '</p>' : ''),
+      { flush: true, foot: L.foot + ' Hollow dot: not shown yet in training.' });
   }
 
   function seasonTimeline(sv) {
@@ -6141,6 +6143,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.024", "2026-10-17", "Goals: \u2018What\u2019s holding you back\u2019 is all measured: a fitness score for this point in the plan, endurance at race pace from your training, and how to fix it. Weekly km is advice, not a pass mark", 0],
     ["4.023", "2026-10-17", "Goals: \u2018What\u2019s holding you back\u2019 \u2013 your fitness, engine (VO2max), efficiency and durability from training, each against what your goal time needs, with the biggest gap named", 0],
     ["4.022", "2026-10-17", "Goals: a run race time says when it is out of date (much less running, or a break, since the races it comes from) and that a parkrun or 5k time trial will update it", 0],
     ["4.021", "2026-10-17", "Goals: run race times now come from your own races (parkruns, 10ks, halves), how much you slow as races get longer, and your weekly km for the marathon", 0],

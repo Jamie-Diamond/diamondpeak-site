@@ -237,15 +237,24 @@ def fitness_band(event, goal_s, cfg: dict, profile: dict, data: dict) -> dict | 
     return out
 
 
-def limiters_for(event, goal_s, goal, data: dict, fb: dict | None) -> dict | None:
-    """The "What's holding you back" card for a run event with a goal time."""
+def limiters_for(event, goal_s, goal, data: dict, fb: dict | None, phases: list | None = None,
+                 today: date | None = None) -> dict | None:
+    """The "What's holding you back" card for a run event with a goal time. Fitness is
+    judged against the share of the race-day band due by the current phase of the build
+    (before the plan starts: base); with no phases, against the band itself."""
     import limiters
     import race_fitness as rf
     run = (data.get("performance") or {}).get("run")
     km = rf._race_km(event) if event else None
     if not run or not km or not goal_s or rf.event_kind(event) != "run":
         return None
-    return limiters.diagnose(km * 1000, goal_s, goal, run, fb, rf.level_for_time(event, goal_s))
+    frac = None
+    if phases and today:
+        iso = today.isoformat()
+        now = next((p for p in phases if p["start"] <= iso <= p["end"]), None)
+        fam = (now or {}).get("family") or ("base" if iso < phases[0]["start"] else "taper")
+        frac = rf.PHASE_FRACTION.get(fam)
+    return limiters.diagnose(km * 1000, goal_s, goal, run, fb, frac)
 
 
 def payload(slug: str, cfg: dict, profile: dict, data: dict, today: date | None = None) -> dict:
@@ -282,7 +291,8 @@ def payload(slug: str, cfg: dict, profile: dict, data: dict, today: date | None 
             pass
         try:
             out["limiters"] = limiters_for(a_view.get("event"), a_view.get("goal_s"),
-                                           a_view.get("goal"), data, out.get("fitness"))
+                                           a_view.get("goal"), data, out.get("fitness"),
+                                           phases, today)
         except Exception:
             pass
     # A goal without a race (lib/goals.py): the goal card replaces the race hero while no A

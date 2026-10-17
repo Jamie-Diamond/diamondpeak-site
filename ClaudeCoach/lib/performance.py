@@ -14,7 +14,8 @@
         "longestKm":   longest run, last 8 weeks
         "efficiency":  {"value", "n", "device", "prev"} - speed at heart rate as a VDOT,
                        now and six weeks ago (same watch only)
-        "training":    best 3k / 5k / 10k inside any run in the last 90 days (pace curve)
+        "training":    best 3k / 5k / 10k / 15k / half / 30k inside any run in the last 90
+                       days (pace curve)
         "criticalSpeed": {"mps", "pace_s_km"} - Intervals.icu's 90-day model, for reference
         "engine":      {"vo2max", "source", "n"} - Garmin's VO2max estimate (median, last 6
                        weeks), else the heart-rate one (run_model.hr_vdot)
@@ -61,7 +62,8 @@ ENGINE_DAYS = 42
 THRESHOLD_MIN_RUNS = 6
 THRESHOLD_MAX_REACH = 30             # bpm the line may be extended past the hardest run
 LONG_RUN_S = 75 * 60
-TRAINING_EVENTS = {"3k": 3000.0, "5k": 5000.0, "10k": 10000.0}
+TRAINING_EVENTS = {"3k": 3000.0, "5k": 5000.0, "10k": 10000.0, "15k": 15000.0,
+                   "half_marathon": 21097.5, "30k": 30000.0}   # long ones: limiters endurance
 
 
 def _athlete_dir(slug: str) -> Path:
