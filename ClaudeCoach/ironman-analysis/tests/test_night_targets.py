@@ -166,7 +166,7 @@ def test_prompt_layout_wins_over_level_and_fuelling_off_drops_nutrition():
     t = nb._target_lines([JAMIE_RIDE], "1:41", 297, "4:02", level="pro")
     p = nb._build_prompt("jamie", "Jamie", 297, "1:41", "4:02", "IM", [], title=nb._title_line([JAMIE_RIDE]),
                          targets=t, level="pro", fuel="0 g/hr carbs, water to thirst")
-    assert "Coaching level: PRO" in p and "no narrative or summary sentence" in p
+    assert "Coaching level: PRO" in p and "ONE verdict line in its slot is the only sentence of narrative" in p and "[Verdict" in p
     assert "exactly these bullets, one per line" in p and "2-4 bullets" not in p
     assert "*Nutrition:* 0 g/hr carbs, water to thirst" in p
     k = nb._build_prompt("kathryn", "Kathryn", 186, "1:38", "5:04", "IM", [],

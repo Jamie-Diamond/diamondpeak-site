@@ -443,9 +443,11 @@ def _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries
     # NP/IF bullet is written in code (Jamie, 17 Oct 2026: shadow review: both models put a
     # narrative paragraph above Jamie's bullets, Haiku dropped his NP bullet and relabelled
     # "Form" as "Form (TSB)"). So the level sets the wording; Step 4 sets the layout.
+    # One verdict line back, in its own slot under the title (Jamie, 17 Oct 2026: "A bring
+    # back"): fixed position, so Haiku and Sonnet still write the same card.
     layout_rule = ("For this brief the level above sets the WORDING only. The layout is Step 4's, at "
-                   "every level: no narrative or summary sentence anywhere, every bullet Step 4 gives "
-                   "is kept, and the bold labels are copied exactly as written.")
+                   "every level: the ONE verdict line in its slot is the only sentence of narrative, "
+                   "every bullet Step 4 gives is kept, and the bold labels are copied exactly as written.")
     # Fuelling off: no Nutrition line in the template at all, rather than a template line
     # and a note further down saying to leave it out (Jamie, 17 Oct 2026: shadow review).
     nutrition_line = (f"*Nutrition:* {fuel or '[g/hr carbs + ml/hr fluid — calibrated to session length and intensity. Zero if easy/recovery.]'}\n"
@@ -478,6 +480,7 @@ Reference for working out targets (NEVER print these lines; they are not part of
 Step 4 — Output the night-before brief in Telegram Markdown (no preamble, no sign-off):
 
 {title_block}
+[Verdict — ONE short sentence: what tomorrow's session is for and how it should feel, in the level's words. No numbers.]
 
 {targets_block}
 Numbers (pace bands, power bands, NP, IF, HR caps, durations, Load) are copied EXACTLY as

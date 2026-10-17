@@ -741,8 +741,12 @@ def _overshoot_pass(slug: str, session_log_f: Path) -> str:
         lines = []
         for a in acts:
             day = str(a.get("start_date_local") or "")[:10]
-            plan = [e for e in evs if str(e.get("start_date_local") or "")[:10] == day
-                    and consistency.family(e.get("type")) == consistency.family(a.get("type"))]
+            # The planned session is Intervals.icu's own link, as PLAN_DELTA uses (Jamie,
+            # 17 Oct 2026: "B link"); same day + sport only when the activity has no link.
+            pid = a.get("paired_event_id")
+            plan = ([e for e in evs if str(e.get("id")) == str(pid)] if pid else
+                    [e for e in evs if str(e.get("start_date_local") or "")[:10] == day
+                     and consistency.family(e.get("type")) == consistency.family(a.get("type"))])
             if not plan or not consistency.overshoot(plan[0], a):
                 continue
             nxt = sorted((e for e in evs if str(e.get("start_date_local") or "")[:10] > day),
