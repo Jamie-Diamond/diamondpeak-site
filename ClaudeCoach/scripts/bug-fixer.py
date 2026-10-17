@@ -982,7 +982,10 @@ def _prune_group(group, idx, slug, dry_run, prefs):
               "summary": summary, "stat": stat, "files": [str(rules_p)],
               "proposal": proposed, "base_sha": hashlib.sha256(original.encode()).hexdigest(),
               "old_count": old_count, "new_count": new_count,
-              "status": "awaiting", "created": date.today().isoformat()}
+              "status": "awaiting", "created": date.today().isoformat(),
+              # Kept so a stale draft can be redrafted on the current rules (apply_prune).
+              "group": {k: group.get(k) for k in ("action", "title", "root_cause", "plan",
+                                                   "proposed_rule", "entries")}}
 
     if dry_run:
         tag = " [WOULD AUTO-APPLY]" if verdict == "auto_apply" else ""
@@ -1031,8 +1034,19 @@ def apply_prune(rid):
         print(f"[bug-fixer] apply-prune {rid}: rules file missing", file=sys.stderr); return
     current = rules_p.read_text()
     if hashlib.sha256(current.encode()).hexdigest() != rv.get("base_sha"):
-        print(f"[bug-fixer] apply-prune {rid}: rules changed since draft - refusing to apply. "
-              f"Re-run the fixer to redraft.", file=sys.stderr); return
+        # Never apply over newer rules - but redraft on them rather than leaving Jamie a
+        # dead card (17 Oct 2026: the 01:30 rule tidy changed the rules after the 00:00
+        # draft, and Merge failed with "re-run the fixer", which he cannot do).
+        rv["status"] = "superseded"; _save_reviews(reviews)
+        grp = rv.get("group") or {"action": rv.get("action") or "prune",
+                                  "title": rv.get("title", ""), "plan": rv.get("summary", ""),
+                                  "entries": rv.get("entries") or []}
+        new = _prune_group(grp, f"{rid.rsplit('-', 1)[-1]}r", slug, False,
+                           _confirmed_preferences(slug))
+        print(f"[bug-fixer] apply-prune {rid}: rules changed since the draft, so nothing was "
+              f"applied; redrafted on the current rules as {new or '(nothing to change now)'}"
+              f" - a new card follows if it needs your OK.", file=sys.stderr)
+        return
     proposal = rv.get("proposal")
     if not proposal:
         print(f"[bug-fixer] apply-prune {rid}: no stored proposal - cannot apply", file=sys.stderr); return
