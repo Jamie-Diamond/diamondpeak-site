@@ -5466,7 +5466,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     if (pword && (dword !== 'easy' || /test/i.test(pword))) return (pword + ' ' + sets).trim();
     if (dword && dword !== 'easy') return (dword + ' ' + (sets || size())).trim();
     if (!dword && !pname) return fam ? (fam[0].toUpperCase() + fam.slice(1) + ' ' + size()).trim() : (a.name || '');
-    var long = (fam === 'bike' && dur >= 150) || (fam === 'run' && (dur >= 90 || km >= 18)) ||
+    var long = (fam === 'bike' && dur >= 150) || (fam === 'run' && (km >= 15 || (!km && dur >= 90))) ||
                (fam === 'swim' && (km >= 3 || dur >= 60));
     return ((long ? 'Long ' + noun : 'Easy') + ' ' + size()).trim();
   }
@@ -6623,6 +6623,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.035", "2026-10-17", "Share card titles: a run of 15 km or more is a \u2018Long run\u2019.", 0],
     ["4.034", "2026-10-17", "Share cards get a title that says what the session was: \u2018Easy 2 hrs\u2019, \u2018Threshold 3\u00d78\u2019, \u2018Long run 21 km\u2019, from what you actually did and the plan\u2019s sets.", 0],
     ["4.033", "2026-10-17", "Chat: attach a race route (.gpx) and the coach reads the climbs, the cut-offs and what they need", 0],
     ["4.032", "2026-10-17", "Share cards are square (1:1), both the image and the overlay.", 0],
