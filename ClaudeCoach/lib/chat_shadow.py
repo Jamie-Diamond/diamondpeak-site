@@ -53,10 +53,17 @@ adjusting or swapping one session, fuelling or kit advice, how training is going
 anything you are unsure about.
 opus - only when the message asks to change the plan beyond one session (rebuild or
 rebalance a week, move a race, add a block, a taper), reports illness or an injury that
-changes training, disagrees with or corrects the coach, or asks for Opus by name.
+changes training, disagrees with or corrects the coach (including a complaint that the
+plan or the coach got something wrong, or a repeat of a correction), or asks for Opus by
+name.
 
-Read short replies through the recent exchange: "yes do it" after the coach proposed a
-new week is a plan change; "yes" to "did the session happen?" is logging.
+Never haiku for a complaint or correction, or when your own reason says judgement is
+needed. If you are between two models, pick the higher one.
+
+Read short replies through the recent exchange: "yes do it" or picking an option after
+the coach proposed a change is carrying out a change already decided - sonnet, never
+haiku, as it edits the calendar or saved rules; "yes" to "did the session happen?" is
+logging.
 
 Recent exchange:
 {recent}
@@ -64,6 +71,10 @@ Recent exchange:
 Athlete's message:
 {message}
 """
+# 17 Oct review of the first 23 pairs: the picker sent a complaint ("there are still
+# double sessions") to Haiku while its own reason said judgement was needed, sent the
+# same FTP correction to Opus then, 23 s later, to Sonnet; and the old example made a
+# "yes" to an agreed week an Opus plan change, which Sonnet carried out as well.
 
 # The reply must read as it would be sent, or the side-by-side compares a caveat with a
 # reply (16 Oct check: "This is a read-only run, so here's what I'd change" in the reply).
