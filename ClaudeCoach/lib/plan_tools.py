@@ -3284,6 +3284,46 @@ def cmd_log_strength(args) -> dict:
             "status": "manual activity created — counts toward CTL/ATL"}
 
 
+# ── subcommand: strength-session ───────────────────────────────────────────────
+def cmd_strength_session(args) -> dict:
+    """Rewrite one planned strength day for this week's kit (the weekly equipment ask:
+    gym A / dumbbells B / bodyweight C) from the exercise library (lib/strength_builder.py,
+    17 Oct 2026). Updates the Intervals.icu event's name and exercise list and the copy
+    Peak's strength player reads. Use this, not edit_workout, for strength content."""
+    import re as _re
+    import plan_builder
+    import strength_builder
+    import strength_log
+    cfg = _load_cfg(args.athlete)
+    client = _client(cfg)
+    ev = client.get_event(args.event_id)
+    if ev.get("type") not in ("WeightTraining", "Workout"):
+        return {"error": f"event {args.event_id} is a {ev.get('type')}, not a strength session"}
+    name = _re.sub(r"\btier\s*[ABC]\b", f"Tier {args.tier}", ev.get("name") or "Strength A", flags=_re.I)
+    if "tier" not in name.lower():
+        name += f" (Tier {args.tier})"
+    profile = json.loads((BASE / "athletes" / args.athlete / "profile.json").read_text())
+    day = str(ev.get("start_date_local") or "")[:10]
+    lib = strength_builder.load_library()
+    ws = date.fromisoformat(day) - timedelta(days=date.fromisoformat(day).weekday())
+    phase = str((plan_builder.current_phase(plan_builder._blueprint(args.athlete), ws) or {}).get("name") or "build")
+    others = [v for k, v in strength_log.planned(args.athlete).items()
+              if k != str(args.event_id) and str(v.get("date") or "")[:10] >= ws.isoformat()
+              and str(v.get("date") or "")[:10] < day]
+    sess = plan_builder._strength_for(args.athlete, {"date": day, "name": name,
+                                      "minutes": int((ev.get("moving_time") or 2400) // 60)},
+                                      profile, lib, others, phase,
+                                      int((cfg.get("day_rules") or {}).get("strength_max") or 2))
+    if not sess:
+        return {"error": "no strength session this day (race week, or the athlete's own protocol covers it)"}
+    title = name if sess.get("kind") == "protocol" else sess["title"]
+    client.edit_workout(args.event_id, name=title, description=strength_builder.describe(sess, lib))
+    strength_builder.write_plan(args.athlete, args.event_id, sess)
+    return {"athlete": args.athlete, "event_id": args.event_id, "date": day, "name": title,
+            "tier": args.tier, "minutes": sess.get("minutes"),
+            "exercises": [it["ex"] for p in sess["parts"] for it in p["items"]]}
+
+
 def cmd_log_weight(args) -> dict:
     """A weight the athlete tells the coach goes to Intervals.icu wellness for that day
     (Jamie, 16 Oct 2026: James typed 84 kg twice, the coach said "Saved", but it only
@@ -3480,6 +3520,11 @@ def main():
     pls.add_argument("--date", help="YYYY-MM-DD; default today")
     pls.add_argument("--name")
 
+    pss = sub.add_parser("strength-session", help="rewrite a planned strength day for this week's kit (A gym / B dumbbells / C bodyweight) from the exercise library")
+    pss.add_argument("--athlete", required=True)
+    pss.add_argument("--event-id", required=True, dest="event_id")
+    pss.add_argument("--tier", required=True, choices=["A", "B", "C"])
+
     plw = sub.add_parser("log-weight", help="save a weight the athlete tells you to Intervals.icu (and current-state)")
     plw.add_argument("--athlete", required=True)
     plw.add_argument("--kg", required=True, type=float)
@@ -3568,6 +3613,7 @@ def main():
                "course": cmd_course,
                "ctl-sweep": cmd_ctl_sweep,
                "sweat-rate": cmd_sweat_rate, "log-strength": cmd_log_strength,
+               "strength-session": cmd_strength_session,
                "log-weight": cmd_log_weight,
                "windowed-np": cmd_windowed_np, "wbal": cmd_wbal,
                "post-race-ready": cmd_post_race_ready,

@@ -542,14 +542,17 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     # sessions (tier-C content by default); the weekly message carries the equipment ask.
     strength = None
     if profile.get("strength_programme"):
-        smd = BASE / "blueprints" / "strength.md"
         strength = {
             "sessions_per_week": (cfg.get("day_rules") or {}).get("strength_max") or 2,
             "default_tier": "C (bodyweight + band — always possible, so strength is never dropped)",
             "placement": ("Wednesday spare slot first; a 2nd session after a swim day; "
                           "NEVER the day before the long ride; >=8h from any quality bike/run."),
-            "content_each": "warm-up / main lifts / ankle block / core — write this into notes.",
-            "guide": smd.read_text()[:1800] if smd.exists() else "",
+            # Code writes each session's exercises from the exercise library (lib/strength_builder.py,
+            # 17 Oct 2026), so the proposer only names and places the days.
+            "content_each": ("Name each day 'Strength A (Tier C)' or 'Strength B (Tier C)', alternating "
+                             "A/B; minutes 35-45. Do NOT write exercises in notes: code writes them "
+                             "from the exercise library. A day for the athlete's own physio session "
+                             "keeps that session's name."),
         }
 
     # Durability (ported from generate-plan.py) — fatigue resistance is trained by working at

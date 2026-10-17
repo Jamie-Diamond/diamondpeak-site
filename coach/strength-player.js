@@ -135,7 +135,7 @@
     (session.parts || []).forEach(function (p, pi) {
       (p.items || []).forEach(function (it0, ii) {
         if (!it0.ex || !LIB.exercises[it0.ex]) return;
-        var it = Object.assign({}, it0, { physio: !!session.physio || isPhysio(it0) });
+        var it = Object.assign({}, it0, { physio: !!session.physio || !!it0.physio || isPhysio(it0) });
         var e = ex(it.ex), sug = suggest(e, it), n = typeof it.sets === 'number' ? it.sets : (parseInt(it.sets, 10) || 3);
         var rows = [];
         for (var i = 1; i <= n; i++) sides(e).forEach(function (s) {

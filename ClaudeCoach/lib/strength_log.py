@@ -291,7 +291,10 @@ def own_sessions(profile: dict) -> list:
             if not isinstance(s, dict) or not s.get("items"):
                 continue
             out.append({"id": f"is:{i}:{n}", "title": s.get("title") or "Session",
-                        "physio": str(inj.get("set_by") or "").lower() == "physio",
+                        # set_by in live profiles ("source" there already means where we
+                        # heard it); the library's schema calls it source, so read both
+                        "physio": "physio" in (str(inj.get("set_by") or "").lower(),
+                                               str(inj.get("source") or "").lower()),
                         "set_by": inj.get("set_by"), "issue": inj.get("description"),
                         "match": s.get("match") or [str(s.get("title") or "").lower()],
                         "parts": [{"title": s.get("title") or "Session", "order": "any", "items": s["items"]}]})

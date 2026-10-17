@@ -48,6 +48,7 @@ from primitives.nutrition import (fuel_target, last_ride_g_hr,           # noqa:
 from primitives.validate_plan import validate_week             # noqa: E402
 from primitives.blueprint import current_phase, tss_ceiling    # noqa: E402
 import weekly_availability                                     # noqa: E402
+import strength_builder                                        # noqa: E402
 
 ATHLETES = BASE / "config" / "athletes.json"
 # Rides (Brick counts as a ride: its fuelling is bike fuelling carried into a run).
@@ -198,10 +199,71 @@ def _sport_family(sport: str) -> str:
         "ride" in s or "bike" in s or "cycl" in s) else s
 
 
+def _athlete_sports(profile: dict) -> list:
+    """The sports the strength modules serve: the profile's own list, else the race."""
+    sp = profile.get("sports")
+    if isinstance(sp, list) and sp:
+        return [str(x).lower() for x in sp]
+    rd = str(profile.get("race_distance") or profile.get("race_type") or "").lower()
+    if any(k in rd for k in ("ironman", "70.3", "triath", "olympic", "sprint")):
+        return ["swim", "bike", "run"]
+    if any(k in rd for k in ("sportive", "fondo", "cycl", "bike", "gravel")):
+        return ["bike"]
+    if any(k in rd for k in ("marathon", "half", "10k", "5k", "run", "ultra", "trail")):
+        return ["run"]
+    return []
+
+
+_STRENGTH_SPORTS = ("Strength", "WeightTraining", "Weights")
+
+
+def _strength_for(slug: str, s: dict, profile: dict, lib: dict, week: list, phase_name: str,
+                  cap: int) -> dict | None:
+    """The planner names a strength day ("Strength A (Tier C)"); the exercise library
+    writes it (lib/strength_builder.py, Jamie 17 Oct 2026). A day named after the athlete's
+    own physio session ("Strength: hamstrings") carries that session as set, plus the
+    week's one upper-body/core top-up. None = leave the day as the planner wrote it."""
+    import re as _re
+    import strength_log
+    name = s.get("name") or ""
+    prog = profile.get("strength_programme") if isinstance(profile.get("strength_programme"), dict) else {}
+    tier_m = _re.search(r"\btier\s*([ABC])\b", name, _re.I)
+    tier = (tier_m.group(1) if tier_m else prog.get("kit") or "C").upper()
+    common = dict(date=s["date"], phase=phase_name, tier=tier, sports=_athlete_sports(profile),
+                  level=int(prog.get("level") or 2), week_logged=week, cap=cap)
+    own = strength_log.for_event(name, strength_log.own_sessions(profile))
+    if own:
+        parts = [dict(p, items=[dict(it, physio=True) if own.get("physio") else dict(it) for it in p["items"]])
+                 for p in own["parts"]]
+        top = strength_builder.build(profile, lib, slot="A", **common)
+        if top and top.get("kind") == "top_up":
+            parts += [dict(p, title=p["title"] + " (if you have time)") for p in top["parts"]]
+        sess = {"date": s["date"], "title": own["title"], "kind": "protocol", "parts": parts}
+        sess["minutes"] = strength_builder.estimate_minutes(sess, lib)
+        return sess
+    slot_m = _re.search(r"\b(?:strength|session)\s+([AB])\b", name, _re.I)
+    slot = slot_m.group(1).upper() if slot_m else ("B" if len(week) % 2 else "A")
+    return strength_builder.build(profile, lib, slot=slot,
+                                  minutes=int(s.get("minutes") or s.get("duration_min") or 0) or None,
+                                  **common)
+
+
 def build_sessions(slug: str, proposal: dict) -> dict:
     """Turn a Stage-1 proposal into push-ready, validated sessions. Pure except
     for reading athlete config/session-log; never pushes."""
     cfg = _cfg(slug)
+    # Strength days are written from the exercise library. Phase from the week's own
+    # Monday (the validator below computes the same).
+    week_strength, _st_lib, _st_prof, _st_phase = [], None, {}, ""
+    try:
+        _dates = [date.fromisoformat(x["date"]) for x in proposal.get("sessions", []) if x.get("date")]
+        _ws0 = min(_dates) - timedelta(days=min(_dates).weekday()) if _dates else date.today()
+        _st_phase = str((current_phase(_blueprint(slug), _ws0) or {}).get("name") or "build")
+        _st_prof = json.loads((BASE / "athletes" / slug / "profile.json").read_text())
+        _st_lib = strength_builder.load_library()
+    except Exception as e:
+        print(f"[plan_builder:{slug}] strength library unavailable ({e!r}); strength days as proposed",
+              file=sys.stderr)
     fuel, run_fuel = _fuel_for(slug, cfg)
     fuel_on = coaching_prefs.fuelling_on(slug)       # the athlete can switch fuelling off
     built, events = [], []
@@ -238,6 +300,23 @@ def build_sessions(slug: str, proposal: dict) -> dict:
             load = planned_session_tss({"type": sport, "name": s.get("name", ""),
                                         "moving_time": dur * 60})["tss"]
             desc = ""
+        strength = None
+        if sport in _STRENGTH_SPORTS and not pinned and _st_lib:
+            try:
+                strength = _strength_for(slug, s, _st_prof, _st_lib, week_strength, _st_phase,
+                                         int((cfg.get("day_rules") or {}).get("strength_max") or 2))
+            except Exception as e:
+                print(f"[plan_builder:{slug}] strength session for {date_s} not built ({e!r})", file=sys.stderr)
+            if strength:
+                week_strength.append(strength)
+                # In `description`: Intervals.icu drops description_raw (checked live 17 Oct
+                # 2026), and keeps this text as notes with no steps and the same Load.
+                desc, notes = strength_builder.describe(strength, _st_lib), ""
+                dur = int(strength.get("minutes") or dur)
+                if strength.get("kind") != "protocol":
+                    s = dict(s, name=strength["title"])
+                load = planned_session_tss({"type": sport, "name": s.get("name", ""),
+                                            "moving_time": dur * 60})["tss"]
         if pinned:
             # THE AGREED FIGURE WINS. The load on the calendar is the load the athlete
             # agreed to; re-deriving it here (from a coarse pin's single segment, or from
@@ -267,7 +346,7 @@ def build_sessions(slug: str, proposal: dict) -> dict:
         built.append({"date": date_s, "sport": sport, "name": s.get("name", ""),
                       "duration_min": dur, "load_target": load,
                       "description": desc, "description_raw": notes,
-                      "pinned": pinned})
+                      "pinned": pinned, "strength": strength})
         events.append({"start_date_local": f"{date_s}T00:00:00", "type": sport,
                        "category": "WORKOUT", "load_target": load,
                        "moving_time": dur * 60, "pinned": pinned,
@@ -455,12 +534,22 @@ def push(slug: str, built: dict, replace: bool = True):
                    "planned_training_load": s["load_target"]}
         r = c.push_workout(**payload)        # raises before any delete if a payload is bad
         pushed.append(r.get("id"))
+        if s.get("strength") and r.get("id"):
+            # Peak's strength player reads the day's exercises from here (lib/strength_log.py)
+            try:
+                strength_builder.write_plan(slug, r["id"], s["strength"])
+            except Exception as e:
+                print(f"[plan_builder:{slug}] strength plan for {s['date']} not saved ({e!r})", file=sys.stderr)
     deleted = []
     failed = []
     for eid, edate in old_ids:                # only reached if ALL pushes succeeded
         assert_deletable(slug, eid, edate, pinned)   # raises before anything irreversible
         try:
             c.delete_workout(eid); deleted.append(eid)
+            try:
+                strength_builder.write_plan(slug, eid, None)   # or Peak shows the old day too
+            except Exception:
+                pass
         except Exception as e:
             # A swallowed delete is benign ONCE (worst case a duplicate event), but a
             # systematically failing delete doubles the week silently, which is how the
