@@ -146,3 +146,12 @@ apart). Kathryn's 15 Oct was 139 Sonnet runs, ~$31.
 - Opus -> Sonnet: as good or better on 10/13, slightly worse on 3, materially worse on 0.
 - **Jamie: corrections to the coach stay on Opus** until the shadow ends on 26 Oct.
 - Open: follow-up turns record $0 cost (under-counted chat spend); picks take 3-7 s, too slow to go live as is.
+
+### Picker go-live pass mark (Jamie, 17 Oct 2026)
+Judged on shadow pairs (picked model's reply vs the reply actually sent) at the 26 Oct review:
+- 40+ messages reviewed.
+- Zero under-picks on anything that changes a plan, the calendar or a log.
+- At most 1 in 20 under-picks on simple questions, and only minor ones.
+- Saving of 25%+ of chat cost.
+- Jamie reads 5 random pairs and agrees.
+Pass: go live. An under-pick in a risky category: lock that category to Sonnet/Opus, the rest goes live.

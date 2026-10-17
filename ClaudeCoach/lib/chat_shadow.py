@@ -30,6 +30,8 @@ billing ledger with its own cost, labelled chat-picker. Still SHADOW ONLY: nothi
 pick() before a reply.
 
     python3 ClaudeCoach/lib/chat_shadow.py --report [--days 7]
+
+Go-live pass mark (Jamie, 17 Oct 2026): docs/cost-levers.md, "Picker go-live pass mark".
 """
 from __future__ import annotations
 
