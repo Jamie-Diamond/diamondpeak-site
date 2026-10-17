@@ -51,8 +51,10 @@ _ZONE_IF = {
              "aerobic": 0.80, "drill": 0.68, "kick": 0.70, "pull": 0.85,
              "steady": 0.88, "race": 0.95, "css": 1.00, "threshold": 1.00,
              "speed": 1.08, "sprint": 1.12},
-    "run":  {"recovery": 0.60, "easy": 0.83, "z2": 0.83, "warmup": 0.68,
-             "cooldown": 0.62, "steady": 0.83, "z3": 0.83, "tempo": 0.88,
+    # Run easy blocks re-centred 17 Oct 2026 with _ZONE_BAND below (Jamie: "what the hell
+    # is going on with Jamie's pacing").
+    "run":  {"recovery": 0.72, "easy": 0.83, "z2": 0.83, "warmup": 0.74,
+             "cooldown": 0.72, "steady": 0.83, "z3": 0.83, "tempo": 0.88,
              "threshold": 0.97, "css": 0.97, "interval": 1.05, "vo2": 1.06,
              "hill": 0.95, "sprint": 1.15},
     "bike": {"recovery": 0.50, "z1": 0.55, "z2": 0.65, "endurance": 0.65,
@@ -128,13 +130,18 @@ def segment_if(sport: str, zone: str) -> float:
 # Centred on the same intensities as _ZONE_IF so computed TSS and the pushed
 # structure agree.
 _ZONE_BAND = {
+    # Run easy blocks were 56-72% of threshold pace (Jamie, 17 Oct 2026: his easy run's
+    # warm-up came out at 6:18-7:12/km off a 4:02 threshold). Intervals.icu's run Zone 1
+    # runs to 77.5% and Zone 2 to 87.7%, so recovery / warm-up / cool-down now sit in the
+    # top of Zone 1. SWIM easy bands are still too slow (a 1:41 CSS "easy" = 2:06-2:24);
+    # fixing them moves stage1's IFs and the label validator with them - separate change.
     "swim": {"recovery": (58, 66), "easy": (70, 80), "warmup": (66, 74),
              "cooldown": (60, 70), "aerobic": (76, 84), "drill": (62, 72),
              "kick": (64, 74), "pull": (82, 88), "steady": (84, 92),
              "race": (92, 98), "css": (97, 103), "threshold": (98, 104),
              "speed": (104, 112), "sprint": (108, 118)},
-    "run":  {"recovery": (56, 64), "easy": (78, 88), "z2": (78, 88),
-             "warmup": (64, 72), "cooldown": (58, 66), "steady": (80, 86),
+    "run":  {"recovery": (68, 76), "easy": (78, 88), "z2": (78, 88),
+             "warmup": (70, 78), "cooldown": (68, 76), "steady": (80, 86),
              "z3": (80, 86), "tempo": (85, 91), "threshold": (95, 101),
              "css": (95, 101), "interval": (102, 108), "vo2": (103, 110),
              "hill": (92, 98), "sprint": (112, 120)},

@@ -63,7 +63,7 @@ def test_targets_only_tomorrows_sports_and_no_labels():
     assert lines[-1].startswith("• Main focus") and "name none" in lines[-1]
     assert not any(l.startswith(("Ride", "Run", "Swim", "Strength")) for l in lines)
     swim = nb._target_lines([SWIM], "1:38", 190, "5:04", level="pro")
-    assert swim == ["• Target pace [the /100m band above, the pace only] vs CSS 1:38", "• Main set structure"]
+    assert swim[0].startswith("• Main set pace ") and swim[0].endswith("/100m vs CSS 1:38") and swim[1] == "• Main set structure"
 
 
 def test_prompt_carries_title_targets_and_power_without_sport_templates():
@@ -173,3 +173,12 @@ def test_prompt_layout_wins_over_level_and_fuelling_off_drops_nutrition():
                          title=nb._title_line([KB_EMPTY]), targets=nb._target_lines([KB_EMPTY], None, None, None),
                          fuelling=False)
     assert "Nutrition" not in k and "*Sleep:* ≥8h tonight" in k
+
+
+def test_run_target_is_the_main_set_not_the_warm_up():
+    """17 Oct 2026: Jamie's brief quoted his 15-min warm-up band as the run's target."""
+    ev = {"type": "Run", "name": "Easy run", "start_date_local": "2026-10-18T08:00:00",
+          "description": "- 15m 68-76% Pace\n- 34m 78-88% Pace"}
+    assert nb._main_set_pace(ev, "4:02", "/km") == "4:35-5:10/km"
+    lines = nb._target_lines([ev], "1:41", 297, "4:02", level="pro")
+    assert any(l == "• Target pace 4:35-5:10/km" for l in lines)

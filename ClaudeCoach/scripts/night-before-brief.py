@@ -157,20 +157,14 @@ def _power_bands(events, ftp) -> list[str]:
 _PCT = r"(?<![\d.])(\d+(?:\.\d+)?)(?:\s*-\s*(\d+(?:\.\d+)?))?\s*%(?!\s*(?:Pace|HR|LTHR|MMP))"
 
 
-def _main_set_watts(event, ftp) -> str:
-    """"178-208 W": the one ride band the "Main set power" bullet quotes, picked here
+def _main_band(event, pct_re):
+    """(lo, hi): the one ride band the "Main set power" bullet quotes, picked here
     (Jamie, 17 Oct 2026: shadow review: Jamie's ride had 15m 50-58% at each end and 57m
     60-70% between, both bands were listed, and Haiku printed the 50-58% one as an extra
     "Easy blocks" bullet while Sonnet did not). Minutes per %FTP band, a "4x" block's
     steps counted 4 times; the main set is the hardest band with 10+ min in it (so a 5-min
     opener in an endurance ride is not it), else the hardest band. "" if none."""
     import re
-    try:
-        ftp = float(ftp)
-    except (TypeError, ValueError):
-        return ""
-    if ftp <= 0:
-        return ""
     mins, mult = {}, 1
     for raw in str(event.get("description") or "").splitlines():
         line = raw.strip()
@@ -187,15 +181,44 @@ def _main_set_watts(event, ftp) -> str:
         if not tok or not d:
             continue
         t = int(d.group(1) or 0) * 60 + int(d.group(2) or 0) + int(d.group(3) or 0) / 60
-        p = re.search(_PCT, step)
+        p = re.search(pct_re, step)
         if not p:
             continue
         lo, hi = float(p.group(1)), float(p.group(2) or p.group(1))
         mins[(lo, hi)] = mins.get((lo, hi), 0) + t * mult
     if not mins:
-        return ""
+        return None
     long_enough = [b for b, t in mins.items() if t >= 10] or list(mins)
-    lo, hi = max(long_enough, key=lambda b: (b[1], b[0]))
+    return max(long_enough, key=lambda b: (b[1], b[0]))
+
+
+_PACE_PCT = r"(?<![\d.])(\d+(?:\.\d+)?)(?:\s*-\s*(\d+(?:\.\d+)?))?\s*%\s*Pace"
+
+
+def _main_set_pace(event, threshold, unit) -> str:
+    """"4:35-5:10/km": the one pace band a run (or swim) "Target pace" bullet quotes - the
+    main set, picked like _main_set_watts (Jamie, 17 Oct 2026: the brief quoted his run's
+    15-min warm-up band, 6:18-7:12, as the target for the whole run). "" if none."""
+    thr = _pace_s(threshold)
+    b = _main_band(event, _PACE_PCT)
+    if not thr or not b:
+        return ""
+    lo, hi = b
+    return f"{_mmss(thr / (hi / 100))}-{_mmss(thr / (lo / 100))}{unit}"
+
+
+def _main_set_watts(event, ftp) -> str:
+    """Watts for the main-set %FTP band (_main_band)."""
+    try:
+        ftp = float(ftp)
+    except (TypeError, ValueError):
+        return ""
+    if ftp <= 0:
+        return ""
+    b = _main_band(event, _PCT)
+    if not b:
+        return ""
+    lo, hi = b
     w_lo, w_hi = round(ftp * lo / 100), round(ftp * hi / 100)
     return f"{w_lo}-{w_hi} W" if w_lo != w_hi else f"{w_lo} W"
 
@@ -266,11 +289,14 @@ def _target_lines(events, css, ftp, run_threshold=None, run_note="", level="mid"
             bullets.append("• HR cap [bpm] only if the planned event sets one; otherwise leave that"
                            " bullet out, never write that none is set")
         elif fam == "run":
-            src = "the /km band above" if _pace_bands([e], run_threshold) else "/km, as the planned event gives it"
-            bullets += [f"• Target pace [{src}, the pace only]", f"• HR cap [bpm]{run_note}"]
+            pace = _main_set_pace(e, run_threshold, "/km")
+            bullets += [f"• Target pace {pace}" if pace else
+                        "• Target pace [/km, as the planned event gives it, the pace only]",
+                        f"• HR cap [bpm]{run_note}"]
         elif fam == "swim":
-            src = "the /100m band above" if _pace_bands([e], None, css) else "/100m, as the planned event gives it"
-            bullets.append(f"• Target pace [{src}, the pace only]"
+            pace = _main_set_pace(e, css, "/100m")
+            bullets.append((f"• Main set pace {pace}" if pace else
+                            "• Target pace [/100m, as the planned event gives it, the pace only]")
                            + (f" vs CSS {css or '?'}" if level == "pro" else ""))
             bullets.append("• Main set structure")
         elif fam == "strength":
