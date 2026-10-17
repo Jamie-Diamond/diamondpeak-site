@@ -6,7 +6,7 @@ import quality_inject as qi
 # faithful _seg_if mirror (post run-z3 fix: run z3 = 0.88)
 _IF = {"bike": {"z1": 0.55, "z2": 0.65, "z3": 0.80, "z4": 0.95, "z5": 1.05},
        "run":  {"z1": 0.60, "z2": 0.83, "z3": 0.88, "z4": 0.97, "z5": 1.06},
-       "swim": {"z1": 0.60, "z2": 0.72, "z3": 0.85, "z4": 1.00, "z5": 1.08}}
+       "swim": {"z1": 0.65, "z2": 0.78, "z3": 0.85, "z4": 1.00, "z5": 1.08}}  # swim z1/z2 raised 17 Oct 2026
 def seg_if(sport, seg):
     if seg.get("if") is not None:
         return seg["if"]

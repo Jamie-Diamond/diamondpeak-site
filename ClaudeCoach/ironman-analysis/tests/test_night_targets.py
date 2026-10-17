@@ -16,7 +16,9 @@ def _ev(t, name, desc="", start="2026-10-17T00:00:00", **kw):
             "start_date_local": start, **kw}
 
 
-SWIM = _ev("Swim", "Technique swim", "- 10m 70-80% Pace\n- 30m 58-66% Pace\n- 5m 70-80% Pace")
+# Swim bands as rendered since 17 Oct 2026 (warm-up/cool-down 85-91%, drill 78-86% of CSS;
+# were 70-80% / 58-66%, i.e. 2:03-2:49/100m off a 1:38 CSS).
+SWIM = _ev("Swim", "Technique swim", "- 10m 85-91% Pace\n- 30m 78-86% Pace\n- 5m 85-91% Pace")
 RUN = _ev("Run", "Tempo run", "- 20m 78-88% Pace")
 RIDE = _ev("Ride", "Endurance ride", "- 15m 50-58%\n- 57m 60-70%\n- 5m 95%\n- 10m 70% HR",
            icu_intensity=61.588177)
@@ -24,7 +26,7 @@ RIDE = _ev("Ride", "Endurance ride", "- 15m 50-58%\n- 57m 60-70%\n- 5m 95%\n- 10
 
 def test_swim_pace_is_per_100m_from_css_not_run_threshold():
     bands = nb._pace_bands([SWIM], "5:04/km - DERIVED working estimate", "1:38")
-    assert bands == ["Swim 70-80% Pace = 2:03-2:20/100m", "Swim 58-66% Pace = 2:28-2:49/100m"]
+    assert bands == ["Swim 85-91% Pace = 1:48-1:55/100m", "Swim 78-86% Pace = 1:54-2:06/100m"]
     assert not any("/km" in b for b in bands)
 
 
@@ -182,3 +184,16 @@ def test_run_target_is_the_main_set_not_the_warm_up():
     assert nb._main_set_pace(ev, "4:02", "/km") == "4:35-5:10/km"
     lines = nb._target_lines([ev], "1:41", 297, "4:02", level="pro")
     assert any(l == "• Target pace 4:35-5:10/km" for l in lines)
+
+
+def test_swim_easy_main_set_is_css_plus_4_to_9():
+    """17 Oct 2026 (Jamie): a 1:41 CSS "easy" swim came out 2:06-2:24/100m. The rendered
+    easy band is now 92-96% of CSS = CSS+4-9 s, and the brief quotes it, not the warm-up."""
+    import sys as _s
+    _s.path.insert(0, str(CC / "ironman-analysis"))
+    from primitives.planned_tss import render_workout
+    r = render_workout("Swim", [{"minutes": 10, "zone": "warmup"}, {"minutes": 28, "zone": "easy"},
+                                {"minutes": 5, "zone": "cooldown"}])
+    ev = _ev("Swim", "Easy swim", r["description"])
+    assert nb._main_set_pace(ev, "1:41", "/100m") == "1:45-1:50/100m"
+    assert nb._main_set_pace(ev, "1:38", "/100m") == "1:42-1:47/100m"

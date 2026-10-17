@@ -47,8 +47,18 @@ _DUR_DEFAULT_MIN = {
 # integrates to the session-average IF seen in logged history (e.g. Jamie's CSS
 # swims average ~0.90 → a WU/CSS-main/CD split integrates to ~0.88–0.92).
 _ZONE_IF = {
-    "swim": {"recovery": 0.60, "easy": 0.72, "warmup": 0.70, "cooldown": 0.65,
-             "aerobic": 0.80, "drill": 0.68, "kick": 0.70, "pull": 0.85,
+    # SWIM IFs are NOT the step's % of CSS (Jamie, 17 Oct 2026). Swim speed is compressed:
+    # an easy swim at CSS+4-9 s/100m is 92-96% of CSS speed, and an IF that high would bin
+    # every easy swim minute as Z4-5 against the shared 0.85 / 0.90 cuts stage1 and
+    # quality_inject classify with. So the easy end stays on the session-average scale,
+    # tuned against logged swims (Jamie + Kathryn, Jul-Oct 2026: easy/aerobic swims log
+    # ~60 Load/hr of elapsed time, wall rest included), and stays below 0.85. The pace is
+    # _ZONE_BAND's job. Raised from easy 0.72 / warm-up 0.70 / cool-down 0.65 / recovery
+    # 0.60 / drill 0.68 with the faster bands; pull 0.85 -> 0.80 (it now renders at aerobic
+    # pace, not near steady, and 0.85 made a pull set count as quality).
+    # scripts/stage1-plan.py:_ZLABEL_IF swim z1/z2 must equal recovery/easy here.
+    "swim": {"recovery": 0.65, "easy": 0.78, "warmup": 0.75, "cooldown": 0.72,
+             "aerobic": 0.80, "drill": 0.72, "kick": 0.70, "pull": 0.80,
              "steady": 0.88, "race": 0.95, "css": 1.00, "threshold": 1.00,
              "speed": 1.08, "sprint": 1.12},
     # Run easy blocks re-centred 17 Oct 2026 with _ZONE_BAND below (Jamie: "what the hell
@@ -128,17 +138,27 @@ def segment_if(sport: str, zone: str) -> float:
 # %-of-threshold bands per zone for STRUCTURED workout steps (what syncs to
 # Garmin). Bike bands are %FTP (power); run/swim bands are %threshold-pace.
 # Centred on the same intensities as _ZONE_IF so computed TSS and the pushed
-# structure agree.
+# structure agree - except swim's easy end, whose IFs are session-average load (see
+# _ZONE_IF) while these bands are the real paces.
 _ZONE_BAND = {
     # Run easy blocks were 56-72% of threshold pace (Jamie, 17 Oct 2026: his easy run's
     # warm-up came out at 6:18-7:12/km off a 4:02 threshold). Intervals.icu's run Zone 1
     # runs to 77.5% and Zone 2 to 87.7%, so recovery / warm-up / cool-down now sit in the
-    # top of Zone 1. SWIM easy bands are still too slow (a 1:41 CSS "easy" = 2:06-2:24);
-    # fixing them moves stage1's IFs and the label validator with them - separate change.
-    "swim": {"recovery": (58, 66), "easy": (70, 80), "warmup": (66, 74),
-             "cooldown": (60, 70), "aerobic": (76, 84), "drill": (62, 72),
-             "kick": (64, 74), "pull": (82, 88), "steady": (84, 92),
-             "race": (92, 98), "css": (97, 103), "threshold": (98, 104),
+    # top of Zone 1.
+    # SWIM easy bands were copied from the IF table, not from swim paces (Jamie, 17 Oct
+    # 2026: a 1:41 CSS "easy" came out 2:06-2:24/100m and Kathryn's warm-up 2:49/100m). A
+    # swim "% Pace" is a share of CSS speed, so CSS + N s/100m = CSS / (CSS + N). Per
+    # lib/coach_manual.md: easy/aerobic CSS+4-9 s = 92-96%; warm-up / recovery / cool-down
+    # CSS+10-18 s = 85-91%; drill slower (78-86%); pull at aerobic pace (90-95%); kick is
+    # genuinely slow and keeps 64-74%. steady sits between aerobic and race (94-96%).
+    # race moved 92-98 -> 97-100 (CSS to CSS+3, the manual's race pace): with easy topping
+    # out at 96, a race floor of 92 would let a "race pace" swim of easy steps pass
+    # name_intensity_mismatch. Every claim floor (race 97, css 97, threshold 98, speed
+    # 104) stays above the top of every easy band (96), so the check keeps its teeth.
+    "swim": {"recovery": (85, 91), "easy": (92, 96), "warmup": (85, 91),
+             "cooldown": (85, 91), "aerobic": (92, 96), "drill": (78, 86),
+             "kick": (64, 74), "pull": (90, 95), "steady": (94, 96),
+             "race": (97, 100), "css": (97, 103), "threshold": (98, 104),
              "speed": (104, 112), "sprint": (108, 118)},
     "run":  {"recovery": (68, 76), "easy": (78, 88), "z2": (78, 88),
              "warmup": (70, 78), "cooldown": (68, 76), "steady": (80, 86),
@@ -367,8 +387,15 @@ _RPE_CUES = {
             (93, "Steady, RPE 5"), (97, "Comfortably hard, RPE 6"),
             (104, "Hard but sustainable, RPE 7"), (112, "Very hard, RPE 8"),
             (999, "All out, RPE 9")),
+    # Swim has its own cut points (Jamie, 17 Oct 2026): its bands are compressed into
+    # 85-96% of CSS for everything easy, so run's cuts would call an easy swim (mid 94)
+    # "Comfortably hard". Warm-up/recovery/cool-down/drill/kick -> very easy, easy/aerobic/
+    # pull -> easy, steady -> steady, race -> comfortably hard, CSS/threshold -> hard.
+    "swim": ((91.5, "Very easy, RPE 2"), (95, "Easy, RPE 3, conversational"),
+             (96.5, "Steady, RPE 5"), (99.5, "Comfortably hard, RPE 6"),
+             (105, "Hard but sustainable, RPE 7"), (110, "Very hard, RPE 8"),
+             (999, "All out, RPE 9")),
 }
-_RPE_CUES["swim"] = _RPE_CUES["run"]
 
 
 def rpe_cue(sport: str, lo: float, hi: float) -> str:

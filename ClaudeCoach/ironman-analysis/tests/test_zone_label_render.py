@@ -39,7 +39,7 @@ class LabelIFsAgreeWithStage1(unittest.TestCase):
 
     def test_easy_labels(self):
         for sport, label, want in (("Ride", "Z2", 0.65), ("Run", "Z2", 0.83),
-                                   ("Swim", "Z2", 0.72), ("Swim", "Z1", 0.60)):
+                                   ("Swim", "Z2", 0.78), ("Swim", "Z1", 0.65)):
             self.assertAlmostEqual(segment_if(sport, label), want, places=2,
                                    msg=f"{sport} {label}")
 
@@ -184,9 +184,28 @@ class StillHasTeeth(unittest.TestCase):
         self.assertEqual(found, 120)
 
     def test_css_swim_over_easy_labels_still_blocks(self):
+        # Easy swim tops out at 96% of CSS since the bands moved to real paces (Jamie,
+        # 17 Oct 2026: CSS+4-9 s/100m); CSS needs 97. One point apart, still caught.
         _, mm = _hardest("Swim", "CSS 5x400", [{"minutes": 15, "zone": "Z1"},
                                                {"minutes": 32, "zone": "Z2"}])
-        self.assertEqual((mm["claim"], mm["found"]), ("css", 80))
+        self.assertEqual((mm["claim"], mm["required"], mm["found"]), ("css", 97, 96))
+
+    def test_every_easy_swim_band_is_caught_by_every_swim_claim(self):
+        # The guard behind the one above, for every easy-end swim zone and every claim a
+        # swim name can make: no easy step may reach a claim's floor. race moved 92-98 ->
+        # 97-100 for exactly this (17 Oct 2026); at 92 an all-easy "race pace" swim passed.
+        easy = ("recovery", "warmup", "cooldown", "easy", "aerobic", "drill", "kick",
+                "pull", "steady", "Z1", "Z2", "Z3")
+        for claim_name in ("CSS 5x400", "Threshold 4x300", "Race pace 8x200",
+                           "Technique + speed 8x100"):
+            for z in easy:
+                _, mm = _hardest("Swim", claim_name, [{"minutes": 40, "zone": z}])
+                self.assertIsNotNone(mm, msg=f"{claim_name!r} over {z} steps passed")
+
+    def test_race_pace_swim_over_easy_still_blocks(self):
+        _, mm = _hardest("Swim", "Race pace 8x200", [{"minutes": 10, "zone": "warmup"},
+                                                     {"minutes": 30, "zone": "aerobic"}])
+        self.assertEqual((mm["claim"], mm["required"], mm["found"]), ("race pace", 97, 96))
 
 
 class ExplicitIntensityWins(unittest.TestCase):
@@ -214,9 +233,11 @@ class WithoutAName(unittest.TestCase):
 
     def test_swim_warmup_label_is_not_near_css(self):
         # The quieter half of the same fallback: every TID-labelled swim warm-up was
-        # prescribed at 76-84% of CSS.
+        # prescribed at 76-84% of CSS. Since 17 Oct 2026 a Z1 warm-up is 85-91% (CSS+10-18
+        # s/100m, Jamie): a real warm-up pace, and still below the 97% CSS floor.
         r = render_workout("Swim", [{"minutes": 10, "zone": "Z1"}])
-        self.assertEqual(top_step_pct(r["description"])[0], 66)
+        self.assertEqual(r["description"], "- 10m 85-91% Pace")
+        self.assertLess(top_step_pct(r["description"])[0], 97)
 
 
 if __name__ == "__main__":
