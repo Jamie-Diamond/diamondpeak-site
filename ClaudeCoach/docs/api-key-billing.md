@@ -1,7 +1,7 @@
 # Claude API key for athletes' coaching
 
-Set up 16 Oct 2026. **Fred and James are on the key** (Jamie, 16 Oct); everyone else waits for the
-daily messages to be on Haiku.
+Set up 16 Oct 2026. **Everyone except Jamie is on the key** (`api_athletes: "all"`, Jamie, 17 Oct);
+Fred and James moved first, on 16 Oct. A new sign-up lands on the key with no action.
 
 ## How it works
 
