@@ -172,7 +172,10 @@ def test_build_publishes_predictions_and_keeps_one_row_a_week(tmp_path, monkeypa
     assert run["k"]["own"] and len(run["races"]) == 3 and run["weeklyKm"] > 0
     performance.build("x", c, {}, {}, today=date(2026, 10, 18))
     rows = json.loads((tmp_path / "athletes" / "x" / "performance-history.json").read_text())
-    assert len(rows) == 1 and rows[0]["date"] == "2026-10-18" and rows[0]["pred"]["5k"]
+    weeks = [r["week"] for r in rows]
+    assert len(weeks) == len(set(weeks)) == performance.BACKFILL_WEEKS + 1     # a year rebuilt + this week
+    assert rows[-1]["date"] == "2026-10-18" and rows[-1]["pred"]["5k"] and rows[-1]["v"] == performance.HISTORY_V
+    assert rows[0]["week"] == "2025-10-13" and "weeklyKm" in rows[0]           # backfilled once, not twice
 
 
 def test_goals_page_uses_the_athletes_races(monkeypatch):

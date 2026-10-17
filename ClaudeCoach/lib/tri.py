@@ -192,7 +192,9 @@ def legs(kind: str, tri_block: dict, run_block: dict | None, bike_block: dict | 
         f, n = (tri_block.get("swim_factor") or [SWIM_DEFAULT, 0])
         t = swim_km * 10 * css * f
         out["swim"] = {"time_s": t, "you": f"CSS {_mmss(css)} × {f:.2f} open water ≈ {_hm(t)}",
-                       "source": f"{n} race swims" if n else "typical open-water gap (no race swims yet)"}
+                       "source": f"{n} race swims" if n else "typical open-water gap (no race swims yet)",
+                       "levers": [{"label": "CSS 3 s/100 m faster", "minutes": swim_km * 10 * 3 * f / 60,
+                                   "why": "CSS sets"}]}
     ftp, kg = (bike_block or {}).get("ftp"), (bike_block or {}).get("weight")
     if ftp:
         hours = bike_hours or bike_km / 32.0
@@ -204,8 +206,12 @@ def legs(kind: str, tri_block: dict, run_block: dict | None, bike_block: dict | 
         if t:
             how = (f"your {len(anchors)} past ride{'s' if len(anchors) > 1 else ''} here" if anchors
                    else "the course and a typical age-group position")
+            vi = (tri_block or {}).get("vi") or VI_DEFAULT
+            avg10 = (ftp + 10) * i / vi
+            t10 = bike_time(avg10, anchors) if anchors else bike_time_physics(avg10, course_ele, kg)
             out["bike"] = {"time_s": t, "you": f"{ftp} W FTP → ~{np_w:.0f} W NP (IF {i:.2f}) ≈ {_hm(t)}",
-                           "source": how}
+                           "source": how,
+                           "levers": [{"label": "FTP +10 W", "minutes": (t - t10) / 60, "why": "the bike leg"}] if t10 else []}
     run = run_block or {}
     p = rm.predict(run_km * 1000, run.get("races") or [], today, run.get("weeklyKm") or 0.0,
                    run.get("training"), run.get("recentBreakDays"))
@@ -213,5 +219,8 @@ def legs(kind: str, tri_block: dict, run_block: dict | None, bike_block: dict | 
         f, n = ((tri_block or {}).get("off_bike") or {}).get(kind) or [RUN_DEFAULT.get(kind, 1.08), 0]
         t = p["now_s"] * f
         out["run"] = {"time_s": t, "you": f"open {_hm(p['now_s'])} × {f:.2f} off the bike ≈ {_hm(t)}",
-                      "source": f"{n} past {kind.replace('_', '.')} runs" if n else "typical off-the-bike slowing"}
+                      "source": f"{n} past {kind.replace('_', '.')} runs" if n else "typical off-the-bike slowing",
+                      "levers": [{"label": "Run fitness +2%", "minutes": t * (1 - 1 / 1.02) / 60, "why": "the run leg"},
+                                 {"label": "Fade less off the bike (−3%)", "minutes": p["now_s"] * 0.03 / 60,
+                                  "why": "bricks, pacing the bike, race fuelling"}]}
     return out

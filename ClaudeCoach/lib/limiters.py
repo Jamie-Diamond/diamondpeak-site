@@ -198,7 +198,34 @@ def diagnose(dist_m: float, goal_s: int, goal: str, run: dict, fitness: dict | N
     return {"rows": rows, "limiter": limiter,
             "headline": _headline(limiter, by, goal, fitness, run, eff, goal_pace, also),
             "fix": _fix(limiter, run, dist_m),
+            "levers": run_levers(dist_m, goal_s, run),
             "foot": _foot(run)}
+
+
+# ── Where the minutes are (Jamie, 17 Oct 2026: "minutes per fix on every card") ─────
+# What a realistic gain in each lever is worth on race day, each on its own (they overlap,
+# so they don't add up). Gains are a block's worth, judgement: threshold +3%, economy +2%,
+# VO2max +2 (only up to 10 km: past that, threshold decides), 10 km more running a week
+# (Vickers & Vertosick 2016's mileage term, scaled down for shorter races).
+
+def _lever(label, minutes, why=None) -> dict | None:
+    return {"label": label, "minutes": round(minutes), "why": why} if minutes and minutes >= 0.5 else None
+
+
+def run_levers(dist_m: float, goal_s, run: dict) -> list:
+    ev = next((k for k, m in rm.STANDARD_M.items() if abs(m - dist_m) < 500), None)
+    t = ((run.get("predictions") or {}).get(ev) or {}).get("now_s") or goal_s
+    if not t:
+        return []
+    out = [_lever("Threshold +3%", t * (1 - 1 / 1.03) / 60, "threshold sessions"),
+           _lever("Economy +2%", t * (1 - 1 / 1.02) / 60, "strides, hills, strength")]
+    vo2 = (run.get("engine") or {}).get("vo2max")
+    if vo2 and dist_m <= 10500:
+        out.append(_lever("VO2max +2", t * (1 - 1 / (1 + 2 / vo2)) / 60, "VO2max intervals"))
+    v = dist_m / t
+    dv = 0.06423826 * (10 / rm.KM_PER_MILE) / 10 * min(1.0, dist_m / 42195)
+    out.append(_lever("10 km more running a week", (t - dist_m / (v + dv)) / 60, "volume"))
+    return sorted([x for x in out if x], key=lambda x: -x["minutes"])
 
 
 def _headline(limiter, by, goal, fitness, run, eff, goal_pace, also) -> str:
@@ -385,7 +412,26 @@ def diagnose_bike(course: dict | None, bike: dict | None, fitness: dict | None,
         limiter = "day"
     head = _bike_headline(limiter, by, course, bike, binding, need_w)
     return {"rows": rows, "limiter": limiter, "headline": head,
-            "fix": _bike_fix(limiter, course, bike), "foot": _bike_foot(course, bike, no_meter)}
+            "fix": _bike_fix(limiter, course, bike), "levers": bike_levers(course, bike),
+            "foot": _bike_foot(course, bike, no_meter)}
+
+
+def bike_levers(course, bike) -> list:
+    """Minutes off the climbs to the binding cut-off: +10 W of FTP, 3 kg lighter (physics)."""
+    import course as cs
+    if not course or not course.get("start") or not bike or not bike.get("ftp") or not bike.get("weight"):
+        return []
+    kg, hold = bike["weight"], CLIMB_IF * bike["ftp"]
+    at = cs.needs(course, hold, kg)
+    if not at:
+        return []
+    km = max(at, key=lambda n: n["rest_kmh"] if n["rest_kmh"] is not None else 999)["km"]
+    base = cs.climbing_split(course["ele"], 0, km, hold, kg + cs.KIT_KG)[0]
+    w10 = base - cs.climbing_split(course["ele"], 0, km, hold + CLIMB_IF * 10, kg + cs.KIT_KG)[0]
+    kg3 = base - cs.climbing_split(course["ele"], 0, km, hold, kg - 3 + cs.KIT_KG)[0]
+    return sorted([x for x in (_lever("FTP +10 W", w10 / 60, f"on the climbs to km {km:g}"),
+                               _lever("3 kg lighter", kg3 / 60, f"on the climbs to km {km:g}")) if x],
+                  key=lambda x: -x["minutes"])
 
 
 def _bike_headline(limiter, by, course, bike, binding, need_w) -> str:
@@ -540,7 +586,10 @@ def diagnose_tri(kind: str, splits: dict | None, legs: dict, fitness: dict | Non
             "bike from your past rides on this course (or the course and a typical age-group position "
             "the first time), wind moving it by 5-10% either way; run from your open-run fitness and how "
             "much your past triathlon runs slowed.")
-    return {"rows": rows, "limiter": limiter, "headline": head, "fix": fix, "foot": foot}
+    levers = sorted([x for x in (_lever(l["label"], l["minutes"], l.get("why"))
+                                 for leg in legs.values() for l in leg.get("levers") or []) if x],
+                    key=lambda x: -x["minutes"])
+    return {"rows": rows, "limiter": limiter, "headline": head, "fix": fix, "levers": levers, "foot": foot}
 
 
 # ── The plan nudge ─────────────────────────────────────────────────────────────

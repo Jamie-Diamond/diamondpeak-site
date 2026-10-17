@@ -66,8 +66,8 @@ SLIM = ("id", "start_date_local", "type", "name", "distance", "moving_time", "el
         "average_heartrate", "athlete_max_hr", "icu_resting_hr", "icu_ignore_hr", "gap",
         "average_speed", "device_name", "race", "VO2MaxGarmin", "lthr", "decoupling",
         "threshold_pace", "icu_average_watts", "icu_weight", "carbs_ingested",
-        "icu_weighted_avg_watts")
-CACHE_VERSION = 5                    # bump when SLIM grows: forces a full refetch
+        "icu_weighted_avg_watts", "icu_rolling_ftp")
+CACHE_VERSION = 6                    # bump when SLIM grows: forces a full refetch
 RIDE_TYPES = ("Ride", "VirtualRide", "GravelRide", "MountainBikeRide")
 OUTDOOR_RIDES = ("Ride", "GravelRide", "MountainBikeRide")
 LONG_RIDE_S = 3 * 3600
@@ -329,8 +329,93 @@ def determinants(acts: list, today: date, profile: dict | None = None,
     return out
 
 
-def record_week(slug: str, run: dict, today: date) -> None:
-    """One row per ISO week (the latest build of the week wins), newest last."""
+HISTORY_V = 2                         # rows carry the bike and fitness fields; older rows get backfilled
+BACKFILL_WEEKS = 52
+
+
+def _median(xs):
+    xs = [x for x in xs if x is not None]
+    return round(statistics.median(xs), 1) if xs else None
+
+
+def _log_drift(log: list, as_of: date, min_minutes: int, days: int = 56):
+    """Median drift (%) of logged sessions of min_minutes+ in the `days` before as_of."""
+    return _median(e.get("decoupling_pct") for e in log or []
+                   if (e.get("duration_min") or 0) >= min_minutes
+                   and (d := rm._d(e.get("date"))) and 0 < (as_of - d).days <= days)
+
+
+def _curve_history(client, sport: str, ends: list) -> dict:
+    """{end_iso: run_power(...)} for the 90 days before each date, from Intervals' power
+    curves over custom windows ("r.START.END", 13 per call)."""
+    out = {}
+    for i in range(0, len(ends), 13):
+        chunk = ends[i:i + 13]
+        ids = ",".join(f"r.{(e - timedelta(days=90)).isoformat()}.{(e - timedelta(days=1)).isoformat()}"
+                       for e in chunk)
+        try:
+            reply = client._get("power-curves", {"type": sport, "curves": ids})
+        except Exception:
+            continue
+        for c in (reply or {}).get("list") or []:
+            end = rm._d(str(c.get("id") or "").split(".")[-1])
+            if end:
+                out[(end + timedelta(days=1)).isoformat()] = run_power({"list": [c]})
+    return out
+
+
+def history_row(as_of: date, acts: list, run_cp=None, bike_cp=None, ctl=None,
+                run_log=None, ride_log=None, races=None) -> dict:
+    """The factors as they stood on `as_of` (activities before it only): what Trends draws."""
+    day = as_of - timedelta(days=1)
+    eng = engine(acts, day) or {}
+    eco = economy(acts, day) or {}
+    km, longest = _volume(acts, day)
+    rides = [a for a in acts if a.get("type") in RIDE_TYPES and (d := rm._d(a.get("start_date_local")))
+             and 0 <= (day - d).days < 90]
+    ftps = sorted(((a["start_date_local"], a["icu_rolling_ftp"]) for a in rides if a.get("icu_rolling_ftp")))
+    row = {"week": (as_of - timedelta(days=as_of.weekday())).isoformat(), "date": as_of.isoformat(),
+           "v": HISTORY_V, "vo2max": eng.get("vo2max"), "vo2max_source": eng.get("source"),
+           "cp": run_cp, "economy": eco.get("value"), "weeklyKm": km, "longestKm": longest,
+           "drift": _log_drift(run_log, as_of, 75), "bike_cp": bike_cp,
+           "bike_ftp": ftps[-1][1] if ftps else None,
+           "bike_drift": _log_drift(ride_log, as_of, 180),
+           "longest_ride_h": round(max(((a.get("moving_time") or 0) for a in rides), default=0) / 3600, 1),
+           "ctl": ctl}
+    if races is not None:
+        ok = [r for r in races if r["date"] < as_of.isoformat()]
+        row["pred"] = {ev: p["now_s"] for ev in ("5k", "10k", "half_marathon", "marathon")
+                       if (p := rm.predict(rm.STANDARD_M[ev], ok, day, km))}
+    return row
+
+
+def backfill(slug: str, client, acts: list, today: date, races: list, weeks: int = BACKFILL_WEEKS) -> list:
+    """History rows for the past `weeks` Mondays, rebuilt from Intervals: the factors as
+    they stood each week, so Trends has a line from day one (Jamie, 17 Oct 2026)."""
+    monday = today - timedelta(days=today.weekday())
+    ends = [monday - timedelta(weeks=w) for w in range(weeks, 0, -1)]
+    run_c = _curve_history(client, "Run", ends)
+    ride_c = _curve_history(client, "Ride", ends)
+    try:
+        wl = client.get_wellness(days=weeks * 7 + 7) or []
+        ctl_by = {str(w.get("id"))[:10]: w.get("ctl") for w in wl if w.get("ctl") is not None}
+    except Exception:
+        ctl_by = {}
+    run_log = _load(_athlete_dir(slug) / "run-durability-log.json", [])
+    ride_log = _load(_athlete_dir(slug) / "decoupling-log.json", [])
+    rows = []
+    for e in ends:
+        iso = e.isoformat()
+        ctl = next((round(ctl_by[d], 1) for d in ((e - timedelta(days=i)).isoformat() for i in range(1, 8))
+                    if d in ctl_by), None)
+        rows.append(history_row(e, acts, (run_c.get(iso) or {}).get("cp"), (ride_c.get(iso) or {}).get("cp"),
+                                ctl, run_log, ride_log, races))
+    return rows
+
+
+def record_week(slug: str, run: dict, today: date, extra: dict | None = None) -> list:
+    """One row per ISO week (the latest build of the week wins), newest last. `extra`:
+    the bike / fitness fields of history_row for this week. Returns the rows."""
     path = _athlete_dir(slug) / "performance-history.json"
     rows = _load(path, [])
     week = (today - timedelta(days=today.weekday())).isoformat()
@@ -346,11 +431,15 @@ def record_week(slug: str, run: dict, today: date) -> None:
            "drift": (run.get("durability") or {}).get("drift_pct"),
            "bestRaceVdot": max((r["vdot"] for r in recent), default=None),
            "races": len(run.get("races") or [])}
+    for k, v in (extra or {}).items():
+        row.setdefault(k, v)
     rows = [r for r in rows if r.get("week") != week] + [row]
+    rows = sorted(rows, key=lambda r: r["week"])[-KEEP_WEEKS:]
     try:
-        path.write_text(json.dumps(rows[-KEEP_WEEKS:], indent=1))
+        path.write_text(json.dumps(rows, indent=1))
     except OSError:
         pass
+    return rows
 
 
 def build(slug: str, client, cfg: dict | None = None, profile: dict | None = None,
@@ -368,7 +457,6 @@ def build(slug: str, client, cfg: dict | None = None, profile: dict | None = Non
         power = None
     dur_log = _load(_athlete_dir(slug) / "run-durability-log.json", [])
     run = determinants(acts, today, profile, training, cs, power, dur_log)
-    record_week(slug, run, today)
     out = {"asOf": today.isoformat(), "run": run}
     try:
         ride_power = run_power(client._get("power-curves", {"type": "Ride", "curves": "90d"}))
@@ -383,6 +471,26 @@ def build(slug: str, client, cfg: dict | None = None, profile: dict | None = Non
     out["bike"] = bike(acts, today, ride_power, ftp,
                        _load(_athlete_dir(slug) / "decoupling-log.json", []))
     out["tri"] = tri_block(acts, run, profile, client)
+    # Trends (Jamie, 17 Oct 2026): this week's row, and a year rebuilt once from Intervals.
+    path = _athlete_dir(slug) / "performance-history.json"
+    if not any(r.get("v") == HISTORY_V for r in _load(path, [])[:-1]):
+        try:
+            old = {r["week"]: r for r in _load(path, [])}
+            for r in backfill(slug, client, acts, today, run.get("races") or []):
+                old[r["week"]] = {**old.get(r["week"], {}), **r}
+            path.write_text(json.dumps(sorted(old.values(), key=lambda r: r["week"])[-KEEP_WEEKS:], indent=1))
+        except Exception:
+            pass
+    try:
+        wl = client.get_wellness(days=2) or []
+        ctl = round(float(wl[-1].get("ctl")), 1) if wl and wl[-1].get("ctl") is not None else None
+    except Exception:
+        ctl = None
+    now = history_row(today + timedelta(days=1), acts, None, (ride_power or {}).get("cp"), ctl,
+                      _load(_athlete_dir(slug) / "run-durability-log.json", []),
+                      _load(_athlete_dir(slug) / "decoupling-log.json", []))
+    extra = {k: now[k] for k in ("v", "bike_cp", "bike_ftp", "bike_drift", "longest_ride_h", "ctl", "vo2max_source")}
+    out["history"] = record_week(slug, run, today, extra)[-BACKFILL_WEEKS:]
     return out
 
 

@@ -3224,8 +3224,11 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       '<div class="chartbox tall"><canvas id="c-now"></canvas></div>',
       { action: action, foot: META.foot });
 
+    // Right after the first card, on the Fitness view (the factors behind the Goals card).
+    if (sel === 'fit') h += factorCard(d);
     h += trendExtras(sel, d);
     $('#v-trends').innerHTML = h;
+    if (sel === 'fit') wireFactorScrub($('#v-trends'));
 
     $('#trendSeg').onclick = function (e) {
       var b = e.target.closest('button');
@@ -3538,6 +3541,238 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     }
 
     return h;
+  }
+
+  /* ── What's holding you back, over time ──────────────────────────────────
+     The factors behind the Goals card (lib/performance.py history_row: one row a week for a
+     year), one small chart each, side by side on one shared time axis. The panel for the
+     area the Goals card names as the limiter is the one in colour; the rest stay grey.
+     factorPanels() chooses and shapes the data and draws nothing; factorChart() and
+     factorTile() draw it. Inline SVG, like the Body sparklines, so there is no Chart.js
+     instance to destroy when the tab changes. */
+  // pos: zero or below means "not measured" (a 0 W threshold is a gap, not a reading).
+  // Without it a zero is a real value (no running that week), though a series that is
+  // zero every week is dropped as having nothing to say.
+  var FACTORS = {
+    cp:             { label: 'Threshold power',     unit: 'W',  dp: 0, pos: true },
+    economy:        { label: 'Economy',             unit: '',   dp: 2, pos: true, fixed: true },
+    vo2max:         { label: 'VO2max',              unit: '',   dp: 1, pos: true },
+    drift:          { label: 'Drift on long runs',  unit: '%',  dp: 1 },
+    ctl:            { label: 'Fitness',             unit: '',   dp: 0 },
+    weeklyKm:       { label: 'Weekly km',           unit: 'km', dp: 0 },
+    bike_ftp:       { label: 'FTP',                 unit: 'W',  dp: 0, pos: true },
+    longest_ride_h: { label: 'Longest ride',        unit: 'h',  dp: 1 },
+    bike_drift:     { label: 'Drift on long rides', unit: '%',  dp: 1 }
+  };
+  var FACTOR_SETS = {
+    run:  ['cp', 'economy', 'vo2max', 'drift', 'ctl', 'weeklyKm'],
+    bike: ['bike_ftp', 'longest_ride_h', 'bike_drift', 'ctl'],
+    tri:  ['vo2max', 'cp', 'bike_ftp', 'ctl', 'weeklyKm', 'bike_drift'],
+    // No Goals card (no race or goal): every series that has something to show.
+    any:  ['cp', 'economy', 'vo2max', 'drift', 'ctl', 'weeklyKm', 'bike_ftp', 'longest_ride_h', 'bike_drift']
+  };
+  // The Goals card's limiter key -> the factor that moves it.
+  var LIMITER_FACTOR = {
+    threshold: 'cp', efficiency: 'economy', engine: 'vo2max', durability: 'drift',
+    fitness: 'ctl', climbing: 'bike_ftp', day: 'longest_ride_h'
+  };
+
+  // Which kind of Goals card this is, from its rows (lib/limiters.py): climbing = bike,
+  // swim = triathlon, anything else = run. null when there is no card.
+  function limitersKind(L) {
+    if (!L || !L.rows || !L.rows.length) return null;
+    var keys = L.rows.map(function (r) { return r && r.key; });
+    return keys.indexOf('climbing') >= 0 ? 'bike' : keys.indexOf('swim') >= 0 ? 'tri' : 'run';
+  }
+
+  function limiterFactor(L, kind) {
+    var k = L && L.limiter;
+    if (!k || !kind) return null;
+    // Durability is drift on long runs for a run card, on long rides for bike and tri.
+    if (k === 'durability') return kind === 'run' ? 'drift' : 'bike_drift';
+    // A triathlon card names a leg: the bike's factor is FTP, the run's is threshold power.
+    if (kind === 'tri' && k === 'bike') return 'bike_ftp';
+    if (kind === 'tri' && k === 'run') return 'cp';
+    return LIMITER_FACTOR[k] || null;
+  }
+
+  /* history: performance.history (weekly rows, oldest first, any field may be missing).
+     L: the Goals card (season.limiters) or undefined. Returns the panels to draw, in
+     order: {key, label, unit, dp, fixed, points: [{week, t, v}], highlight, tick, lo, hi,
+     x0, x1}. points holds measured weeks only; a gap in the weeks stays a gap (the chart
+     breaks the line there). x0/x1 are the whole history's first and last week, the same
+     for every panel. tick: the first Garmin week of a VO2max series that was estimated
+     from heart rate before it, else null. Fewer than 3 points: no panel. */
+  function factorPanels(history, L) {
+    var rows = (history || []).filter(function (r) { return r && r.week; });
+    var kind = limitersKind(L), hot = limiterFactor(L, kind);
+    var stamp = function (w) { return Date.parse(w + 'T12:00:00'); };
+    var x0 = rows.length ? stamp(rows[0].week) : 0;
+    var x1 = rows.length ? stamp(rows[rows.length - 1].week) : 0;
+    var out = [];
+    FACTOR_SETS[kind || 'any'].forEach(function (key) {
+      var f = FACTORS[key], pts = [], src = [];
+      rows.forEach(function (r) {
+        var v = r[key];
+        if (v == null || v === '' || typeof v === 'boolean' || !isFinite(Number(v))) return;
+        v = Number(v);
+        if (f.pos && v <= 0) return;
+        pts.push({ week: r.week, t: stamp(r.week), v: v });
+        src.push(String(r.vo2max_source || '').toLowerCase());
+      });
+      if (pts.length < 3) return;
+      if (!f.pos && pts.every(function (q) { return q.v === 0; })) return;
+      var tick = null;
+      if (key === 'vo2max') {
+        for (var i = 1; i < pts.length && !tick; i++) {
+          if (src[i - 1] === 'heart rate' && src[i] === 'garmin') tick = pts[i];
+        }
+      }
+      var vals = pts.map(function (q) { return q.v; });
+      out.push({ key: key, label: f.label, unit: f.unit, dp: f.dp, fixed: !!f.fixed,
+        points: pts, highlight: key === hot, tick: tick,
+        lo: Math.min.apply(null, vals), hi: Math.max.apply(null, vals), x0: x0, x1: x1 });
+    });
+    return out;
+  }
+
+  /* ── drawing (kept apart from the choosing above) ── */
+  var FP = { W: 200, H: 60, PX: 5, PY: 7 };   // viewBox; stretched to the tile, strokes stay put
+
+  function fpText(p, v) {
+    return p.fixed ? Number(v).toFixed(p.dp) : String(Number(Number(v).toFixed(p.dp)));
+  }
+  function fpValue(p, v) {
+    return esc(fpText(p, v)) + (p.unit ? '<span style="font-size:.55em;font-weight:500;color:var(--muted);' +
+      'margin-left:' + (p.unit === '%' ? 1 : 3) + 'px">' + esc(p.unit) + '</span>' : '');
+  }
+  function fpDate(iso, withYear) {
+    return new Date(iso + 'T12:00:00').toLocaleDateString('en-GB',
+      withYear ? { month: 'short', year: 'numeric' } : { day: 'numeric', month: 'short' });
+  }
+
+  // Time to x and value to y inside the viewBox. Own y range per panel (a different unit
+  // each), padded so the line never touches the edge; one shared x range.
+  function fpScale(p) {
+    var lo = p.lo, hi = p.hi, pad = (hi - lo) * 0.12 || Math.abs(hi) * 0.1 || 1;
+    lo -= pad; hi += pad;
+    var span = (p.x1 - p.x0) || 1;
+    return {
+      x: function (t) { return FP.PX + (t - p.x0) / span * (FP.W - 2 * FP.PX); },
+      y: function (v) { return FP.H - FP.PY - (v - lo) / (hi - lo) * (FP.H - 2 * FP.PY); }
+    };
+  }
+
+  // Runs of consecutive weeks. A week with no reading ends the run, so the line is never
+  // drawn across a stretch that was not measured.
+  function fpRuns(points) {
+    var runs = [], cur = [];
+    points.forEach(function (q) {
+      if (cur.length && q.t - cur[cur.length - 1].t > 8.5 * 864e5) { runs.push(cur); cur = []; }
+      cur.push(q);
+    });
+    if (cur.length) runs.push(cur);
+    return runs;
+  }
+
+  function factorChart(p) {
+    var s = fpScale(p), col = p.highlight ? 'var(--accent)' : 'var(--muted)';
+    var n = function (v) { return v.toFixed(1); };
+    var at = function (q) { return n(s.x(q.t)) + ' ' + n(s.y(q.v)); };
+    var line = '', lone = '';
+    fpRuns(p.points).forEach(function (run) {
+      if (run.length === 1) lone += 'M' + at(run[0]) + 'h0';      // a week on its own is a dot
+      else line += 'M' + run.map(at).join('L');
+    });
+    var end = p.points[p.points.length - 1];
+    // Round caps on a zero-length path = a dot that never stretches with the tile.
+    var dot = function (d, w, c, cls) {
+      return '<path' + (cls ? ' class="' + cls + '"' : '') + ' d="' + d + '" style="fill:none;stroke:' + c +
+        ';stroke-width:' + w + ';stroke-linecap:round;vector-effect:non-scaling-stroke"/>';
+    };
+    var label = p.label + ', now ' + fpText(p, end.v) + (p.unit ? ' ' + p.unit : '') + ', ranging from ' +
+      fpText(p, p.lo) + ' to ' + fpText(p, p.hi) + ' over ' + p.points.length + ' weeks';
+    return '<svg class="spark fp-c" viewBox="0 0 ' + FP.W + ' ' + FP.H + '" preserveAspectRatio="none" role="img" ' +
+      'aria-label="' + esc(label) + '" style="height:' + FP.H + 'px;margin-top:8px;overflow:visible;touch-action:pan-y">' +
+      (p.tick ? '<path d="M' + n(s.x(p.tick.t)) + ' 0V' + FP.H + '" style="fill:none;stroke:var(--muted);' +
+        'stroke-width:1;opacity:.6;vector-effect:non-scaling-stroke"/>' : '') +
+      (line ? '<path d="' + line + '" style="fill:none;stroke:' + col + ';stroke-width:2;stroke-linecap:round;' +
+        'stroke-linejoin:round;vector-effect:non-scaling-stroke"/>' : '') +
+      (lone ? dot(lone, 5, col) : '') +
+      // the latest week: a ring in the surface colour so the dot reads over the line
+      dot('M' + at(end) + 'h0', 12, '#fff') + dot('M' + at(end) + 'h0', 8, col) +
+      // pointer readout: a hairline and a dot, hidden until a finger or the mouse is on it
+      '<path class="fp-x" d="" style="fill:none;stroke:var(--ink-2);stroke-width:1;opacity:.5;' +
+        'vector-effect:non-scaling-stroke"/>' + dot('', 8, 'var(--ink)', 'fp-s') + '</svg>';
+  }
+
+  // One panel is one of the Figures tiles: the factor, the latest value large, the chart,
+  // then a line saying either what the range was or that this is the limiter.
+  function factorTile(p) {
+    var last = p.points[p.points.length - 1];
+    return '<div class="fig fp" data-k="' + esc(p.key) + '">' +
+      '<span class="n fp-n">' + fpValue(p, last.v) + '</span>' +
+      '<span class="l">' + esc(p.label) + '</span>' + factorChart(p) +
+      (p.highlight ? '<span class="d fp-d" style="color:var(--accent);font-weight:600">the limiter now</span>'
+        : '<span class="d fp-d">' + (fpText(p, p.lo) === fpText(p, p.hi) ? 'no change'
+          : 'range ' + esc(fpText(p, p.lo)) + '–' + esc(fpText(p, p.hi))) + '</span>') +
+      '</div>';
+  }
+
+  var fpShown = [];
+  function factorCard(d) {
+    fpShown = [];
+    try {
+      var panels = factorPanels((d.performance || {}).history, (d.season || {}).limiters);
+      if (!panels.length) return '';
+      fpShown = panels;
+      var vo2 = panels.filter(function (p) { return p.tick; })[0];
+      return card('What’s holding you back, over time',
+        '<div class="figures two">' + panels.map(factorTile).join('') + '</div>',
+        { foot: 'Each point is how that factor stood that week, rebuilt from Intervals.icu for the past year.' +
+          (vo2 ? ' VO2max: Garmin’s estimate from ' + fpDate(vo2.tick.week, true) +
+            '; heart-rate estimate before.' : '') });
+    } catch (err) {
+      // A card that cannot be built costs the card, not the whole Trends tab.
+      if (window.console) console.error('[peak] factor panels failed:', err);
+      fpShown = [];
+      return '';
+    }
+  }
+
+  // Touch or hover on a panel: show that week's value in place of the latest, with a hairline
+  // and a dot on the chart; let go and it returns. The tile's own text carries the values
+  // for anyone who does not scrub.
+  function wireFactorScrub(root) {
+    if (!root || !root.querySelectorAll || !fpShown.length) return;
+    var by = {};
+    fpShown.forEach(function (p) { by[p.key] = p; });
+    Array.prototype.forEach.call(root.querySelectorAll('.fp-c'), function (svg) {
+      var tile = svg.closest('.fp'), p = tile && by[tile.dataset.k];
+      if (!p) return;
+      var num = tile.querySelector('.fp-n'), note = tile.querySelector('.fp-d');
+      var cross = svg.querySelector('.fp-x'), dot = svg.querySelector('.fp-s');
+      var s = fpScale(p), rest = { n: num.innerHTML, d: note.textContent };
+      function on(e) {
+        var r = svg.getBoundingClientRect();
+        if (!r.width) return;
+        var vx = (e.clientX - r.left) / r.width * FP.W;
+        var q = p.points.reduce(function (b, c) {
+          return Math.abs(s.x(c.t) - vx) < Math.abs(s.x(b.t) - vx) ? c : b;
+        });
+        var x = s.x(q.t).toFixed(1), y = s.y(q.v).toFixed(1);
+        cross.setAttribute('d', 'M' + x + ' 0V' + FP.H);
+        dot.setAttribute('d', 'M' + x + ' ' + y + 'h0');
+        num.innerHTML = fpValue(p, q.v);
+        note.textContent = 'Week of ' + fpDate(q.week);
+      }
+      function off() {
+        cross.setAttribute('d', ''); dot.setAttribute('d', '');
+        num.innerHTML = rest.n; note.textContent = rest.d;
+      }
+      svg.onpointerdown = on; svg.onpointermove = on;
+      svg.onpointerup = off; svg.onpointerleave = off; svg.onpointercancel = off;
+    });
   }
 
   /* ── charts ──────────────────────────────────────────────────────────── */
@@ -4872,11 +5107,21 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
         '</td><td>' + esc(r.you) + '</td><td>' + esc(r.need) + '</td><td><span class="lim-d ' +
         esc(r.status) + '"></span></td></tr>';
     }).join('');
+    // Where the minutes are (lib/limiters.py levers, 17 Oct 2026): what a realistic gain in
+    // each area is worth on race day, three at most, each on its own.
+    var lev = (L.levers || []).filter(function (x) {
+      return x && x.label && x.minutes != null && Math.round(Number(x.minutes)) >= 1;
+    }).slice(0, 3);
     return card('What\u2019s holding you back', '<p class="gv' + (L.limiter ? ' warn' : '') + '" style="margin:12px 16px">' +
       esc(L.headline) + '</p><table class="tbl"><thead><tr><th></th><th>You</th><th>Goal needs</th><th></th>' +
       '</tr></thead><tbody>' + rows + '</tbody></table>' +
-      (L.fix ? '<p class="gv" style="margin:10px 16px 12px">How to fix it: ' + esc(L.fix) + '</p>' : ''),
-      { flush: true, foot: L.foot + ' Hollow dot: not shown yet in training.' });
+      (L.fix ? '<p class="gv" style="margin:10px 16px 12px">How to fix it: ' + esc(L.fix) + '</p>' : '') +
+      (lev.length ? '<p class="gv" style="margin:' + (L.fix ? '0' : '10px') + ' 16px 12px">Where the minutes are: ' +
+        lev.map(function (x) {
+          return esc(x.label) + ' \u2248 ' + Math.round(Number(x.minutes)) + ' min';
+        }).join(' \u00b7 ') + '</p>' : ''),
+      { flush: true, foot: L.foot + ' Hollow dot: not shown yet in training.' +
+        (lev.length ? ' Minutes are each on their own; they overlap, so they don\u2019t add up.' : '') });
   }
 
   function seasonTimeline(sv) {
@@ -6630,6 +6875,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.041", "2026-10-17", "Trends: \u2018What\u2019s holding you back, over time\u2019 \u2013 each factor week by week for the past year, the limiter highlighted. Goals: where the minutes are \u2013 what a realistic gain in each is worth on race day", 0],
     ["4.040", "2026-10-17", "Strength sessions: one look for every session (a physio's is just one with exact sets, reps and weights), nothing added on top of physio sessions, and a cleaner session sheet: time, exercises and Load in one row, a proper Start button, the exercise list underneath. Pilot: Jamie and Fred", 1],
     ["4.039", "2026-10-17", "Strength sessions tidied: each exercise in the session sheet has its picture with what to do under it, and Start is at the top. In the player, change a set\u2019s weight and the sets after it follow; a progress bar; cleaner set rows; the rest of the session shows the next three, with every exercise one tap away. Pilot: Jamie and Fred", 1],
     ["4.038", "2026-10-17", "When you mention a sportive, gran fondo or triathlon, the coach asks for the route (GPX) and the time limits, and saves the cut-offs you give it", 0],
