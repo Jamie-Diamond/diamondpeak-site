@@ -371,6 +371,19 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     return out.length ? out : FOCUS.slice();
   }
 
+  // What Trends shows: the focus sports PLUS any sport the athlete has actually done
+  // (Jamie, 17 Oct 2026: Calum runs but his plan is bike-only, so his running fitness was
+  // hidden; "it should show sports the athlete has done irrespective of plan"). Done =
+  // a per-sport Fitness series that reached 1 or more this season.
+  function shownSports(d) {
+    var fs = focusSports();
+    var cur = (((d || state.data || {}).fitnessBySport) || {}).current || {};
+    var done = Object.keys(cur).filter(function (k) {
+      return k !== 'Total' && (cur[k] || []).some(function (p) { return Number(p[1]) >= 1; });
+    }).map(function (k) { return family(k); });
+    return FOCUS.filter(function (x) { return fs.indexOf(x) >= 0 || done.indexOf(x) >= 0; });
+  }
+
   /* ── chrome ──────────────────────────────────────────────────────────── */
 
   function buildTabs() {
@@ -3021,7 +3034,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // whichever of them that metric's data carries. Total is excluded by name, not by
   // relying on it failing the focus test.
   function fitChipSports(d) {
-    var fs = focusSports();
+    var fs = shownSports(d);
     var src = fitMetric() === 'dur'
       ? durBySport(d).current || {}
       : ((d || state.data || {}).fitnessBySport || {}).current || {};
@@ -3033,7 +3046,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // 'Run km' is a run tab and nothing else: with run out of focus it is an empty chart
   // and a dead sub-nav entry, so it leaves the list entirely.
   function trendTabs() {
-    var fs = focusSports();
+    var fs = shownSports();
     return TRENDS.filter(function (t) {
       if (t.id === 'heat' && !heatOn()) return false;
       if (t.id === 'body') return !!(bodyCards(state.data || {}));
@@ -3216,7 +3229,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     }
 
     if (sel === 'fit') {
-      var fs = focusSports();
+      var fs = shownSports(d);
       var bs = (d.fitnessBySport || {}).current || {};
       var sports = fitMetric() === 'dur' ? []
         : Object.keys(bs).filter(function (s) { return fs.indexOf(family(s)) >= 0; });
@@ -4398,7 +4411,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   function zoneWindows(d) {
     var zd = (d || {}).zoneDistribution || {};
     var sp = zd.sports || {};
-    var fs = focusSports();
+    var fs = shownSports(d);
     return ZONE_WINS.filter(function (o) {
       var block = sp[o[0]];
       if (!block) return false;
@@ -4429,7 +4442,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     var win = zoneWinSel(d);
     if (!win) return null;
     var block = (zd.sports || {})[win] || {};
-    var fs = focusSports();
+    var fs = shownSports(d);
     var out = [];
 
     Object.keys(block).forEach(function (name) {
@@ -6100,6 +6113,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.019", "2026-10-17", "Trends shows every sport you have done, not only the ones in your plan", 0],
     ["4.018", "2026-10-17", "If Peak can\u2019t reach the server when it opens, it keeps retrying and recovers by itself", 0],
     ["4.017", "2026-10-16", "Peak reloads itself when it is running older code than the latest release", 0],
     ["4.016", "2026-10-16", "Athletes & usage: the margin is no longer shown", 1],
