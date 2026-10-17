@@ -5175,8 +5175,10 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       ? 'Fitness held between ' + g.band[0] + ' and ' + g.band[1] + '.'
       : (g.nextTest ? (n - 1) + ' build weeks, then an easier week with ' + (g.nextTest.name === '5k time trial'
           ? 'a 5k time trial' : 'an ' + g.nextTest.name) + '.' : (n - 1) + ' build weeks, then an easier week.');
-    // SMART target (lib/goals.py, 13 Oct 2026): "Keep my fitness" may stay open-ended.
+    // SMART target (lib/goals.py, 13 Oct 2026): "Keep my fitness" may stay open-ended, and
+    // any goal the athlete chose to run with no target (17 Oct 2026).
     var tgt = g.target ? 'Target: ' + g.target + (g.by ? ', by ' + fmt(g.by) : '') + '.'
+      : g.openEnded ? 'No set target: see how far you can take it.'
       : (g.type === 'maintain' ? '' : 'No target yet. Your coach will agree one with you.');
     // Main + extras (13 Oct 2026): each extra's own target, then the sports kept ticking over.
     (g.extras || []).forEach(function (e) {
@@ -6875,6 +6877,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.042", "2026-10-17", "Goals: a goal can run with no set target, to see how far you can take it. The coach won\u2019t ask for one", 0],
     ["4.041", "2026-10-17", "Trends: \u2018What\u2019s holding you back, over time\u2019 \u2013 each factor week by week for the past year, the limiter highlighted. Goals: where the minutes are \u2013 what a realistic gain in each is worth on race day", 0],
     ["4.040", "2026-10-17", "Strength sessions: one look for every session (a physio's is just one with exact sets, reps and weights), nothing added on top of physio sessions, and a cleaner session sheet: time, exercises and Load in one row, a proper Start button, the exercise list underneath. Pilot: Jamie and Fred", 1],
     ["4.039", "2026-10-17", "Strength sessions tidied: each exercise in the session sheet has its picture with what to do under it, and Start is at the top. In the player, change a set\u2019s weight and the sets after it follow; a progress bar; cleaner set rows; the rest of the session shows the next three, with every exercise one tap away. Pilot: Jamie and Fred", 1],

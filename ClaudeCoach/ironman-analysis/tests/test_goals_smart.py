@@ -30,6 +30,33 @@ def test_only_open_ended_goals_may_skip_a_target():
     assert goals.smart_missing({"type": "run", "target": "5k in 21:30", "by": "2027-01-10"}) == []
 
 
+def test_any_goal_may_be_open_ended_by_choice():
+    """17 Oct 2026: Fred's FTP goal is "seeing how far he can get it with no target in mind"."""
+    g = {"type": "ftp", "open_ended": True}
+    assert goals.smart_missing(g) == []
+    assert goals.smart_missing(dict(g, extras=[{"type": "run"}])) == [
+        "Run faster target", "Run faster date"]               # extras still need theirs
+
+
+def test_goal_setup_open_ended_keeps_the_block_and_a_target_ends_it(tmp_path):
+    import json
+    import plan_tools
+    from datetime import date
+    cfg = tmp_path / "athletes.json"
+    g = {"type": "ftp", "set": "2026-10-01", "block_weeks": 4, "start": "2026-10-12",
+         "start_values": {"ctl": 9.3, "ftp": 212}}
+    cfg.write_text(json.dumps({"fred": {"goal": g}}))
+    out = plan_tools.goal_setup("fred", "ftp", apply=True, path=cfg, ctl=10,
+                                today=date(2026, 10, 17), open_ended=True)
+    saved = json.loads(cfg.read_text())["fred"]["goal"]
+    assert out["keeps_running_block"] and saved["open_ended"] and saved["start"] == "2026-10-12"
+    assert out["smart"]["missing"] == []
+    plan_tools.goal_setup("fred", "ftp", apply=True, path=cfg, ctl=10, today=date(2026, 10, 17),
+                          target="FTP 240 W", target_value=240, by="2027-01-31")
+    saved = json.loads(cfg.read_text())["fred"]["goal"]
+    assert "open_ended" not in saved and saved["target"] == "FTP 240 W"
+
+
 def test_main_plus_extras():
     """13 Oct 2026: James wants run speed, a higher FTP and to keep swimming. The main goal's
     sport gets the focus row, each extra the one-quality-session row, keep sports support."""

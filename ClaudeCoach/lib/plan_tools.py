@@ -3195,10 +3195,12 @@ def goal_setup(slug: str, goal: str | None = None, apply: bool = False, today=No
                path=None, sports=None, start=None, clear: bool = False,
                ctl=None, block_weeks: int | None = None, target: str | None = None,
                target_value=None, by: str | None = None, extras=None,
-               keep=None) -> dict:
+               keep=None, open_ended: bool = False) -> dict:
     """Set (or with clear, remove) the athlete's goal without a race (lib/goals.py).
     target / target_value / by make it SMART (goals.realistic / assess judge the target);
     the same goal type with a target only updates the target, so a running block goes on.
+    open_ended: no target in mind, see how far it goes (drops any target; a target set
+    later ends it).
     A preview by default: what the blocks, tests and this week's load would be. With
     apply, writes athletes.json `goal`, block 1 starting `start` or the coming Monday."""
     import shutil
@@ -3234,11 +3236,17 @@ def goal_setup(slug: str, goal: str | None = None, apply: bool = False, today=No
     first = start if isinstance(start, date) else (
         date.fromisoformat(start) if start else today + timedelta(days=(7 - today.weekday()) % 7 or 7))
     old = _goals.goal_cfg(cfg)
-    same = bool(old and old.get("type") == goal and (target or target_value or by
+    same = bool(old and old.get("type") == goal and (target or target_value or by or open_ended
                                                      or extras is not None or keep is not None)
                 and not sports and not start and not block_weeks)
     g = dict(old) if same else _goals.make(goal, today=today, start=first, sports=sports,
                                            ctl=ctl, profile=profile)
+    if open_ended:
+        g["open_ended"] = True
+        for k in ("target", "target_value", "by"):
+            g.pop(k, None)
+    elif target or target_value not in (None, ""):
+        g.pop("open_ended", None)
     if target:
         g["target"] = str(target).strip()
     if target_value not in (None, ""):
@@ -3347,7 +3355,7 @@ def cmd_goal_setup(args) -> dict:
     return goal_setup(args.athlete, args.goal, apply=args.apply, sports=args.sports,
                       start=args.start, clear=args.clear, block_weeks=args.block_weeks,
                       target=args.target, target_value=args.target_value, by=args.by,
-                      extras=args.extras, keep=args.keep)
+                      extras=args.extras, keep=args.keep, open_ended=args.open_ended)
 
 
 # Chat side of the choice: only the bot hears the athlete answer the Sunday question.
@@ -3720,6 +3728,8 @@ def main():
     pgs.add_argument("--extras", help='extra sport goals as JSON: [{"type":"ftp","target":"FTP 290 W",'
                                       '"target_value":290,"by":"2027-01-31"}] ("[]" clears)')
     pgs.add_argument("--keep", help="sports held easy with a touch, e.g. swim")
+    pgs.add_argument("--open-ended", action="store_true", dest="open_ended",
+                     help="no target: see how far it goes (drops any target)")
     pgs.add_argument("--apply", action="store_true")
 
     pter = sub.add_parser("terrain", help="did real climbs explain an activity's hard parts (lib/terrain.py)")

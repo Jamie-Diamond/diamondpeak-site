@@ -417,6 +417,9 @@ REALISTIC_12W = {
     "swim":  ((2, 4), (3, 8)),                   # seconds per 100 m faster
 }
 OPEN_ENDED = {"maintain"}
+# Any goal may be open-ended by the athlete's choice: goal["open_ended"] = True (Jamie,
+# 17 Oct 2026, of Fred's FTP goal: "about seeing how far he can get it with no target in
+# mind"). No target or date is asked for; progress against the start still shows.
 
 
 def _fmt_pace(sec: float) -> str:
@@ -489,7 +492,7 @@ def smart_missing(g: dict | None) -> list:
     themselves, but their extras still need targets."""
     if not g:
         return []
-    out = [] if g.get("type") in OPEN_ENDED else [
+    out = [] if g.get("type") in OPEN_ENDED or g.get("open_ended") else [
         k for k, f in (("target", "target"), ("date", "by")) if not g.get(f)]
     for e in extras(g):
         lab = GOALS[e["type"]]["label"]
@@ -612,6 +615,7 @@ def view(cfg: dict, profile: dict, slug: str | None = None, today: date | None =
             "kind": pos["kind"], "nextTest": next_test,
             "band": list(lo_hi) if lo_hi else None,
             "target": g.get("target"), "targetValue": g.get("target_value"), "by": g.get("by"),
+            "openEnded": bool(g.get("open_ended")),
             "progress": progress(cfg, profile, ctl_now)}
 
 
@@ -630,7 +634,8 @@ _SETUP = (
     "takes over from the goal on its own; the goal resumes after the race's recovery weeks."
     "\nSMART GOALS: every goal except \"Keep my fitness\" (which may stay open-ended) needs a "
     "measurable target and a date before it is applied: Specific, Measurable, Achievable, "
-    "Relevant, Time-bound. The preview gives the realistic range for the target from their "
+    "Relevant, Time-bound. If they would rather see how far they can take it with no target "
+    "in mind, that is fine too: apply with --open-ended and never ask for a target again. The preview gives the realistic range for the target from their "
     "start values (`realistic`) and judges a proposed one (`assessment`: realistic / stretch "
     "/ unrealistic / too easy) - use those numbers, never your own guess. Check it is "
     "RELEVANT to their situation too: straight after a long race or a big block, with hours "
@@ -693,6 +698,10 @@ def prompt_block(slug: str, first_name: str = "", path=None, today: date | None 
                 "already record a goal they stated, confirm that one rather than asking from "
                 "scratch; otherwise offer 2-3 options as buttons. Then save it with goal-setup "
                 "as below.")
+    if g and g.get("open_ended"):
+        out += (f"\nNO SET TARGET: {name} chose to see how far they can take \"{label(g)}\" "
+                "with no target in mind. Never ask for or suggest one; show progress against "
+                "where they started.")
     if g and smart_missing(g):
         r = realistic(g["type"], g.get("start_values") or {}, 12)
         rng = (f" A realistic 12-week target from their start ({r['measure']} {r['from']}"
