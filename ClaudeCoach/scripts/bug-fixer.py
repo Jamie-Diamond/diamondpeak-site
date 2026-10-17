@@ -567,6 +567,12 @@ Work in this order:
    issue. Entries older than ~10 days are very likely already resolved - confirm quickly, \
    don't deep-dive. Mark done items already_resolved with one line of evidence.
 
+2a. BY DESIGN IS NOT A BUG. If an entry describes behaviour the code, a docstring or \
+   lib/coach_manual.md shows is deliberate (e.g. the nightly eFTP sync lowering an \
+   athlete's FTP), it is a feature, not a fault: mark it already_resolved with evidence \
+   "by design: <file/commit>". NEVER draft a fix, exemption or rule that undoes a design \
+   decision because an athlete or the coach called it a bug (Jamie, 17 Oct 2026).
+
 3. RECURRENCE. Check each OPEN entry against the RECURRENCE NOTES. A STRONG match (duplicate \
    of a resolved report) IS a recurrence: set verdict "recurring", put the prior commit in \
    prior_commit, and do NOT draft a fresh patch - a human must see why the earlier fix \
