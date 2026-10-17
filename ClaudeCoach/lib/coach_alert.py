@@ -375,6 +375,53 @@ DELIVERABLES = [
      "per_athlete": False, "telegram": False, "detail": "restarted ok",
      "cron": "0 0 * * *",        "cron_cmd": "api-nightly-restart.py",
      "since": "2026-10-04T22:18:00"},
+    # 17 Oct 2026 (Jamie: "sort the 8 jobs" the cron audit reported unwatched). Four of
+    # them are watched below; the other four are CRON_EXEMPT with their reasons.
+    #
+    # The 00:15 Today note (scripts/today-note-early.py, 15 Oct 2026) is the first
+    # thing an athlete sees in Peak each day, written from the plan before any
+    # wellness exists. It runs morning-checkin.py with --early, which already writes
+    # its own heartbeat under "morning-checkin" with detail "today note (plan)" -
+    # only that path writes that detail, so pinning it keeps this apart from the
+    # morning card ("card sent") on the same script name. No script change needed;
+    # `since` is its first heartbeat run from cron (16 Oct 00:15).
+    {"script": "morning-checkin",    "label": "overnight Today note", "window": "daily",
+     "per_athlete": True,  "telegram": False, "detail": "today note (plan)",
+     "cron": "15 0 * * *",       "cron_cmd": "today-note-early.py",
+     "since": "2026-10-16T00:00:00"},
+    # The Strava -> Intervals.icu bridge (scripts/strava-to-icu.py, every 30 min) is
+    # the only way an Apple Watch athlete's sessions reach Intervals.icu, so every
+    # analysis, load number and plan for them depends on it. If it dies nothing
+    # fails loudly: their sessions simply never appear. Heartbeat added 17 Oct 2026:
+    # one "cycle complete" per cron invocation, like activity-watcher, written even
+    # when no athlete is on the bridge yet. Rolling 90 min = three ticks, so one tick
+    # skipped behind the lock of a long history copy is not a gap.
+    {"script": "strava-to-icu",      "label": "Strava to Intervals bridge",
+     "window": "rolling", "window_minutes": 90,
+     "per_athlete": False, "telegram": False, "detail": "cycle complete",
+     "cron": "11,41 * * * *",    "cron_cmd": "strava-to-icu.py",
+     "since": "2026-10-17T09:30:00"},
+    # scripts/telegram-inbox.py (every 10 min) passes anything an athlete still sends
+    # the retired Telegram coach and food bots into Peak. Telegram keeps an unread
+    # message for about a day, so a dead inbox loses athlete messages for good.
+    # Heartbeat added 17 Oct 2026: "cycle complete" per run, ok=False when
+    # getUpdates fails. Rolling 60 min, as activity-watcher.
+    {"script": "telegram-inbox",     "label": "old-Telegram inbox",
+     "window": "rolling", "window_minutes": 60,
+     "per_athlete": False, "telegram": False, "detail": "cycle complete",
+     "cron": "*/10 * * * *",     "cron_cmd": "telegram-inbox.py",
+     "since": "2026-10-17T09:30:00"},
+    # lib/thresholds.py --sync-ftp --apply (04:50) keeps each athlete's Intervals.icu
+    # FTP on eFTP, and their power zones are a % of that FTP. Stopped, the zones
+    # drift stale with nothing to show for it. Heartbeat added 17 Oct 2026, written
+    # only by the applying sync run. detail is pinned because "thresholds" is
+    # FINDING-class in OUTCOME_CLASS (the weekly "zones may be stale-high" note), so
+    # any ok=False row would otherwise count as a run; the sync's own failure row is
+    # stamped outcome=FAILURE as well.
+    {"script": "thresholds",         "label": "FTP sync to eFTP",   "window": "daily",
+     "per_athlete": False, "telegram": False, "detail": "ftp sync ok",
+     "cron": "50 4 * * *",       "cron_cmd": "thresholds.py",
+     "since": "2026-10-17T09:30:00"},
 ]
 
 # The digest's own schedule. Declared so the crontab cross-check can prove what
@@ -481,6 +528,26 @@ CRON_EXEMPT = {
         "from the audit itself. A missed run means one day without an audit, not a "
         "missed deliverable to an athlete — though now that a human depends on it, "
         "registering it as a deliverable is worth a decision.",
+    # 17 Oct 2026 (Jamie: "sort the 8 jobs"): the four of the eight not registered above.
+    "nutrition-unresolved-nudge.py":
+        "daily 09:30 nudge about unresolved food-log rows (scripts/nutrition-unresolved-"
+        "nudge.py). An optional nudge like rule-check: a missed day leaves the rows queued "
+        "for the next one. A failed config read, Peak write or nudge each writes an "
+        "ops-alerts line already.",
+    "prompt-size-check.py":
+        "daily 06:10 developer cost check (scripts/prompt-size-check.py, 12 Oct 2026). "
+        "Nothing reaches an athlete; a missed day is one day without a cost check, and "
+        "every oversized prompt it finds is already an ops-alerts line.",
+    "shadow-done.py":
+        "one-off Dev-tab notice that the Haiku shadow week has finished (scripts/shadow-"
+        "done.py). Exits silently every day but the day after lib/shadow.py's SHADOW_UNTIL, "
+        "so there is no daily heartbeat to watch. Temporary: delete it with its crontab "
+        "line once it has posted.",
+    "state_archive.py":
+        "nightly 03:40 trim of current-state.md (lib/state_archive.py, 12 Oct 2026). "
+        "Optional upkeep like rule_tidy: nothing is lost if it misses, the file is just "
+        "longer until the next night, and prompt-size-check flags a prompt that grows "
+        "too big. Its one line per athlete is in state-archive.log.",
 }
 
 UNVERIFIED = ("\u26a0 CRON AUDIT: could not read `crontab -l` \u2014 the deliverable "
@@ -964,6 +1031,9 @@ OUTCOME_CLASS = {
     "stage1-plan":        FAILURE,
     "claude-cli-update":  FAILURE,   # new CLI failed its smoke test / swap failed
     "api-restart":        FAILURE,   # restart failed or the API did not come back
+    "strava-to-icu":      FAILURE,   # an athlete's copy failed / Strava refused the token
+    "telegram-inbox":     FAILURE,   # getUpdates failed, so messages were not passed on
+    "nutrition-unresolved-nudge": FAILURE,   # no config / Peak write failed / exception
     "bot-watchdog":       FAILURE,   # the bot stopped answering
     "claude_call":        FAILURE,   # auth expired in production
     "cc-gitpull":         FAILURE,
@@ -983,6 +1053,7 @@ OUTCOME_CLASS = {
     "thresholds":         FINDING,   # "zones may be stale-high"
     "selftest":           FINDING,   # "loud-path verification (not a real failure)"
     "icu-sync-nudge":     FINDING,   # a missed reminder, or "fixed, remove me"
+    "prompt-size-check":  FINDING,   # "N run(s) passed 90k prompt tokens"
 }
 
 

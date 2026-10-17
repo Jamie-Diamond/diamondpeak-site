@@ -1250,6 +1250,16 @@ _CRON_LINES = [
     # Rule management (2 Oct 2026): both CRON_EXEMPT, with their reasons in coach_alert.
     f"30 1 * * * /root/.claude/cc-run python3 {CC}/lib/rule_tidy.py --all >> /root/Library/Logs/ClaudeCoach/rule-tidy.log 2>&1",
     f"45 18 * * 0 /usr/bin/python3 {CC}/scripts/rule-check.py >> /root/Library/Logs/ClaudeCoach/rule-check.log 2>&1",
+    # The eight jobs the audit reported unwatched until 17 Oct 2026, copied from the
+    # live crontab. Four are DELIVERABLES, four CRON_EXEMPT (coach_alert).
+    f"30 9 * * * /root/.claude/cc-run python3 {CC}/scripts/nutrition-unresolved-nudge.py >> /root/Library/Logs/ClaudeCoach/nutrition-unresolved-nudge.log 2>&1",
+    f"11,41 * * * * /root/.claude/cc-run python3 {CC}/scripts/strava-to-icu.py >> /root/Library/Logs/ClaudeCoach/strava-to-icu.log 2>&1",
+    f"*/10 * * * * /root/.claude/cc-run python3 {CC}/scripts/telegram-inbox.py >> /root/Library/Logs/ClaudeCoach/telegram-inbox.log 2>&1",
+    f"0 9 * * * /root/.claude/cc-run python3 {CC}/scripts/shadow-done.py >> /root/Library/Logs/ClaudeCoach/shadow.log 2>&1",
+    f"10 6 * * * /root/.claude/cc-run python3 {CC}/scripts/prompt-size-check.py >> /root/Library/Logs/ClaudeCoach/prompt-size-check.log 2>&1",
+    f"40 3 * * * /root/.claude/cc-run python3 {CC}/lib/state_archive.py --all >> /root/Library/Logs/ClaudeCoach/state-archive.log 2>&1",
+    f"50 4 * * * /root/.claude/cc-run python3 {CC}/lib/thresholds.py --all --sync-ftp --apply --notify >> /root/Library/Logs/ClaudeCoach/ftp-sync.log 2>&1",
+    f"15 0 * * * /root/.claude/cc-run python3 {CC}/scripts/today-note-early.py >> /root/Library/Logs/ClaudeCoach/today-note-early.log 2>&1",
 ]
 
 # FIXED 28 Jul 2026 (this ticket): activity-watcher.py and sync-private-repo.sh

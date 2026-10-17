@@ -382,6 +382,13 @@ def main() -> int:
             if ops_log and "401" in str(e):
                 ops_log.alert("strava-to-icu", f"Strava refused {slug}'s token (disconnected?): {e}",
                               athlete=slug)
+            elif ops_log and not args.dry_run:
+                ops_log.record_run("strava-to-icu", athlete=slug, ok=False,
+                                   detail=f"copy failed: {str(e)[:160]}")
+    # The heartbeat coach_alert.DELIVERABLES watches (17 Oct 2026): one per cron run,
+    # even with nobody on the bridge, so a dead bridge shows as a gap in the digest.
+    if ops_log and not args.dry_run:
+        ops_log.record_run("strava-to-icu", ok=True, detail="cycle complete")
     return 0
 
 

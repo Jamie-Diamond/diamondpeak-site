@@ -20,6 +20,7 @@ from pathlib import Path
 
 CC = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(CC / "lib"))
+import ops_log  # noqa: E402
 import outbox  # noqa: E402
 import tg      # noqa: E402
 
@@ -104,6 +105,8 @@ def main() -> int:
                                       "allowed_updates": ["message", "edited_message"]}, log=log)
     if not r.get("ok"):
         log(f"getUpdates failed: {r}")
+        ops_log.record_run("telegram-inbox", ok=False,
+                           detail=f"getUpdates failed: {str(r.get('error') or r)[:120]}")
         return 1
     passed = 0
     for u in r.get("result") or []:
@@ -118,6 +121,8 @@ def main() -> int:
     STATE.write_text(json.dumps({"offset": offset, "checked": datetime.now().isoformat()}))
     if passed:
         log(f"passed on {passed} Telegram message(s)")
+    # The heartbeat coach_alert.DELIVERABLES watches (17 Oct 2026).
+    ops_log.record_run("telegram-inbox", ok=True, detail="cycle complete")
     return 0
 
 

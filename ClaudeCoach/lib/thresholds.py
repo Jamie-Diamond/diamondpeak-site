@@ -159,7 +159,19 @@ if __name__ == "__main__":
     slugs = ([s for s, c in athletes.items() if c.get("active", True)] if args.all
              else [args.athlete])
     if args.sync_ftp:
-        res = [sync_ftp_from_eftp(s, athletes[s], apply=args.apply) for s in slugs]
+        # The applying run (cron 04:50) writes the heartbeat coach_alert.DELIVERABLES
+        # watches (17 Oct 2026). "thresholds" is FINDING-class there, so a failure is
+        # stamped FAILURE explicitly or it would read as a run.
+        import ops_log
+        try:
+            res = [sync_ftp_from_eftp(s, athletes[s], apply=args.apply) for s in slugs]
+        except Exception as exc:
+            if args.apply:
+                ops_log.record_run("thresholds", ok=False, outcome=ops_log.FAILURE,
+                                   detail=f"ftp sync failed: {type(exc).__name__}: {exc}"[:200])
+            raise
+        if args.apply:
+            ops_log.record_run("thresholds", ok=True, detail="ftp sync ok")
         for r in res:
             tag = "APPLIED" if r["applied"] else ("WOULD CHANGE" if r["changed"] else "no change")
             print(f"{r['athlete']:9} [{tag}] {r['reason']}")
