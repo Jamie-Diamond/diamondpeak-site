@@ -2230,6 +2230,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
         log(f"[{slug}] ctlProjection skipped: {exc}")
 
     data["nextRace"] = _next_race(slug)
+    data["performance"] = _performance(slug)
     data["season"] = _season(slug, data)
     out = BASE / f"training-data-{slug}.json"
     out.write_text(json.dumps(data, separators=(",", ":")))
@@ -2285,6 +2286,22 @@ def _next_race(slug: str) -> dict | None:
         return None
 
 
+def _performance(slug: str) -> dict | None:
+    """Running determinants and race evidence (lib/performance.py, 17 Oct 2026): the
+    Goals page predicts run races from these, and a weekly row is kept for tracking."""
+    try:
+        import performance
+        from icu_api import IcuClient
+        acfg = json.loads(ATHLETES_CONFIG.read_text()).get(slug) or {}
+        prof_f = BASE / "athletes" / slug / "profile.json"
+        prof = json.loads(prof_f.read_text()) if prof_f.exists() else {}
+        client = IcuClient(acfg["icu_athlete_id"], acfg.get("icu_api_key", ""))
+        return performance.build(slug, client, acfg, prof)
+    except Exception as exc:
+        log(f"[{slug}] performance skipped: {exc}")
+        return None
+
+
 def _season(slug: str, data: dict) -> dict | None:
     """The Goals page (lib/season_view.py): A/B/C races with goals and predictions,
     and the phases to the A race."""
@@ -2319,6 +2336,7 @@ def refresh_one(slug):
         except Exception as e:
             log(f"Post-processing warning: {e} — continuing without extra fields")
         data["nextRace"] = _next_race("jamie")
+        data["performance"] = _performance("jamie")
         data["season"] = _season("jamie", data)
         OUT_FILE.write_text(json.dumps(data, separators=(",", ":")))
         log(f"[jamie] refreshed: CTL {data['kpi'].get('ctl')}")
@@ -2416,6 +2434,7 @@ def main():
             except Exception as e:
                 log(f"Post-processing warning: {e} — continuing without extra fields")
             data["nextRace"] = _next_race("jamie")
+            data["performance"] = _performance("jamie")
             data["season"] = _season("jamie", data)
             OUT_FILE.write_text(json.dumps(data, separators=(",", ":")))
             icu_changes.mark_run("jamie", "refresh", started)

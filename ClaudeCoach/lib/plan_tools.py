@@ -2314,6 +2314,53 @@ def cmd_race_predict(args) -> dict:
     return rp
 
 
+# ── subcommand: run-predict ────────────────────────────────────────────────────
+def _training_data(slug: str) -> dict:
+    for p in (BASE / "athletes" / slug / "training-data.json", BASE / f"training-data-{slug}.json"):
+        if p.exists():
+            try:
+                return json.loads(p.read_text())
+            except ValueError:
+                pass
+    return {}
+
+
+def cmd_run_predict(args) -> dict:
+    """Run race times, 5k to marathon, from the athlete's own races (lib/run_model.py):
+    the same numbers as Peak's Goals page. `booked` is each run race on their calendar
+    with Now / Race day exactly as the Goals page shows them; `standard` is Now for the
+    usual distances (or --km). Use these numbers, never invent run times."""
+    import run_model
+    from season_view import training_volume
+    data = _training_data(args.athlete)
+    run = (data.get("performance") or {}).get("run")
+    if not run:
+        raise SystemExit(_err("no performance data yet: refresh-site-data builds it"))
+    today = date.today()
+    k_now, _ = training_volume(data.get("recent"), today)
+    fmt = run_model.fmt_time
+    dists = ({f"{args.km:g} km": args.km * 1000} if getattr(args, "km", None)
+             else {ev: run_model.STANDARD_M[ev] for ev in ("5k", "10k", "half_marathon", "marathon")})
+    standard = {}
+    for ev, m in dists.items():
+        p = run_model.predict(m, run.get("races") or [], today, k_now or 0.0, run.get("training"))
+        if p:
+            standard[ev] = {"now": fmt(p["now_s"]), "model": p["model"], "note": p["note"]}
+    booked = [{"name": r.get("name"), "date": r.get("date"), "priority": r.get("priority"),
+               "now": fmt(r["now_s"]) if r.get("now_s") else None,
+               "race_day": fmt(r["raceday_s"]) if r.get("raceday_s") else None,
+               "goal": r.get("goal"), "method": r.get("method"), "note": r.get("note")}
+              for r in (data.get("season") or {}).get("races") or [] if r.get("kind") == "run"]
+    return {"athlete": args.athlete, "as_of": (data.get("performance") or {}).get("asOf"),
+            "booked": booked, "standard": standard, "k": run.get("k"),
+            "weekly_km": round(k_now, 1) if k_now is not None else None,
+            "races": [{"date": r["date"], "event": r["event"], "time": fmt(r["time_s"]),
+                       "source": r.get("source"), "name": r.get("name")}
+                      for r in (run.get("races") or [])[-8:]],
+            "model": "own races (recency- and distance-weighted, personal Riegel k); marathon "
+                     "Vickers & Vertosick 2016; race day adds the Tanda volume gain"}
+
+
 # ── subcommand: ctl-sweep ──────────────────────────────────────────────────────
 def cmd_ctl_sweep(args) -> dict:
     """CTL-sensitivity sweep: how much a race-day CTL / predicted outcome moves
@@ -3270,6 +3317,10 @@ def main():
     prp.add_argument("--athlete", required=True)
     prp.add_argument("--ctl", type=float, help="current CTL (default: training-data.json kpi.ctl)")
 
+    prr = sub.add_parser("run-predict", help="run race times 5k-marathon from the athlete's own races (Goals page model)")
+    prr.add_argument("--athlete", required=True)
+    prr.add_argument("--km", type=float, help="one distance in km instead of 5k/10k/half/marathon")
+
     pcs = sub.add_parser("ctl-sweep",
                          help="CTL-sensitivity sweep: race-day CTL + predicted-outcome range "
                               "across a band of ramp-rate assumptions (reuses project + race-predict)")
@@ -3388,6 +3439,7 @@ def main():
                "render-workout": cmd_render_workout, "fuel-target": cmd_fuel_target,
                "race-fuelling": cmd_race_fuelling, "fuel-check": cmd_fuel_check,
                "wetsuit": cmd_wetsuit, "race-predict": cmd_race_predict,
+               "run-predict": cmd_run_predict,
                "ctl-sweep": cmd_ctl_sweep,
                "sweat-rate": cmd_sweat_rate, "log-strength": cmd_log_strength,
                "log-weight": cmd_log_weight,

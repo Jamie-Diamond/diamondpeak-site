@@ -4540,6 +4540,9 @@ def prefetch_context(slug: str) -> str:
                 "For RACE TIME / split predictions, NEVER invent numbers — call:  "
                 f"plan_tools.py race-predict --athlete {slug}  "
                 "-> Now / Race-day / Target scenarios from the shared IF ∝ √CTL model (same as /race and the website). "
+                "RUN races (5k to marathon) instead:  "
+                f"plan_tools.py run-predict --athlete {slug}  "
+                "-> Now / Race day from the athlete's own races, the same numbers as Peak's Goals page. "
                 "If the athlete reports a PRE/POST-SESSION WEIGH-IN (sweat test), call:  "
                 f"plan_tools.py sweat-rate --athlete {slug} --pre <kg> --post <kg> --fluid <ml> --minutes <n> --activity <icu id> --save  "
                 "-> computes sweat rate and (with --save) updates sweat_ml_hr so race-fuelling uses it automatically; "
@@ -6246,7 +6249,7 @@ def _classify_tool(name, hint):
         if "render-workout" in blob:
             return ("render", "Writing the workout to intervals.icu",
                     "wrote the workout")
-        if "race-predict" in blob:
+        if "race-predict" in blob or "run-predict" in blob:
             return ("racepred", "Predicting your race day", "predicted your race")
         if has("race-fuelling", "fuel-target", "fuel-check"):
             return ("fuel", "Working out your fuelling", "worked out your fuelling")

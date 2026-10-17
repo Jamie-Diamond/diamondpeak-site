@@ -4779,6 +4779,14 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   function goalMethod(r) {
     var v = r.volume;
     if (r.hold) return 'A steady effort for the expected time, from your FTP.';
+    // Run races from the athlete's own races (lib/run_model.py, 17 Oct 2026): the note
+    // names the races used and how much they slow with distance.
+    if ((r.method === 'races' || r.method === 'training') && r.note) {
+      return r.note + (r.raceday_s != null && v
+        ? ' Race day: at the ~' + v.k_race + ' km a week the plan builds to' +
+          (r.event === 'marathon' ? '' : ', scaled down for a shorter race') + '. An estimate.'
+        : '');
+    }
     if (r.method === 'tanda' && v) {
       return 'Marathon prediction from training (Tanda 2011). Now: your last 8 weeks, ' + v.k_now +
         ' km a week at ' + paceStr(v.pace_s_km) + '/km. Race day: the same pace at the ~' + v.k_race +
@@ -6113,6 +6121,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.021", "2026-10-17", "Goals: run race times now come from your own races (parkruns, 10ks, halves), how much you slow as races get longer, and your weekly km for the marathon", 0],
     ["4.020", "2026-10-17", "Settings retries if an athlete\u2019s connections and coaching options don\u2019t load", 1],
     ["4.019", "2026-10-17", "Trends shows every sport you have done, not only the ones in your plan", 0],
     ["4.018", "2026-10-17", "If Peak can\u2019t reach the server when it opens, it keeps retrying and recovers by itself", 0],

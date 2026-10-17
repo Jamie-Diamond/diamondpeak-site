@@ -7,7 +7,8 @@ build to the A race.
       "races":  every upcoming race, earliest first:
                 {name, date, days, priority, distance, event, kind,
                  goal, goal_s,                 the race's own goal (A race: race_goal)
-                 now_s,                        run races: Riegel from threshold pace
+                 now_s, raceday_s, method,     run races: see below
+                 note, evidence                 (method "races" / "training")
                  hold: {if_lo, if_hi, w_lo, w_hi, hours}   bike races: an intensity they
                                                could hold for the expected duration
                  tri: {now_min, raceday_min}   triathlon A race: the IM model's numbers},
@@ -17,7 +18,17 @@ build to the A race.
       "goalAfterRace": the goal's label when an A race is ahead of it,
     }
 
-Run-race predictions (Jamie, 1 Oct 2026: "do some research and do what you can"):
+Run-race predictions, FIRST CHOICE (Jamie, 17 Oct 2026: "build a better predictor ...
+look at the races I have done"): lib/run_model.py from the athlete's own race results
+(data["performance"], lib/performance.py): their races, weighted by recency and nearness
+to the distance, moved along their own fade-with-distance (Riegel k); marathons through
+Vickers & Vertosick (2016) with their weekly km. Backtested on Jamie's races it beat the
+threshold-pace estimate (2.5% vs 3.5% mean error). "Race day" applies the Tanda volume
+gain below to that "now". Method "training" is the same from their best hard training
+effort when they have no race in two years.
+
+FALLBACK, when there is no race or training effort to go on (Jamie, 1 Oct 2026: "do
+some research and do what you can"):
   Marathon: Tanda (2011), marathon pace from training: Pm (s/km) = 17.1 +
     140 exp(-0.0053 K) + 0.55 P, K = mean weekly running km and P = mean training pace
     (s/km) over 8 weeks; it explained ~77% of finish-time variance in recreational
@@ -159,6 +170,18 @@ def _run_predictions(v, event, a_race, cfg, profile, data, today, when) -> None:
         gain = m_then / m_now                                    # < 1 = faster
         v["volume"] = {"k_now": round(k_now, 1), "k_race": round(k_then, 1),
                        "pace_s_km": round(pace)}
+    share = 1.0 if event == "marathon" else min(1.0, km / 42.195)
+    run = (data.get("performance") or {}).get("run") or {}
+    if km and (run.get("races") or run.get("training")):
+        import run_model
+        p = run_model.predict(km * 1000, run.get("races") or [], today, k_now or 0.0,
+                              run.get("training"))
+        if p:
+            v.update(now_s=p["now_s"], method=p["method"], model=p["model"], note=p["note"],
+                     evidence=p["evidence"])
+            if gain is not None:
+                v["raceday_s"] = int(round(p["now_s"] * (1 - share * (1 - gain))))
+            return
     if event == "marathon" and gain is not None:
         v["now_s"], v["raceday_s"] = m_now, m_then
         v["method"] = "tanda"
@@ -166,7 +189,6 @@ def _run_predictions(v, event, a_race, cfg, profile, data, today, when) -> None:
     v["now_s"] = rf.predicted_run_time_s(event, _pace(profile.get("run_threshold_pace_per_km")))
     v["method"] = "riegel"
     if v["now_s"] and gain is not None:
-        share = min(1.0, km / 42.195)
         v["raceday_s"] = int(round(v["now_s"] * (1 - share * (1 - gain))))
 
 
