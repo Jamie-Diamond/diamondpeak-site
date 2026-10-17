@@ -353,7 +353,7 @@ Run pace is GAP: every pace you quote for an OUTDOOR run is Grade-Adjusted Pace 
 
 Rules for ANALYSIS — each logical line must be a separate output line (no semicolons to merge lines):
 
-Always lead with a one-sentence narrative verdict (e.g. "Solid Z2. Form held to the end.").
+{_length_block(coaching_level)}
 Describe what the data shows; never offer a CAUSE for it (tiredness, fatigue, a fitness ceiling, heat, a sensor fault, illness) unless a computed note above or the athlete says so. A fade is "the last km slowed by 50 s", not "points to tiredness": the question line is where the athlete tells you why.
 Always END with the session's question line from its format below ("How did it feel?", or
 the strength question). Short easy-session messages keep it too.
@@ -361,8 +361,8 @@ the strength question). Short easy-session messages keep it too.
 Every format below, regardless of session type, MUST state the session's actual Load (TSS) as a number. This is never dropped for brevity and does not depend on whether PLAN_DELTA fires later in this response — PLAN_DELTA is a separate "vs plan" comparison, not the athlete's only route to seeing what this session cost them.
 
 Then choose the metric set BY SESSION TYPE and surface only what else matters for THIS session, not a fixed block every time:
-- Easy / steady / recovery: Load (TSS) plus at most 1-2 other key numbers (e.g. avg HR and decoupling). Keep it short (well under 200 characters), no headers, no per-rep lines.
-- Long endurance ride or run (roughly 90 min or more, steady): Load (TSS), duration, IF, aerobic decoupling, and the fuelling prompt. A few lines, no per-rep breakdown.
+- Easy / steady / recovery: Load (TSS) plus at most 1-2 other key numbers (e.g. avg HR). Keep it short (well under 200 characters), no headers, no per-rep lines.
+- Long endurance ride or run (roughly 90 min or more, steady): Load (TSS) and the one or two numbers that tell this session's story (e.g. how much of it was easy), then the fuelling question. Heart-rate drift only when it is notable (5% or more). No per-rep breakdown.
 - Intervals / reps (structured): Load (TSS) plus the per-rep splits and target adherence in the sport format below. This per-rep detail IS the point for these sessions, so show it by default.
 - Brick (bike and run in one activity, or bike then run back-to-back): ALWAYS report the bike and run legs separately, splitting time and Load per leg.
 This selection is authoritative and governs the per-sport RIDE / RUN / SWIM formats below: use a format's full header and per-rep breakdown ONLY when the session is intervals/structured, or when the athlete has asked for the full breakdown. For easy/steady/recovery and long-endurance sessions, stay with the verdict plus Load and the few other relevant numbers above. Where these rules conflict with the per-sport format instructions below, these rules win.
@@ -374,9 +374,9 @@ RIDE:
 - Structured (Strava laps show alternating hard/easy, or ICU >3 intervals): header line + one line per WORK interval.
   Header: NxDUR @ AVG W (X% FTP) · NP XXXw · IF X.XX
   Rep lines: Rep N: DUR · XXXw (X% FTP) · AVGbpm/MAXbpm
-  Final line: completion note if intervals missed, else "Nutrition — g carbs/hr, bottles, and sodium?"
-- Unstructured ≤90 min: NP + IF | "Nutrition — g carbs/hr, bottles, and sodium?"
-- Unstructured >90 min: NP + IF | aerobic decoupling % | "Nutrition — g carbs/hr, bottles, and sodium? (recent avg: {fuel_avg} · {nutrition_label} {nutrition_target}g/hr)"
+  Final line: completion note if intervals missed, else "Roughly how many grams of carbs an hour did you take on?"
+- Unstructured ≤90 min: NP + IF | "Roughly how many grams of carbs an hour did you take on?"
+- Unstructured >90 min: NP + IF | aerobic decoupling % | "Roughly how many grams of carbs an hour did you take on? (recent avg: {fuel_avg} · {nutrition_label} {nutrition_target}g/hr)"
 
 RUN:
 {run_injury_ask}
@@ -759,10 +759,13 @@ def _overshoot_pass(slug: str, session_log_f: Path) -> str:
         if not lines:
             return ""
         return ("OVER PLAN (computed - authoritative):\n" + "\n".join(lines) + "\n"
-                "For that activity, just before the question line, add ONE short line: credit "
-                "the effort first, then say that keeping to the plan is what lets the next "
-                "planned session (named above) land well too, because steady sessions build "
-                "more than big one-off days. Warm, never a telling-off, no numbers in that line.")
+                # One short line, credit first, no lecture (Jamie, 17 Oct 2026: "This is way
+                # too wordy for Fred" - the line had grown to a two-clause explanation).
+                "For that activity, just before the question line, add ONE short line of 15 "
+                "words or fewer: credit the effort first, then that keeping to plan lets the "
+                "next planned session (named above, by its day) land well. No 'because', no "
+                "lesson, no numbers. Example: \"Big day out - keeping to plan lets Tuesday's "
+                "threshold land well.\"")
     except Exception as exc:
         print(f"[overshoot:{slug}] check failed: {exc}", file=sys.stderr)
         return ""
@@ -1710,6 +1713,166 @@ def _queue_evening_ask(slug, activity_id, sport, name, question, state=None,
     return True
 
 
+# --- debrief length, card overlap and template leaks (Jamie, 17 Oct 2026) ---------------
+# "This is way too wordy for Fred": a MID athlete's 2h04 ride got six lines of stacked
+# stats (zone shares, avg power, avg HR, drift), a two-clause over-plan lecture and a
+# "Nutrition: g carbs/hr, bottles, and sodium?" line that read as a blank template, then a
+# Quick log card asking carbs again. Each is now held in code after the model answers.
+
+# (max lines, max words) of the ANALYSIS, not counting the trailing question line.
+DEBRIEF_CAPS = {"beginner": (2, 40), "mid": (3, 60), "pro": (5, 100)}
+
+
+def _debrief_cap(level) -> tuple:
+    return DEBRIEF_CAPS.get(str(level or "").lower(), DEBRIEF_CAPS["mid"])
+
+
+def _length_block(level) -> str:
+    """The length budget told to the model; _cap_debrief enforces it after."""
+    lvl = str(level or "").lower()
+    lvl = lvl if lvl in DEBRIEF_CAPS else "mid"
+    n, w = DEBRIEF_CAPS[lvl]
+    pick = {
+        "beginner": "Then at most one more short line in effort words (easy, steady, hard) - "
+                    "no stat lists.",
+        "mid": "Then the ONE or TWO numbers that matter most for this session, each with a "
+               "word for what it means. Never stack stats: no zone % breakdowns, and never "
+               "avg HR + avg power + zone shares together. Heart-rate drift only when notable "
+               "(5% or more).",
+        "pro": "Then one key-numbers line, and further lines only for what this session "
+               "needs (reps, notable drift).",
+    }[lvl]
+    return (
+        f"LENGTH (Jamie, 17 Oct 2026, enforced in code): this athlete is {lvl.upper()}, so "
+        f"ANALYSIS is at most {n} lines and about {w} words, NOT counting the question line. "
+        "The code cuts whole lines from the end past that, so put the most important first.\n"
+        "Line 1 = ONE plain verdict sentence: what the session was and the one thing that "
+        "matters (e.g. \"Long ride, but it ran harder than the easy plan.\").\n"
+        f"{pick}\n"
+        "Structured reps go on ONE line at this budget (e.g. \"Reps: 312, 315, 318, 310 W\") "
+        "unless the athlete asked for the full breakdown.\n"
+        "When PLAN_DELTA is not none the code adds the planned-vs-actual Load line itself: "
+        "never restate the planned Load in words.\n"
+        "A Quick log card follows most debriefs and asks effort, pain and carbs: the code "
+        "removes those questions from your text when it is sent, so never rely on them.")
+
+
+def _cap_debrief(analysis: str, level, protect_last: bool = False) -> tuple:
+    """Hold the ANALYSIS to the level's DEBRIEF_CAPS (lines, words), the trailing question
+    line(s) not counted. Returns (text, dropped_lines).
+
+    Whole lines are dropped, last first, as morning-checkin._cap_note does: nothing is cut
+    mid-sentence or rewritten, so a trim can never put half a sentence or a wrong number in
+    front of the athlete. The verdict (line 1) is never dropped; nor is the last body line
+    when protect_last (the OVER PLAN line, which the prompt puts just before the question).
+    A run of "Rep N:" lines counts as one unit and goes whole or not at all."""
+    if not analysis:
+        return analysis, []
+    lines = [l for l in analysis.rstrip().split("\n") if l.strip()]
+    q = []
+    while lines and "?" in lines[-1]:
+        last = lines.pop()
+        segs = last.split("|")
+        if len(segs) > 1 and any("?" not in s for s in segs):
+            # "NP 180 W | Roughly how many grams...?": the stats half is body, not question
+            body = " | ".join(s.strip() for s in segs if "?" not in s and s.strip())
+            q.insert(0, " | ".join(s.strip() for s in segs if "?" in s))
+            if body:
+                lines.append(body)
+            break
+        q.insert(0, last)
+    units = []
+    for l in lines:
+        if _REP_LINE.match(l) and units and all(_REP_LINE.match(x) for x in units[-1]):
+            units[-1].append(l)
+        else:
+            units.append([l])
+    max_lines, max_words = _debrief_cap(level)
+    n_lines = lambda us: len(us)
+    n_words = lambda us: sum(len(x.split()) for u in us for x in u)
+    protected = {0} | ({len(units) - 1} if protect_last and len(units) > 1 else set())
+    dropped = []
+    i = len(units) - 1
+    while (n_lines(units) > max_lines or n_words(units) > max_words) and i >= 0:
+        if i not in protected and i < len(units):
+            dropped = units[i] + dropped
+            units.pop(i)
+            protected = {p - 1 if p > i else p for p in protected}
+        i -= 1
+    if not dropped:
+        return analysis, []
+    return "\n".join([x for u in units for x in u] + q), dropped
+
+
+_REP_LINE = re.compile(r"^\s*Rep \d+\s*:", re.I)
+
+# Prompt template text that must never reach an athlete. The old fuelling ask
+# ("Nutrition — g carbs/hr, bottles, and sodium?") read as a form with its blanks left in;
+# it is rewritten as a plain question. A line still carrying a format placeholder
+# (X:XX, XXXw, AVGbpm, NxDUR, <id>, {field}, [avg ...]) is dropped whole.
+_OLD_FUEL_ASK = re.compile(r"^\s*Nutrition\s*[:—–-]\s*g carbs/hr[^?]*\?", re.I)
+_PLACEHOLDER = re.compile(
+    r"\bX:XX\b|\bXXX|\bAVGbpm\b|\bMAXbpm\b|\bNxDUR\b|\b[NX]x\(?distance|"
+    r"<[a-z_ ]+>|\{[a-z_]+\}|\[avg\b|\bX% FTP\b|\+/-Xsec|(?<![\d~])\s+g carbs/hr", re.I)
+
+
+def _scrub_templates(analysis: str) -> tuple:
+    """(text, dropped) with no unfilled prompt template text left in it."""
+    if not analysis:
+        return analysis, []
+    out, dropped = [], []
+    for line in analysis.split("\n"):
+        line = _OLD_FUEL_ASK.sub("Roughly how many grams of carbs an hour did you take on?",
+                                 line)
+        if _PLACEHOLDER.search(line):
+            dropped.append(line.strip())
+            continue
+        out.append(line)
+    return "\n".join(out).strip(), dropped
+
+
+def _card_kinds(entry, slug, injuries, history=None) -> list:
+    """What the Quick log card asks for this activity, or [] when no card will be sent.
+    One rule for both the card send and the debrief text, so the debrief never asks in
+    words what the card is about to ask in buttons (Jamie, 17 Oct 2026). The caller still
+    gates on already-discussed and tiny recordings."""
+    if not entry or _strength_with_hr(entry) or _too_short_to_ask(entry) \
+            or str(entry.get("sport") or "").lower() in _WATER_SPORTS:
+        return []
+    kinds = [ask_gate.ANKLE if entry.get("sport") == "Run" and injuries else ask_gate.RPE]
+    if (entry.get("duration_min") or 0) >= ask_gate.LONG_SESSION_MIN \
+            and entry.get("sport") == "Ride" and coaching_prefs.fuelling_on(slug):
+        kinds.append(ask_gate.NUTRITION)     # matches _quick_log_keyboard's carb row
+    # The card is a question in button form: when everything it captures is already
+    # known it is the re-ask, so it is not sent. Only when ALL of them are known: a long
+    # ride whose RPE is in but whose fuelling is not still gets the carb buttons.
+    hist = _load_history(slug) if history is None else history
+    since = ask_gate.entry_synced_at(entry)
+    if all(ask_gate.already_answered(entry, k, history=hist, since=since) for k in kinds):
+        return []
+    return kinds
+
+
+def _drop_card_questions(analysis: str, kinds) -> str:
+    """Remove the debrief's question segments the Quick log card covers. With a card the
+    effort, pain and how-it-felt asks all go (the card is the effort/pain capture), and the
+    carbs ask when the card has its carb row. Questions the card does not cover (strength
+    focus, "what was this one?") stay."""
+    if not analysis or not kinds:
+        return analysis
+    covered = {ask_gate.RPE, ask_gate.ANKLE} | (
+        {ask_gate.NUTRITION} if ask_gate.NUTRITION in kinds else set())
+    out = []
+    for line in analysis.split("\n"):
+        segs = line.split("|")
+        kept = [s for s in segs if ask_gate.classify_question(s) not in covered]
+        if len(kept) == len(segs):
+            out.append(line)
+        elif any(s.strip() for s in kept):
+            out.append("|".join(kept).strip(" |"))
+    return "\n".join(out).rstrip()
+
+
 def _defer_trailing_question(analysis, slug, activity_id, sport, name, state=None,
                              state_file=None, now=None):
     """Strip the debrief's trailing question line(s) inside the evening window and queue
@@ -1957,7 +2120,7 @@ def _send_followup_nudge(state, session_log_f, chat_id, injuries=None, state_fil
             if kind == ask_gate.ANKLE:
                 msg = f"Ankle score during the {label}? (0–10)"
             elif kind == ask_gate.NUTRITION:
-                msg = f"Fuelling check for the {label} — roughly g carbs/hr?"
+                msg = f"Fuelling check for the {label}: roughly how many grams of carbs an hour?"
             elif sport == "Swim":
                 msg = f"How did the {label} feel? (RPE 1–10 if you have it)"
             else:
@@ -2803,9 +2966,23 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
                 _name_now = ""
         except Exception:
             _name_now = ""
+        # No unfilled template text, no ask the Quick log card is about to make, and the
+        # level's length cap (Jamie, 17 Oct 2026: "This is way too wordy for Fred").
+        analysis, _scrubbed = _scrub_templates(analysis)
+        if _scrubbed:
+            print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] debrief template text "
+                  f"dropped: " + " | ".join(t[:60] for t in _scrubbed), file=sys.stderr)
+        analysis = _drop_card_questions(analysis, _card_kinds(_entry_now, slug, injuries))
         # Asked-and-answered, and one question at most. BEFORE the evening defer,
         # so a suppressed ask is not queued for 21:00 instead of dropped.
         analysis = _filter_debrief_questions(analysis, _entry_now, slug)
+        _level = profile.get("coaching_level", "mid")
+        analysis, _trimmed = _cap_debrief(analysis, _level,
+                                          protect_last=f"({activity_id})" in (_over or ""))
+        if _trimmed:
+            print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] debrief over the "
+                  f"{_level} cap {_debrief_cap(_level)}; cut {len(_trimmed)} line(s): "
+                  + " | ".join(t[:60] for t in _trimmed), file=sys.stderr)
         analysis = _defer_trailing_question(analysis, slug, activity_id, _sport_now,
                                             _name_now, state=state, state_file=state_file)
         if not analysis:
@@ -2874,23 +3051,10 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
         except Exception:
             pass
     # The keyboard is a SECOND message carrying a question, so it obeys the same
-    # asked-and-answered rule as the debrief: if everything it captures is already
-    # filled — the analysis fills these from chat when the athlete volunteered them
-    # — then offering the buttons is the re-ask in button form. Only when ALL of
-    # them are known: a long ride whose RPE is in but whose fuelling is not still
-    # gets the keyboard, because the carb buttons are the cheap way to answer.
-    _kb_kinds = [ask_gate.ANKLE if new_entry and new_entry.get("sport") == "Run" and injuries
-                 else ask_gate.RPE]
-    if new_entry and (new_entry.get("duration_min") or 0) >= ask_gate.LONG_SESSION_MIN \
-            and new_entry.get("sport") == "Ride" and coaching_prefs.fuelling_on(slug):
-        _kb_kinds.append(ask_gate.NUTRITION)     # matches _quick_log_keyboard's carb row
-    _kb_known = bool(new_entry) and all(
-        ask_gate.already_answered(new_entry, _k, history=_load_history(slug),
-                                  since=ask_gate.entry_synced_at(new_entry))
-        for _k in _kb_kinds)
-    if (new_entry and not already_discussed and not _kb_known and not tiny
-            and not _strength_with_hr(new_entry) and not _too_short_to_ask(new_entry)
-            and new_entry.get("sport", "").lower() not in _WATER_SPORTS):
+    # asked-and-answered rule as the debrief (_card_kinds, the one rule the debrief
+    # text also used to drop the asks this card makes).
+    if (new_entry and not already_discussed and not tiny
+            and _card_kinds(new_entry, slug, injuries)):
         sport = new_entry.get("sport", "")
         dur = new_entry.get("duration_min", 0) or 0
         kb = _quick_log_keyboard(activity_id, slug, sport, bool(injuries), dur)

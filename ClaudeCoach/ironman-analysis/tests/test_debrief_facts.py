@@ -485,3 +485,154 @@ def test_target_activity_picked_in_code():
 
 def test_no_next_time_line_with_over_plan():
     assert "Never one for an activity with an OVER PLAN line" in _prompt()
+
+
+# Length by level, no double asks, short over-plan line, no template leaks ----------------
+# (Jamie, 17 Oct 2026: "This is way too wordy for Fred", a MID debrief for a 2h04 ride.)
+
+FRED_DEBRIEF = (
+    "Long ride, 51 km in 2h04, but only 54% of it was in the easy zones, so it ran harder "
+    "than the plan's easy label.\n"
+    "Load 143, which is well over the 70 planned for this ride. Average power was 136 W, with "
+    "46% of the time in Zone 3 or above and 31% in Zone 4 or above.\n"
+    "Heart-rate drift was 0.5%. Average heart rate was 142 bpm.\n"
+    "Most of the time above 150 bpm came on short climbs.\n"
+    "Nutrition: g carbs/hr, bottles, and sodium? (recent avg: 50 g/hr · your agreed training "
+    "figure 45 g/hr)")
+
+
+def _body(text):
+    lines = [l for l in text.split("\n") if l.strip()]
+    while lines and "?" in lines[-1]:
+        lines.pop()
+    return lines
+
+
+def test_cap_per_level_drops_whole_trailing_lines():
+    body = "\n".join(f"Line {i} has exactly six words." for i in range(1, 8)) + "\nHow did it feel?"
+    for level, (n, w) in {"beginner": (2, 40), "mid": (3, 60), "pro": (5, 100)}.items():
+        out, dropped = aw._cap_debrief(body, level)
+        kept = _body(out)
+        assert kept == [f"Line {i} has exactly six words." for i in range(1, n + 1)], level
+        assert len(dropped) == 7 - n
+        assert out.endswith("How did it feel?")           # the question is not counted
+    assert aw._debrief_cap("unknown") == (3, 60)
+
+
+def test_cap_by_words_never_cuts_mid_sentence_and_keeps_verdict():
+    long = "word " * 45
+    out, dropped = aw._cap_debrief(f"Verdict sentence here.\n{long.strip()}\nShort.", "beginner")
+    # Last first, until under the cap: the trailing short line goes before the long one.
+    assert out == "Verdict sentence here."
+    assert dropped == [long.strip(), "Short."]
+    # The verdict alone over budget is kept whole, never truncated.
+    out, dropped = aw._cap_debrief(long.strip(), "beginner")
+    assert out == long.strip() and dropped == []
+
+
+def test_cap_protects_over_plan_line_and_rep_blocks():
+    text = "Verdict.\nLoad 143.\nAvg HR 142.\nBig day out - keeping to plan lets Tuesday's threshold land well."
+    out, _ = aw._cap_debrief(text, "mid", protect_last=True)
+    assert _body(out) == ["Verdict.", "Load 143.",
+                          "Big day out - keeping to plan lets Tuesday's threshold land well."]
+    reps = "Verdict.\nRep 1: 4:00 · 300 W\nRep 2: 4:00 · 305 W\nRep 3: 4:00 · 310 W\nLoad 80."
+    out, _ = aw._cap_debrief(reps, "beginner")              # rep run is one unit
+    assert _body(out) == ["Verdict.", "Rep 1: 4:00 · 300 W", "Rep 2: 4:00 · 305 W",
+                          "Rep 3: 4:00 · 310 W"]
+
+
+def test_fred_debrief_comes_out_within_mid_cap(monkeypatch):
+    monkeypatch.setattr(aw.coaching_prefs, "fuelling_on", lambda slug: True)
+    entry = {"activity_id": "i1", "sport": "Ride", "duration_min": 124, "rpe": None,
+             "nutrition_g_carb": None}
+    text, scrubbed = aw._scrub_templates(FRED_DEBRIEF)
+    assert "g carbs/hr" not in text and scrubbed == []
+    kinds = aw._card_kinds(entry, "fred", [], history=[])
+    assert kinds == [aw.ask_gate.RPE, aw.ask_gate.NUTRITION]
+    text = aw._drop_card_questions(text, kinds)
+    assert "carbs" not in text and "?" not in text
+    out, dropped = aw._cap_debrief(text, "mid")
+    lines = _body(out)
+    assert len(lines) <= 3 and len(out.split()) <= 60
+    assert lines[0].startswith("Long ride, 51 km in 2h04")
+    assert dropped
+
+
+def test_no_carbs_or_effort_question_when_card_sent(monkeypatch):
+    monkeypatch.setattr(aw.coaching_prefs, "fuelling_on", lambda slug: True)
+    ride = {"activity_id": "i1", "sport": "Ride", "duration_min": 124}
+    kinds = aw._card_kinds(ride, "fred", [], history=[])
+    text = ("Steady ride.\nLoad 90.\nRoughly how many grams of carbs an hour did you take on?"
+            " (recent avg: 50 g/hr)")
+    assert aw._drop_card_questions(text, kinds) == "Steady ride.\nLoad 90."
+    assert aw._drop_card_questions("Easy run.\nHow did it feel?",
+                                   [aw.ask_gate.RPE]) == "Easy run."
+    assert aw._drop_card_questions("Easy run.\nInjury pain score during? (0-10)",
+                                   [aw.ask_gate.ANKLE]) == "Easy run."
+    # A short ride's card has no carb row, so the text keeps a carbs ask.
+    assert "carbs" in aw._drop_card_questions("Ride.\nRoughly how many grams of carbs an hour?",
+                                              [aw.ask_gate.RPE])
+    # A question the card does not cover stays.
+    q = "Cardio, 30 min.\nWhat was this one - a run, a ride, or something else?"
+    assert aw._drop_card_questions(q, [aw.ask_gate.RPE]) == q
+
+
+def test_no_card_means_the_text_question_stays(monkeypatch):
+    monkeypatch.setattr(aw.coaching_prefs, "fuelling_on", lambda slug: True)
+    assert aw._card_kinds({"sport": "Ride", "duration_min": 10}, "x", [], history=[]) == []
+    assert aw._card_kinds({"sport": "Strength", "duration_min": 40, "avg_hr": 110},
+                          "x", [], history=[]) == []
+    answered = {"sport": "Ride", "duration_min": 124, "rpe": 6, "nutrition_g_carb": 60}
+    assert aw._card_kinds(answered, "x", [], history=[]) == []
+    text = "Ride.\nRoughly how many grams of carbs an hour did you take on?"
+    assert aw._drop_card_questions(text, []) == text
+    assert aw._card_kinds({"sport": "Run", "duration_min": 40}, "x",
+                          [{"location": "knee"}], history=[]) == [aw.ask_gate.ANKLE]
+
+
+def test_template_text_never_reaches_athlete():
+    out, dropped = aw._scrub_templates(
+        "Solid ride.\nNutrition — g carbs/hr, bottles, and sodium?\n"
+        "Rep 1: DUR · XXXw (X% FTP) · AVGbpm/MAXbpm\nHeader: NxDUR @ AVG W\n"
+        "Fuel: [avg g/hr from last 4 rides] · {fuel_avg}")
+    assert out == "Solid ride.\nRoughly how many grams of carbs an hour did you take on?"
+    assert len(dropped) == 3
+    real = "Reps: 4:12, 4:10, 4:08/km · Load 62 · 60 g carbs/hr logged"
+    assert aw._scrub_templates(real) == (real, [])
+    p = _prompt()
+    assert "Nutrition — g carbs/hr" not in p and "g carbs/hr, bottles" not in p
+
+
+def test_prompt_states_level_budget_and_verdict_first():
+    for level, (n, w) in {"beginner": (2, 40), "mid": (3, 60), "pro": (5, 100)}.items():
+        p = aw._build_prompt("t", "Fred", 250, [], {"coaching_level": level})
+        assert f"ANALYSIS is at most {n} lines and about {w} words" in p
+        assert "Line 1 = ONE plain verdict sentence" in p
+    assert "Never stack stats" in aw._length_block("mid")
+    assert "effort words" in aw._length_block("beginner")
+
+
+def test_over_plan_line_is_short_credit_first(monkeypatch, tmp_path):
+    import consistency
+    acts = [{"id": "i5", "name": "Long ride", "start_date_local": f"{aw.date.today()}T09:00:00",
+             "type": "Ride", "paired_event_id": 1}]
+    evs = [{"id": 1, "name": "Endurance", "start_date_local": f"{aw.date.today()}T00:00:00",
+            "type": "Ride"},
+           {"id": 2, "name": "Threshold", "type": "Ride",
+            "start_date_local": f"{aw.date.today() + aw.timedelta(days=2)}T00:00:00"}]
+
+    class C:
+        def __init__(self, *a): pass
+        def get_training_history(self, days): return acts
+        def get_events(self, a, b): return evs
+    monkeypatch.setitem(sys.modules, "icu_api", types.SimpleNamespace(IcuClient=C))
+    monkeypatch.setattr(consistency, "overshoot", lambda plan, a: True)
+    cfg = tmp_path / "a.json"
+    cfg.write_text(json.dumps({"fred": {"icu_athlete_id": "x", "icu_api_key": "y"}}))
+    monkeypatch.setattr(aw, "ATHLETES_CONFIG", cfg)
+    out = aw._overshoot_pass("fred", tmp_path / "none.json")
+    assert "(i5)" in out and "Threshold" in out
+    assert "15 words or fewer" in out and "credit the effort first" in out
+    assert "because steady sessions build" not in out and "No 'because'" in out
+    example = "Big day out - keeping to plan lets Tuesday's threshold land well."
+    assert example in out and len(example.split()) <= 15
