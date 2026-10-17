@@ -138,6 +138,10 @@ def levels_key(event: str):
         return "gravel"
     if "sportive" in s or "fondo" in s or "cyclosportive" in s:
         return "sportive"
+    # "Road — 312 km" (Calum's Mallorca 312, 17 Oct 2026): a road ride with a distance is a
+    # sportive for the level tables; it showed nothing on Goals before.
+    if re.search(r"\broad\b", s) and re.search(r"\d+\s*km", s):
+        return "sportive"
     return run_event_key(s)
 
 

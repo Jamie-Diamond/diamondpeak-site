@@ -203,6 +203,8 @@ def diagnose(dist_m: float, goal_s: int, goal: str, run: dict, fitness: dict | N
 
 def _headline(limiter, by, goal, fitness, run, eff, goal_pace, also) -> str:
     g = f"for {goal}" if goal else "for your goal"
+    if limiter is None and not any(x["status"] in ("green", "amber", "red", "unshown") for x in by.values()):
+        return "Not enough measured yet to say what's holding you back."
     if limiter is None:
         return f"Nothing is holding you back {g} on these numbers."
     r = by[limiter]
@@ -274,3 +276,174 @@ def _foot(run) -> str:
     elif eng.get("source"):
         bits.append("VO2max is estimated from your runs' heart rate.")
     return " ".join(bits)
+
+
+# ── Bike: what the course demands (lib/course.py) ─────────────────────────────
+#
+# Outdoor ride times aren't predicted (wind, drafting: Jamie, 17 Oct 2026); what the course
+# needs is. CLIMBING: the steady power on the climbs at which every cut-off leaves no more
+# than REST_KMH to find on the flats and descents (a bunch on the flat, the descents),
+# against what the rider can hold on climbs in a long day (CLIMB_IF of FTP). DAY LENGTH:
+# the longest ride shown against the time the finish cut-off allows. DURABILITY and
+# EFFICIENCY need power outdoors: without a power meter the card says so rather than guess
+# (Jamie, 17 Oct 2026: "yes, needs power meter!"). FUELLING: carbs logged per hour on long
+# rides against FUEL_G_H, the evidence-based range for rides over 2.5 h (Jeukendrup 2014).
+
+REST_KMH = 30.0
+CLIMB_IF = 0.80
+DAY_SHOWN = 0.75                 # longest ride at this share of the day reads as shown
+FUEL_G_H = (60, 90)
+
+BIKE_LABELS = {"fitness": "Fitness", "climbing": "Climbing power", "day": "Day length",
+               "durability": "Durability", "fuelling": "Fuelling"}
+
+
+def _brow(key, you, need, short, status=None, source=None, why=None) -> dict:
+    s = None if short is None else round(max(0.0, short), 3)
+    return {"key": key, "label": BIKE_LABELS[key], "you": you, "need": need, "short": s,
+            "status": status or _status(s), "source": source, "why": why}
+
+
+def _hm(minutes) -> str:
+    m = int(round(minutes))
+    return f"{m // 60}h{m % 60:02d}"
+
+
+def diagnose_bike(course: dict | None, bike: dict | None, fitness: dict | None,
+                  phase_frac: float | None = None, goal: str | None = None) -> dict | None:
+    """The "What's holding you back" card for a bike event: rows measured from training
+    against what the course demands. Without a course only fitness and the measures are
+    shown, and the card asks for the route."""
+    import course as cs
+    if not bike and not fitness:
+        return None
+    bike = bike or {}
+    rows = []
+    if fitness and fitness.get("now") is not None:
+        due = fitness["lo"] * (phase_frac or 1.0)
+        need = (f"~{due:.0f} by now · {fitness['lo']}–{fitness['hi']} race day"
+                if phase_frac and phase_frac < 1 else f"{fitness['lo']}–{fitness['hi']}")
+        rows.append(_brow("fitness", f"{fitness['now']:.0f}", need, (due - fitness["now"]) / due))
+    else:
+        rows.append(_brow("fitness", "—", "—", None))
+
+    ftp, kg = bike.get("ftp"), bike.get("weight")
+    binding, need_w = None, None
+    if course and ftp and kg:
+        hold = CLIMB_IF * ftp
+        need_w = cs.climb_power_for(course, kg, REST_KMH)
+        at_hold = cs.needs(course, hold, kg)
+        binding = (max(at_hold, key=lambda n: n["rest_kmh"] if n["rest_kmh"] is not None else 999)
+                   if at_hold else None)
+        if need_w:
+            rows.append(_brow("climbing", f"{ftp} W FTP ({ftp / kg:.1f} W/kg) · ~{hold:.0f} W on long-day climbs",
+                              f"~{need_w:.0f} W on the climbs ({need_w / kg:.1f} W/kg)",
+                              (need_w - hold) / need_w,
+                              source="indoor power" if not bike.get("outdoor", {}).get("with_power") else "power"))
+        else:
+            rows.append(_brow("climbing", f"{ftp} W FTP", "—", None))
+    else:
+        rows.append(_brow("climbing", f"{ftp} W FTP" if ftp else "—",
+                          "add the route (GPX)" if not course else "—", None))
+
+    if course:
+        fin = next((c for c in course.get("checkpoints") or [] if c.get("type") == "finish"), None)
+        day_h = (cs._clock_min(fin["clock"]) - cs._clock_min(course["start"])) / 60 if fin else None
+        if day_h and bike.get("longest_h") is not None and course.get("start"):
+            short = (DAY_SHOWN * day_h - bike["longest_h"]) / (DAY_SHOWN * day_h)
+            rows.append(_brow("day", f"{bike['longest_h']:.1f} h longest ride (90 days)",
+                              f"up to {day_h:.1f} h to the finish cut-off", short,
+                              status="green" if short <= GREEN else "unshown"))
+        else:
+            rows.append(_brow("day", "—", "—", None))
+    else:
+        rows.append(_brow("day", f"{bike.get('longest_h', 0):.1f} h longest ride" if bike.get("longest_h") else "—",
+                          "add the route (GPX)", None))
+
+    out_rides = bike.get("outdoor") or {}
+    no_meter = out_rides.get("rides") and not out_rides.get("with_power")
+    dur = bike.get("durability")
+    if dur:
+        rows.append(_brow("durability", f"{dur['drift_pct']:+.0f}% drift on 3h+ rides",
+                          f"under {DRIFT_OK:.0f}%", max(0.0, dur["drift_pct"] - DRIFT_OK) / DRIFT_SCALE,
+                          source=f"power, {dur['n']} long rides"))
+    else:
+        rows.append(_brow("durability", "needs a power meter" if no_meter else "no long rides with power",
+                          f"under {DRIFT_OK:.0f}% drift", None, why="power" if no_meter else None))
+
+    fuel = bike.get("fuel")
+    if fuel:
+        rows.append(_brow("fuelling", f"{fuel['g_per_h']} g carbs an hour", f"{FUEL_G_H[0]}–{FUEL_G_H[1]} g an hour",
+                          (FUEL_G_H[0] - fuel["g_per_h"]) / FUEL_G_H[0], source=f"{fuel['n']} long rides"))
+    else:
+        rows.append(_brow("fuelling", "not logged on long rides", f"{FUEL_G_H[0]}–{FUEL_G_H[1]} g an hour", None))
+
+    by = {r["key"]: r for r in rows}
+    flagged = [r for r in rows if r["status"] in ("amber", "red")]
+    limiter = max(flagged, key=lambda r: r["short"])["key"] if flagged else None
+    if limiter is None and by["day"]["status"] == "unshown":
+        limiter = "day"
+    head = _bike_headline(limiter, by, course, bike, binding, need_w)
+    return {"rows": rows, "limiter": limiter, "headline": head,
+            "fix": _bike_fix(limiter, course, bike), "foot": _bike_foot(course, bike, no_meter)}
+
+
+def _bike_headline(limiter, by, course, bike, binding, need_w) -> str:
+    if not course:
+        return "Add the route (a GPX) and the coach works out what this race needs."
+    if limiter is None and not course.get("start"):
+        return "Add the start time and cut-offs for this route and the coach works out what it needs."
+    if limiter is None and not any(r["status"] in ("green", "amber", "red", "unshown") for r in by.values()):
+        return "Not enough measured yet to say what's holding you back."
+    if limiter is None:
+        return "Nothing is holding you back on these numbers."
+    r = by[limiter]
+    if limiter == "climbing" and binding:
+        hold = CLIMB_IF * bike["ftp"]
+        return (f"Climbing power is the issue: at ~{hold:.0f} W the climbs to {binding['label']} take "
+                f"{_hm(binding['climb_min'])}, so the other {binding['rest_km']:.0f} km would need "
+                f"{binding['rest_kmh']:.0f} km/h to make {binding['clock']}"
+                + (" (miss it and it's a shorter route)" if binding.get("on_miss") else "")
+                + f". About {need_w:.0f} W on the climbs makes it at {REST_KMH:.0f} km/h.")
+    if limiter == "fitness":
+        return f"Fitness is the issue: your fitness is {r['you']}, against {r['need']}."
+    if limiter == "day":
+        return f"Not shown yet: a day this long. Your longest ride lately is {r['you'].split(' longest')[0]}; the cut-offs allow {r['need'].split('up to ')[1].split(' to')[0]}."
+    if limiter == "durability":
+        return f"Durability is the issue: you drift {bike['durability']['drift_pct']:.0f}% on rides over 3 hours."
+    return f"Fuelling is the issue: {r['you']} on long rides, against {r['need']}."
+
+
+def _bike_fix(limiter, course, bike) -> str | None:
+    import course as cs
+    if limiter == "climbing" and course and bike.get("ftp") and bike.get("weight"):
+        kg, hold = bike["weight"], CLIMB_IF * bike["ftp"]
+        km = next((c["km"] for c in course.get("checkpoints") or [] if c.get("type") == "cutoff"), None) or 100
+        base = cs.climbing_split(course["ele"], 0, km, hold, kg + cs.KIT_KG)[0]
+        w10 = base - cs.climbing_split(course["ele"], 0, km, hold + CLIMB_IF * 10, kg + cs.KIT_KG)[0]
+        kg3 = base - cs.climbing_split(course["ele"], 0, km, hold, kg - 3 + cs.KIT_KG)[0]
+        return (f"Raise FTP and carry less: each 10 W of FTP saves ~{w10 / 60:.0f} min on the climbs to "
+                f"km {km:g}, and each 3 kg saves ~{kg3 / 60:.0f} min.")
+    if limiter == "day":
+        return "Build the longest ride over the season, fuelled as on the day."
+    if limiter == "fitness":
+        return "More riding builds it."
+    if limiter == "durability":
+        return "Long steady rides, fuelled, with the last hour at target power."
+    if limiter == "fuelling":
+        return "Practise 60-90 g of carbs an hour on long rides."
+    return None
+
+
+def _bike_foot(course, bike, no_meter) -> str:
+    import course as cs
+    bits = []
+    if course:
+        bits.append(f"Climb times are physics (no drafting on a climb); the flats and descents aren't "
+                    f"predicted, only the speed they'd need. Assumes {CLIMB_IF:.0%} of FTP on the climbs, "
+                    f"cut-offs from the gun ({course.get('year', '')}), {cs.STOP_MIN_PER_FEED} min at each feed.")
+    if no_meter:
+        bits.append("Your outdoor rides have no power, so FTP comes from indoor sessions and durability "
+                    "can't be measured: a power meter on the road bike would fill those in.")
+    bits.append("Fuelling counts carbs logged on rides over 3 hours.")
+    return " ".join(b.strip() for b in bits)

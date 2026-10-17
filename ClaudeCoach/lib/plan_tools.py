@@ -2371,6 +2371,111 @@ def cmd_run_predict(args) -> dict:
                      "Vickers & Vertosick 2016; race day adds the Tanda volume gain"}
 
 
+def cmd_course(args) -> dict:
+    """A bike race route from its GPX (lib/course.py): the climbs, the climbing time on each at
+    the rider's climbing power, what the cut-offs need, and the steady climbing power that
+    makes every cut-off. Pass --race NAME (a stored course: the athlete's own upload first,
+    then reference/races) or --gpx FILE_OR_URL (add --save to keep it for the athlete). FTP
+    and weight come from the athlete's performance data, or --watts / --kg. Outdoor ride times
+    are never predicted (drafting, wind): quote the climb times and the speed the rest needs."""
+    import re
+    import course as _course
+    import limiters as _lim
+    slug = args.athlete
+    race, gpx = getattr(args, "race", None), getattr(args, "gpx", None)
+    if bool(race) == bool(gpx):
+        raise SystemExit(_err("pass exactly one of --race NAME or --gpx FILE_OR_URL"))
+    saved = None
+    if race:
+        crs = _course.for_race(race, slug)
+        if crs is None:
+            raise SystemExit(_err(f"no course for '{race}': send the GPX and run "
+                                  "course --gpx ... --save"))
+    else:
+        if gpx.lower().startswith(("http://", "https://")):
+            import ipaddress
+            import requests
+            from urllib.parse import urlparse
+            host = (urlparse(gpx).hostname or "").lower()
+            try:
+                ipaddress.ip_address(host)
+                literal = True
+            except ValueError:
+                literal = False
+            # Public https links only: the chat can pass any URL, and this runs on the VM.
+            if not gpx.lower().startswith("https://") or literal or "." not in host or host.endswith(
+                    (".local", ".internal", "localhost")):
+                raise SystemExit(_err("only public https links to a GPX are fetched"))
+            try:
+                r = requests.get(gpx, timeout=30)
+                r.raise_for_status()
+                text = r.text
+            except Exception as e:
+                raise SystemExit(_err(f"could not fetch the GPX: {e}"))
+            stem = Path(gpx.split("?")[0].rstrip("/")).stem
+        else:
+            try:
+                text = Path(gpx).expanduser().read_text(errors="replace")
+            except OSError as e:
+                raise SystemExit(_err(f"could not read the GPX: {e}"))
+            stem = Path(gpx).stem
+        name = getattr(args, "name", None) or re.sub(r"[-_]+", " ", stem).strip() or "course"
+        crs = _course.from_gpx(text, name)
+        if len(crs["ele"]) < 2:
+            raise SystemExit(_err("no track points with elevation found in the GPX"))
+        if getattr(args, "save", False):
+            d = BASE / "athletes" / slug / "courses"
+            d.mkdir(parents=True, exist_ok=True)
+            fname = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "course"
+            saved = d / f"{fname}.json"
+            saved.write_text(json.dumps(crs))
+
+    bike = ((_training_data(slug).get("performance") or {}).get("bike")) or {}
+    ftp = getattr(args, "watts", None) or bike.get("ftp")
+    kg = getattr(args, "kg", None) or bike.get("weight")
+    ele, step = crs["ele"], crs.get("step_m", _course.STEP_M)
+    hold = _lim.CLIMB_IF * ftp if ftp and kg else None
+    cl = crs.get("climbs")
+    if cl is None:
+        cl = _course.climbs(ele, crs.get("summits"), step)
+    climbs = []
+    for c in cl:
+        row = {"name": c.get("name") or "unnamed", "start_km": c["start_km"], "length_km": c["length_km"],
+               "avg_pct": c["avg_pct"], "gain_m": c["gain_m"]}
+        if hold:
+            secs, _, _ = _course.climbing_split(ele, c["start_km"], c["top_km"], hold, kg + _course.KIT_KG, step)
+            row["minutes"] = round(secs / 60, 1)
+        climbs.append(row)
+
+    out = {"athlete": slug,
+           "course": {"name": crs.get("name"), "year": crs.get("year"), "distance_km": crs.get("distance_km"),
+                      "ascent_m": crs.get("official_ascent_m") or crs.get("ascent_m"),
+                      "start": crs.get("start"), "checkpoints": crs.get("checkpoints"),
+                      "feeds": crs.get("feeds")},
+           "climbs": climbs}
+    if hold:
+        # needs() and climb_power_for() need a start time and at least one cut-off to work from
+        timed = bool(crs.get("start")) and any(
+            cp.get("type") in ("cutoff", "finish") for cp in crs.get("checkpoints") or [])
+        out["climb_power_w"] = round(hold)
+        out["needs"] = _course.needs(crs, hold, kg) if timed else []
+        pw = _course.climb_power_for(crs, kg, _lim.REST_KMH) if timed else None
+        out["power_needed_w"] = round(pw) if pw else None
+        out["assumptions"] = (f"climbing at {_lim.CLIMB_IF:.0%} of FTP {ftp:g} W = {hold:.0f} W; rest of the "
+                              f"course at {_lim.REST_KMH:g} km/h; {_course.STOP_MIN_PER_FEED} min at each feed; "
+                              f"CdA {_course.CDA}, Crr {_course.CRR}, bike + kit {_course.KIT_KG:g} kg, rider {kg:g} kg")
+        if not timed:
+            out["note"] = "no start time / cut-offs on this course, so no cut-off needs or required power"
+    else:
+        out["note"] = ("no FTP and weight for this athlete: pass --watts and --kg for climb times, "
+                       "cut-off needs and required power")
+    out["rule"] = ("Never predict a finish time for an outdoor ride: drafting and wind. Quote climb "
+                   "times and the speed the rest would need.")
+    if saved:
+        out["saved"] = str(saved)
+    return out
+
+
 # ── subcommand: ctl-sweep ──────────────────────────────────────────────────────
 def cmd_ctl_sweep(args) -> dict:
     """CTL-sensitivity sweep: how much a race-day CTL / predicted outcome moves
@@ -3331,6 +3436,16 @@ def main():
     prr.add_argument("--athlete", required=True)
     prr.add_argument("--km", type=float, help="one distance in km instead of 5k/10k/half/marathon")
 
+    pco = sub.add_parser("course", help="bike race route: climbs, climb times at the rider's power, cut-off needs (never an outdoor ride time)")
+    pco.add_argument("--athlete", required=True)
+    pcog = pco.add_mutually_exclusive_group(required=True)
+    pcog.add_argument("--race", help="a stored course by race name (athlete's own upload, then reference/races)")
+    pcog.add_argument("--gpx", help="a GPX file path or http(s) URL")
+    pco.add_argument("--name", help="course name for --gpx (default: the file name)")
+    pco.add_argument("--save", action="store_true", help="keep the --gpx course as athletes/<slug>/courses/<name>.json")
+    pco.add_argument("--watts", type=float, help="FTP override (default: the athlete's FTP)")
+    pco.add_argument("--kg", type=float, help="rider weight override (default: the athlete's weight)")
+
     pcs = sub.add_parser("ctl-sweep",
                          help="CTL-sensitivity sweep: race-day CTL + predicted-outcome range "
                               "across a band of ramp-rate assumptions (reuses project + race-predict)")
@@ -3450,6 +3565,7 @@ def main():
                "race-fuelling": cmd_race_fuelling, "fuel-check": cmd_fuel_check,
                "wetsuit": cmd_wetsuit, "race-predict": cmd_race_predict,
                "run-predict": cmd_run_predict,
+               "course": cmd_course,
                "ctl-sweep": cmd_ctl_sweep,
                "sweat-rate": cmd_sweat_rate, "log-strength": cmd_log_strength,
                "log-weight": cmd_log_weight,

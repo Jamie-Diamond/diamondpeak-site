@@ -4544,6 +4544,9 @@ def prefetch_context(slug: str) -> str:
                 f"plan_tools.py run-predict --athlete {slug}  "
                 "-> Now / Race day from the athlete's own races and what's holding them back "
                 "(fitness / engine / efficiency / durability), the same as Peak's Goals page. "
+                "BIKE race routes / a rider's GPX:  "
+                f"plan_tools.py course --athlete {slug} --race '<name>' (or --gpx <file> --name '<race>' --save)  "
+                "-> climbs, cut-off needs and the climbing power they need; never predict an outdoor ride time. "
                 "If the athlete reports a PRE/POST-SESSION WEIGH-IN (sweat test), call:  "
                 f"plan_tools.py sweat-rate --athlete {slug} --pre <kg> --post <kg> --fluid <ml> --minutes <n> --activity <icu id> --save  "
                 "-> computes sweat rate and (with --save) updates sweat_ml_hr so race-fuelling uses it automatically; "
@@ -6221,6 +6224,10 @@ def _classify_tool(name, hint):
         if has("render-workout"):
             return ("render", "Writing the workout to intervals.icu",
                     "wrote the workout")
+
+    # --- Race route from a GPX (plan_tools.py course): a read, never an outdoor ride time ---
+    if "plan_tools.py course" in blob or " course --athlete" in blob:
+        return ("course", "Reading the race route", "read the race route")
 
     # --- Plan / session maths (plan_tools.py subcommands, run via Bash) ---------
     # Checked first: these commands don't carry "icu" in the hint, and they are

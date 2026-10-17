@@ -65,8 +65,11 @@ RUN_TYPES = ("Run", "TrailRun", "VirtualRun", "Treadmill")
 SLIM = ("id", "start_date_local", "type", "name", "distance", "moving_time", "elapsed_time",
         "average_heartrate", "athlete_max_hr", "icu_resting_hr", "icu_ignore_hr", "gap",
         "average_speed", "device_name", "race", "VO2MaxGarmin", "lthr", "decoupling",
-        "threshold_pace", "icu_average_watts", "icu_weight")
-CACHE_VERSION = 3                    # bump when SLIM grows: forces a full refetch
+        "threshold_pace", "icu_average_watts", "icu_weight", "carbs_ingested")
+CACHE_VERSION = 4                    # bump when SLIM grows: forces a full refetch
+RIDE_TYPES = ("Ride", "VirtualRide", "GravelRide", "MountainBikeRide")
+OUTDOOR_RIDES = ("Ride", "GravelRide", "MountainBikeRide")
+LONG_RIDE_S = 3 * 3600
 POWER_SECS = (600, 1200, 1800, 3600, 5400, 7200, 10800)
 POWER_MODEL_ORDER = ("MORTON_3P", "ECP", "FFT_CURVES", "MS_2P")
 ENGINE_DAYS = 42
@@ -268,6 +271,31 @@ def economy(acts: list, today: date) -> dict | None:
             "prev": round(statistics.median(prev), 3) if len(prev) >= 5 else None}
 
 
+def bike(acts: list, today: date, power: dict | None, ftp: dict | None,
+         dur_log: list | None = None) -> dict | None:
+    """The bike block (lib/limiters.diagnose_bike): FTP, outdoor power coverage, longest
+    ride, durability (power:HR drift on 3h+ rides, from the activity watcher's
+    decoupling-log.json, so only rides with power) and fuelling logged on long rides."""
+    rides = [a for a in acts if a.get("type") in RIDE_TYPES
+             and (d := rm._d(a.get("start_date_local"))) and 0 <= (today - d).days < 90]
+    if not rides and not power:
+        return None
+    outdoor = [a for a in rides if a.get("type") in OUTDOOR_RIDES and (a.get("moving_time") or 0) >= 3600]
+    longs = [a for a in rides if (a.get("moving_time") or 0) >= LONG_RIDE_S]
+    ids = {str(a.get("id")) for a in longs}
+    logged = [e for e in dur_log or [] if str(e.get("activity_id")) in ids and e.get("decoupling_pct") is not None]
+    fuel = [(a["carbs_ingested"], a["moving_time"] / 3600) for a in longs if a.get("carbs_ingested")]
+    weight = (power or {}).get("weight") or next((a.get("icu_weight") for a in rides if a.get("icu_weight")), None)
+    return {"ftp": (ftp or {}).get("watts"), "ftp_source": (ftp or {}).get("source"),
+            "weight": weight, "best": (power or {}).get("best") or {},
+            "outdoor": {"rides": len(outdoor), "with_power": sum(1 for a in outdoor if a.get("icu_average_watts"))},
+            "longest_h": round(max(((a.get("moving_time") or 0) for a in rides), default=0) / 3600, 1),
+            "durability": ({"drift_pct": round(statistics.median(e["decoupling_pct"] for e in logged), 1),
+                            "n": len(logged)} if logged else None),
+            "fuel": ({"g_per_h": round(sum(c for c, _ in fuel) / sum(h for _, h in fuel)), "n": len(fuel)}
+                     if fuel else None)}
+
+
 def determinants(acts: list, today: date, profile: dict | None = None,
                  training: list | None = None, cs_mps: float | None = None,
                  power: dict | None = None, dur_log: list | None = None) -> dict:
@@ -340,4 +368,17 @@ def build(slug: str, client, cfg: dict | None = None, profile: dict | None = Non
     dur_log = _load(_athlete_dir(slug) / "run-durability-log.json", [])
     run = determinants(acts, today, profile, training, cs, power, dur_log)
     record_week(slug, run, today)
-    return {"asOf": today.isoformat(), "run": run}
+    out = {"asOf": today.isoformat(), "run": run}
+    try:
+        ride_power = run_power(client._get("power-curves", {"type": "Ride", "curves": "90d"}))
+    except Exception:
+        ride_power = None
+    try:
+        from thresholds import get_thresholds
+        t = get_thresholds(slug, cfg, client) or {}
+        ftp = {"watts": t.get("ftp_watts"), "source": t.get("ftp_source")} if t.get("ftp_watts") else None
+    except Exception:
+        ftp = None
+    out["bike"] = bike(acts, today, ride_power, ftp,
+                       _load(_athlete_dir(slug) / "decoupling-log.json", []))
+    return out

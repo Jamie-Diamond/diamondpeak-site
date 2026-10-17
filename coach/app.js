@@ -4923,7 +4923,10 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
           '<p class="hero-k">A race \u00b7 ' + esc(a.distance || '') + ' \u00b7 ' + a.days + ' days</p>' +
           '<h2 class="hero-t">' + esc(a.name) + '</h2>' +
           '<p class="hero-m">' + new Date(a.date + 'T12:00:00').toLocaleDateString('en-GB',
-            { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + '</p></section>';
+            { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + '</p>' +
+          // The route (lib/course.py, 17 Oct 2026): distance and climbing from the official course.
+          (a.course ? '<p class="hero-m">' + Math.round(a.course.distance_km) + ' km \u00b7 ' +
+            Number(a.course.ascent_m).toLocaleString('en-GB') + ' m climbing</p>' : '') + '</section>';
         h += card(a.hold ? 'What you could hold' : 'Times', goalTimes(a) + goalVerdict(a),
                   { foot: goalMethod(a) });
         h += limitersCard(sv.limiters);
@@ -6143,6 +6146,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.026", "2026-10-17", "Goals for bike races: \u2018What\u2019s holding you back\u2019 from the route itself \u2013 the climbs, the cut-offs and the climbing power they need, how long the day can be, durability and fuelling (no finish time: drafting and wind make that a guess)", 0],
     ["4.025", "2026-10-17", "Goals: \u2018What\u2019s holding you back\u2019 uses running power where you have it: threshold power, economy (speed per watt) against your own trend, and power drift late in long runs, all said as pace too", 0],
     ["4.024", "2026-10-17", "Goals: \u2018What\u2019s holding you back\u2019 is all measured: a fitness score for this point in the plan, endurance at race pace from your training, and how to fix it. Weekly km is advice, not a pass mark", 0],
     ["4.023", "2026-10-17", "Goals: \u2018What\u2019s holding you back\u2019 \u2013 your fitness, engine (VO2max), efficiency and durability from training, each against what your goal time needs, with the biggest gap named", 0],

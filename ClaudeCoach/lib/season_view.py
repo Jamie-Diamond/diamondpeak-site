@@ -124,6 +124,16 @@ def _race_view(r: dict, a_race: dict | None, cfg: dict, profile: dict, data: dic
     elif kind == "bike":
         mins = ((cfg.get("race_target_splits") or {}).get("bike_min") if is_a else None)
         hours = mins / 60 if mins else None
+        # The race's course (lib/course.py): shown with the race; with no target time of
+        # their own, a finish cut-off is the longest the day can be.
+        import course as cs
+        c = cs.for_race(r.get("name"), cfg.get("_slug"))
+        if c:
+            v["course"] = {"name": c["name"], "year": c.get("year"), "distance_km": c["distance_km"],
+                           "ascent_m": c.get("official_ascent_m") or c["ascent_m"]}
+            fin = next((x for x in c.get("checkpoints") or [] if x.get("type") == "finish"), None)
+            if hours is None and fin:
+                hours = (cs._clock_min(fin["clock"]) - cs._clock_min(c["start"])) / 60
         if hours is None:
             lvl = rf.level_for_fitness(event, (data.get("kpi") or {}).get("ctl"))
             if lvl and lvl.get("hours"):
@@ -248,13 +258,19 @@ def limiters_for(event, goal_s, goal, data: dict, fb: dict | None, phases: list 
     km = rf._race_km(event) if event else None
     if not run or not km or not goal_s or rf.event_kind(event) != "run":
         return None
-    frac = None
-    if phases and today:
-        iso = today.isoformat()
-        now = next((p for p in phases if p["start"] <= iso <= p["end"]), None)
-        fam = (now or {}).get("family") or ("base" if iso < phases[0]["start"] else "taper")
-        frac = rf.PHASE_FRACTION.get(fam)
-    return limiters.diagnose(km * 1000, goal_s, goal, run, fb, frac)
+    return limiters.diagnose(km * 1000, goal_s, goal, run, fb, _phase_frac(phases, today))
+
+
+def _phase_frac(phases: list | None, today: date | None):
+    """Share of the race-day fitness band due by the current phase (before the plan
+    starts: base); None without phases."""
+    import race_fitness as rf
+    if not phases or not today:
+        return None
+    iso = today.isoformat()
+    now = next((p for p in phases if p["start"] <= iso <= p["end"]), None)
+    fam = (now or {}).get("family") or ("base" if iso < phases[0]["start"] else "taper")
+    return rf.PHASE_FRACTION.get(fam)
 
 
 def payload(slug: str, cfg: dict, profile: dict, data: dict, today: date | None = None) -> dict:
@@ -270,6 +286,7 @@ def payload(slug: str, cfg: dict, profile: dict, data: dict, today: date | None 
                        if _d(r.get("date")) and _d(r.get("date")) >= today and not r.get("completed")),
                       key=lambda r: r["date"])
     a_race = next((r for r in upcoming if str(r.get("priority") or "").upper() == "A"), None)
+    cfg = dict(cfg, _slug=slug)          # so a race can find the athlete's own course upload
     views = [_race_view(r, a_race, cfg, profile, data, today) for r in upcoming]
     tracking = planning_pause.is_paused(slug, cfg)
     phases = []
@@ -290,9 +307,16 @@ def payload(slug: str, cfg: dict, profile: dict, data: dict, today: date | None 
         except Exception:
             pass
         try:
-            out["limiters"] = limiters_for(a_view.get("event"), a_view.get("goal_s"),
-                                           a_view.get("goal"), data, out.get("fitness"),
-                                           phases, today)
+            if a_view.get("kind") == "bike":
+                import course as cs
+                import limiters
+                out["limiters"] = limiters.diagnose_bike(
+                    cs.for_race(a_view.get("name"), slug), (data.get("performance") or {}).get("bike"),
+                    out.get("fitness"), _phase_frac(phases, today), a_view.get("goal"))
+            else:
+                out["limiters"] = limiters_for(a_view.get("event"), a_view.get("goal_s"),
+                                               a_view.get("goal"), data, out.get("fitness"),
+                                               phases, today)
         except Exception:
             pass
     # A goal without a race (lib/goals.py): the goal card replaces the race hero while no A
