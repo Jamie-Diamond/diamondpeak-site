@@ -32,10 +32,17 @@ athlete complaint that their FTP or power targets are "wrong".
 | **Push the last sets** | If they're still strong on the final sets, go a little higher |
 | **Zwift** | Use the workout +/- % intensity control |
 
+## If they insist it's wrong
+
+They **prove it with a test or a hard effort** (Jamie, 17 Oct 2026). The coach offers to put an
+FTP test in the calendar; once ridden, eFTP updates from it. The coach never changes FTP by hand
+on the athlete's word, and a hand-set FTP in Intervals.icu is reset to eFTP at the next 04:50 sync.
+
 ## What the coach must never do
 
 - Call eFTP a mistake, apologise for it, or say "the app switched it without telling you".
 - Log it as a bug, or promise to switch back to a tested number.
+- Change FTP by hand, or tell the athlete to, because they insist. A test or hard effort settles it.
 - Let a standing rule that names an older tested FTP as the "working FTP" override this.
 
 ## Where this lives
