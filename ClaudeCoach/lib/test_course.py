@@ -412,10 +412,10 @@ def test_mallorca_at_160w_and_93kg_the_climbs_leave_over_30_kmh_to_find_by_km_97
 
 def test_bike_without_a_course_asks_for_the_route():
     d = limiters.diagnose_bike(None, HEAVY_BIKE, FITNESS, 0.7)
-    assert d["headline"].startswith("Add the route")
-    assert row(d, "climbing")["need"] == "add the route (GPX)"
+    assert d["headline"].startswith("Send the route")
+    assert row(d, "climbing")["need"] == "send the route (GPX)"
     assert row(d, "climbing")["status"] == "unknown"
-    assert row(d, "day")["need"] == "add the route (GPX)"
+    assert row(d, "day")["need"] == "send the route (GPX)"
     assert d["limiter"] is None and d["fix"] is None
 
 
@@ -423,7 +423,7 @@ def test_bike_without_a_course_still_judges_fitness():
     behind = {"now": 12, "lo": 28, "hi": 40}
     d = limiters.diagnose_bike(None, HEAVY_BIKE, behind, 0.7)
     assert row(d, "fitness")["status"] == "red" and d["limiter"] == "fitness"
-    assert d["headline"].startswith("Add the route")
+    assert d["headline"].startswith("Send the route")
 
 
 def test_bike_with_nothing_to_go_on_is_none():
@@ -527,4 +527,4 @@ def test_a_route_with_nothing_measured_never_reads_as_all_clear():
     bare = {"name": "My route", "ele": [0.0] * 50}
     d = limiters.diagnose_bike(bare, {"outdoor": {"rides": 0, "with_power": 0}}, None)
     assert "Nothing is holding you back" not in d["headline"]
-    assert d["headline"].startswith("Add the start time and cut-offs")
+    assert d["headline"].startswith("Send the start time and cut-offs")

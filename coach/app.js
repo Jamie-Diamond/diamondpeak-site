@@ -6627,6 +6627,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.038", "2026-10-17", "When you mention a sportive, gran fondo or triathlon, the coach asks for the route (GPX) and the time limits, and saves the cut-offs you give it", 0],
     ["4.037", "2026-10-17", "Share cards: runs with running power can show average power and normalised power.", 0],
     ["4.036", "2026-10-17", "Planned strength days now come with their exercises, sets, reps and rest, written from the exercise library for your sports and kit (and shown in Intervals.icu). Physio sessions stay exactly as set. Pilot: Jamie and Fred", 1],
     ["4.035", "2026-10-17", "Share card titles: a run of 15 km or more is a \u2018Long run\u2019.", 0],

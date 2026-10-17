@@ -4547,6 +4547,13 @@ def prefetch_context(slug: str) -> str:
                 "BIKE race routes / a rider's GPX:  "
                 f"plan_tools.py course --athlete {slug} --race '<name>' (or --gpx <file> --name '<race>' --save)  "
                 "-> climbs, cut-off needs and the climbing power they need; never predict an outdoor ride time. "
+                "ROUTE + TIME LIMITS (Jamie, 17 Oct 2026): when the athlete is entering or eyeing up a sportive, "
+                "gran fondo, long road event or triathlon and course --race finds no course (or one with no start "
+                "time / cut-offs), ASK in one message for the route GPX (they can attach it in this chat), the start "
+                "time, each cut-off (km and time), the finish closing time and the feed stations. Never guess a "
+                "cut-off: if they don't know, find the official event page, quote it with its source and year, and "
+                "confirm. Save with course ... --save --start HH:MM --cutoff KM@HH:MM (repeat) --finish HH:MM "
+                "--feed KM:LABEL (or --race '<name>' plus those flags to add them later). "
                 "If the athlete reports a PRE/POST-SESSION WEIGH-IN (sweat test), call:  "
                 f"plan_tools.py sweat-rate --athlete {slug} --pre <kg> --post <kg> --fluid <ml> --minutes <n> --activity <icu id> --save  "
                 "-> computes sweat rate and (with --save) updates sweat_ml_hr so race-fuelling uses it automatically; "
@@ -4561,6 +4568,30 @@ def prefetch_context(slug: str) -> str:
                 "Never write code to build a chart.")
         except Exception as _e:
             log(f"prefetch planning numbers (non-fatal): {_e}")
+
+        # A booked bike / tri race with no route or no cut-offs on file (lib/course.py): the
+        # coach asks for them when it fits (Jamie, 17 Oct 2026: "when someone is eyeing up a
+        # sportive like 312 you should ask for the gpx and time limits").
+        try:
+            import course as _course
+            import race_fitness as _rf
+            _miss = []
+            for _r in races_lib.load_races(slug):
+                if _r.get("completed") or str(_r.get("date") or "") < date.today().isoformat():
+                    continue
+                _k = _rf.event_kind(_rf.levels_key(_r.get("distance") or "") or _rf.levels_key(_r.get("name") or ""))
+                if _k not in ("bike", "tri"):
+                    continue
+                _c = _course.for_race(_r.get("name"), slug)
+                if not _c:
+                    _miss.append(f"{_r.get('name')} ({_r.get('date')}): no route")
+                elif _k == "bike" and not _c.get("start"):
+                    _miss.append(f"{_r.get('name')} ({_r.get('date')}): route but no start time or cut-offs")
+            if _miss:
+                lines.append("ROUTE MISSING - ask once, when it fits the conversation, unless already asked in "
+                             "this chat: " + "; ".join(_miss) + ".")
+        except Exception as _e:
+            log(f"prefetch route check (non-fatal): {_e}")
 
         # Nutrition reference facts live in a FILE, not in the prompt. A ~120-token
         # pointer replaces ~3,650 tokens of inlined product prose, and a fact that is

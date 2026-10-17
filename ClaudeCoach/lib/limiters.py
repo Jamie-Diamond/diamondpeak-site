@@ -344,7 +344,7 @@ def diagnose_bike(course: dict | None, bike: dict | None, fitness: dict | None,
             rows.append(_brow("climbing", f"{ftp} W FTP", "—", None))
     else:
         rows.append(_brow("climbing", f"{ftp} W FTP" if ftp else "—",
-                          "add the route (GPX)" if not course else "—", None))
+                          "send the route (GPX)" if not course else "—", None))
 
     if course:
         fin = next((c for c in course.get("checkpoints") or [] if c.get("type") == "finish"), None)
@@ -358,7 +358,7 @@ def diagnose_bike(course: dict | None, bike: dict | None, fitness: dict | None,
             rows.append(_brow("day", "—", "—", None))
     else:
         rows.append(_brow("day", f"{bike.get('longest_h', 0):.1f} h longest ride" if bike.get("longest_h") else "—",
-                          "add the route (GPX)", None))
+                          "send the route (GPX)", None))
 
     out_rides = bike.get("outdoor") or {}
     no_meter = out_rides.get("rides") and not out_rides.get("with_power")
@@ -390,9 +390,9 @@ def diagnose_bike(course: dict | None, bike: dict | None, fitness: dict | None,
 
 def _bike_headline(limiter, by, course, bike, binding, need_w) -> str:
     if not course:
-        return "Add the route (a GPX) and the coach works out what this race needs."
+        return "Send the route (a GPX) and the time limits in the chat, and the coach works out what this race needs."
     if limiter is None and not course.get("start"):
-        return "Add the start time and cut-offs for this route and the coach works out what it needs."
+        return "Send the start time and cut-offs in the chat, and the coach works out what this route needs."
     if limiter is None and not any(r["status"] in ("green", "amber", "red", "unshown") for r in by.values()):
         return "Not enough measured yet to say what's holding you back."
     if limiter is None:

@@ -2371,13 +2371,117 @@ def cmd_run_predict(args) -> dict:
                      "Vickers & Vertosick 2016; race day adds the Tanda volume gain"}
 
 
+def _course_hhmm(raw, what: str) -> str:
+    """'7:00' / '07:00' -> '07:00'; anything that is not a 24-hour clock time exits with a plain message."""
+    import re
+    m = re.fullmatch(r"\s*(\d{1,2}):(\d{2})\s*", str(raw))
+    if not m or int(m.group(1)) > 23 or int(m.group(2)) > 59:
+        raise SystemExit(_err(f"{what} '{str(raw).strip()}' is not a time: use HH:MM on a 24-hour clock, "
+                              "00:00 to 23:59"))
+    return f"{int(m.group(1)):02d}:{m.group(2)}"
+
+
+def _course_km(raw, what: str, dist) -> float | int:
+    """A positive km, not beyond the course distance + 2 km (GPX and official lengths differ a little)."""
+    try:
+        km = float(str(raw).strip())
+    except ValueError:
+        raise SystemExit(_err(f"{what} '{str(raw).strip()}' is not a distance in km"))
+    if not km > 0:
+        raise SystemExit(_err(f"{what} distance must be more than 0 km, not '{str(raw).strip()}'"))
+    if dist and km > dist + 2:
+        raise SystemExit(_err(f"{what} at km {km:g} is beyond the end of the course ({dist:g} km)"))
+    return int(km) if km == int(km) else round(km, 2)
+
+
+def _course_facts(args, crs: dict) -> tuple:
+    """The race facts on the command line (--start, --cutoff, --on-miss, --finish, --feed, --year),
+    validated against `crs` and merged over what it already has: a given kind replaces the old one
+    (all cut-offs when any --cutoff is given; all feeds when any --feed is given), anything not given
+    stays. Returns ({key: new value}, [what changed]), both empty when no fact flag was given.
+    Exits with a plain-English message on a bad value."""
+    import course as _course
+    start = getattr(args, "start", None)
+    cutoffs = getattr(args, "cutoff", None) or []
+    on_miss = (getattr(args, "on_miss", None) or "").strip()
+    finish = getattr(args, "finish", None)
+    feeds = getattr(args, "feed", None) or []
+    year = getattr(args, "year", None)
+    if on_miss and not cutoffs:
+        raise SystemExit(_err("--on-miss goes with --cutoff: give the cut-offs it applies to"))
+    if not (start or cutoffs or finish or feeds or year):
+        return {}, []
+    dist = crs.get("distance_km") or 0
+    facts, changed = {}, []
+
+    if start:
+        facts["start"] = _course_hhmm(start, "start time")
+        changed.append("start")
+    if year:
+        facts["year"] = str(year).strip()
+        changed.append("year")
+
+    cps = crs.get("checkpoints") or []
+    cuts = [cp for cp in cps if cp.get("type") == "cutoff"]
+    fin = [cp for cp in cps if cp.get("type") == "finish"]
+    if cutoffs:
+        cuts = []
+        for raw in cutoffs:
+            km_s, sep, clock = str(raw).rpartition("@")
+            if not sep or not km_s.strip():
+                raise SystemExit(_err(f"cut-off '{raw}' should look like KM@HH:MM, e.g. 97@11:20"))
+            km = _course_km(km_s, "cut-off", dist)
+            cp = {"km": km, "clock": _course_hhmm(clock, f"cut-off at km {km:g}"), "type": "cutoff"}
+            if on_miss:
+                cp["on_miss"] = on_miss
+            cuts.append(cp)
+        changed.append("cutoffs")
+    if finish:
+        fin = [{"km": dist, "clock": _course_hhmm(finish, "finish time"), "type": "finish", "label": "Finish"}]
+        changed.append("finish")
+
+    if start or cutoffs or finish:
+        eff_start = facts.get("start") or crs.get("start")
+        if (cutoffs or finish) and not eff_start:
+            raise SystemExit(_err("cut-offs and the finish run from a start time: add --start HH:MM"))
+        cuts = sorted(cuts, key=lambda cp: cp["km"])
+        prev, prev_what = (_course._clock_min(eff_start), f"the {eff_start} start") if eff_start else (None, "")
+        for cp in cuts + fin:
+            what = "the finish" if cp["type"] == "finish" else f"the km {cp['km']:g} cut-off"
+            if prev is not None and _course._clock_min(cp["clock"]) <= prev:
+                raise SystemExit(_err(f"{what} at {cp['clock']} must be later than {prev_what}: "
+                                      "cut-off clocks run from the start and increase with distance"))
+            prev, prev_what = _course._clock_min(cp["clock"]), f"{what} at {cp['clock']}"
+        if len({cp["km"] for cp in cuts}) < len(cuts):
+            raise SystemExit(_err("two cut-offs are at the same km"))
+        if cutoffs or finish:
+            others = [cp for cp in cps if cp.get("type") not in ("cutoff", "finish")]
+            facts["checkpoints"] = sorted(others + cuts + fin, key=lambda cp: (cp.get("type") == "finish", cp.get("km") or 0))
+
+    if feeds:
+        new = []
+        for raw in feeds:
+            km_s, sep, label = str(raw).partition(":")
+            if not sep or not km_s.strip() or not label.strip():
+                raise SystemExit(_err(f"feed '{raw}' should look like KM:LABEL, e.g. 50:Gorg Blau"))
+            new.append({"km": _course_km(km_s, "feed", dist), "label": label.strip()})
+        facts["feeds"] = sorted(new, key=lambda f: f["km"])
+        changed.append("feeds")
+    return facts, changed
+
+
 def cmd_course(args) -> dict:
     """A bike race route from its GPX (lib/course.py): the climbs, the climbing time on each at
     the rider's climbing power, what the cut-offs need, and the steady climbing power that
     makes every cut-off. Pass --race NAME (a stored course: the athlete's own upload first,
     then reference/races) or --gpx FILE_OR_URL (add --save to keep it for the athlete). FTP
     and weight come from the athlete's performance data, or --watts / --kg. Outdoor ride times
-    are never predicted (drafting, wind): quote the climb times and the speed the rest needs."""
+    are never predicted (drafting, wind): quote the climb times and the speed the rest needs.
+
+    Race facts the athlete gives (--start, --cutoff KM@HH:MM, --on-miss, --finish, --feed KM:LABEL,
+    --year) are saved onto the course: with --gpx --save they go into the new file; with --race
+    they update the athlete's own course file in place, or, for a shared reference course, a copy
+    in athletes/<slug>/courses/ (the reference file is never touched)."""
     import re
     import course as _course
     import limiters as _lim
@@ -2386,11 +2490,31 @@ def cmd_course(args) -> dict:
     if bool(race) == bool(gpx):
         raise SystemExit(_err("pass exactly one of --race NAME or --gpx FILE_OR_URL"))
     saved = None
+    changed = []
     if race:
         crs = _course.for_race(race, slug)
         if crs is None:
             raise SystemExit(_err(f"no course for '{race}': send the GPX and run "
                                   "course --gpx ... --save"))
+        facts, changed = _course_facts(args, crs)
+        if facts:
+            own = None      # the athlete's own file for this course, if that is where it came from
+            own_dir = _course.BASE / "athletes" / slug / "courses"
+            for f in sorted(own_dir.glob("*.json")) if own_dir.exists() else []:
+                if _course.load(f) == crs:
+                    own = f
+                    break
+            crs.update(facts)
+            if own is None:     # a shared reference course: the athlete gets a copy, the original stays as is
+                d = BASE / "athletes" / slug / "courses"
+                d.mkdir(parents=True, exist_ok=True)
+                fname = re.sub(r"[^a-z0-9]+", "-", str(crs.get("name") or race).lower()).strip("-") or "course"
+                own, n = d / f"{fname}.json", 1
+                while own.exists():
+                    n += 1
+                    own = d / f"{fname}-{n}.json"
+            own.write_text(json.dumps(crs))
+            saved = own
     else:
         if gpx.lower().startswith(("http://", "https://")):
             import ipaddress
@@ -2423,6 +2547,8 @@ def cmd_course(args) -> dict:
         crs = _course.from_gpx(text, name)
         if len(crs["ele"]) < 2:
             raise SystemExit(_err("no track points with elevation found in the GPX"))
+        facts, changed = _course_facts(args, crs)
+        crs.update(facts)
         if getattr(args, "save", False):
             d = BASE / "athletes" / slug / "courses"
             d.mkdir(parents=True, exist_ok=True)
@@ -2471,6 +2597,10 @@ def cmd_course(args) -> dict:
                        "cut-off needs and required power")
     out["rule"] = ("Never predict a finish time for an outdoor ride: drafting and wind. Quote climb "
                    "times and the speed the rest would need.")
+    if changed:
+        out["facts_updated"] = changed
+        if not saved:
+            out["warning"] = "these race facts are not saved: add --save to keep them for the athlete"
     if saved:
         out["saved"] = str(saved)
     return out
@@ -3485,6 +3615,15 @@ def main():
     pco.add_argument("--save", action="store_true", help="keep the --gpx course as athletes/<slug>/courses/<name>.json")
     pco.add_argument("--watts", type=float, help="FTP override (default: the athlete's FTP)")
     pco.add_argument("--kg", type=float, help="rider weight override (default: the athlete's weight)")
+    pco.add_argument("--start", help="HH:MM mass-start (the gun) that the cut-offs run from; saved onto the course")
+    pco.add_argument("--cutoff", action="append", metavar="KM@HH:MM",
+                     help="an intermediate cut-off, e.g. 97@11:20; repeat for each; replaces the saved cut-offs")
+    pco.add_argument("--on-miss", dest="on_miss", metavar="TEXT",
+                     help="what missing the cut-offs given in this call means, e.g. 'shorter route' or 'out'")
+    pco.add_argument("--finish", help="HH:MM the finish closes (at the course distance); saved onto the course")
+    pco.add_argument("--feed", action="append", metavar="KM:LABEL",
+                     help="a feed station, e.g. 50:Gorg Blau; repeat for each; replaces the saved feeds")
+    pco.add_argument("--year", help="the year (or edition) these race facts are for")
 
     pcs = sub.add_parser("ctl-sweep",
                          help="CTL-sensitivity sweep: race-day CTL + predicted-outcome range "
