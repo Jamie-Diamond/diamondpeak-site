@@ -6627,6 +6627,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.039", "2026-10-17", "Strength sessions tidied: each exercise in the session sheet has its picture with what to do under it, and Start is at the top. In the player, change a set\u2019s weight and the sets after it follow; a progress bar; cleaner set rows; the rest of the session shows the next three, with every exercise one tap away. Pilot: Jamie and Fred", 1],
     ["4.038", "2026-10-17", "When you mention a sportive, gran fondo or triathlon, the coach asks for the route (GPX) and the time limits, and saves the cut-offs you give it", 0],
     ["4.037", "2026-10-17", "Share cards: runs with running power can show average power and normalised power.", 0],
     ["4.036", "2026-10-17", "Planned strength days now come with their exercises, sets, reps and rest, written from the exercise library for your sports and kit (and shown in Intervals.icu). Physio sessions stay exactly as set. Pilot: Jamie and Fred", 1],
@@ -7523,7 +7524,18 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   function strengthRx(it, e) {
     var kg = it.kg_L != null || it.kg_R != null ? 'L ' + it.kg_L + ' / R ' + it.kg_R + ' kg' : (it.kg != null ? it.kg + ' kg' : '');
     return [it.sets && it.reps ? it.sets + ' \u00d7 ' + it.reps + (e.per_side && !/side/.test(it.reps) ? ' each side' : '') : null,
-      kg || null].filter(Boolean).join(' \u00b7 ');
+      kg || null, it.rest_s ? 'rest ' + (it.rest_s >= 60 ? Math.round(it.rest_s / 6) / 10 + ' min' : it.rest_s + ' s') : null]
+      .filter(Boolean).join(' \u00b7 ');
+  }
+  // One exercise: a still of its animation, the name on one line, what to do under it.
+  function strengthItem(it, lib) {
+    var e = lib[it.ex] || {}, an = (window.PeakAnims || {})[it.ex], th = '';
+    if (an && window.PeakFigure) {
+      var ks = PeakFigure.compile(an).keys;
+      th = PeakFigure.drawStatic(an, (an.views || ['side'])[0], ks[Math.min(1, ks.length - 1)].t0);
+    }
+    return '<div class="st-ex"><div class="st-th">' + th + '</div><div class="st-tx"><div class="st-n">' +
+      esc(e.name || it.ex) + '</div><div class="st-m">' + esc(strengthRx(it, e)) + '</div></div></div>';
   }
   function strengthCards(dateISO, pl, done) {
     var lib = state.exlib.exercises || {}, h = '';
@@ -7540,13 +7552,14 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     if (done) return h;
     var s = strengthSessionFor(pl);
     if (s) {
-      h += card(s.physio ? 'Your physio\u2019s session' : 'The session', (s.parts || []).map(function (p) {
-        return (p.items || []).map(function (it) {
-          var e = lib[it.ex] || {};
-          return '<div class="st-row"><span>' + esc(e.name || it.ex) + '</span><span>' + esc(strengthRx(it, e)) + '</span></div>';
-        }).join('');
-      }).join('') + '<button type="button" class="st-go" data-st="' + esc(s.id) + '">Start session</button>' +
-        (s.physio ? '<p class="hint">Peak logs your physio\u2019s numbers as they are and never changes them.</p>' : ''));
+      var multi = (s.parts || []).length > 1;
+      h += card(s.physio ? 'Your physio\u2019s session' : 'The session',
+        '<button type="button" class="st-go" data-st="' + esc(s.id) + '">Start session</button>' +
+        (s.physio ? '<p class="hint st-h">Your physio\u2019s numbers, logged as set and never changed.</p>' : '') +
+        (s.parts || []).map(function (p) {
+          return (multi ? '<div class="st-part">' + esc(p.title) + '</div>' : '') +
+            (p.items || []).map(function (it) { return strengthItem(it, lib); }).join('');
+        }).join(''));
     } else {
       var opts = (state.strength.sessions || []).filter(function (x) { return !x.planned; });
       h += card('Pick a session', '<p class="hint">Nothing written for this one yet. Pick a session to do and log:</p>' +
