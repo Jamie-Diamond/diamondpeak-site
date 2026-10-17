@@ -8,7 +8,9 @@
         "races":       race results (lib/run_model.detect_races), last two years
         "k":           {"k", "pairs", "own"} - how much they slow as races get longer
         "predictions": {"5k" | "10k" | "half_marathon" | "marathon": {now_s, model}}
-        "weeklyKm":    mean running km a week, last 8 weeks
+        "weeklyKm":    mean running km a week, last 8 weeks (each race has its own
+                       `km_before`, the same for the 8 weeks before it)
+        "recentBreakDays": longest stretch without a run in the last 8 weeks
         "longestKm":   longest run, last 8 weeks
         "efficiency":  {"value", "n", "device", "prev"} - speed at heart rate as a VDOT,
                        now and six weeks ago (same watch only)
@@ -123,24 +125,37 @@ def _volume(acts: list, today: date, days: int = 56) -> tuple:
     return round(km / (days / 7), 1), round(longest, 1)
 
 
+def _longest_break(acts: list, today: date, days: int = 56) -> int:
+    """Longest run of days with no running in the last `days`, up to today."""
+    start = today - timedelta(days=days)
+    dates = sorted({d for a in acts if a.get("type") in RUN_TYPES
+                    for d in [rm._d(a.get("start_date_local"))] if d and start < d <= today})
+    edges = [start] + dates + [today + timedelta(days=1)]
+    return max((b - a).days - 1 for a, b in zip(edges, edges[1:]))
+
+
 def determinants(acts: list, today: date, profile: dict | None = None,
                  training: list | None = None, cs_mps: float | None = None) -> dict:
     """The run block of `build`, from data already fetched. Pure."""
     profile = profile or {}
     races = rm.detect_races(acts, profile.get("race_results"), profile.get("race_results_exclude"))
     races = [r for r in races if (today - rm._d(r["date"])).days <= rm.K_WINDOW_DAYS]
+    for r in races:
+        r["km_before"] = _volume(acts, rm._d(r["date"]))[0]
     weekly_km, longest = _volume(acts, today)
+    brk = _longest_break(acts, today)
     preds = {}
     for ev in ("5k", "10k", "half_marathon", "marathon"):
-        p = rm.predict(rm.STANDARD_M[ev], races, today, weekly_km, training)
+        p = rm.predict(rm.STANDARD_M[ev], races, today, weekly_km, training, brk)
         if p:
-            preds[ev] = {"now_s": p["now_s"], "model": p["model"], "method": p["method"]}
+            preds[ev] = {"now_s": p["now_s"], "model": p["model"], "method": p["method"],
+                         "stale": p.get("stale")}
     eff = rm.efficiency(acts, today + timedelta(days=1))
     if eff:
         prev = rm.efficiency(acts, today - timedelta(days=41))
         eff["prev"] = prev["value"] if prev and prev["device"] == eff["device"] else None
     out = {"races": races, "k": rm.personal_k(races, today), "predictions": preds,
-           "weeklyKm": weekly_km, "longestKm": longest, "efficiency": eff,
+           "weeklyKm": weekly_km, "longestKm": longest, "recentBreakDays": brk, "efficiency": eff,
            "training": training or []}
     if cs_mps:
         out["criticalSpeed"] = {"mps": round(cs_mps, 3), "pace_s_km": round(1000 / cs_mps)}

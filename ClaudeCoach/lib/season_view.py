@@ -175,10 +175,10 @@ def _run_predictions(v, event, a_race, cfg, profile, data, today, when) -> None:
     if km and (run.get("races") or run.get("training")):
         import run_model
         p = run_model.predict(km * 1000, run.get("races") or [], today, k_now or 0.0,
-                              run.get("training"))
+                              run.get("training"), run.get("recentBreakDays"))
         if p:
             v.update(now_s=p["now_s"], method=p["method"], model=p["model"], note=p["note"],
-                     evidence=p["evidence"])
+                     evidence=p["evidence"], stale=p.get("stale"))
             if gain is not None:
                 v["raceday_s"] = int(round(p["now_s"] * (1 - share * (1 - gain))))
             return

@@ -22,6 +22,16 @@ What sets the time for a run race of a given length, and where each one comes fr
                       strap shifts it (his 2025 switch moved it ~15% with no change in race
                       times).
 
+OUT OF DATE (Jamie, 17 Oct 2026: consistent athletes are fine on a race a year old,
+"for a lot of athletes they wouldn't be as flat"). An old race is NOT corrected for a
+change in fitness: every correction tried (training volume and pace, volume alone, heart-
+rate efficiency) made the backtest worse or no better. Instead the prediction says it is
+out of date, and that a parkrun or 5k time trial will update it, when the athlete runs
+under STALE_VOLUME_FRAC of the weekly km they ran in the 8 weeks before those races, or
+has had STALE_BREAK_DAYS or more without running in the last 8 weeks. Both thresholds
+are judgement, not tested. Races carry `km_before`; `recent_break_days` comes from
+lib/performance.py.
+
 Race evidence (`detect_races`): a road run that covers a standard distance where the
 athlete was racing: Intervals.icu's race flag; or an average HR at racing level for the
 duration (HR_RACE_FRAC) or a parkrun (Saturday / Christmas Day / New Year's Day, 9am, 5k)
@@ -72,6 +82,9 @@ RACE_WINDOW_DAYS = 730           # sets "now"
 K_WINDOW_DAYS = RACE_WINDOW_DAYS  # sets the fade with distance
 RECENCY_HALF_LIFE_DAYS = 270
 DIST_SIGMA = 0.8                 # nearness of a race to the target, in ln(distance)
+
+STALE_VOLUME_FRAC = 0.6
+STALE_BREAK_DAYS = 21
 
 EFF_WINDOW_DAYS = 42
 EFF_MIN_RUNS = 5
@@ -361,11 +374,25 @@ def _when(iso: str) -> str:
     return d.strftime("%b %Y") if d else iso
 
 
+def stale(used: list, weekly_km: float | None, recent_break_days: int | None) -> dict | None:
+    """{"reason": "break" | "volume", ...} when the races behind a prediction no longer
+    describe the athlete (see OUT OF DATE above), else None."""
+    if recent_break_days is not None and recent_break_days >= STALE_BREAK_DAYS:
+        return {"reason": "break", "days": int(recent_break_days)}
+    pairs = [(r["km_before"], w) for r, w in used if r.get("km_before") is not None and w > 0]
+    if weekly_km is None or not pairs:
+        return None
+    before = sum(k * w for k, w in pairs) / sum(w for _, w in pairs)
+    if before > 0 and weekly_km < STALE_VOLUME_FRAC * before:
+        return {"reason": "volume", "km_before": round(before, 1), "km_now": round(weekly_km, 1)}
+    return None
+
+
 def predict(dist_m: float, races: list, today: date, weekly_km: float | None = None,
-            training: list | None = None) -> dict | None:
+            training: list | None = None, recent_break_days: int | None = None) -> dict | None:
     """Race time today for a run of dist_m metres.
 
-    {now_s, method: "races" | "training", model, k, k_pairs, evidence, note}, or
+    {now_s, method: "races" | "training", model, k, k_pairs, evidence, stale, note}, or
     None when there is nothing to go on (no race in RACE_WINDOW_DAYS and no training
     effort): the caller then falls back to the threshold-pace estimate."""
     recent = [r for r in races if 0 <= (today - _d(r["date"])).days <= RACE_WINDOW_DAYS]
@@ -402,6 +429,7 @@ def predict(dist_m: float, races: list, today: date, weekly_km: float | None = N
                          "name": r.get("name") or "", "source": r.get("source")} for r in top]}
     if model.startswith("vickers"):
         out["weekly_km"] = round(weekly_km, 1)
+    out["stale"] = stale(used, weekly_km, recent_break_days)
     out["note"] = _note(out)
     return out
 
@@ -444,11 +472,19 @@ def _label(e: dict) -> str:
 def _note(p: dict) -> str:
     ev = ", ".join(f"{_label(e)} {fmt_time(e['time_s'])} ({_when(e['date'])})" for e in p["evidence"][:2])
     k = p["k"]
+    st = p.get("stale")
+    s = ""
+    if st and st["reason"] == "break":
+        s = (f"Out of date: {st['days'] // 7} weeks without running recently. "
+             f"A parkrun or 5k time trial will update this. ")
+    elif st:
+        s = (f"Out of date: you're running {st['km_now']:.0f} km a week, against "
+             f"{st['km_before']:.0f} before these races. A parkrun or 5k time trial will update this. ")
     if p["k_pairs"]:
         fade = ("more than most" if k > 1.085 else "less than most" if k < 1.055 else "about average")
-        s = f"From your races: {ev}. You slow {fade} as races get longer (k {k:.2f})."
+        s += f"From your races: {ev}. You slow {fade} as races get longer (k {k:.2f})."
     else:
-        s = f"From your races: {ev}. Average slowing with distance assumed (k {k:.2f})."
+        s += f"From your races: {ev}. Average slowing with distance assumed (k {k:.2f})."
     if p["model"].startswith("vickers"):
         s += f" Marathon at your {p['weekly_km']:.0f} km a week (Vickers 2016)."
     return s

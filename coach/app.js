@@ -4764,7 +4764,9 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     var cell = function (v, l, cls) {
       return '<div' + (cls ? ' class="' + cls + '"' : '') + '><b>' + v + '</b><span>' + l + '</span></div>';
     };
-    return '<div class="gt">' + cell(rtime(now), 'now') + cell(rtime(day), 'race day', 'hl') +
+    // Out of date (run_model.stale, 17 Oct 2026): the races behind it no longer describe them.
+    return '<div class="gt">' + cell(rtime(now), r.stale ? 'now \u00b7 out of date' : 'now') +
+      cell(rtime(day), 'race day', 'hl') +
       cell(r.goal ? esc(r.goal) : '\u2014', 'goal') + '</div>';
   }
 
@@ -4927,7 +4929,8 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
             return '<tr><td><span class="ptag p-' + (r.priority || 'c').toLowerCase() + '">' +
               esc(r.priority || '\u00b7') + '</span></td><td class="lbl">' + esc(r.name) +
               '<br><small>' + new Date(r.date + 'T12:00:00').toLocaleDateString('en-GB',
-                { day: 'numeric', month: 'short' }) + ' \u00b7 ' + r.days + ' days</small></td>' +
+                { day: 'numeric', month: 'short' }) + ' \u00b7 ' + r.days + ' days' +
+              (r.stale ? '<br>out of date: a parkrun or 5k time trial will update it' : '') + '</small></td>' +
               '<td>' + (hold || rtime(r.now_s)) + '</td><td class="t">' + (hold ? '' : rtime(r.raceday_s)) +
               '</td><td>' + esc(r.goal || '\u2014') + '</td></tr>';
           }).join('') + '</tbody></table>',
@@ -6121,6 +6124,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.022", "2026-10-17", "Goals: a run race time says when it is out of date (much less running, or a break, since the races it comes from) and that a parkrun or 5k time trial will update it", 0],
     ["4.021", "2026-10-17", "Goals: run race times now come from your own races (parkruns, 10ks, halves), how much you slow as races get longer, and your weekly km for the marathon", 0],
     ["4.020", "2026-10-17", "Settings retries if an athlete\u2019s connections and coaching options don\u2019t load", 1],
     ["4.019", "2026-10-17", "Trends shows every sport you have done, not only the ones in your plan", 0],

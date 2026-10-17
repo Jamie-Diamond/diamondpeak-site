@@ -2343,13 +2343,16 @@ def cmd_run_predict(args) -> dict:
              else {ev: run_model.STANDARD_M[ev] for ev in ("5k", "10k", "half_marathon", "marathon")})
     standard = {}
     for ev, m in dists.items():
-        p = run_model.predict(m, run.get("races") or [], today, k_now or 0.0, run.get("training"))
+        p = run_model.predict(m, run.get("races") or [], today, k_now or 0.0, run.get("training"),
+                              run.get("recentBreakDays"))
         if p:
-            standard[ev] = {"now": fmt(p["now_s"]), "model": p["model"], "note": p["note"]}
+            standard[ev] = {"now": fmt(p["now_s"]), "model": p["model"], "note": p["note"],
+                            "out_of_date": bool(p.get("stale"))}
     booked = [{"name": r.get("name"), "date": r.get("date"), "priority": r.get("priority"),
                "now": fmt(r["now_s"]) if r.get("now_s") else None,
                "race_day": fmt(r["raceday_s"]) if r.get("raceday_s") else None,
-               "goal": r.get("goal"), "method": r.get("method"), "note": r.get("note")}
+               "goal": r.get("goal"), "method": r.get("method"), "note": r.get("note"),
+               "out_of_date": bool(r.get("stale"))}
               for r in (data.get("season") or {}).get("races") or [] if r.get("kind") == "run"]
     return {"athlete": args.athlete, "as_of": (data.get("performance") or {}).get("asOf"),
             "booked": booked, "standard": standard, "k": run.get("k"),

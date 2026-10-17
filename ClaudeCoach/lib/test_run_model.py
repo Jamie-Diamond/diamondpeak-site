@@ -192,3 +192,38 @@ def test_goals_page_uses_the_athletes_races(monkeypatch):
     assert five["method"] == mara["method"] == "races" and mara["model"] == "vickers2"
     assert mara["raceday_s"] < mara["now_s"] and "From your races" in mara["note"]
     assert five["now_s"] - five["raceday_s"] < (mara["now_s"] - mara["raceday_s"]) * 0.2
+
+
+def test_out_of_date_after_a_drop_in_running_or_a_break():
+    today = date(2026, 10, 17)
+    base = easy_runs(date(2025, 1, 1), date(2025, 12, 31), every=2)            # ~35 km a week
+    races = [act("2025-12-27T09:01:00", 5.01, 1124, hr=171, name="parkrun")]
+    # Consistent: still running the same -> current.
+    steady = performance.determinants(base + races + easy_runs(date(2026, 1, 1), date(2026, 10, 16)), today)
+    assert steady["predictions"]["5k"]["stale"] is None and steady["recentBreakDays"] < 3
+    # Much less running now (every 5 days ~14 km a week, under 60% of ~35).
+    drop = performance.determinants(base + races + easy_runs(date(2026, 1, 1), date(2026, 10, 16), every=5), today)
+    st = drop["predictions"]["5k"]["stale"]
+    assert st["reason"] == "volume" and st["km_now"] < 0.6 * st["km_before"]
+    # A month off ending a week ago, volume otherwise similar.
+    gap = [a for a in base + easy_runs(date(2026, 1, 1), date(2026, 10, 16))
+           if not "2026-09-10" <= a["start_date_local"][:10] <= "2026-10-09"]
+    brk = performance.determinants(gap + races, today)
+    assert brk["recentBreakDays"] >= 21 and brk["predictions"]["5k"]["stale"]["reason"] == "break"
+    p = rm.predict(5000, brk["races"], today, 30, None, brk["recentBreakDays"])
+    assert p["note"].startswith("Out of date: 4 weeks without running recently.")
+
+
+def test_the_goals_page_and_coach_carry_the_flag(monkeypatch):
+    import planning_pause
+    import races
+    import season_view as sv
+    monkeypatch.setattr(planning_pause, "is_paused", lambda slug, cfg=None: False)
+    monkeypatch.setattr(races, "load_races", lambda slug, config=None: [
+        {"name": "Parkrun", "date": "2026-11-14", "priority": "C", "distance": "5k"}])
+    today = date(2026, 10, 17)
+    run = performance.determinants(jamie_like(), today)
+    run["recentBreakDays"] = 30
+    p = sv.payload("x", {}, {}, {"recent": [], "performance": {"run": run}}, today=today)
+    r = p["races"][0]
+    assert r["stale"]["reason"] == "break" and r["note"].startswith("Out of date")
