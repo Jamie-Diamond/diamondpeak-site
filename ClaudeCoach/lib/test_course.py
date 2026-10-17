@@ -372,7 +372,7 @@ def test_a_course_with_no_cutoffs_has_nothing_timed_so_no_climbing_power_is_aske
     assert cs.climb_power_for(c, 80, 30) is None
     d = limiters.diagnose_bike(c, {"ftp": 250, "weight": 80, "outdoor": {"rides": 3, "with_power": 3}},
                                FITNESS, 0.7)
-    assert row(d, "climbing")["status"] == "unknown" and row(d, "day")["status"] == "unknown"
+    assert row(d, "climbing")["status"] == "unknown"
 
 
 # ── the real Mallorca 312 file ────────────────────────────────────────────────
@@ -415,7 +415,6 @@ def test_bike_without_a_course_asks_for_the_route():
     assert d["headline"].startswith("Send the route")
     assert row(d, "climbing")["need"] == "send the route (GPX)"
     assert row(d, "climbing")["status"] == "unknown"
-    assert row(d, "day")["need"] == "send the route (GPX)"
     assert d["limiter"] is None and d["fix"] is None
 
 
@@ -437,13 +436,15 @@ def test_heavy_rider_on_mallorca_is_held_back_by_climbing_and_needs_a_power_mete
     assert "km 97" in d["headline"] and "11:20" in d["headline"]
     climbing = row(d, "climbing")
     assert climbing["status"] == "red" and climbing["short"] > limiters.RED
-    assert climbing["source"] == "indoor power" and "211 W FTP" in climbing["you"]
-    assert row(d, "durability")["you"] == "needs a power meter"
+    assert climbing["source"] == "indoor power" and climbing["you"].startswith("2.3 W/kg FTP (211 W at 93 kg)")
+    assert "W/kg on the climbs" in climbing["need"] and "W/kg (" in d["headline"]
+    assert row(d, "durability")["you"].startswith("needs a power meter")
     assert row(d, "durability")["status"] == "unknown" and row(d, "durability")["why"] == "power"
     assert row(d, "fuelling")["status"] == "unknown"
     assert "each 10 W" in d["fix"] and "each 3 kg" in d["fix"]
     assert "power meter" in d["foot"]
-    assert [r["key"] for r in d["rows"]] == ["fitness", "climbing", "day", "durability", "fuelling"]
+    assert [r["key"] for r in d["rows"]] == ["fitness", "climbing", "durability", "fuelling"]
+    assert "8.7 h longest" in row(d, "durability")["you"]          # context, not a pass mark
 
 
 def test_heavy_rider_fix_savings_are_positive_minutes():
@@ -453,22 +454,18 @@ def test_heavy_rider_fix_savings_are_positive_minutes():
     assert w10 > 0 and kg3 > 0
 
 
-def test_strong_rider_has_no_climbing_problem_and_is_held_back_only_by_day_length():
-    bike = dict(STRONG_BIKE, longest_h=10)               # 75% of the ~14.2 h day is ~10.6 h: not shown yet
-    d = limiters.diagnose_bike(MALLORCA, bike, {"now": 30, "lo": 28, "hi": 40}, 0.7)
-    assert row(d, "climbing")["status"] == "green"
-    assert row(d, "durability")["status"] == "green" and row(d, "fuelling")["status"] == "green"
-    assert row(d, "day")["status"] == "unshown"
-    assert d["limiter"] == "day"
-    assert d["headline"].startswith("Not shown yet")
+def test_a_short_longest_ride_is_never_the_verdict():
+    """Jamie, 17 Oct 2026: nobody rides 14 h to prepare for a 14 h ride."""
+    d = limiters.diagnose_bike(MALLORCA, dict(STRONG_BIKE, longest_h=5), {"now": 30, "lo": 28, "hi": 40}, 0.7)
+    assert d["limiter"] is None and d["headline"].startswith("Nothing is holding you back")
+    assert "longest_ride_h" not in d["targets"]
 
 
 def test_strong_rider_with_a_long_enough_longest_ride_has_nothing_holding_them_back():
-    for longest in (11, 12):                             # 11 h already clears 75% of the ~14.2 h day (~10.6 h)
+    for longest in (11, 12):
         d = limiters.diagnose_bike(MALLORCA, dict(STRONG_BIKE, longest_h=longest),
                                    {"now": 30, "lo": 28, "hi": 40}, 0.7)
         assert row(d, "climbing")["status"] == "green"
-        assert row(d, "day")["status"] == "green"
         assert d["limiter"] is None
         assert d["headline"].startswith("Nothing is holding you back")
         assert d["fix"] is None

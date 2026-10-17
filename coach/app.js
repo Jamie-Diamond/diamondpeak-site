@@ -109,6 +109,9 @@
     // with a sport picker of its own. Labelled 'Race', or 'Goal' for an athlete with a goal
     // and no A race (see trendTabs); hidden when there is nothing to show.
     { id: 'race', label: 'Race' },
+    // Best power, run times and swim paces against a year ago, one sport at a time (Jamie,
+    // 17 Oct 2026). The power curve used to sit under the Fitness chart.
+    { id: 'best', label: 'Best efforts' },
     { id: 'load', label: 'Load' },
     // Weight, HRV, resting HR and sleep over the 90 days published (Jamie, 15 Oct 2026:
     // "need to also go in trends"): the Today cards, drawn over the longer window. Third,
@@ -145,7 +148,7 @@
     me: null, updated: null, refreshing: false,
     // fitMetric is 'tss' (CTL) or 'dur' (hours/week). fitSport is shared by both, so
     // the discipline you were looking at survives a switch of metric.
-    chart: null, todayChart: null, trend: 'fit', fitSport: 'all', fitMetric: 'tss', limSport: null,
+    chart: null, todayChart: null, trend: 'fit', fitSport: 'all', fitMetric: 'tss', limSport: null, bestSport: null,
     calMonth: null, calDay: null, libGroup: null,
     lrMode: 'long', pcMode: 'avg', zoneWin: 'week'
   };
@@ -3286,6 +3289,34 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       return;
     }
 
+    // Best efforts: Bike (the power curve), Run or Swim. No chart on this tab.
+    if (sel === 'best') {
+      var bsp = bestSport(d);
+      $('#v-trends').innerHTML = seg + subSeg('bestSport', bsp, BEST_SPORTS) +
+        (bsp === 'bike' ? powerCurveCard(d)
+          : bsp === 'run' ? bestsCard('Best run times', d.runBests, 'run')
+          : bestsCard('Best swim pace', d.swimBests, 'swim'));
+      $('#trendSeg').onclick = function (e) {
+        var b = e.target.closest('button');
+        if (!b) return;
+        state.trend = b.dataset.t;
+        renderTrends();
+        drawTrend();
+      };
+      // The sport picker, and (Bike only) the power curve's Average / Normalised toggle.
+      ['bestSport', 'pcMode'].forEach(function (key) {
+        var el = $('#' + key);
+        if (!el) return;
+        el.onclick = function (e) {
+          var b = e.target.closest('button');
+          if (!b) return;
+          state[key] = b.dataset.s;
+          renderTrends();
+        };
+      });
+      return;
+    }
+
     var zoomable = (sel === 'fit' || sel === 'heat');
     var action = zoomable
       ? '<button type="button" class="card-a" id="zreset">Reset zoom</button>' : '';
@@ -3309,7 +3340,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       drawTrend();
     };
     // Every sub-segment writes the state field its container id names.
-    ['fitMetric', 'fitSport', 'lrMode', 'pcMode', 'zoneWin'].forEach(function (key) {
+    ['fitMetric', 'fitSport', 'lrMode', 'zoneWin'].forEach(function (key) {
       var el = $('#' + key);
       if (!el) return;
       el.onclick = function (e) {
@@ -3377,66 +3408,6 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
             '%"></i></div></span><span class="rt"><b>' + Number(last).toFixed(1) +
             '</b>peak ' + Number(max).toFixed(0) + '</span></div>';
         }).join('') + '</div>', { flush: true });
-      }
-      // Best efforts in watts: a bike block. It stays out of the view for an athlete
-      // whose focus does not include the bike, even though the rides are still logged.
-      var pc = fs.indexOf('bike') >= 0 ? (d.powerCurve || []) : [];
-      if (pc.length) {
-        var pw = d.powerCurveWindow || {};
-        var days = pw.days || 90;
-        // Average or normalised. NP is the honest number for a long race effort: over
-        // four hours a lumpy ride and a smooth one can share an average and be entirely
-        // different rides, and it is the smooth one that gets you off the bike able to
-        // run. Intervals.icu has no NP curve, so these come from the power streams and
-        // populate a few rides per refresh - hence np_pending.
-        var npMode = state.pcMode === 'np';
-        var hasNp = pc.some(function (r) { return r.np != null; });
-        var pick = function (r) { return npMode ? r.np : r.w; };
-        var pickPrev = function (r) { return npMode ? r.npPrev : r.wPrev; };
-        var bar = hasNp || npMode
-          ? subSeg('pcMode', state.pcMode, [['avg', 'Average'], ['np', 'Normalised']])
-          : '';
-        var pending = pw.np_pending;
-
-        var table = '<table class="tbl">' +
-          '<thead><tr><th>Duration</th><th>Last ' + days + 'd</th>' +
-          '<th>Year ago</th><th>Δ</th></tr></thead><tbody>' +
-          pc.map(function (r) {
-            var now = pick(r), was = pickPrev(r);
-            var dl = (now != null && was) ? Math.round((now - was) / was * 100) : null;
-            return '<tr><td class="lbl">' + esc(r.label) + '</td><td class="t">' +
-              (now != null ? now + 'w' : '—') + '</td><td>' +
-              (was != null ? was + 'w' : '—') + '</td><td class="' +
-              (dl == null ? '' : (dl >= 0 ? 'pos' : 'neg')) + '">' +
-              (dl == null ? '—' : (dl >= 0 ? '+' : '') + dl + '%') + '</td></tr>';
-          }).join('') + '</tbody></table>';
-
-        // Twelve rows of dashes reads as "you have never ridden that long", which is a
-        // different and wrong statement. Until one duration has an NP, the column says
-        // what it is doing instead of pretending to be a table.
-        var body = bar + ((npMode && !hasNp)
-          ? '<div class="empty">Normalised curve still building' +
-            (pending ? ' · ' + pending + ' ride' + (pending === 1 ? '' : 's') + ' to go' : '') +
-            '</div>'
-          : table);
-
-        var pcFoot = pw.label
-          ? 'Best of ' + pw.now_from + ' to ' + pw.now_to + ', against the same ' +
-            days + ' days a year earlier (' + pw.prev_from + ' to ' + pw.prev_to + ').'
-          : 'Best efforts over the last ' + days + ' days.';
-        if (npMode) {
-          pcFoot += ' Normalised power: ' + (pw.np_basis ||
-            'the 30-second rolling fourth-power mean over every window of that length') +
-            '.';
-          // Counted, so a curve that is thin at the long end is read as work in progress
-          // rather than as a ceiling.
-          if (pending) {
-            pcFoot += ' Still building: ' + pending + ' ride' +
-              (pending === 1 ? '' : 's') + ' not yet processed, so the longer ' +
-              'durations may fill in over the next few refreshes.';
-          }
-        }
-        h += card('Power curve', body, { flush: true, foot: pcFoot });
       }
     }
 
@@ -3680,11 +3651,17 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
      x0, x1}. points holds measured weeks only; a gap in the weeks stays a gap (the chart
      breaks the line there). x0/x1 are the whole history's first and last week, the same
      for every panel. tick: the first Garmin week of a VO2max series that was estimated
-     from heart rate before it, else null. Fewer than 3 points: no panel. */
+     from heart rate before it, else null. target: {min, max, label} from L.targets (the
+     Goals card, keyed by the same history field) or null; a band is drawn for it. Targets
+     belong to the goal's own sport, so they apply on its view only - except the drift
+     panels, which take theirs wherever the card publishes one. Fewer than 3 points: no
+     panel. */
   function factorPanels(history, L, view) {
     var rows = (history || []).filter(function (r) { return r && r.week; });
     var kind = limitersKind(L), shown = (view && view.sport) || kind;
-    var hot = kind && (kind === shown || kind === 'tri') ? limiterFactor(L, kind) : null;
+    var onGoal = !!(kind && (kind === shown || kind === 'tri'));
+    var hot = onGoal ? limiterFactor(L, kind) : null;
+    var targets = (L && L.targets) || {};
     var stamp = function (w) { return Date.parse(w + 'T12:00:00'); };
     var x0 = rows.length ? stamp(rows[0].week) : 0;
     var x1 = rows.length ? stamp(rows[rows.length - 1].week) : 0;
@@ -3711,9 +3688,22 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       out.push({ key: key, label: key === 'ctl' && view && view.single ? 'Fitness (all sports)' : f.label,
         unit: f.unit, dp: f.dp, fixed: !!f.fixed,
         points: pts, highlight: key === hot, tick: tick,
+        target: fpTarget(onGoal || key === 'drift' || key === 'bike_drift' ? targets[key] : null),
         lo: Math.min.apply(null, vals), hi: Math.max.apply(null, vals), x0: x0, x1: x1 });
     });
     return out;
+  }
+
+  // A target from the Goals card: min, max or both (numbers), and a few words on where it
+  // comes from. null when it has neither edge, or the edges are the wrong way round.
+  function fpTarget(t) {
+    if (!t || typeof t !== 'object') return null;
+    var num = function (v) {
+      return v == null || v === '' || typeof v === 'boolean' || !isFinite(Number(v)) ? null : Number(v);
+    };
+    var min = num(t.min), max = num(t.max);
+    if ((min == null && max == null) || (min != null && max != null && min > max)) return null;
+    return { min: min, max: max, label: t.label ? String(t.label) : '' };
   }
 
   /* ── drawing (kept apart from the choosing above) ── */
@@ -3726,6 +3716,17 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     return esc(fpText(p, v)) + (p.unit ? '<span style="font-size:.55em;font-weight:500;color:var(--muted);' +
       'margin-left:' + (p.unit === '%' ? 1 : 3) + 'px">' + esc(p.unit) + '</span>' : '');
   }
+  // "482+ W for sub 3", "under 5%", "70–95 race day": the target in words, without
+  // saying the label twice when it already says it ("under 5%" labelled "under 5%").
+  function fpTargetText(p) {
+    var t = p.target;
+    if (!t) return '';
+    var u = p.unit ? (p.unit === '%' ? '%' : ' ' + p.unit) : '';
+    var core = t.min != null && t.max != null ? fpText(p, t.min) + '\u2013' + fpText(p, t.max) + u
+      : t.min != null ? fpText(p, t.min) + '+' + u : 'under ' + fpText(p, t.max) + u;
+    return t.label && t.label.toLowerCase().indexOf(core.toLowerCase()) >= 0 ? t.label
+      : core + (t.label ? ' ' + t.label : '');
+  }
   function fpDate(iso, withYear) {
     return new Date(iso + 'T12:00:00').toLocaleDateString('en-GB',
       withYear ? { month: 'short', year: 'numeric' } : { day: 'numeric', month: 'short' });
@@ -3734,7 +3735,12 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Time to x and value to y inside the viewBox. Own y range per panel (a different unit
   // each), padded so the line never touches the edge; one shared x range.
   function fpScale(p) {
-    var lo = p.lo, hi = p.hi, pad = (hi - lo) * 0.12 || Math.abs(hi) * 0.1 || 1;
+    var lo = p.lo, hi = p.hi, t = p.target;
+    // A target outside the data still gets its edge on the chart.
+    [t && t.min, t && t.max].forEach(function (v) {
+      if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    });
+    var pad = (hi - lo) * 0.12 || Math.abs(hi) * 0.1 || 1;
     lo -= pad; hi += pad;
     var span = (p.x1 - p.x0) || 1;
     return {
@@ -3755,6 +3761,19 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     return runs;
   }
 
+  // The target zone as a pale wash behind the line, the way the Recovery card shows a normal
+  // band: the accent at low opacity, no outline. Only a min runs up to the panel's top, only a
+  // max runs down from its bottom; the panel clips it.
+  function fpBand(p, s) {
+    var t = p.target;
+    if (!t) return '';
+    var top = t.max != null ? Math.max(0, s.y(t.max)) : 0;
+    var bot = t.min != null ? Math.min(FP.H, s.y(t.min)) : FP.H;
+    if (bot - top < 0.5) return '';
+    return '<rect class="fp-b" x="0" y="' + top.toFixed(1) + '" width="' + FP.W + '" height="' +
+      (bot - top).toFixed(1) + '" style="fill:var(--accent);opacity:.14;stroke:none"/>';
+  }
+
   function factorChart(p) {
     var s = fpScale(p), col = p.highlight ? 'var(--accent)' : 'var(--muted)';
     var n = function (v) { return v.toFixed(1); };
@@ -3771,9 +3790,11 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
         ';stroke-width:' + w + ';stroke-linecap:round;vector-effect:non-scaling-stroke"/>';
     };
     var label = p.label + ', now ' + fpText(p, end.v) + (p.unit ? ' ' + p.unit : '') + ', ranging from ' +
-      fpText(p, p.lo) + ' to ' + fpText(p, p.hi) + ' over ' + p.points.length + ' weeks';
+      fpText(p, p.lo) + ' to ' + fpText(p, p.hi) + ' over ' + p.points.length + ' weeks' +
+      (p.target ? ', target ' + fpTargetText(p) : '');
     return '<svg class="spark fp-c" viewBox="0 0 ' + FP.W + ' ' + FP.H + '" preserveAspectRatio="none" role="img" ' +
       'aria-label="' + esc(label) + '" style="height:' + FP.H + 'px;margin-top:8px;overflow:visible;touch-action:pan-y">' +
+      fpBand(p, s) +
       (p.tick ? '<path d="M' + n(s.x(p.tick.t)) + ' 0V' + FP.H + '" style="fill:none;stroke:var(--muted);' +
         'stroke-width:1;opacity:.6;vector-effect:non-scaling-stroke"/>' : '') +
       (line ? '<path d="' + line + '" style="fill:none;stroke:' + col + ';stroke-width:2;stroke-linecap:round;' +
@@ -3793,9 +3814,11 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     return '<div class="fig fp" data-k="' + esc(p.key) + '">' +
       '<span class="n fp-n">' + fpValue(p, last.v) + '</span>' +
       '<span class="l">' + esc(p.label) + '</span>' + factorChart(p) +
-      (p.highlight ? '<span class="d fp-d" style="color:var(--accent);font-weight:600">the limiter now</span>'
-        : '<span class="d fp-d">' + (fpText(p, p.lo) === fpText(p, p.hi) ? 'no change'
-          : 'range ' + esc(fpText(p, p.lo)) + '–' + esc(fpText(p, p.hi))) + '</span>') +
+      '<span class="d fp-d">' + (p.highlight
+        ? '<b style="color:var(--accent);font-weight:600">the limiter now</b>'
+        : (fpText(p, p.lo) === fpText(p, p.hi) ? 'no change'
+          : 'range ' + esc(fpText(p, p.lo)) + '–' + esc(fpText(p, p.hi)))) +
+      (p.target ? ' \u00b7 target ' + esc(fpTargetText(p)) : '') + '</span>' +
       '</div>';
   }
 
@@ -3882,7 +3905,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       if (!p) return;
       var num = tile.querySelector('.fp-n'), note = tile.querySelector('.fp-d');
       var cross = svg.querySelector('.fp-x'), dot = svg.querySelector('.fp-s');
-      var s = fpScale(p), rest = { n: num.innerHTML, d: note.textContent };
+      var s = fpScale(p), rest = { n: num.innerHTML, d: note.innerHTML };
       function on(e) {
         var r = svg.getBoundingClientRect();
         if (!r.width) return;
@@ -3898,11 +3921,150 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
       }
       function off() {
         cross.setAttribute('d', ''); dot.setAttribute('d', '');
-        num.innerHTML = rest.n; note.textContent = rest.d;
+        num.innerHTML = rest.n; note.innerHTML = rest.d;
       }
       svg.onpointerdown = on; svg.onpointermove = on;
       svg.onpointerup = off; svg.onpointerleave = off; svg.onpointercancel = off;
     });
+  }
+
+  /* ── Best efforts (Jamie, 17 Oct 2026): bike power, run times, swim paces ────────────
+     The power curve used to sit under the Fitness chart. It lives here now with the run and
+     swim equivalents, behind a Bike / Run / Swim picker (state.bestSport). */
+
+  // Bike: the power curve, moved here unchanged from the Fitness view.
+  function powerCurveCard(d) {
+    // Best efforts in watts: a bike block. It stays out of the view for an athlete
+    // whose focus does not include the bike, even though the rides are still logged.
+    var fs = shownSports(d);
+    var pc = fs.indexOf('bike') >= 0 ? (d.powerCurve || []) : [];
+    if (!pc.length) return card('Power curve', '<div class="empty">No ride power in the last 90 days.</div>');
+    var pw = d.powerCurveWindow || {};
+    var days = pw.days || 90;
+    // Average or normalised. NP is the honest number for a long race effort: over
+    // four hours a lumpy ride and a smooth one can share an average and be entirely
+    // different rides, and it is the smooth one that gets you off the bike able to
+    // run. Intervals.icu has no NP curve, so these come from the power streams and
+    // populate a few rides per refresh - hence np_pending.
+    var npMode = state.pcMode === 'np';
+    var hasNp = pc.some(function (r) { return r.np != null; });
+    var pick = function (r) { return npMode ? r.np : r.w; };
+    var pickPrev = function (r) { return npMode ? r.npPrev : r.wPrev; };
+    var bar = hasNp || npMode
+      ? subSeg('pcMode', state.pcMode, [['avg', 'Average'], ['np', 'Normalised']])
+      : '';
+    var pending = pw.np_pending;
+
+    var table = '<table class="tbl">' +
+      '<thead><tr><th>Duration</th><th>Last ' + days + 'd</th>' +
+      '<th>Year ago</th><th>Δ</th></tr></thead><tbody>' +
+      pc.map(function (r) {
+        var now = pick(r), was = pickPrev(r);
+        var dl = (now != null && was) ? Math.round((now - was) / was * 100) : null;
+        return '<tr><td class="lbl">' + esc(r.label) + '</td><td class="t">' +
+          (now != null ? now + 'w' : '—') + '</td><td>' +
+          (was != null ? was + 'w' : '—') + '</td><td class="' +
+          (dl == null ? '' : (dl >= 0 ? 'pos' : 'neg')) + '">' +
+          (dl == null ? '—' : (dl >= 0 ? '+' : '') + dl + '%') + '</td></tr>';
+      }).join('') + '</tbody></table>';
+
+    // Twelve rows of dashes reads as "you have never ridden that long", which is a
+    // different and wrong statement. Until one duration has an NP, the column says
+    // what it is doing instead of pretending to be a table.
+    var body = bar + ((npMode && !hasNp)
+      ? '<div class="empty">Normalised curve still building' +
+        (pending ? ' · ' + pending + ' ride' + (pending === 1 ? '' : 's') + ' to go' : '') +
+        '</div>'
+      : table);
+
+    var pcFoot = pw.label
+      ? 'Best of ' + pw.now_from + ' to ' + pw.now_to + ', against the same ' +
+        days + ' days a year earlier (' + pw.prev_from + ' to ' + pw.prev_to + ').'
+      : 'Best efforts over the last ' + days + ' days.';
+    if (npMode) {
+      pcFoot += ' Normalised power: ' + (pw.np_basis ||
+        'the 30-second rolling fourth-power mean over every window of that length') +
+        '.';
+      // Counted, so a curve that is thin at the long end is read as work in progress
+      // rather than as a ceiling.
+      if (pending) {
+        pcFoot += ' Still building: ' + pending + ' ride' +
+          (pending === 1 ? '' : 's') + ' not yet processed, so the longer ' +
+          'durations may fill in over the next few refreshes.';
+      }
+    }
+    return card('Power curve', body, { flush: true, foot: pcFoot });
+  }
+
+  var BEST_SPORTS = [['bike', 'Bike'], ['run', 'Run'], ['swim', 'Swim']];
+
+  // The sport shown: the picker's (state.bestSport), else the target sport's from the Goals
+  // card (run -> Run; bike and triathlon -> Bike), else - no card - Bike if there is a power
+  // curve and Run if not.
+  function bestSport(d) {
+    var pick = state.bestSport;
+    if (BEST_SPORTS.some(function (o) { return o[0] === pick; })) return pick;
+    var kind = limitersKind(((d || {}).season || {}).limiters);
+    if (kind) return kind === 'run' ? 'run' : 'bike';
+    return ((d || {}).powerCurve || []).length ? 'bike' : 'run';
+  }
+
+  // h:mm:ss for an hour or more, else m:ss.
+  function fmtClock(sec) {
+    var t = Math.round(Number(sec)), h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), x = t % 60;
+    var two = function (n) { return (n < 10 ? '0' : '') + n; };
+    return h ? h + ':' + two(m) + ':' + two(x) : m + ':' + two(x);
+  }
+  // A signed difference in seconds as a clock: -0:12 is 12 seconds faster.
+  function fmtGap(sec) {
+    var r = Math.round(sec);
+    return r === 0 ? '0:00' : (r < 0 ? '-' : '+') + fmtClock(Math.abs(r));
+  }
+
+  /* Run times (data.runBests) and swim paces (data.swimBests) share one shape:
+     {window: {from, to, prevFrom, prevTo}, rows: [{label, dist_m, s, sPrev, pace_s,
+     pacePrev_s, activity}]}, pace_s being seconds per km for a run and per 100 m for a swim.
+     Run leads with the time and the pace under it; swim leads with the pace, time under. The
+     change is the time for a run and the pace for a swim, in the power table's colours:
+     green for faster, red for slower. A file from before these were published has neither
+     key: the card says it is updating rather than vanishing. */
+  function bestsCard(title, b, kind) {
+    var swim = kind === 'swim', unit = swim ? '/100 m' : '/km';
+    if (!b || !Array.isArray(b.rows)) {
+      return card(title, '<div class="empty">Updating - check back after the next refresh.</div>');
+    }
+    if (!b.rows.length) {
+      return card(title, '<div class="empty">No ' + kind + ' efforts in the last 90 days.</div>');
+    }
+    var per = function (r, s, pace) {
+      return pace != null ? pace : (s != null && r.dist_m ? s / (r.dist_m / (swim ? 100 : 1000)) : null);
+    };
+    var cell = function (s, pace) {
+      if (s == null || pace == null) return null;
+      return esc(swim ? fmtClock(pace) + unit : fmtClock(s)) + '<small style="display:block">' +
+        esc(swim ? fmtClock(s) : fmtClock(pace) + unit) + '</small>';
+    };
+    var table = '<table class="tbl"><thead><tr><th>Distance</th><th>Last 90d</th>' +
+      '<th>Year ago</th><th>Δ</th></tr></thead><tbody>' + b.rows.map(function (r) {
+        var pace = per(r, r.s, r.pace_s), prev = per(r, r.sPrev, r.pacePrev_s);
+        var now = cell(r.s, pace), was = cell(r.sPrev, prev);
+        var gap = (r.s != null && r.sPrev != null && pace != null && prev != null)
+          ? Math.round(swim ? pace - prev : r.s - r.sPrev) : null;
+        return '<tr><td class="lbl">' + esc(r.label) + '</td><td class="t">' +
+          (now || '<small style="display:block;max-width:11em;white-space:normal">' +
+            'no effort this long in 90 days</small>') + '</td><td>' + (was || '—') +
+          '</td><td class="' + (gap ? (gap < 0 ? 'pos' : 'neg') : '') + '">' +
+          (gap == null ? '—' : fmtGap(gap)) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    var w = b.window || {};
+    var day = function (iso) {
+      return new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    };
+    var span = w.from && w.to && w.prevFrom && w.prevTo
+      ? ' (' + day(w.from) + ' to ' + day(w.to) + ' against ' + day(w.prevFrom) + ' to ' + day(w.prevTo) + ')' : '';
+    return card(title, table, { flush: true, foot: 'Best ' + (swim ? 'pace' : 'time') +
+      ' for each distance inside any ' + kind + ', the last 90 days against the same 90 days a year ago' +
+      span + '.' });
   }
 
   /* ── charts ──────────────────────────────────────────────────────────── */
@@ -7014,6 +7176,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.048", "2026-10-17", "Trends: a Best efforts tab (Bike power, Run best times for 1 km to the marathon, Swim best pace from 100 m to 3.8 km, each against a year ago); target bands on the Race charts; climbing power in W/kg; a long day is judged on durability and fuelling, not on having ridden one", 0],
     ["4.047", "2026-10-17", "Calendar: TSS per day counts rest days, and today only once you\u2019ve trained, so a morning before your session doesn\u2019t pull it down", 0],
     ["4.046", "2026-10-17", "Calendar month: average TSS per day instead of the month\u2019s TSS, and distance for swim, bike and run instead of a session count. Hours, TSS and distance count what you\u2019ve done, not what\u2019s planned. The note under it now just says how many days are left", 0],
     ["4.045", "2026-10-17", "Sport colours easier to tell apart: swim is now a clear blue (it was close to bike\u2019s teal), run a brighter amber, strength near-black. The same colours on the calendar dots, session cards and charts. Calendar: each sport in the weekly totals has its icon, including a new one for other activities", 0],

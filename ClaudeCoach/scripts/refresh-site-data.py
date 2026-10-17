@@ -341,6 +341,220 @@ def _np_curves(client, recent_acts, durations, today, p_from, p_to):
             pending or None)
 
 
+def _power_curve_block(client, slug, profile, today, np_fn=None):
+    """(rows, window) for the bike power table: best average power at the standard
+    durations over the last 90 days, against the SAME 90 days a year earlier. ([], None)
+    when there is no current curve or the fetch fails. One implementation for every
+    athlete's builder (Jamie's and _build_athlete_training_data), so they cannot drift.
+
+    np_fn(durations, p_from, p_to) -> (np_now, np_prev, pending), optional. The NP
+    columns come from the power streams, cached per activity (_np_curves, which needs
+    the NP cache path and a ride list), and only Jamie's builder wires that up. For
+    everyone else np_fn is None, so np/npPrev are None and the window's np_basis and
+    np_pending are None: the keys are there, the values are not computed.
+
+    Non-fatal and NAMED in the log: a blank column with no log line is how the year-ago
+    column sat broken for months."""
+    pc_durations = _power_durations(profile)
+    try:
+        pc_raw = client.get_power_curves(sport="Ride", curves="90d")
+        if not pc_raw.get("list"):
+            return [], None
+        curve     = pc_raw["list"][0]
+        secs_to_w = dict(zip(curve.get("secs", []), curve.get("values", [])))
+
+        prev_w = {}
+        # Shift by 365 days rather than replace(year=...): the latter raises
+        # ValueError on 29 Feb, which would take the whole nightly refresh down
+        # one day every four years.
+        p_from = today - timedelta(days=90 + 365)
+        p_to   = today - timedelta(days=365)
+        try:
+            prev_raw = client.get_power_curves(
+                sport="Ride", curves=f"r.{p_from.isoformat()}.{p_to.isoformat()}")
+            if prev_raw.get("list"):
+                pcurve = prev_raw["list"][0]
+                prev_w = dict(zip(pcurve.get("secs", []), pcurve.get("values", [])))
+            else:
+                log(f"[{slug}] Power curve: no year-ago data in range - wPrev left blank")
+        except Exception as e:
+            log(f"[{slug}] Power curve year-ago fetch failed (non-fatal): {e}")
+
+        # Normalised power at each duration. NOT available from /power-curves, which is
+        # mean-maximal AVERAGE power only: passing powerField=np or np=true returns the
+        # identical average curve without erroring, which is exactly how you would ship
+        # a mislabelled column. So NP is computed from the power streams (np_fn).
+        np_now, np_prev, np_ready = {}, {}, None
+        if np_fn is not None:
+            try:
+                np_now, np_prev, np_ready = np_fn(
+                    [t for t, _ in pc_durations], p_from, p_to)
+            except Exception as e:
+                log(f"[{slug}] NP curve skipped (non-fatal): {e}")
+
+        rows = [{"t": t, "label": lbl,
+                 "w": secs_to_w.get(t), "wPrev": prev_w.get(t),
+                 "np": np_now.get(t), "npPrev": np_prev.get(t)}
+                for t, lbl in pc_durations]
+        window = {
+            "days": 90,
+            "now_from": (today - timedelta(days=90)).isoformat(),
+            "now_to": today.isoformat(),
+            "prev_from": p_from.isoformat(),
+            "prev_to": p_to.isoformat(),
+            "label": "best 90 days vs same 90 days last year",
+            "np_basis": ("30s-rolling 4th-power mean over every window of that "
+                         "length, best across all rides in the period")
+                        if np_fn is not None else None,
+            "np_pending": np_ready,
+        }
+        return rows, window
+    except Exception as e:
+        log(f"[{slug}] Power curve fetch failed (non-fatal): {e}")
+        return [], None
+
+
+# ── Run and swim best efforts (Jamie, 17 Oct 2026) ──────────────────────────────
+# Trends' "Best efforts" tab: Bike is the power table above; Run and Swim are the best
+# time over a standard distance in the last 90 days against the SAME 90 days a year
+# earlier (like-for-like, same reasoning as the power curve). Intervals.icu's
+# /pace-curves gives the best time at a fixed list of distances, so the distances we
+# publish are looked up in it rather than computed from streams.
+_RUN_BEST_TARGETS  = [("1 km", 1000.0), ("5 km", 5000.0), ("10 km", 10000.0),
+                      ("Half", 21097.5), ("Marathon", 42195.0)]
+_SWIM_BEST_TARGETS = [("100 m", 100.0), ("400 m", 400.0), ("1500 m", 1500.0),
+                      ("3.8 km", 3800.0)]
+# Within this fraction of a target distance a listed distance stands in for it, its
+# time scaled linearly to the target. Wider than this would be a different effort.
+_BEST_NEAR_TOL = 0.02
+# Faster than a world record for the distance is a GPS glitch (a tunnel, a car, a
+# paused watch), never a best. Floors are on pace: s/km for run, s/100 m for swim.
+_RUN_PACE_FLOOR_S_PER_KM    = 150.0   # 2:30/km, for 1 km and up
+_SWIM_PACE_FLOOR_S_PER_100M = 45.0    # 0:45/100 m
+# sport -> (targets, metres per pace unit, pace floor in seconds per unit, key)
+_BEST_EFFORTS = {
+    "Run":  (_RUN_BEST_TARGETS,  1000.0, _RUN_PACE_FLOOR_S_PER_KM,    "runBests"),
+    "Swim": (_SWIM_BEST_TARGETS, 100.0,  _SWIM_PACE_FLOOR_S_PER_100M, "swimBests"),
+}
+
+
+def _pace_curve_pick(reply, target_m):
+    """(seconds at target_m, activity id or None, activities dict) from a /pace-curves
+    reply: the exact listed distance, else the nearest listed distance within
+    _BEST_NEAR_TOL with its time scaled to the target. (None, None, {}) if neither.
+
+    Only distances with a usable time count, so a listed-but-empty exact distance does
+    not hide a usable one next to it."""
+    try:
+        curve = (reply or {}).get("list", [])[0]
+        dists = curve.get("distance")
+        secs = curve.get("values")
+        ids = curve.get("activity_id")
+        acts = (reply or {}).get("activities")
+    except (IndexError, AttributeError, TypeError):
+        return None, None, {}
+    dists = dists if isinstance(dists, list) else []
+    secs = secs if isinstance(secs, list) else []
+    ids = ids if isinstance(ids, list) else []
+    acts = acts if isinstance(acts, dict) else {}
+    best = None                                   # (relative gap, index)
+    for i, d in enumerate(dists):
+        t = secs[i] if i < len(secs) else None
+        if not isinstance(d, (int, float)) or d <= 0:
+            continue
+        if not isinstance(t, (int, float)) or isinstance(t, bool) or t <= 0:
+            continue
+        gap = abs(d - target_m) / target_m
+        if gap <= _BEST_NEAR_TOL and (best is None or gap < best[0]):
+            best = (gap, i)
+    if best is None:
+        return None, None, acts
+    i = best[1]
+    aid = ids[i] if i < len(ids) else None
+    return secs[i] * target_m / dists[i], aid, acts
+
+
+def _best_effort_activity(aid, acts):
+    """{"id","date","name"} for the activity behind an effort, or None if unknown."""
+    if aid is None or aid == "":
+        return None
+    info = {}
+    if isinstance(acts, dict):
+        info = acts.get(aid) or acts.get(str(aid)) or {}
+    when = str(info.get("start_date_local") or info.get("date") or "")[:10] or None
+    return {"id": str(aid), "date": when, "name": info.get("name")}
+
+
+def _best_efforts_rows(sport, now_reply, prev_reply):
+    """Rows for Trends' Best efforts table (sport "Run" or "Swim") from the two
+    /pace-curves replies: the last 90 days and the same 90 days a year earlier.
+
+    Every target distance gets a row, even with nothing in the window (s None), so the
+    app can say "no effort this long in 90 days" rather than dropping the distance.
+    A time whose pace beats the world-record floor is treated as a glitch -> None."""
+    targets, unit_m, floor, _key = _BEST_EFFORTS[sport]
+
+    def one(reply, target_m):
+        t, aid, acts = _pace_curve_pick(reply, target_m)
+        if t is None:
+            return None, None, None
+        pace = t / (target_m / unit_m)
+        if pace < floor:
+            return None, None, None
+        return round(t, 1), round(pace, 1), _best_effort_activity(aid, acts)
+
+    rows = []
+    for label, target_m in targets:
+        s, pace, activity = one(now_reply, target_m)
+        s_prev, pace_prev, _ = one(prev_reply, target_m)
+        rows.append({"label": label, "dist_m": target_m if target_m % 1 else int(target_m),
+                     "s": s, "sPrev": s_prev, "pace_s": pace, "pacePrev_s": pace_prev,
+                     "activity": activity})
+    return rows
+
+
+def _best_efforts_block(client, sport, today):
+    """{"window": {...}, "rows": [...]} for one sport, or None if the current-window
+    fetch fails. Non-fatal and NAMED in the log: a missing table with no log line is how
+    the power curve's year-ago column sat blank for months."""
+    now_from = today - timedelta(days=90)
+    # Shift by 365 days rather than replace(year=...): that raises on 29 Feb.
+    p_from = today - timedelta(days=90 + 365)
+    p_to = today - timedelta(days=365)
+    # "90d" with exactly these params: lib/performance.py asks /pace-curves for the
+    # same run window, so the per-run cache answers one of the two calls.
+    try:
+        now_reply = client._get("pace-curves", {"type": sport, "curves": "90d"})
+    except Exception as e:
+        log(f"{sport} best efforts fetch failed (non-fatal): {e}")
+        return None
+    prev_reply = None
+    try:
+        prev_reply = client._get(
+            "pace-curves",
+            {"type": sport, "curves": f"r.{p_from.isoformat()}.{p_to.isoformat()}"})
+    except Exception as e:
+        log(f"{sport} best efforts year-ago fetch failed (non-fatal): {e}")
+    return {
+        "window": {"from": now_from.isoformat(), "to": today.isoformat(),
+                   "prevFrom": p_from.isoformat(), "prevTo": p_to.isoformat()},
+        "rows": _best_efforts_rows(sport, now_reply, prev_reply),
+    }
+
+
+def _best_efforts_blocks(client, slug, today):
+    """{"runBests": block|None, "swimBests": block|None} for ONE athlete. Called by both
+    builders so Jamie and everyone else get the same tables. Never raises."""
+    out = {}
+    for sport, (_t, _u, _f, key) in _BEST_EFFORTS.items():
+        try:
+            out[key] = _best_efforts_block(client, sport, today)
+        except Exception as e:
+            log(f"[{slug}] {sport} best efforts skipped (non-fatal): {e}")
+            out[key] = None
+    return out
+
+
 def _ctl_sport_family(raw):
     """Ride/Run/Swim, or None for anything else.
 
@@ -801,68 +1015,16 @@ def _build_jamie_data(client) -> dict:
     #
     # The window is published (powerCurveWindow) because "Now vs Last season" over an
     # unstated period is not a number anyone can act on.
-    power_curve = []
-    power_curve_window = None
     try:
         _pc_profile = json.loads((BASE / "athletes/jamie/profile.json").read_text())
     except Exception:
         _pc_profile = {}
-    pc_durations = _power_durations(_pc_profile)
-    try:
-        pc_raw = client.get_power_curves(sport="Ride", curves="90d")
-        if pc_raw.get("list"):
-            curve     = pc_raw["list"][0]
-            secs_to_w = dict(zip(curve.get("secs", []), curve.get("values", [])))
-
-            prev_w = {}
-            # Shift by 365 days rather than replace(year=...): the latter raises
-            # ValueError on 29 Feb, which would take the whole nightly refresh down
-            # one day every four years.
-            p_from = today - timedelta(days=90 + 365)
-            p_to   = today - timedelta(days=365)
-            try:
-                prev_raw = client.get_power_curves(
-                    sport="Ride", curves=f"r.{p_from.isoformat()}.{p_to.isoformat()}")
-                if prev_raw.get("list"):
-                    pcurve = prev_raw["list"][0]
-                    prev_w = dict(zip(pcurve.get("secs", []), pcurve.get("values", [])))
-                else:
-                    log("Power curve: no year-ago data in range — wPrev left blank")
-            except Exception as e:
-                # Non-fatal and NAMED: a blank column with no log line is how this
-                # sat broken for months.
-                log(f"Power curve year-ago fetch failed (non-fatal): {e}")
-
-            # Normalised power at each duration. NOT available from this endpoint -
-            # /power-curves is mean-maximal AVERAGE power only, and passing
-            # powerField=np or np=true returns the identical average curve without
-            # erroring, which is exactly how you would ship a mislabelled column.
-            # So NP is computed from the power streams, cached per activity.
-            np_now, np_prev, np_ready = {}, {}, None
-            try:
-                np_now, np_prev, np_ready = _np_curves(
-                    client, history_21, [t for t, _ in pc_durations],
-                    today, p_from, p_to)
-            except Exception as e:
-                log(f"NP curve skipped (non-fatal): {e}")
-
-            power_curve = [{"t": t, "label": lbl,
-                            "w": secs_to_w.get(t), "wPrev": prev_w.get(t),
-                            "np": np_now.get(t), "npPrev": np_prev.get(t)}
-                           for t, lbl in pc_durations]
-            power_curve_window = {
-                "days": 90,
-                "now_from": (today - timedelta(days=90)).isoformat(),
-                "now_to": today.isoformat(),
-                "prev_from": p_from.isoformat(),
-                "prev_to": p_to.isoformat(),
-                "label": "best 90 days vs same 90 days last year",
-                "np_basis": "30s-rolling 4th-power mean over every window of that "
-                            "length, best across all rides in the period",
-                "np_pending": np_ready,
-            }
-    except Exception as e:
-        log(f"Power curve fetch failed (non-fatal): {e}")
+    # The average-power curve is built by _power_curve_block, shared with every other
+    # athlete's builder so the two cannot drift. NP is Jamie-only (np_fn below).
+    power_curve, power_curve_window = _power_curve_block(
+        client, "jamie", _pc_profile, today,
+        np_fn=lambda durations, p_from, p_to: _np_curves(
+            client, history_21, durations, today, p_from, p_to))
 
     # Resolve FTP here while raw fitness rows are in scope; post_process (which builds
     # the profile block) cannot see fitness_ytd, so it reads this stashed value instead.
@@ -877,6 +1039,8 @@ def _build_jamie_data(client) -> dict:
 
     fitness_by_sport, duration_by_sport = _per_sport_series_cached(
         "jamie", client, today, history_21)
+
+    best_efforts = _best_efforts_blocks(client, "jamie", today)
 
     return {
         "generated":    today.isoformat(),
@@ -893,6 +1057,8 @@ def _build_jamie_data(client) -> dict:
         "thresholds":   _thresholds_tile("jamie", client),
         "powerCurve":   power_curve,
         "powerCurveWindow": power_curve_window,
+        "runBests":     best_efforts["runBests"],
+        "swimBests":    best_efforts["swimBests"],
         "resolvedFtp":  resolved_ftp,
         "rampCap":      _ramp_cap("jamie"),
         "refreshCadence": _refresh_cadence(),
@@ -2035,6 +2201,17 @@ def _build_athlete_training_data(slug, athlete_cfg):
     fitness_by_sport, duration_by_sport = _per_sport_series_cached(
         slug, client, today, history_49)
 
+    best_efforts = _best_efforts_blocks(client, slug, today)
+
+    try:
+        _pc_profile = json.loads((BASE / f"athletes/{slug}/profile.json").read_text())
+    except Exception:
+        _pc_profile = {}
+    # Same helper as Jamie's builder, average power only: NP is Jamie-only for now (no
+    # np_fn), so np/npPrev stay None for everyone else.
+    power_curve, power_curve_window = _power_curve_block(
+        client, slug, _pc_profile, today)
+
     data = {
         "generated":    today.isoformat(),
         "weightTrend":  _weight_trend(slug, wellness_60)[0],
@@ -2055,6 +2232,10 @@ def _build_athlete_training_data(slug, athlete_cfg):
         "swimLog":      swim_log,
         "sports":       _focus_sports(slug),
         "zoneDistribution": _zone_distribution(slug, history_49, today),
+        "powerCurve":   power_curve,
+        "powerCurveWindow": power_curve_window,
+        "runBests":     best_efforts["runBests"],
+        "swimBests":    best_efforts["swimBests"],
     }
 
     # -- planVsActual ----------------------------------------------------------

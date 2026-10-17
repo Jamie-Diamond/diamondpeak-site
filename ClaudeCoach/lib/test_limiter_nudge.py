@@ -13,7 +13,7 @@ def card(limiter, status, keys):
 
 
 RUN = ("fitness", "engine", "threshold", "efficiency", "endurance", "durability")
-BIKE = ("fitness", "climbing", "day", "durability", "fuelling")
+BIKE = ("fitness", "climbing", "durability", "fuelling")
 TRI = ("fitness", "swim", "bike", "run", "durability", "fuelling")
 
 

@@ -195,10 +195,23 @@ def diagnose(dist_m: float, goal_s: int, goal: str, run: dict, fitness: dict | N
     unshown = by["endurance"]["status"] == "unshown"
     if limiter is None and unshown:
         limiter = "endurance"
+    # Target bands for the Trends charts (Jamie, 17 Oct 2026: "target bands on each of the
+    # limiter graphs ... where a target can be set"), keyed by the history field each panel
+    # draws. Weekly km gets none on purpose: volume is advice, not a pass mark.
+    targets = {"drift": {"max": DRIFT_OK, "label": f"under {DRIFT_OK:.0f}%"}}
+    if pw and e and kg:
+        targets["cp"] = {"min": round((1000 / need_pace) / e * kg), "label": f"for {goal or 'the goal'}"}
+        if eco.get("prev"):
+            targets["economy"] = {"min": round(eco["prev"], 3), "label": "to hold your last 3 months"}
+    if need_vdot:
+        targets["vo2max"] = {"min": round(need_vdot, 1), "label": f"for {goal or 'the goal'}"}
+    if fitness and fitness.get("lo") is not None:
+        targets["ctl"] = {"min": fitness["lo"], "max": fitness["hi"], "label": "race day"}
     return {"rows": rows, "limiter": limiter,
             "headline": _headline(limiter, by, goal, fitness, run, eff, goal_pace, also),
             "fix": _fix(limiter, run, dist_m),
             "levers": run_levers(dist_m, goal_s, run),
+            "targets": targets,
             "foot": _foot(run)}
 
 
@@ -318,10 +331,9 @@ def _foot(run) -> str:
 
 REST_KMH = 30.0
 CLIMB_IF = 0.80
-DAY_SHOWN = 0.75                 # longest ride at this share of the day reads as shown
 FUEL_G_H = (60, 90)
 
-BIKE_LABELS = {"fitness": "Fitness", "climbing": "Climbing power", "day": "Day length",
+BIKE_LABELS = {"fitness": "Fitness", "climbing": "Climbing power",
                "durability": "Durability", "fuelling": "Fuelling"}
 
 
@@ -363,8 +375,11 @@ def diagnose_bike(course: dict | None, bike: dict | None, fitness: dict | None,
         binding = (max(at_hold, key=lambda n: n["rest_kmh"] if n["rest_kmh"] is not None else 999)
                    if at_hold else None)
         if need_w:
-            rows.append(_brow("climbing", f"{ftp} W FTP ({ftp / kg:.1f} W/kg) · ~{hold:.0f} W on long-day climbs",
-                              f"~{need_w:.0f} W on the climbs ({need_w / kg:.1f} W/kg)",
+            # W/kg first (Jamie, 17 Oct 2026: "climbing power should be in w/kg to make it
+            # clear it's W or kg"): on a climb weight counts as much as watts.
+            rows.append(_brow("climbing", f"{ftp / kg:.1f} W/kg FTP ({ftp} W at {kg:g} kg) · "
+                                          f"~{hold / kg:.1f} W/kg on long-day climbs",
+                              f"~{need_w / kg:.1f} W/kg on the climbs ({need_w:.0f} W)",
                               (need_w - hold) / need_w,
                               source="indoor power" if not bike.get("outdoor", {}).get("with_power") else "power"))
         else:
@@ -373,29 +388,19 @@ def diagnose_bike(course: dict | None, bike: dict | None, fitness: dict | None,
         rows.append(_brow("climbing", f"{ftp} W FTP" if ftp else "—",
                           "send the route (GPX)" if not course else "—", None))
 
-    if course:
-        fin = next((c for c in course.get("checkpoints") or [] if c.get("type") == "finish"), None)
-        day_h = (cs._clock_min(fin["clock"]) - cs._clock_min(course["start"])) / 60 if fin else None
-        if day_h and bike.get("longest_h") is not None and course.get("start"):
-            short = (DAY_SHOWN * day_h - bike["longest_h"]) / (DAY_SHOWN * day_h)
-            rows.append(_brow("day", f"{bike['longest_h']:.1f} h longest ride (90 days)",
-                              f"up to {day_h:.1f} h to the finish cut-off", short,
-                              status="green" if short <= GREEN else "unshown"))
-        else:
-            rows.append(_brow("day", "—", "—", None))
-    else:
-        rows.append(_brow("day", f"{bike.get('longest_h', 0):.1f} h longest ride" if bike.get("longest_h") else "—",
-                          "send the route (GPX)", None))
-
     out_rides = bike.get("outdoor") or {}
     no_meter = out_rides.get("rides") and not out_rides.get("with_power")
+    # No "day length" row (Jamie, 17 Oct 2026: "it's unusual you would do a 14h ride to prepare
+    # for a 14h ride"): a long day is carried by durability and fuelling, which have their own
+    # rows. The longest ride is shown as context on the durability row, never a pass mark.
+    longest = f" · {bike['longest_h']:.1f} h longest" if bike.get("longest_h") else ""
     dur = bike.get("durability")
     if dur:
-        rows.append(_brow("durability", f"{dur['drift_pct']:+.0f}% drift on 3h+ rides",
+        rows.append(_brow("durability", f"{dur['drift_pct']:+.0f}% drift on 3h+ rides{longest}",
                           f"under {DRIFT_OK:.0f}%", max(0.0, dur["drift_pct"] - DRIFT_OK) / DRIFT_SCALE,
                           source=f"power, {dur['n']} long rides"))
     else:
-        rows.append(_brow("durability", "needs a power meter" if no_meter else "no long rides with power",
+        rows.append(_brow("durability", ("needs a power meter" if no_meter else "no long rides with power") + longest,
                           f"under {DRIFT_OK:.0f}% drift", None, why="power" if no_meter else None))
 
     fuel = bike.get("fuel")
@@ -408,11 +413,16 @@ def diagnose_bike(course: dict | None, bike: dict | None, fitness: dict | None,
     by = {r["key"]: r for r in rows}
     flagged = [r for r in rows if r["status"] in ("amber", "red")]
     limiter = max(flagged, key=lambda r: r["short"])["key"] if flagged else None
-    if limiter is None and by["day"]["status"] == "unshown":
-        limiter = "day"
     head = _bike_headline(limiter, by, course, bike, binding, need_w)
+    targets = {"bike_drift": {"max": DRIFT_OK, "label": f"under {DRIFT_OK:.0f}%"}}
+    if need_w:
+        targets["bike_ftp"] = {"min": round(need_w / CLIMB_IF),
+                               "label": f"for the cut-offs ({need_w / CLIMB_IF / kg:.1f} W/kg)"}
+    if fitness and fitness.get("lo") is not None:
+        targets["ctl"] = {"min": fitness["lo"], "max": fitness["hi"], "label": "race day"}
     return {"rows": rows, "limiter": limiter, "headline": head,
             "fix": _bike_fix(limiter, course, bike), "levers": bike_levers(course, bike),
+            "targets": targets,
             "foot": _bike_foot(course, bike, no_meter)}
 
 
@@ -446,15 +456,14 @@ def _bike_headline(limiter, by, course, bike, binding, need_w) -> str:
     r = by[limiter]
     if limiter == "climbing" and binding:
         hold = CLIMB_IF * bike["ftp"]
-        return (f"Climbing power is the issue: at ~{hold:.0f} W the climbs to {binding['label']} take "
+        kg = bike["weight"]
+        return (f"Climbing power is the issue: at ~{hold / kg:.1f} W/kg ({hold:.0f} W) the climbs to {binding['label']} take "
                 f"{_hm(binding['climb_min'])}, so the other {binding['rest_km']:.0f} km would need "
                 f"{binding['rest_kmh']:.0f} km/h to make {binding['clock']}"
                 + (" (miss it and it's a shorter route)" if binding.get("on_miss") else "")
-                + f". About {need_w:.0f} W on the climbs makes it at {REST_KMH:.0f} km/h.")
+                + f". About {need_w / kg:.1f} W/kg ({need_w:.0f} W) on the climbs makes it at {REST_KMH:.0f} km/h.")
     if limiter == "fitness":
         return f"Fitness is the issue: your fitness is {r['you']}, against {r['need']}."
-    if limiter == "day":
-        return f"Not shown yet: a day this long. Your longest ride lately is {r['you'].split(' longest')[0]}; the cut-offs allow {r['need'].split('up to ')[1].split(' to')[0]}."
     if limiter == "durability":
         return f"Durability is the issue: you drift {bike['durability']['drift_pct']:.0f}% on rides over 3 hours."
     return f"Fuelling is the issue: {r['you']} on long rides, against {r['need']}."
@@ -470,8 +479,6 @@ def _bike_fix(limiter, course, bike) -> str | None:
         kg3 = base - cs.climbing_split(course["ele"], 0, km, hold, kg - 3 + cs.KIT_KG)[0]
         return (f"Raise FTP and carry less: each 10 W of FTP saves ~{w10 / 60:.0f} min on the climbs to "
                 f"km {km:g}, and each 3 kg saves ~{kg3 / 60:.0f} min.")
-    if limiter == "day":
-        return "Build the longest ride over the season, fuelled as on the day."
     if limiter == "fitness":
         return "More riding builds it."
     if limiter == "durability":
@@ -589,7 +596,12 @@ def diagnose_tri(kind: str, splits: dict | None, legs: dict, fitness: dict | Non
     levers = sorted([x for x in (_lever(l["label"], l["minutes"], l.get("why"))
                                  for leg in legs.values() for l in leg.get("levers") or []) if x],
                     key=lambda x: -x["minutes"])
-    return {"rows": rows, "limiter": limiter, "headline": head, "fix": fix, "levers": levers, "foot": foot}
+    targets = {"drift": {"max": DRIFT_OK, "label": f"under {DRIFT_OK:.0f}%"},
+               "bike_drift": {"max": DRIFT_OK, "label": f"under {DRIFT_OK:.0f}%"}}
+    if fitness and fitness.get("lo") is not None:
+        targets["ctl"] = {"min": fitness["lo"], "max": fitness["hi"], "label": "race day"}
+    return {"rows": rows, "limiter": limiter, "headline": head, "fix": fix, "levers": levers,
+            "targets": targets, "foot": foot}
 
 
 # ── The plan nudge ─────────────────────────────────────────────────────────────
@@ -609,7 +621,6 @@ NUDGES = {
     },
     "bike": {
         "climbing": "Bike quality: threshold work as seated climbing repeats (or low-cadence big-gear efforts indoors) rather than flat sweetspot.",
-        "day": "Long ride: fuelled exactly as on the day (60-90 g carbs an hour), steady to the end.",
         "durability": "Long ride: the closing block at race effort.",
         "fuelling": "Long ride: practise 60-90 g of carbs an hour and log it.",
     },
