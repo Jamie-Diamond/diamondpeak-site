@@ -116,6 +116,28 @@ def _cached_get(session, url: str, params: dict | None):
     return data
 
 
+NOTES_MARK = "Notes"
+
+
+def with_notes(description: str, notes: str) -> str:
+    """The event text Intervals.icu keeps: steps first, then the coaching notes.
+
+    Intervals.icu stores only `description`. `description_raw` is accepted and dropped,
+    with or without steps (checked live 17 Oct 2026), so every planner and coach note -
+    fuel on long rides, how to ride it - reached nobody. Notes go after the steps under a
+    "Notes" line, so a heading in them can't start a repeat block; a line starting "-"
+    would be read as a step, so it becomes a bullet. A previous notes block is replaced."""
+    steps = (description or "").split("\n\n" + NOTES_MARK + "\n")[0].rstrip()
+    lines = []
+    for ln in (notes or "").strip().splitlines():
+        t = ln.strip()
+        lines.append("\u2022 " + t.lstrip("-* ").strip() if t[:1] in "-*" else ln.rstrip())
+    body = "\n".join(lines).strip()
+    if not body:
+        return steps
+    return (steps + "\n\n" if steps else "") + NOTES_MARK + "\n" + body
+
+
 class IcuClient:
     def __init__(self, athlete_id: str, api_key: str = "", token: str | None = None):
         self.athlete_id = athlete_id
@@ -331,7 +353,8 @@ class IcuClient:
 
         description: structured workout text (IcuSync format — parsed into zone charts).
             e.g. 'Main Set 4x\\n- 8m Z4 Pace intensity=interval\\n- 2m Z1 Pace intensity=recovery'
-        description_raw: free-text coaching notes (appears before structured steps).
+        description_raw: free-text coaching notes. Intervals.icu drops this field, so it is
+            written into description after the steps (with_notes).
         day_of_week: e.g. 'Monday' — used to sanity-check date arithmetic.
         athlete_timezone: from get_athlete_profile, prevents UTC date bugs.
         """
@@ -350,10 +373,9 @@ class IcuClient:
             "name": name,
             "load_target": planned_training_load,
         }
-        if description:
-            payload["description"] = description
-        if description_raw:
-            payload["description_raw"] = description_raw
+        text = with_notes(description, description_raw) if description_raw else description
+        if text:
+            payload["description"] = text
         if tags is not None:
             payload["tags"] = tags
         if athlete_timezone:
@@ -366,6 +388,10 @@ class IcuClient:
         """Update a planned event. NOTE: mark_as_done does NOT create an activity
         (verified 5 Jul 2026) — use create_manual_activity for that."""
         payload = dict(fields)
+        if "description_raw" in payload:          # dropped by Intervals.icu: see with_notes
+            raw = payload.pop("description_raw") or ""
+            base = payload["description"] if "description" in payload else (self.get_event(event_id).get("description") or "")
+            payload["description"] = with_notes(base, raw)
         if mark_as_done:
             payload["mark_as_done"] = True
         return self._put(f"events/{event_id}", payload)
