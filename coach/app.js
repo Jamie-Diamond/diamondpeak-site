@@ -5419,6 +5419,10 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
     } else if (a.pace) {
       add({ k: 'Pace', v: a.pace.replace(/\/(km|100m)$/, ''), u: a.pace.indexOf('100m') > 0 ? '/100m' : '/km' });
     }
+    if (fam === 'run') {                    // running power, where the watch records it
+      if (a.powAvg) add({ k: 'Avg power', v: String(a.powAvg), u: 'w' });
+      if (a.powNp) add({ k: 'Norm power', v: String(a.powNp), u: 'w' });
+    }
     if (row('Elevation')) add(shareSplit('Climbing', row('Elevation')));
     // Each peak its own stat; a ★ (best in 90 days) is the coolest thing on the card.
     String(row('Peak power') || '').replace(/ w$/, '').split(' · ').forEach(function (c) {
@@ -6623,6 +6627,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.037", "2026-10-17", "Share cards: runs with running power can show average power and normalised power.", 0],
     ["4.036", "2026-10-17", "Planned strength days now come with their exercises, sets, reps and rest, written from the exercise library for your sports and kit (and shown in Intervals.icu). Physio sessions stay exactly as set. Pilot: Jamie and Fred", 1],
     ["4.035", "2026-10-17", "Share card titles: a run of 15 km or more is a \u2018Long run\u2019.", 0],
     ["4.034", "2026-10-17", "Share cards get a title that says what the session was: \u2018Easy 2 hrs\u2019, \u2018Threshold 3\u00d78\u2019, \u2018Long run 21 km\u2019, from what you actually did and the plan\u2019s sets.", 0],
