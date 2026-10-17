@@ -55,7 +55,7 @@ The validator/audit must compare TID like-for-like via this mapping.
 - **Fallbacks (all-athlete):** Kathryn & Calum have **no run threshold** set in ICU → run pace
   zones unavailable, fall back to HR/RPE (flagged, not invented). Calum has no eFTP → static FTP.
 - ICU computes a pushed workout's load against the athlete's own configured zones, so the
-  configured FTP should be kept tracking eFTP (ICU auto-update) — open item below.
+  configured FTP tracks eFTP: synced nightly, up or down, since 15 Oct 2026 (`docs/eftp.md`).
 
 ## 1. Intensity distribution (the TID targets per phase) — in 3-zone LOW/MOD/HIGH (see §0)
 
@@ -204,9 +204,8 @@ IM = long aerobic bike + 20–40min Z2 run. Run-off-bike at **goal race pace**, 
 - ✅ **Thresholds resolved (§0):** `lib/thresholds.py` pulls live eFTP + m/s-correct pace for all
   athletes (Jamie FTP 297, run 4:02/km, swim 1:39; fallbacks for Kathryn/Calum). My earlier
   FTP/pace "discrepancies" were a unit-misread, now centralised so it can't recur.
-- ⚠️ **Open (not blocking):** keep each athlete's ICU *configured* FTP auto-tracking eFTP, so the
-  load ICU computes on a pushed workout matches our intent; set Kathryn/Calum run thresholds (or
-  accept HR/RPE run zones).
+- ✅ **Configured FTP tracks eFTP** (15 Oct 2026, nightly, up or down; `docs/eftp.md`).
+- ⚠️ **Open (not blocking):** set Kathryn/Calum run thresholds (or accept HR/RPE run zones).
 - ✅ **Trust:** bike (Coggan) + run (Daniels) zones/structures, TID models, PYR→POL, IM/70.3 anchors.
 - 🟡 **Check my extrapolation:** the week-to-week *progression numbers*, short-course event triplets,
   race-pace zones, brick scaling.

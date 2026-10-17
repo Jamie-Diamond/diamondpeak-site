@@ -10,8 +10,9 @@ R=/Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach
 LOG="$HOME/Library/Logs/ClaudeCoach/weekly-plan.log"
 mkdir -p "$(dirname "$LOG")"
 echo "=== weekly-plan $(date) ===" >> "$LOG"
-# Keep each athlete's ICU configured FTP tracking eFTP (raise-only) BEFORE planning, so
-# the week is built on current power zones. Messages the athlete on any change.
+# Keep each athlete's ICU configured FTP equal to eFTP (up or down, by design - see
+# docs/eftp.md) BEFORE planning, so the week is built on current power zones. Any change
+# goes to Jamie's Dev tab, not the athlete.
 echo "--- FTP sync $(date) ---" >> "$LOG"
 timeout 300 python3 "$R/lib/thresholds.py" --all --sync-ftp --apply --notify >> "$LOG" 2>&1
 # rc was captured and thrown away, which is how 9 Aug 2026 passed unnoticed: all THREE
