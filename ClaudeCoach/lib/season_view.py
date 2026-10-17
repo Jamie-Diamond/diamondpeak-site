@@ -213,7 +213,21 @@ def _sport_now(data: dict, sport: str):
         return None
 
 
-def fitness_band(event, goal_s, cfg: dict, profile: dict, data: dict) -> dict | None:
+# With no goal, the level used to come from the athlete's CURRENT fitness, so the target always
+# sat next to where they already were: Calum at 26 read "nearly there" for the Mallorca 312
+# (Jamie, 17 Oct 2026: "Calum's fitness colouring is clearly wrong"; "if you can do the 312 on
+# a fitness of 40 I'll be amazed"). Now: no goal -> the event's FINISH level, and for a bike day
+# the fitness a day that long needs, from the level tables' finish levels by length.
+DAY_FLOOR = ((6, (28, 40), "a day under 6 hours"),             # sportive, finish
+             (10, (36, 48), "a 6-10 hour day"),                  # 70.3, finish (6:15+)
+             (99, (50, 65), "a 10 hour+ day (Ironman finisher)"))  # Ironman, finish (13:00+)
+
+
+def day_floor(hours: float) -> tuple:
+    return next(((band, label) for h, band, label in DAY_FLOOR if hours < h), DAY_FLOOR[-1][1:])
+
+
+def fitness_band(event, goal_s, cfg: dict, profile: dict, data: dict, hours: float | None = None) -> dict | None:
     """The race-day Fitness band from the blueprint's level tables (config/event-levels.json,
     blueprint §4.5) for an event and goal time (Jamie, 16 Oct 2026: "a 70+ CTL for a 10k is
     madness ... I thought we did this with the blueprints"). A run race measures RUNNING
@@ -230,7 +244,17 @@ def fitness_band(event, goal_s, cfg: dict, profile: dict, data: dict) -> dict | 
     if not row:
         return None
     lo, hi = row["fitness_at_taper"]
-    out = {"event": event, "levelLabel": row.get("label"), "source": source, "lo": lo, "hi": hi}
+    label = row.get("label")
+    if source in ("current_fitness", "default"):
+        # Never from where they are now: the event's finish level, raised for a long bike day.
+        fin = rf.level_table(event)[-1]
+        lo, hi = fin["fitness_at_taper"]
+        label, source = fin.get("label"), "finish level"
+        if hours and rf.event_kind(event) == "bike":
+            (dlo, dhi), dlabel = day_floor(hours)
+            if dlo > lo:
+                lo, hi, label, source = dlo, dhi, dlabel, "day length"
+    out = {"event": event, "levelLabel": label, "source": source, "lo": lo, "hi": hi}
     if rf.event_kind(event) == "run":
         st = rf.running_status(event, "taper", _sport_now(data, "Run"), int(row["level"]),
                                bike_ctl=_sport_now(data, "Ride"))
@@ -248,7 +272,7 @@ def fitness_band(event, goal_s, cfg: dict, profile: dict, data: dict) -> dict | 
 
 
 def limiters_for(event, goal_s, goal, data: dict, fb: dict | None, phases: list | None = None,
-                 today: date | None = None) -> dict | None:
+                 today: date | None = None, race_date: str | None = None) -> dict | None:
     """The "What's holding you back" card for a run event with a goal time. Fitness is
     judged against the share of the race-day band due by the current phase of the build
     (before the plan starts: base); with no phases, against the band itself."""
@@ -258,7 +282,7 @@ def limiters_for(event, goal_s, goal, data: dict, fb: dict | None, phases: list 
     km = rf._race_km(event) if event else None
     if not run or not km or not goal_s or rf.event_kind(event) != "run":
         return None
-    return limiters.diagnose(km * 1000, goal_s, goal, run, fb, _phase_frac(phases, today))
+    return limiters.diagnose(km * 1000, goal_s, goal, run, fb, _phase_frac(phases, today, race_date))
 
 
 def _tri_limiters(slug, a_view, a_race, cfg, profile, data, fb, frac, today, all_races):
@@ -290,12 +314,21 @@ def _tri_limiters(slug, a_view, a_race, cfg, profile, data, fb, frac, today, all
                                  (perf.get("bike") or {}).get("fuel"), a_view.get("goal"))
 
 
-def _phase_frac(phases: list | None, today: date | None):
+def _phase_frac(phases: list | None, today: date | None, race_date: str | None = None):
     """Share of the race-day fitness band due by the current phase (before the plan
-    starts: base); None without phases."""
+    starts: base). With no plan phases (tracking only), by weeks to the race: 16+ base,
+    8-16 build, 4-8 specific, under 4 peak - so nobody is judged against race day
+    six months out."""
     import race_fitness as rf
-    if not phases or not today:
+    if not today:
         return None
+    if not phases:
+        rd = _d(race_date)
+        if not rd:
+            return None
+        w = (rd - today).days / 7
+        fam = "base" if w >= 16 else "build" if w >= 8 else "specific" if w >= 4 else "peak"
+        return rf.PHASE_FRACTION.get(fam)
     iso = today.isoformat()
     now = next((p for p in phases if p["start"] <= iso <= p["end"]), None)
     fam = (now or {}).get("family") or ("base" if iso < phases[0]["start"] else "taper")
@@ -332,23 +365,24 @@ def payload(slug: str, cfg: dict, profile: dict, data: dict, today: date | None 
     out = {"aRace": a_view, "races": views, "phases": phases, "trackingOnly": tracking}
     if a_view:
         try:
-            out["fitness"] = fitness_band(a_view.get("event"), a_view.get("goal_s"), cfg, profile, data)
+            out["fitness"] = fitness_band(a_view.get("event"), a_view.get("goal_s"), cfg, profile, data,
+                                          (a_view.get("hold") or {}).get("hours"))
         except Exception:
             pass
         try:
             if a_view.get("kind") == "tri":
                 out["limiters"] = _tri_limiters(slug, a_view, a_race, cfg, profile, data, out.get("fitness"),
-                                                _phase_frac(phases, today), today, all_races)
+                                                _phase_frac(phases, today, a_view.get("date")), today, all_races)
             elif a_view.get("kind") == "bike":
                 import course as cs
                 import limiters
                 out["limiters"] = limiters.diagnose_bike(
                     cs.for_race(a_view.get("name"), slug), (data.get("performance") or {}).get("bike"),
-                    out.get("fitness"), _phase_frac(phases, today), a_view.get("goal"))
+                    out.get("fitness"), _phase_frac(phases, today, a_view.get("date")), a_view.get("goal"))
             else:
                 out["limiters"] = limiters_for(a_view.get("event"), a_view.get("goal_s"),
                                                a_view.get("goal"), data, out.get("fitness"),
-                                               phases, today)
+                                               phases, today, a_view.get("date"))
         except Exception:
             pass
     # A goal without a race (lib/goals.py): the goal card replaces the race hero while no A

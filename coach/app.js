@@ -7176,6 +7176,7 @@ var CHART_FONT = 'DM Mono', CHART_FS = 9;
   // Newest first; the first entry must match APP_VERSION in sw.js (test_peak_release.py).
   // [version, date, what changed in plain words, coach-only]
   var CHANGELOG = [
+    ["4.049", "2026-10-17", "Fixed: with no goal time, the fitness target for a race came from your current fitness, so it always looked nearly met. It now comes from the event: its finish level, and for a long bike day the fitness a day that long needs (10 h+: 50\u201365)", 0],
     ["4.048", "2026-10-17", "Trends: a Best efforts tab (Bike power, Run best times for 1 km to the marathon, Swim best pace from 100 m to 3.8 km, each against a year ago); target bands on the Race charts; climbing power in W/kg; a long day is judged on durability and fuelling, not on having ridden one", 0],
     ["4.047", "2026-10-17", "Calendar: TSS per day counts rest days, and today only once you\u2019ve trained, so a morning before your session doesn\u2019t pull it down", 0],
     ["4.046", "2026-10-17", "Calendar month: average TSS per day instead of the month\u2019s TSS, and distance for swim, bike and run instead of a session count. Hours, TSS and distance count what you\u2019ve done, not what\u2019s planned. The note under it now just says how many days are left", 0],

@@ -516,8 +516,13 @@ def test_payload_for_a_bike_a_race_carries_the_course_and_the_bike_card(monkeypa
     fin = next(c for c in MALLORCA["checkpoints"] if c["type"] == "finish")
     day_h = (cs._clock_min(fin["clock"]) - cs._clock_min(MALLORCA["start"])) / 60
     assert a["hold"]["hours"] == pytest.approx(day_h, abs=0.05)         # the day the finish cut-off allows
-    assert p["limiters"]["limiter"] == "climbing"
-    assert p["limiters"]["headline"].startswith("Climbing power is the issue")
+    rows = {r["key"]: r for r in p["limiters"]["rows"]}
+    assert rows["climbing"]["status"] == "red"
+    # No goal: fitness is judged against a 10 h+ day (50-65), never his current 26 (Jamie,
+    # 17 Oct 2026: "if you can do the 312 on a fitness of 40 I'll be amazed").
+    assert p["fitness"]["lo"] >= 50 and p["fitness"]["source"] == "day length"
+    assert rows["fitness"]["status"] == "red" and p["limiters"]["limiter"] in ("fitness", "climbing")
+    assert p["limiters"]["headline"].startswith(("Climbing power is the issue", "Fitness is the issue"))
 
 
 def test_a_route_with_nothing_measured_never_reads_as_all_clear():
@@ -525,3 +530,23 @@ def test_a_route_with_nothing_measured_never_reads_as_all_clear():
     d = limiters.diagnose_bike(bare, {"outdoor": {"rides": 0, "with_power": 0}}, None)
     assert "Nothing is holding you back" not in d["headline"]
     assert d["headline"].startswith("Send the start time and cut-offs")
+
+
+
+def test_a_fitness_target_never_comes_from_current_fitness():
+    """Circularity guard: with no goal, the band is the event's (or the day's), whatever
+    fitness the athlete has now - so it can't sit next to where they already are."""
+    import season_view as sv
+    for now in (10, 26, 45, 80):
+        fb = sv.fitness_band("sportive", None, {}, {}, {"kpi": {"ctl": now}}, hours=12)
+        assert (fb["lo"], fb["hi"]) == (50, 65) and fb["source"] == "day length"
+        short = sv.fitness_band("sportive", None, {}, {}, {"kpi": {"ctl": now}})
+        assert (short["lo"], short["hi"]) == (28, 40) and short["source"] == "finish level"
+
+
+def test_no_plan_phases_judges_fitness_by_weeks_to_race():
+    import season_view as sv
+    from datetime import date
+    today = date(2026, 10, 17)
+    assert sv._phase_frac(None, today, "2027-04-24") == 0.70        # 27 weeks out: base
+    assert sv._phase_frac(None, today, "2026-11-20") == 0.90        # ~5 weeks out: specific
