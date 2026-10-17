@@ -246,3 +246,18 @@ def test_legacy_t12_only_for_the_week_just_finished(tmp_path):
     (adir / "current-state.json").write_text(json.dumps({"watchdog_flags": [
         {"trigger": "T12", "week_end": "2026-10-11", "source": "icu_fitness"}]}))
     assert mc._recent_flags(adir, FRI) == ["T12: Realised fitness rose 6.8 to 11.3"]
+
+
+def test_hrv_trend_reaches_the_card_and_stops_fresh():
+    """17 Oct 2026: HRV 37 / resting HR 54 did not trip the SD rule, the T3 trend was kept
+    off the card, and it said "fresh". The trend is now worked out fresh into off-normal."""
+    from datetime import date, timedelta
+    today = date(2026, 10, 17)
+    rows = [{"id": (today - timedelta(days=i)).isoformat(), "hrv": 38 if i < 7 else 43,
+             "sleepSecs": 28000, "restingHR": 52} for i in range(14)]
+    line = mc._with_trends("", rows, today)
+    assert line.startswith("Off your normal:") and "7-day HRV average" in line
+    block, _ = mc._form_block("fresh", off_normal=line)
+    assert "never call it a good day for quality" in block
+    assert mc._with_trends("Off your normal: resting HR 56 (usual 52)", [], today) \
+        == "Off your normal: resting HR 56 (usual 52)"

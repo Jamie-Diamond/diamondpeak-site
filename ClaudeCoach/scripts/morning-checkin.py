@@ -732,6 +732,30 @@ def _baseline_rows(slug: str) -> list:
         return []
 
 
+def _with_trends(off_normal: str, wellness_rows, today: date) -> str:
+    """The off-normal line plus this morning's HRV-trend and short-sleep checks
+    (watchdog_checks T3 / T4), worked out fresh from today's rows. Jamie, 17 Oct 2026: the
+    16 Oct shadow fix kept the watchdog's T3/T4 sentences off the card (they carried
+    day-old wording) and left wellness to this line alone, whose SD rule did not trip on
+    HRV 37 / resting HR 54, so the card said "fresh" with no recovery line. The facts come
+    back here, computed today, and an off line also stops "fresh, good day for quality"."""
+    import watchdog_checks as wc
+    extra = []
+    for check in (wc.t3_hrv_down, wc.t4_short_sleep):
+        try:
+            f = check(wellness_rows or [], today)
+        except Exception:
+            f = None
+        if f and f.get("signal"):
+            extra.append(f["signal"])
+    if not extra:
+        return off_normal
+    trend = "; ".join(extra)
+    if off_normal:
+        return f"{off_normal}; {trend}"
+    return f"Off your normal: {trend}"
+
+
 def _off_normal_line(wellness_rows, today: date, exclude=None) -> str:
     """The wellness numbers the card shows: only those off THIS athlete's normal, with the
     normal beside them (Jamie, 12 Oct 2026: "show only when off normal"). Normal = the mean
@@ -1197,8 +1221,9 @@ def run_athlete(slug, athlete_cfg, early=False):
                            post_race_recovery=_post_race_recovery(athlete_cfg),
                            watchdog_flags=_recent_flags(adir, date.today(), skip=_flag_skip(
                                athlete_cfg, wellness_rows)),
-                           off_normal=_off_normal_line(baseline_rows, date.today(),
-                                                    profile.get("baseline_exclude_ranges")))
+                           off_normal=_with_trends(_off_normal_line(
+                               baseline_rows, date.today(), profile.get("baseline_exclude_ranges")),
+                               baseline_rows, date.today()))
     prompt += coaching_prefs.prompt_note(slug)
 
     with open(log_file, "a") as lf:
